@@ -12,109 +12,264 @@ import {
   type ExposureRisk, type PPEType, type ShiftPattern, type JobCategory,
   type OccupationalHealthPatient,
 } from '../../../models/OccupationalHealth';
+import { PatientUtils } from '../../../models/Patient';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 const ACCENT = '#D97706';
-const STORAGE_KEY = '@occhealth_workers';
+const STORAGE_KEY = '@occhealth_patients';
 
-// ─── Sample Workers ─────────────────────────────────────────
-const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
+// ─── Sample Patients (with full Patient + OH fields) ─────────
+const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
   {
-    id: 'w1', firstName: 'Jean-Pierre', lastName: 'Kabongo', middleName: '', dateOfBirth: '1985-03-15',
-    gender: 'male', phone: '+243 812 345 678', email: 'jpkabongo@mail.com',
-    address: '12 Ave Kasavubu, Lubumbashi', city: 'Lubumbashi', province: 'Haut-Katanga',
-    emergencyContactName: 'Marie Kabongo', emergencyContactPhone: '+243 815 555 111',
-    employeeId: 'EMP-001', company: 'Kamoto Copper Company', sector: 'mining',
-    site: 'Site Kamoto Principal', department: 'Opérations Souterraines', jobTitle: 'Mineur de Fond',
-    jobCategory: 'underground_work', shiftPattern: 'rotating', hireDate: '2015-06-01',
-    contractType: 'permanent', fitnessStatus: 'fit', lastMedicalExam: '2024-10-15',
-    nextMedicalExam: '2025-04-15', exposureRisks: ['silica_dust', 'noise', 'vibration', 'confined_spaces'],
+    id: 'w1',
+    firstName: 'Jean-Pierre',
+    lastName: 'Kabongo',
+    middleName: '',
+    dateOfBirth: '1985-03-15',
+    gender: 'male',
+    phone: '+243 812 345 678',
+    email: 'jpkabongo@mail.com',
+    address: '12 Ave Kasavubu, Lubumbashi',
+    city: 'Lubumbashi',
+    emergencyContactName: 'Marie Kabongo',
+    emergencyContactPhone: '+243 815 555 111',
+    // Patient required fields
+    allergies: [],
+    chronicConditions: [],
+    currentMedications: [],
+    patientNumber: PatientUtils.generatePatientNumber(),
+    registrationDate: '2015-06-01',
+    status: 'active',
+    createdAt: '2015-06-01T00:00:00.000Z',
+    // OH fields
+    employeeId: 'EMP-001',
+    company: 'Kamoto Copper Company',
+    sector: 'mining',
+    site: 'Site Kamoto Principal',
+    department: 'Opérations Souterraines',
+    jobTitle: 'Mineur de Fond',
+    jobCategory: 'underground_work',
+    shiftPattern: 'rotating',
+    hireDate: '2015-06-01',
+    contractType: 'permanent',
+    fitnessStatus: 'fit',
+    lastMedicalExam: '2024-10-15',
+    nextMedicalExam: '2025-04-15',
+    exposureRisks: ['silica_dust', 'noise', 'vibration', 'confined_spaces'],
     ppeRequired: ['hard_hat', 'safety_boots', 'ear_plugs', 'dust_mask', 'safety_glasses', 'high_vis_vest'],
-    riskLevel: 'very_high', vaccinationStatus: [],
-  } as any,
+    riskLevel: 'very_high',
+    vaccinationStatus: [],
+  },
   {
-    id: 'w2', firstName: 'Grace', lastName: 'Mwamba', middleName: '', dateOfBirth: '1990-07-22',
-    gender: 'female', phone: '+243 821 456 789', email: 'gmwamba@mail.com',
-    address: '45 Ave Mobutu, Kinshasa', city: 'Kinshasa', province: 'Kinshasa',
-    emergencyContactName: 'Paul Mwamba', emergencyContactPhone: '+243 822 333 444',
-    employeeId: 'EMP-002', company: 'Rawbank S.A.', sector: 'banking_finance',
-    site: 'Siège Social Kinshasa', department: 'Opérations Bancaires', jobTitle: 'Analyste Financier',
-    jobCategory: 'finance_accounting', shiftPattern: 'regular', hireDate: '2019-01-15',
-    contractType: 'permanent', fitnessStatus: 'fit', lastMedicalExam: '2024-09-20',
-    nextMedicalExam: '2025-09-20', exposureRisks: ['ergonomic', 'vdt_screen', 'psychosocial', 'sedentary'],
-    ppeRequired: ['ergonomic_chair'], riskLevel: 'low', vaccinationStatus: [],
-  } as any,
+    id: 'w2',
+    firstName: 'Grace',
+    lastName: 'Mwamba',
+    middleName: '',
+    dateOfBirth: '1990-07-22',
+    gender: 'female',
+    phone: '+243 821 456 789',
+    email: 'gmwamba@mail.com',
+    address: '45 Ave Mobutu, Kinshasa',
+    city: 'Kinshasa',
+    emergencyContactName: 'Paul Mwamba',
+    emergencyContactPhone: '+243 822 333 444',
+    allergies: [],
+    chronicConditions: [],
+    currentMedications: [],
+    patientNumber: PatientUtils.generatePatientNumber(),
+    registrationDate: '2019-01-15',
+    status: 'active',
+    createdAt: '2019-01-15T00:00:00.000Z',
+    employeeId: 'EMP-002',
+    company: 'Rawbank S.A.',
+    sector: 'banking_finance',
+    site: 'Siège Social Kinshasa',
+    department: 'Opérations Bancaires',
+    jobTitle: 'Analyste Financier',
+    jobCategory: 'finance_accounting',
+    shiftPattern: 'regular',
+    hireDate: '2019-01-15',
+    contractType: 'permanent',
+    fitnessStatus: 'fit',
+    lastMedicalExam: '2024-09-20',
+    nextMedicalExam: '2025-09-20',
+    exposureRisks: ['ergonomic', 'vdt_screen', 'psychosocial', 'sedentary'],
+    ppeRequired: ['ergonomic_chair'],
+    riskLevel: 'low',
+    vaccinationStatus: [],
+  },
   {
-    id: 'w3', firstName: 'Patrick', lastName: 'Lukusa', middleName: 'Tshimanga', dateOfBirth: '1988-11-08',
-    gender: 'male', phone: '+243 833 567 890', email: 'plukusa@mail.com',
-    address: '78 Blvd 30 Juin, Kolwezi', city: 'Kolwezi', province: 'Lualaba',
-    emergencyContactName: 'Jeanne Lukusa', emergencyContactPhone: '+243 834 222 333',
-    employeeId: 'EMP-003', company: 'Brasserie Simba', sector: 'manufacturing',
-    site: 'Usine Kolwezi', department: 'Production', jobTitle: 'Opérateur Machine',
-    jobCategory: 'production_line', shiftPattern: 'rotating', hireDate: '2017-03-10',
-    contractType: 'permanent', fitnessStatus: 'fit_with_restrictions', lastMedicalExam: '2024-11-05',
-    nextMedicalExam: '2025-05-05', exposureRisks: ['noise', 'chemical_exposure', 'ergonomic', 'machine_hazards'],
+    id: 'w3',
+    firstName: 'Patrick',
+    lastName: 'Lukusa',
+    middleName: 'Tshimanga',
+    dateOfBirth: '1988-11-08',
+    gender: 'male',
+    phone: '+243 833 567 890',
+    email: 'plukusa@mail.com',
+    address: '78 Blvd 30 Juin, Kolwezi',
+    city: 'Kolwezi',
+    emergencyContactName: 'Jeanne Lukusa',
+    emergencyContactPhone: '+243 834 222 333',
+    allergies: ['Poussière industrielle'],
+    chronicConditions: [],
+    currentMedications: [],
+    patientNumber: PatientUtils.generatePatientNumber(),
+    registrationDate: '2017-03-10',
+    status: 'active',
+    createdAt: '2017-03-10T00:00:00.000Z',
+    employeeId: 'EMP-003',
+    company: 'Brasserie Simba',
+    sector: 'manufacturing',
+    site: 'Usine Kolwezi',
+    department: 'Production',
+    jobTitle: 'Opérateur Machine',
+    jobCategory: 'production_line',
+    shiftPattern: 'rotating',
+    hireDate: '2017-03-10',
+    contractType: 'permanent',
+    fitnessStatus: 'fit_with_restrictions',
+    lastMedicalExam: '2024-11-05',
+    nextMedicalExam: '2025-05-05',
+    exposureRisks: ['noise', 'chemical_exposure', 'ergonomic', 'machine_hazards'],
     ppeRequired: ['ear_plugs', 'safety_glasses', 'safety_gloves', 'safety_boots'],
-    riskLevel: 'high', vaccinationStatus: [],
-  } as any,
+    riskLevel: 'high',
+    vaccinationStatus: [],
+  },
   {
-    id: 'w4', firstName: 'Nadine', lastName: 'Tshilombo', middleName: '', dateOfBirth: '1992-04-30',
-    gender: 'female', phone: '+243 844 678 901', email: 'ntshilombo@mail.com',
-    address: '33 Ave Lumumba, Lubumbashi', city: 'Lubumbashi', province: 'Haut-Katanga',
-    emergencyContactName: 'Robert Tshilombo', emergencyContactPhone: '+243 845 444 555',
-    employeeId: 'EMP-004', company: 'Hôpital Sendwe', sector: 'healthcare',
-    site: 'Hôpital Général Jason Sendwe', department: 'Soins Infirmiers', jobTitle: 'Infirmière Chef',
-    jobCategory: 'nursing', shiftPattern: 'rotating', hireDate: '2016-08-20',
-    contractType: 'permanent', fitnessStatus: 'fit', lastMedicalExam: '2024-08-10',
-    nextMedicalExam: '2025-02-10', exposureRisks: ['biological', 'needle_stick', 'chemical_exposure', 'psychosocial', 'shift_work'],
+    id: 'w4',
+    firstName: 'Nadine',
+    lastName: 'Tshilombo',
+    middleName: '',
+    dateOfBirth: '1992-04-30',
+    gender: 'female',
+    phone: '+243 844 678 901',
+    email: 'ntshilombo@mail.com',
+    address: '33 Ave Lumumba, Lubumbashi',
+    city: 'Lubumbashi',
+    emergencyContactName: 'Robert Tshilombo',
+    emergencyContactPhone: '+243 845 444 555',
+    allergies: ['Latex'],
+    chronicConditions: [],
+    currentMedications: [],
+    patientNumber: PatientUtils.generatePatientNumber(),
+    registrationDate: '2016-08-20',
+    status: 'active',
+    createdAt: '2016-08-20T00:00:00.000Z',
+    employeeId: 'EMP-004',
+    company: 'Hôpital Sendwe',
+    sector: 'healthcare',
+    site: 'Hôpital Général Jason Sendwe',
+    department: 'Soins Infirmiers',
+    jobTitle: 'Infirmière Chef',
+    jobCategory: 'nursing',
+    shiftPattern: 'rotating',
+    hireDate: '2016-08-20',
+    contractType: 'permanent',
+    fitnessStatus: 'fit',
+    lastMedicalExam: '2024-08-10',
+    nextMedicalExam: '2025-02-10',
+    exposureRisks: ['biological', 'needle_stick', 'chemical_exposure', 'psychosocial', 'shift_work'],
     ppeRequired: ['safety_gloves', 'lab_coat', 'face_shield', 'dust_mask'],
-    riskLevel: 'high', vaccinationStatus: [{ vaccine: 'Hepatitis B', date: '2016-09-01' }],
-  } as any,
+    riskLevel: 'high',
+    vaccinationStatus: [{ vaccine: 'Hepatitis B', date: '2016-09-01' }],
+  },
   {
-    id: 'w5', firstName: 'Samuel', lastName: 'Ilunga', middleName: '', dateOfBirth: '1995-01-12',
-    gender: 'male', phone: '+243 855 789 012', email: 'silunga@mail.com',
-    address: '67 Ave Kamanyola, Kinshasa', city: 'Kinshasa', province: 'Kinshasa',
-    emergencyContactName: 'Alice Ilunga', emergencyContactPhone: '+243 856 666 777',
-    employeeId: 'EMP-005', company: 'Vodacom Congo', sector: 'telecom_it',
-    site: 'Tour Vodacom Kinshasa', department: 'Développement IT', jobTitle: 'Ingénieur Logiciel',
-    jobCategory: 'it_systems', shiftPattern: 'regular', hireDate: '2021-02-01',
-    contractType: 'permanent', fitnessStatus: 'pending_evaluation', lastMedicalExam: '2024-02-01',
-    nextMedicalExam: '2025-02-01', exposureRisks: ['ergonomic', 'vdt_screen', 'psychosocial', 'sedentary'],
-    ppeRequired: ['ergonomic_chair', 'wrist_rest'], riskLevel: 'low', vaccinationStatus: [],
-  } as any,
+    id: 'w5',
+    firstName: 'Samuel',
+    lastName: 'Ilunga',
+    middleName: '',
+    dateOfBirth: '1995-01-12',
+    gender: 'male',
+    phone: '+243 855 789 012',
+    email: 'silunga@mail.com',
+    address: '67 Ave Kamanyola, Kinshasa',
+    city: 'Kinshasa',
+    emergencyContactName: 'Alice Ilunga',
+    emergencyContactPhone: '+243 856 666 777',
+    allergies: [],
+    chronicConditions: [],
+    currentMedications: [],
+    patientNumber: PatientUtils.generatePatientNumber(),
+    registrationDate: '2021-02-01',
+    status: 'active',
+    createdAt: '2021-02-01T00:00:00.000Z',
+    employeeId: 'EMP-005',
+    company: 'Vodacom Congo',
+    sector: 'telecom_it',
+    site: 'Tour Vodacom Kinshasa',
+    department: 'Développement IT',
+    jobTitle: 'Ingénieur Logiciel',
+    jobCategory: 'it_systems',
+    shiftPattern: 'regular',
+    hireDate: '2021-02-01',
+    contractType: 'permanent',
+    fitnessStatus: 'pending_evaluation',
+    lastMedicalExam: '2024-02-01',
+    nextMedicalExam: '2025-02-01',
+    exposureRisks: ['ergonomic', 'vdt_screen', 'psychosocial', 'sedentary'],
+    ppeRequired: ['ergonomic_chair', 'wrist_rest'],
+    riskLevel: 'low',
+    vaccinationStatus: [],
+  },
   {
-    id: 'w6', firstName: 'François', lastName: 'Mutombo', middleName: '', dateOfBirth: '1980-06-18',
-    gender: 'male', phone: '+243 866 890 123', email: 'fmutombo@mail.com',
-    address: '14 Ave Kasai, Mbuji-Mayi', city: 'Mbuji-Mayi', province: 'Kasaï-Oriental',
-    emergencyContactName: 'Claire Mutombo', emergencyContactPhone: '+243 867 888 999',
-    employeeId: 'EMP-006', company: 'Tenke Fungurume Mining', sector: 'mining',
-    site: 'Site TFM Fungurume', department: 'Traitement Minerais', jobTitle: 'Superviseur Usine',
-    jobCategory: 'processing_refining', shiftPattern: 'day_shift', hireDate: '2010-04-15',
-    contractType: 'permanent', fitnessStatus: 'fit', lastMedicalExam: '2024-12-01',
-    nextMedicalExam: '2025-06-01', exposureRisks: ['chemical_exposure', 'noise', 'heat_stress', 'heavy_metals'],
+    id: 'w6',
+    firstName: 'François',
+    lastName: 'Mutombo',
+    middleName: '',
+    dateOfBirth: '1980-06-18',
+    gender: 'male',
+    phone: '+243 866 890 123',
+    email: 'fmutombo@mail.com',
+    address: '14 Ave Kasai, Mbuji-Mayi',
+    city: 'Mbuji-Mayi',
+    emergencyContactName: 'Claire Mutombo',
+    emergencyContactPhone: '+243 867 888 999',
+    allergies: [],
+    chronicConditions: ['Hypertension légère'],
+    currentMedications: ['Amlodipine 5mg'],
+    patientNumber: PatientUtils.generatePatientNumber(),
+    registrationDate: '2010-04-15',
+    status: 'active',
+    createdAt: '2010-04-15T00:00:00.000Z',
+    employeeId: 'EMP-006',
+    company: 'Tenke Fungurume Mining',
+    sector: 'mining',
+    site: 'Site TFM Fungurume',
+    department: 'Traitement Minerais',
+    jobTitle: 'Superviseur Usine',
+    jobCategory: 'processing_refining',
+    shiftPattern: 'day_shift',
+    hireDate: '2010-04-15',
+    contractType: 'permanent',
+    fitnessStatus: 'fit',
+    lastMedicalExam: '2024-12-01',
+    nextMedicalExam: '2025-06-01',
+    exposureRisks: ['chemical_exposure', 'noise', 'heat_stress', 'heavy_metals'],
     ppeRequired: ['hard_hat', 'safety_glasses', 'respirator', 'safety_boots', 'coveralls', 'safety_gloves'],
-    riskLevel: 'very_high', vaccinationStatus: [],
-  } as any,
+    riskLevel: 'very_high',
+    vaccinationStatus: [],
+  },
 ];
 
-// ─── Worker Card ─────────────────────────────────────────────
-function WorkerCard({ worker, onPress }: { worker: OccupationalHealthPatient; onPress: () => void }) {
-  const sectorProfile = SECTOR_PROFILES[worker.sector];
-  const fitnessColor = OccHealthUtils.getFitnessStatusColor(worker.fitnessStatus);
-  const fitnessLabel = OccHealthUtils.getFitnessStatusLabel(worker.fitnessStatus);
-  const riskColor = OccHealthUtils.getSectorRiskColor(worker.riskLevel);
-  const isOverdue = worker.nextMedicalExam && new Date(worker.nextMedicalExam) < new Date();
+// ─── Patient Card ────────────────────────────────────────────
+function PatientCard({ patient, onPress }: { patient: OccupationalHealthPatient; onPress: () => void }) {
+  const sectorProfile = SECTOR_PROFILES[patient.sector];
+  const fitnessColor = OccHealthUtils.getFitnessStatusColor(patient.fitnessStatus);
+  const fitnessLabel = OccHealthUtils.getFitnessStatusLabel(patient.fitnessStatus);
+  const riskColor = OccHealthUtils.getSectorRiskColor(patient.riskLevel);
+  const isOverdue = patient.nextMedicalExam && new Date(patient.nextMedicalExam) < new Date();
 
   return (
-    <TouchableOpacity style={styles.workerCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.workerCardHeader}>
-        <View style={[styles.workerAvatar, { backgroundColor: sectorProfile.color + '14' }]}>
+    <TouchableOpacity style={styles.patientCard} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.patientCardHeader}>
+        <View style={[styles.patientAvatar, { backgroundColor: sectorProfile.color + '14' }]}>
           <Ionicons name={sectorProfile.icon as any} size={22} color={sectorProfile.color} />
         </View>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={styles.workerName}>{worker.firstName} {worker.lastName}</Text>
+            <Text style={styles.patientName}>{patient.firstName} {patient.lastName}</Text>
             {isOverdue && (
               <View style={styles.overdueBadge}>
                 <Ionicons name="alert-circle" size={12} color="#FFF" />
@@ -122,7 +277,7 @@ function WorkerCard({ worker, onPress }: { worker: OccupationalHealthPatient; on
               </View>
             )}
           </View>
-          <Text style={styles.workerEmployeeId}>{worker.employeeId} • {worker.company}</Text>
+          <Text style={styles.patientId}>{patient.patientNumber} • {patient.employeeId} • {patient.company}</Text>
         </View>
         <View style={[styles.fitnessChip, { backgroundColor: fitnessColor + '14' }]}>
           <View style={[styles.fitnessChipDot, { backgroundColor: fitnessColor }]} />
@@ -130,44 +285,44 @@ function WorkerCard({ worker, onPress }: { worker: OccupationalHealthPatient; on
         </View>
       </View>
 
-      <View style={styles.workerCardBody}>
-        <View style={styles.workerInfoRow}>
-          <View style={styles.workerInfoItem}>
+      <View style={styles.patientCardBody}>
+        <View style={styles.patientInfoRow}>
+          <View style={styles.patientInfoItem}>
             <Ionicons name="briefcase-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.workerInfoText}>{worker.jobTitle}</Text>
+            <Text style={styles.patientInfoText}>{patient.jobTitle}</Text>
           </View>
-          <View style={styles.workerInfoItem}>
+          <View style={styles.patientInfoItem}>
             <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.workerInfoText}>{worker.site}</Text>
+            <Text style={styles.patientInfoText}>{patient.site}</Text>
           </View>
         </View>
-        <View style={styles.workerInfoRow}>
-          <View style={styles.workerInfoItem}>
+        <View style={styles.patientInfoRow}>
+          <View style={styles.patientInfoItem}>
             <Ionicons name="business-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.workerInfoText}>{worker.department}</Text>
+            <Text style={styles.patientInfoText}>{sectorProfile.label} • {patient.department}</Text>
           </View>
           <View style={[styles.riskBadge, { backgroundColor: riskColor + '14' }]}>
             <Ionicons name="shield-outline" size={12} color={riskColor} />
             <Text style={[styles.riskBadgeText, { color: riskColor }]}>
-              Risque {OccHealthUtils.getSectorRiskLabel(worker.riskLevel)}
+              Risque {OccHealthUtils.getSectorRiskLabel(patient.riskLevel)}
             </Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.workerCardFooter}>
-        <View style={styles.workerPPERow}>
-          {worker.ppeRequired.slice(0, 4).map((ppe, i) => (
+      <View style={styles.patientCardFooter}>
+        <View style={styles.ppeRow}>
+          {patient.ppeRequired.slice(0, 4).map((ppe, i) => (
             <View key={i} style={styles.ppeMiniTag}>
               <Text style={styles.ppeMiniTagText}>{getPPELabel(ppe)}</Text>
             </View>
           ))}
-          {worker.ppeRequired.length > 4 && (
-            <Text style={styles.ppeMoreText}>+{worker.ppeRequired.length - 4}</Text>
+          {patient.ppeRequired.length > 4 && (
+            <Text style={styles.ppeMoreText}>+{patient.ppeRequired.length - 4}</Text>
           )}
         </View>
-        <Text style={styles.workerExamDate}>
-          Prochain examen: {worker.nextMedicalExam ? new Date(worker.nextMedicalExam).toLocaleDateString('fr-CD') : 'N/A'}
+        <Text style={styles.examDate}>
+          Prochain examen: {patient.nextMedicalExam ? new Date(patient.nextMedicalExam).toLocaleDateString('fr-CD') : 'N/A'}
         </Text>
       </View>
     </TouchableOpacity>
@@ -186,13 +341,13 @@ function getPPELabel(ppe: PPEType): string {
   return labels[ppe] || ppe;
 }
 
-// ─── Worker Detail Modal ─────────────────────────────────────
-function WorkerDetailModal({
-  visible, worker, onClose, onEdit
-}: { visible: boolean; worker: OccupationalHealthPatient | null; onClose: () => void; onEdit: () => void }) {
-  if (!worker) return null;
-  const sectorProfile = SECTOR_PROFILES[worker.sector];
-  const fitnessColor = OccHealthUtils.getFitnessStatusColor(worker.fitnessStatus);
+// ─── Patient Detail Modal ────────────────────────────────────
+function PatientDetailModal({
+  visible, patient, onClose, onEdit
+}: { visible: boolean; patient: OccupationalHealthPatient | null; onClose: () => void; onEdit: () => void }) {
+  if (!patient) return null;
+  const sectorProfile = SECTOR_PROFILES[patient.sector];
+  const fitnessColor = OccHealthUtils.getFitnessStatusColor(patient.fitnessStatus);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -200,7 +355,7 @@ function WorkerDetailModal({
         <View style={styles.modalContent}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Fiche Travailleur</Text>
+              <Text style={styles.modalTitle}>Fiche Patient — Santé au Travail</Text>
               <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
 
@@ -211,13 +366,13 @@ function WorkerDetailModal({
                   <Ionicons name={sectorProfile.icon as any} size={32} color={sectorProfile.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.detailName}>{worker.firstName} {worker.middleName || ''} {worker.lastName}</Text>
-                  <Text style={styles.detailSubtext}>{worker.employeeId} • {worker.company}</Text>
+                  <Text style={styles.detailName}>{patient.firstName} {patient.middleName || ''} {patient.lastName}</Text>
+                  <Text style={styles.detailSubtext}>N° {patient.patientNumber} • {patient.employeeId} • {patient.company}</Text>
                 </View>
                 <View style={[styles.fitnessChip, { backgroundColor: fitnessColor + '14' }]}>
                   <View style={[styles.fitnessChipDot, { backgroundColor: fitnessColor }]} />
                   <Text style={[styles.fitnessChipText, { color: fitnessColor }]}>
-                    {OccHealthUtils.getFitnessStatusLabel(worker.fitnessStatus)}
+                    {OccHealthUtils.getFitnessStatusLabel(patient.fitnessStatus)}
                   </Text>
                 </View>
               </View>
@@ -226,41 +381,51 @@ function WorkerDetailModal({
             {/* Personal Info */}
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Informations Personnelles</Text>
-              <DetailRow label="Date de Naissance" value={new Date(worker.dateOfBirth).toLocaleDateString('fr-CD')} />
-              <DetailRow label="Genre" value={worker.gender === 'male' ? 'Masculin' : 'Féminin'} />
-              <DetailRow label="Téléphone" value={worker.phone} />
-              <DetailRow label="Email" value={worker.email || 'N/A'} />
-              <DetailRow label="Adresse" value={worker.address || 'N/A'} />
-              <DetailRow label="Contact Urgence" value={`${worker.emergencyContactName || 'N/A'} — ${worker.emergencyContactPhone || 'N/A'}`} />
+              <DetailRow label="Date de Naissance" value={new Date(patient.dateOfBirth).toLocaleDateString('fr-CD')} />
+              <DetailRow label="Âge" value={`${OccHealthUtils.getPatientAge(patient)} ans`} />
+              <DetailRow label="Genre" value={patient.gender === 'male' ? 'Masculin' : 'Féminin'} />
+              <DetailRow label="Téléphone" value={patient.phone || 'N/A'} />
+              <DetailRow label="Email" value={patient.email || 'N/A'} />
+              <DetailRow label="Adresse" value={patient.address || 'N/A'} />
+              <DetailRow label="Contact Urgence" value={`${patient.emergencyContactName || 'N/A'} — ${patient.emergencyContactPhone || 'N/A'}`} />
+            </View>
+
+            {/* Medical Info */}
+            <View style={styles.detailSection}>
+              <Text style={styles.detailSectionTitle}>Informations Médicales</Text>
+              <DetailRow label="Groupe Sanguin" value={patient.bloodType || 'Non renseigné'} />
+              <DetailRow label="Allergies" value={patient.allergies.length > 0 ? patient.allergies.join(', ') : 'Aucune connue'} />
+              <DetailRow label="Pathologies Chroniques" value={patient.chronicConditions.length > 0 ? patient.chronicConditions.join(', ') : 'Aucune'} />
+              <DetailRow label="Médicaments" value={patient.currentMedications.length > 0 ? patient.currentMedications.join(', ') : 'Aucun'} />
             </View>
 
             {/* Employment Info */}
             <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Informations Professionnelles</Text>
-              <DetailRow label="Entreprise" value={worker.company} />
+              <Text style={styles.detailSectionTitle}>Contexte Professionnel</Text>
+              <DetailRow label="Entreprise" value={patient.company} />
               <DetailRow label="Secteur" value={sectorProfile.label} />
-              <DetailRow label="Site" value={worker.site} />
-              <DetailRow label="Département" value={worker.department} />
-              <DetailRow label="Poste" value={worker.jobTitle} />
-              <DetailRow label="Catégorie" value={OccHealthUtils.getJobCategoryLabel(worker.jobCategory)} />
-              <DetailRow label="Horaire" value={getShiftLabel(worker.shiftPattern)} />
-              <DetailRow label="Date Embauche" value={new Date(worker.hireDate).toLocaleDateString('fr-CD')} />
-              <DetailRow label="Contrat" value={getContractLabel(worker.contractType)} />
+              <DetailRow label="Site" value={patient.site} />
+              <DetailRow label="Département" value={patient.department} />
+              <DetailRow label="Poste" value={patient.jobTitle} />
+              <DetailRow label="Catégorie" value={OccHealthUtils.getJobCategoryLabel(patient.jobCategory)} />
+              <DetailRow label="Horaire" value={getShiftLabel(patient.shiftPattern)} />
+              <DetailRow label="Date Embauche" value={new Date(patient.hireDate).toLocaleDateString('fr-CD')} />
+              <DetailRow label="Contrat" value={getContractLabel(patient.contractType)} />
             </View>
 
             {/* Health Info */}
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Santé au Travail</Text>
-              <DetailRow label="Dernier Examen" value={worker.lastMedicalExam ? new Date(worker.lastMedicalExam).toLocaleDateString('fr-CD') : 'Aucun'} />
-              <DetailRow label="Prochain Examen" value={worker.nextMedicalExam ? new Date(worker.nextMedicalExam).toLocaleDateString('fr-CD') : 'Non planifié'} />
-              <DetailRow label="Niveau de Risque" value={OccHealthUtils.getSectorRiskLabel(worker.riskLevel)} />
+              <DetailRow label="Dernier Examen" value={patient.lastMedicalExam ? new Date(patient.lastMedicalExam).toLocaleDateString('fr-CD') : 'Aucun'} />
+              <DetailRow label="Prochain Examen" value={patient.nextMedicalExam ? new Date(patient.nextMedicalExam).toLocaleDateString('fr-CD') : 'Non planifié'} />
+              <DetailRow label="Niveau de Risque" value={OccHealthUtils.getSectorRiskLabel(patient.riskLevel)} />
             </View>
 
             {/* Exposure Risks */}
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Risques d'Exposition</Text>
               <View style={styles.tagContainer}>
-                {worker.exposureRisks.map((risk, i) => (
+                {patient.exposureRisks.map((risk, i) => (
                   <View key={i} style={[styles.riskTag, { backgroundColor: '#EF444414' }]}>
                     <Ionicons name="warning-outline" size={12} color="#EF4444" />
                     <Text style={[styles.riskTagText, { color: '#EF4444' }]}>{OccHealthUtils.getExposureRiskLabel(risk)}</Text>
@@ -273,7 +438,7 @@ function WorkerDetailModal({
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>EPI Requis</Text>
               <View style={styles.tagContainer}>
-                {worker.ppeRequired.map((ppe, i) => (
+                {patient.ppeRequired.map((ppe, i) => (
                   <View key={i} style={[styles.riskTag, { backgroundColor: ACCENT + '14' }]}>
                     <Ionicons name="shield-checkmark-outline" size={12} color={ACCENT} />
                     <Text style={[styles.riskTagText, { color: ACCENT }]}>{getPPELabel(ppe)}</Text>
@@ -322,10 +487,10 @@ function getContractLabel(c: string): string {
   return m[c] || c;
 }
 
-// ─── Add Worker Modal ────────────────────────────────────────
-function AddWorkerModal({
+// ─── Add Patient Modal ───────────────────────────────────────
+function AddPatientModal({
   visible, onClose, onSave
-}: { visible: boolean; onClose: () => void; onSave: (w: OccupationalHealthPatient) => void }) {
+}: { visible: boolean; onClose: () => void; onSave: (p: OccupationalHealthPatient) => void }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [employeeId, setEmployeeId] = useState('');
@@ -343,13 +508,23 @@ function AddWorkerModal({
       return;
     }
     const sectorProfile = SECTOR_PROFILES[sector];
-    const newWorker: OccupationalHealthPatient = {
-      id: `w-${Date.now()}`,
+    const now = new Date().toISOString();
+    const newPatient: OccupationalHealthPatient = {
+      id: `p-${Date.now()}`,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       dateOfBirth: dateOfBirth || '1990-01-01',
       gender: 'male',
       phone: phone.trim(),
+      // Patient required fields
+      allergies: [],
+      chronicConditions: [],
+      currentMedications: [],
+      patientNumber: PatientUtils.generatePatientNumber(),
+      registrationDate: now,
+      status: 'active',
+      createdAt: now,
+      // OH fields
       employeeId: employeeId.trim(),
       company: company.trim() || 'Non spécifié',
       sector,
@@ -365,8 +540,8 @@ function AddWorkerModal({
       ppeRequired: [] as PPEType[],
       riskLevel: sectorProfile.riskLevel,
       vaccinationStatus: [],
-    } as any;
-    onSave(newWorker);
+    };
+    onSave(newPatient);
     // Reset
     setFirstName(''); setLastName(''); setEmployeeId(''); setCompany('');
     setSector('mining'); setSite(''); setDepartment(''); setJobTitle('');
@@ -379,7 +554,7 @@ function AddWorkerModal({
         <View style={[styles.modalContent, { maxHeight: '85%' }]}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau Travailleur</Text>
+              <Text style={styles.modalTitle}>Nouveau Patient — Santé au Travail</Text>
               <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
 
@@ -408,7 +583,7 @@ function AddWorkerModal({
               <TextInput style={styles.formInput} value={company} onChangeText={setCompany} placeholder="Nom de l'entreprise" />
             </View>
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Secteur</Text>
+              <Text style={styles.formLabel}>Secteur d'Activité</Text>
               <View style={styles.sectorGrid}>
                 {(Object.keys(SECTOR_PROFILES) as IndustrySector[]).slice(0, 8).map(s => {
                   const sp = SECTOR_PROFILES[s];
@@ -454,75 +629,76 @@ function AddWorkerModal({
 }
 
 // ─── Main Screen ─────────────────────────────────────────────
-export function WorkersScreen() {
-  const [workers, setWorkers] = useState<OccupationalHealthPatient[]>(SAMPLE_WORKERS);
+export function OHPatientsScreen() {
+  const [patients, setPatients] = useState<OccupationalHealthPatient[]>(SAMPLE_PATIENTS);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSector, setFilterSector] = useState<IndustrySector | 'all'>('all');
   const [filterFitness, setFilterFitness] = useState<FitnessStatus | 'all'>('all');
-  const [selectedWorker, setSelectedWorker] = useState<OccupationalHealthPatient | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<OccupationalHealthPatient | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
-    loadWorkers();
+    loadPatients();
   }, []);
 
-  const loadWorkers = async () => {
+  const loadPatients = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setWorkers(JSON.parse(stored));
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_WORKERS));
+      if (stored) setPatients(JSON.parse(stored));
+      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_PATIENTS));
     } catch { /* keep samples */ }
   };
 
-  const saveWorkers = async (list: OccupationalHealthPatient[]) => {
-    setWorkers(list);
+  const savePatients = async (list: OccupationalHealthPatient[]) => {
+    setPatients(list);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   };
 
-  const handleAddWorker = (w: OccupationalHealthPatient) => {
-    const updated = [w, ...workers];
-    saveWorkers(updated);
+  const handleAddPatient = (p: OccupationalHealthPatient) => {
+    const updated = [p, ...patients];
+    savePatients(updated);
     setShowAddModal(false);
-    Alert.alert('Succès', `${w.firstName} ${w.lastName} ajouté(e) au registre.`);
+    Alert.alert('Succès', `${p.firstName} ${p.lastName} enregistré(e) — N° ${p.patientNumber}`);
   };
 
-  const handleDeleteWorker = (id: string) => {
-    Alert.alert('Confirmer', 'Supprimer ce travailleur ?', [
+  const handleDeletePatient = (id: string) => {
+    Alert.alert('Confirmer', 'Supprimer ce patient du registre ?', [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer', style: 'destructive', onPress: () => {
-          saveWorkers(workers.filter(w => w.id !== id));
+          savePatients(patients.filter(p => p.id !== id));
           setShowDetail(false);
-          setSelectedWorker(null);
+          setSelectedPatient(null);
         }
       },
     ]);
   };
 
-  const filteredWorkers = useMemo(() => {
-    return workers.filter(w => {
+  const filteredPatients = useMemo(() => {
+    return patients.filter(p => {
       const q = searchQuery.toLowerCase();
       const matchesSearch = !q ||
-        `${w.firstName} ${w.lastName}`.toLowerCase().includes(q) ||
-        w.employeeId.toLowerCase().includes(q) ||
-        w.company.toLowerCase().includes(q) ||
-        w.jobTitle.toLowerCase().includes(q);
-      const matchesSector = filterSector === 'all' || w.sector === filterSector;
-      const matchesFitness = filterFitness === 'all' || w.fitnessStatus === filterFitness;
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+        p.employeeId.toLowerCase().includes(q) ||
+        p.patientNumber.toLowerCase().includes(q) ||
+        p.company.toLowerCase().includes(q) ||
+        p.jobTitle.toLowerCase().includes(q);
+      const matchesSector = filterSector === 'all' || p.sector === filterSector;
+      const matchesFitness = filterFitness === 'all' || p.fitnessStatus === filterFitness;
       return matchesSearch && matchesSector && matchesFitness;
     });
-  }, [workers, searchQuery, filterSector, filterFitness]);
+  }, [patients, searchQuery, filterSector, filterFitness]);
 
   // Stats
   const stats = useMemo(() => ({
-    total: workers.length,
-    fit: workers.filter(w => w.fitnessStatus === 'fit').length,
-    restricted: workers.filter(w => w.fitnessStatus === 'fit_with_restrictions').length,
-    unfit: workers.filter(w => w.fitnessStatus === 'temporarily_unfit' || w.fitnessStatus === 'permanently_unfit').length,
-    pending: workers.filter(w => w.fitnessStatus === 'pending_evaluation').length,
-    overdue: workers.filter(w => w.nextMedicalExam && new Date(w.nextMedicalExam) < new Date()).length,
-  }), [workers]);
+    total: patients.length,
+    fit: patients.filter(p => p.fitnessStatus === 'fit').length,
+    restricted: patients.filter(p => p.fitnessStatus === 'fit_with_restrictions').length,
+    unfit: patients.filter(p => p.fitnessStatus === 'temporarily_unfit' || p.fitnessStatus === 'permanently_unfit').length,
+    pending: patients.filter(p => p.fitnessStatus === 'pending_evaluation').length,
+    overdue: patients.filter(p => p.nextMedicalExam && new Date(p.nextMedicalExam) < new Date()).length,
+  }), [patients]);
 
   const sectorOptions: { value: IndustrySector | 'all'; label: string }[] = [
     { value: 'all', label: 'Tous les secteurs' },
@@ -545,12 +721,12 @@ export function WorkersScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.screenTitle}>Gestion des Travailleurs</Text>
-          <Text style={styles.screenSubtitle}>Registre complet par secteur et entreprise</Text>
+          <Text style={styles.screenTitle}>Patients — Santé au Travail</Text>
+          <Text style={styles.screenSubtitle}>Registre des patients par secteur d'activité et entreprise</Text>
         </View>
         <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.addButtonText}>Nouveau Travailleur</Text>
+          <Text style={styles.addButtonText}>Nouveau Patient</Text>
         </TouchableOpacity>
       </View>
 
@@ -580,7 +756,7 @@ export function WorkersScreen() {
           <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Rechercher par nom, matricule, entreprise..."
+            placeholder="Rechercher par nom, N° patient, matricule, entreprise..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor={colors.placeholder}
@@ -615,29 +791,29 @@ export function WorkersScreen() {
         </ScrollView>
       </View>
 
-      {/* Workers List */}
-      <Text style={styles.resultsCount}>{filteredWorkers.length} travailleur(s) trouvé(s)</Text>
-      <View style={styles.workersList}>
-        {filteredWorkers.map(w => (
-          <WorkerCard key={w.id} worker={w} onPress={() => { setSelectedWorker(w); setShowDetail(true); }} />
+      {/* Patients List */}
+      <Text style={styles.resultsCount}>{filteredPatients.length} patient(s) trouvé(s)</Text>
+      <View style={styles.patientsList}>
+        {filteredPatients.map(p => (
+          <PatientCard key={p.id} patient={p} onPress={() => { setSelectedPatient(p); setShowDetail(true); }} />
         ))}
-        {filteredWorkers.length === 0 && (
+        {filteredPatients.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>Aucun travailleur trouvé</Text>
-            <Text style={styles.emptySubtext}>Ajustez les filtres ou ajoutez un nouveau travailleur</Text>
+            <Text style={styles.emptyText}>Aucun patient trouvé</Text>
+            <Text style={styles.emptySubtext}>Ajustez les filtres ou enregistrez un nouveau patient</Text>
           </View>
         )}
       </View>
 
       {/* Modals */}
-      <WorkerDetailModal
+      <PatientDetailModal
         visible={showDetail}
-        worker={selectedWorker}
-        onClose={() => { setShowDetail(false); setSelectedWorker(null); }}
+        patient={selectedPatient}
+        onClose={() => { setShowDetail(false); setSelectedPatient(null); }}
         onEdit={() => { Alert.alert('Info', 'Fonction de modification en cours de développement.'); }}
       />
-      <AddWorkerModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleAddWorker} />
+      <AddPatientModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleAddPatient} />
     </ScrollView>
   );
 }
@@ -669,31 +845,31 @@ const styles = StyleSheet.create({
 
   resultsCount: { fontSize: 13, color: colors.textSecondary, marginBottom: 12 },
 
-  workersList: { gap: 12 },
-  workerCard: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 16, ...shadows.sm },
-  workerCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  workerAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  workerName: { fontSize: 15, fontWeight: '600', color: colors.text },
-  workerEmployeeId: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  patientsList: { gap: 12 },
+  patientCard: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 16, ...shadows.sm },
+  patientCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  patientAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  patientName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  patientId: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 
   fitnessChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: borderRadius.full },
   fitnessChipDot: { width: 7, height: 7, borderRadius: 4 },
   fitnessChipText: { fontSize: 11, fontWeight: '600' },
 
-  workerCardBody: { gap: 8, marginBottom: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.outline },
-  workerInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  workerInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  workerInfoText: { fontSize: 13, color: colors.textSecondary },
+  patientCardBody: { gap: 8, marginBottom: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.outline },
+  patientInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  patientInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  patientInfoText: { fontSize: 13, color: colors.textSecondary },
 
   riskBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: borderRadius.full },
   riskBadgeText: { fontSize: 11, fontWeight: '600' },
 
-  workerCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.outline },
-  workerPPERow: { flexDirection: 'row', gap: 4, flexWrap: 'wrap', flex: 1 },
+  patientCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.outline },
+  ppeRow: { flexDirection: 'row', gap: 4, flexWrap: 'wrap', flex: 1 },
   ppeMiniTag: { backgroundColor: colors.surfaceVariant, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
   ppeMiniTagText: { fontSize: 10, color: colors.textSecondary },
   ppeMoreText: { fontSize: 11, color: colors.textTertiary, alignSelf: 'center' },
-  workerExamDate: { fontSize: 11, color: colors.textSecondary },
+  examDate: { fontSize: 11, color: colors.textSecondary },
 
   overdueBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.full },
   overdueBadgeText: { fontSize: 9, fontWeight: '700', color: '#FFF' },

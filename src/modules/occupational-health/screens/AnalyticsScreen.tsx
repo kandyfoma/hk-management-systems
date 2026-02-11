@@ -96,7 +96,7 @@ function SectorComparisonTable() {
     <View style={styles.tableContainer}>
       <View style={styles.tableHeader}>
         <Text style={[styles.tableHeadCell, { flex: 2 }]}>Secteur</Text>
-        <Text style={styles.tableHeadCell}>Travailleurs</Text>
+        <Text style={styles.tableHeadCell}>Patients</Text>
         <Text style={styles.tableHeadCell}>Incidents</Text>
         <Text style={styles.tableHeadCell}>LTIFR</Text>
         <Text style={styles.tableHeadCell}>Conformité</Text>
@@ -165,7 +165,7 @@ export function AnalyticsScreen() {
       {/* Stats Row */}
       <View style={styles.statsRow}>
         {[
-          { label: 'Travailleurs', value: globalStats.totalWorkers, icon: 'people', color: '#3B82F6' },
+          { label: 'Patients', value: globalStats.totalWorkers, icon: 'people', color: '#3B82F6' },
           { label: 'Incidents', value: globalStats.totalIncidents, icon: 'warning', color: '#F59E0B' },
           { label: 'LTIFR Moy.', value: globalStats.avgLTIFR, icon: 'analytics', color: '#8B5CF6' },
           { label: 'Conformité', value: `${globalStats.avgCompliance}%`, icon: 'checkmark-circle', color: '#22C55E' },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
   trendDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 
   // Table
-  tableContainer: { minWidth: isDesktop ? '100%' : 700 },
+  tableContainer: { minWidth: isDesktop ? '100%' : 800, maxWidth: '100%' },
   tableHeader: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 2, borderBottomColor: colors.outline },
   tableHeadCell: { flex: 1, fontSize: 11, fontWeight: '700', color: colors.textSecondary, textAlign: 'center' },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.outline, borderRadius: 4 },

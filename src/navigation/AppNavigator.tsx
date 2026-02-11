@@ -16,7 +16,7 @@ import { OccHealthDashboardContent } from '../modules/occupational-health/screen
 import { OccHealthConsultationScreen } from '../modules/occupational-health/screens/OccHealthConsultationScreen';
 import { PreviousVisitsScreen } from '../modules/occupational-health/screens/PreviousVisitsScreen';
 import { CertificatesScreen } from '../modules/occupational-health/screens/CertificatesScreen';
-import { WorkersScreen } from '../modules/occupational-health/screens/WorkersScreen';
+import { OHPatientsScreen } from '../modules/occupational-health/screens/OHPatientsScreen';
 import { IncidentsScreen } from '../modules/occupational-health/screens/IncidentsScreen';
 import { DiseasesScreen } from '../modules/occupational-health/screens/DiseasesScreen';
 import { SurveillanceScreen } from '../modules/occupational-health/screens/SurveillanceScreen';
@@ -46,7 +46,7 @@ import { ClinicalNotesScreen } from '../modules/hospital/screens/ClinicalNotesSc
 import { HospitalBillingScreen } from '../modules/hospital/screens/HospitalBillingScreen';
 import { HospitalConsultationScreen } from '../modules/hospital/screens/HospitalConsultationScreen';
 import { ConsultationHistoryScreen } from '../modules/hospital/screens/ConsultationHistoryScreen';
-import { SidebarLayout, SidebarSection } from '../components/SidebarLayout';
+import { SidebarLayout, SidebarSection, SidebarMenuItem } from '../components/SidebarLayout';
 import { colors, borderRadius } from '../theme/theme';
 import { Patient } from '../models/Patient';
 import { selectActiveModules, selectAllFeatures, logout as logoutAction } from '../store/slices/authSlice';
@@ -125,7 +125,7 @@ const createDynamicSections = (
 
   // Add Pharmacy section if user has pharmacy access
   if (activeModules.includes('PHARMACY') || activeModules.includes('TRIAL')) {
-    const pharmacyItems = [
+    const pharmacyItems: SidebarMenuItem[] = [
       { id: 'ph-dashboard', label: 'Vue d\'Ensemble', icon: 'pulse-outline', iconActive: 'pulse' }
     ];
 
@@ -162,19 +162,19 @@ const createDynamicSections = (
 
   // Add Hospital section if user has hospital access
   if (activeModules.includes('HOSPITAL') || activeModules.includes('TRIAL')) {
-    const hospitalItems = [
+    const hospitalItems: SidebarMenuItem[] = [
       { id: 'hp-dashboard', label: 'Vue d\'Ensemble', icon: 'medkit-outline', iconActive: 'medkit' }
     ];
 
     // Emergency & Triage
-    hospitalItems.push({ id: 'hp-emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 } as any);
-    hospitalItems.push({ id: 'hp-triage', label: 'Triage', icon: 'fitness-outline', iconActive: 'fitness' } as any);
+    hospitalItems.push({ id: 'hp-emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 });
+    hospitalItems.push({ id: 'hp-triage', label: 'Triage', icon: 'heart-outline', iconActive: 'heart' });
 
     // Add features based on license
     if (hasFeature('patient_management')) {
       hospitalItems.push({ id: 'hp-patients', label: 'Gestion Patients', icon: 'body-outline', iconActive: 'body' });
-      hospitalItems.push({ id: 'hp-consultation', label: 'Consultation', icon: 'medical-outline', iconActive: 'medical' } as any);
-      hospitalItems.push({ id: 'hp-consultation-history', label: 'Historique Consult.', icon: 'time-outline', iconActive: 'time' } as any);
+      hospitalItems.push({ id: 'hp-consultation', label: 'Consultation', icon: 'medkit-outline', iconActive: 'medkit' });
+      hospitalItems.push({ id: 'hp-consultation-history', label: 'Historique Consult.', icon: 'time-outline', iconActive: 'time' });
     }
     
     if (hasFeature('appointment_scheduling') || hasFeature('advanced_scheduling')) {
@@ -183,15 +183,15 @@ const createDynamicSections = (
     
     // Ward & Admission Management
     if (hasFeature('multi_department')) {
-      hospitalItems.push({ id: 'hp-wards', label: 'Services & Lits', icon: 'bed-outline', iconActive: 'bed' });
-      hospitalItems.push({ id: 'hp-admissions', label: 'Hospitalisations', icon: 'enter-outline', iconActive: 'enter' } as any);
+      hospitalItems.push({ id: 'hp-wards', label: 'Services & Lits', icon: 'home-outline', iconActive: 'home' });
+      hospitalItems.push({ id: 'hp-admissions', label: 'Hospitalisations', icon: 'log-in-outline', iconActive: 'log-in' });
     }
 
     // Medication Administration (MAR)
-    hospitalItems.push({ id: 'hp-mar', label: 'Adm. Médicaments', icon: 'medical-outline', iconActive: 'medical' } as any);
+    hospitalItems.push({ id: 'hp-mar', label: 'Adm. Médicaments', icon: 'medkit-outline', iconActive: 'medkit' });
 
     if (hasFeature('medical_records')) {
-      hospitalItems.push({ id: 'hp-clinical-notes', label: 'Notes Cliniques', icon: 'document-text-outline', iconActive: 'document-text' } as any);
+      hospitalItems.push({ id: 'hp-clinical-notes', label: 'Notes Cliniques', icon: 'document-text-outline', iconActive: 'document-text' });
     }
     
     if (hasFeature('lab_integration')) {
@@ -210,17 +210,17 @@ const createDynamicSections = (
 
   // Add Occupational Health section if user has occ health access
   if (activeModules.includes('OCCUPATIONAL_HEALTH') || activeModules.includes('TRIAL')) {
-    const occHealthItems = [
+    const occHealthItems: SidebarMenuItem[] = [
       { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' }
     ];
 
     if (hasFeature('worker_management')) {
-      occHealthItems.push({ id: 'oh-workers', label: 'Travailleurs', icon: 'people-outline', iconActive: 'people' });
+      occHealthItems.push({ id: 'oh-patients', label: 'Patients', icon: 'people-outline', iconActive: 'people' });
     }
 
     if (hasFeature('medical_examinations')) {
-      occHealthItems.push({ id: 'oh-exams', label: 'Visites Médicales', icon: 'medkit-outline', iconActive: 'medkit', badge: 8 } as any);
-      occHealthItems.push({ id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' } as any);
+      occHealthItems.push({ id: 'oh-exams', label: 'Visites Médicales', icon: 'medkit-outline', iconActive: 'medkit', badge: 8 });
+      occHealthItems.push({ id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' });
     }
 
     if (hasFeature('fitness_certificates')) {
@@ -228,11 +228,11 @@ const createDynamicSections = (
     }
 
     if (hasFeature('incident_management') || hasFeature('basic_incident_reporting')) {
-      occHealthItems.push({ id: 'oh-incidents', label: 'Incidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 } as any);
+      occHealthItems.push({ id: 'oh-incidents', label: 'Incidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 });
     }
 
     if (hasFeature('occupational_disease_tracking')) {
-      occHealthItems.push({ id: 'oh-diseases', label: 'Maladies Pro.', icon: 'fitness-outline', iconActive: 'fitness' });
+      occHealthItems.push({ id: 'oh-diseases', label: 'Maladies Pro.', icon: 'heart-outline', iconActive: 'heart' });
     }
 
     if (hasFeature('surveillance_programs')) {
@@ -288,9 +288,9 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
 // Occupational Health placeholder screen definitions
 // ═══════════════════════════════════════════════════════════════
 const occHealthScreens: Record<string, { title: string; subtitle: string; icon: any; features: string[] }> = {
-  'oh-workers': { title: 'Gestion des Travailleurs', subtitle: 'Registre multi-secteur des travailleurs avec profils de risque.', icon: 'people', features: ['Enregistrement multi-secteur', 'Profil de risque par secteur & poste', 'Historique d\'exposition', 'Suivi EPI', 'Gestion multi-entreprise', 'Export CNSS'] },
+  'oh-patients': { title: 'Patients — Santé au Travail', subtitle: 'Registre des patients par secteur d\'activité et entreprise.', icon: 'people', features: ['Enregistrement multi-secteur', 'Profil de risque par secteur & poste', 'Historique d\'exposition', 'Suivi EPI', 'Gestion multi-entreprise', 'Export CNSS'] },
   'oh-exams': { title: 'Visites Médicales', subtitle: 'Examens d\'aptitude adaptés par secteur (ILO C161).', icon: 'medkit', features: ['Visite d\'embauche', 'Visites périodiques', 'Examens sectoriels adaptés', 'Bilan ergonomique & stress', 'Évaluation santé mentale', 'Tests de risque sectoriel'] },
-  'oh-certificates': { title: 'Certificats d\'Aptitude', subtitle: 'Gestion des certificats médicaux.', icon: 'shield-checkmark', features: ['Émission certificats', 'Suivi expirations', 'Alertes renouvellement', 'Classifications aptitude', 'Historique par travailleur', 'Signature numérique'] },
+  'oh-certificates': { title: 'Certificats d\'Aptitude', subtitle: 'Gestion des certificats médicaux.', icon: 'shield-checkmark', features: ['Émission certificats', 'Suivi expirations', 'Alertes renouvellement', 'Classifications aptitude', 'Historique par patient', 'Signature numérique'] },
   'oh-incidents': { title: 'Incidents & Accidents', subtitle: 'Signalement et investigation ISO 45001 §10.2.', icon: 'warning', features: ['Déclaration accident', 'Classification gravité', 'Investigation causes racines', 'Actions correctives (CAPA)', 'Calcul LTIFR/TRIFR/SR', 'Rapports réglementaires par secteur'] },
   'oh-diseases': { title: 'Maladies Professionnelles', subtitle: 'Classification ILO R194 — tous secteurs.', icon: 'fitness', features: ['TMS & troubles ergonomiques', 'Burnout & risques psychosociaux', 'Pneumoconioses & pathologies respiratoires', 'Déclaration CNSS', 'Suivi indemnisations', 'Registre par secteur'] },
   'oh-surveillance': { title: 'Programmes de Surveillance', subtitle: 'Surveillance médicale par secteur et risque.', icon: 'eye', features: ['Programmes par agent de risque', 'Surveillance musculo-squelettique', 'Surveillance psychosociale', 'Seuils d\'alerte par secteur', 'Calendrier examens', 'Rapports par entreprise'] },
@@ -496,7 +496,7 @@ function DesktopApp() {
         showBackButton={true}
       />
     );
-    if (activeScreen === 'oh-workers') return <WorkersScreen />;
+    if (activeScreen === 'oh-patients') return <OHPatientsScreen />;
     if (activeScreen === 'oh-incidents') return <IncidentsScreen />;
     if (activeScreen === 'oh-diseases') return <DiseasesScreen />;
     if (activeScreen === 'oh-surveillance') return <SurveillanceScreen />;

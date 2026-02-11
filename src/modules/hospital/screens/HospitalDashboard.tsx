@@ -195,24 +195,32 @@ export function HospitalDashboardContent() {
               <Ionicons name="chevron-forward" size={14} color={colors.info} />
             </TouchableOpacity>
           </View>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.th, { flex: 0.8 }]}>ID</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Patient</Text>
-            <Text style={[styles.th, { flex: 0.5 }]}>Âge</Text>
-            <Text style={[styles.th, { flex: 1 }]}>Service</Text>
-            <Text style={[styles.th, { flex: 1 }]}>Statut</Text>
-          </View>
-          {recentPatients.map((p, idx) => (
-            <View key={idx} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowAlt]}>
-              <Text style={[styles.td, { flex: 0.8, color: colors.info, fontWeight: '600' }]}>{p.id}</Text>
-              <Text style={[styles.td, { flex: 1.5, fontWeight: '600' }]}>{p.name}</Text>
-              <Text style={[styles.td, { flex: 0.5 }]}>{p.age}</Text>
-              <Text style={[styles.td, { flex: 1 }]}>{p.service}</Text>
-              <View style={{ flex: 1 }}>
-                <StatusBadge status={p.status} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tableScrollContent}
+          >
+            <View style={{ width: isDesktop ? '100%' : 540 }}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.th, { flex: 0.8 }]}>ID</Text>
+                <Text style={[styles.th, { flex: 1.5 }]}>Patient</Text>
+                <Text style={[styles.th, { flex: 0.5 }]}>Âge</Text>
+                <Text style={[styles.th, { flex: 1 }]}>Service</Text>
+                <Text style={[styles.th, { flex: 1 }]}>Statut</Text>
               </View>
+              {recentPatients.map((p, idx) => (
+                <View key={idx} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowAlt]}>
+                  <Text style={[styles.td, { flex: 0.8, color: colors.info, fontWeight: '600' }]}>{p.id}</Text>
+                  <Text style={[styles.td, { flex: 1.5, fontWeight: '600' }]}>{p.name}</Text>
+                  <Text style={[styles.td, { flex: 0.5 }]}>{p.age}</Text>
+                  <Text style={[styles.td, { flex: 1 }]}>{p.service}</Text>
+                  <View style={{ flex: 1 }}>
+                    <StatusBadge status={p.status} />
+                  </View>
+                </View>
+              ))}
             </View>
-          ))}
+          </ScrollView>
         </View>
 
         {/* Today's Appointments */}
@@ -253,7 +261,7 @@ const styles = StyleSheet.create({
   addBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
 
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 24 },
-  metricCard: { flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '47%' as any, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 18, minWidth: isDesktop ? 200 : undefined, ...shadows.sm },
+  metricCard: { flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '47%' as any, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 18, minWidth: isDesktop ? 220 : 150, ...shadows.sm },
   metricTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   metricIcon: { width: 44, height: 44, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center' },
   changeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.full, gap: 2 },
@@ -272,6 +280,7 @@ const styles = StyleSheet.create({
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.outline },
   tableRowAlt: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.sm },
   td: { fontSize: 13, color: colors.text },
+  tableScrollContent: { paddingBottom: 4 },
 
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: borderRadius.full },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },

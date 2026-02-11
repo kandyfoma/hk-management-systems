@@ -8,6 +8,8 @@ import {
   Dimensions,
   Platform,
   Animated,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing, typography } from '../theme/theme';
@@ -17,7 +19,312 @@ const isDesktop = width >= 1024;
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_COLLAPSED = 68;
 
-// ─── Types ───────────────────────────────────────────────────
+// ─── Mobile Sidebar Modal ───────────────────────────────────
+function MobileSidebarModal({
+  visible,
+  sections,
+  activeId,
+  onSelect,
+  onClose,
+  accentColor,
+  title,
+  subtitle,
+  headerIcon,
+}: {
+  visible: boolean;
+  sections: SidebarSection[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+  accentColor: string;
+  title?: string;
+  subtitle?: string;
+  headerIcon?: keyof typeof Ionicons.glyphMap;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="formSheet"
+      onRequestClose={onClose}
+    >
+      <View style={mobileSidebarStyles.container}>
+        {/* Header */}
+        <View style={mobileSidebarStyles.header}>
+          <View style={mobileSidebarStyles.headerContent}>
+            {headerIcon && (
+              <View style={[mobileSidebarStyles.headerIcon, { backgroundColor: accentColor + '14' }]}>
+                <Ionicons name={headerIcon} size={24} color={accentColor} />
+              </View>
+            )}
+            <View style={mobileSidebarStyles.headerText}>
+              {title && <Text style={mobileSidebarStyles.headerTitle}>{title}</Text>}
+              {subtitle && <Text style={mobileSidebarStyles.headerSubtitle}>{subtitle}</Text>}
+            </View>
+          </View>
+          <TouchableOpacity
+            style={mobileSidebarStyles.closeButton}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Sidebar Content */}
+        <ScrollView style={mobileSidebarStyles.content} showsVerticalScrollIndicator={false}>
+          {sections.map((section, sIdx) => (
+            <View key={sIdx}>
+              {/* Section Header */}
+              {section.title && (
+                <View style={mobileSidebarStyles.sectionHeader}>
+                  <Text style={mobileSidebarStyles.sectionTitle}>{section.title}</Text>
+                </View>
+              )}
+              
+              {/* Section Items */}
+              {section.items.map((item) => {
+                const isActive = item.id === activeId;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      mobileSidebarStyles.menuItem,
+                      isActive && {
+                        backgroundColor: accentColor + '14',
+                        borderLeftColor: accentColor,
+                        borderLeftWidth: 3,
+                      },
+                    ]}
+                    onPress={() => {
+                      onSelect(item.id);
+                      onClose();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[
+                      mobileSidebarStyles.menuIcon,
+                      isActive && { backgroundColor: accentColor + '20' }
+                    ]}>
+                      <Ionicons
+                        name={isActive ? (item.iconActive || item.icon) : item.icon}
+                        size={20}
+                        color={isActive ? accentColor : colors.textSecondary}
+                      />
+                    </View>
+                    <Text style={[
+                      mobileSidebarStyles.menuLabel,
+                      isActive && { color: accentColor, fontWeight: '600' },
+                    ]}>
+                      {item.label}
+                    </Text>
+                    {item.badge ? (
+                      <View style={[mobileSidebarStyles.badge, { backgroundColor: colors.error }]}>
+                        <Text style={mobileSidebarStyles.badgeText}>{item.badge}</Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+              
+              {/* Section Divider */}
+              {sIdx < sections.length - 1 && <View style={mobileSidebarStyles.sectionDivider} />}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+const mobileSidebarStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.sidebar,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingTop: Platform.OS === 'ios' ? spacing.xl + 10 : spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.sidebarHover,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  headerText: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.sidebarText,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: colors.sidebarTextSecondary,
+    marginTop: 2,
+  },
+  closeButton: {
+    padding: spacing.sm,
+    borderRadius: borderRadius.sm,
+  },
+  content: {
+    flex: 1,
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingTop: spacing.lg,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.sidebarTextSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
+  },
+  menuIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  menuLabel: {
+    fontSize: 15,
+    color: colors.sidebarText,
+    flex: 1,
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.surface,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: colors.sidebarHover,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.md,
+  },
+});
+
+// ─── Mobile Header Component ─────────────────────────────────
+function MobileHeader({
+  title,
+  subtitle,
+  headerIcon,
+  accentColor,
+  onMenuPress,
+}: {
+  title?: string;
+  subtitle?: string;
+  headerIcon?: keyof typeof Ionicons.glyphMap;
+  accentColor: string;
+  onMenuPress: () => void;
+}) {
+  return (
+    <View style={mobileHeaderStyles.container}>
+      <View style={mobileHeaderStyles.content}>
+        <TouchableOpacity
+          style={mobileHeaderStyles.menuButton}
+          onPress={onMenuPress}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="menu" size={24} color={colors.text} />
+        </TouchableOpacity>
+        
+        <View style={mobileHeaderStyles.titleContainer}>
+          {headerIcon && (
+            <View style={[mobileHeaderStyles.headerIcon, { backgroundColor: accentColor + '14' }]}>
+              <Ionicons name={headerIcon} size={20} color={accentColor} />
+            </View>
+          )}
+          <View>
+            {title && <Text style={mobileHeaderStyles.title}>{title}</Text>}
+            {subtitle && <Text style={mobileHeaderStyles.subtitle}>{subtitle}</Text>}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const mobileHeaderStyles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+    ...shadows.sm,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingTop: Platform.OS === 'ios' ? spacing.xl + 10 : spacing.md, // Account for status bar
+  },
+  menuButton: {
+    padding: spacing.sm,
+    marginRight: spacing.md,
+    borderRadius: borderRadius.sm,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+});
+
+// ─── Mobile Sidebar Modal ───────────────────────────────────
 export interface SidebarMenuItem {
   id: string;
   label: string;
@@ -42,68 +349,6 @@ interface SidebarLayoutProps {
   headerIcon?: keyof typeof Ionicons.glyphMap;
 }
 
-// ─── Mobile Horizontal Tab Bar ───────────────────────────────
-function MobileTabBar({
-  sections,
-  activeId,
-  onSelect,
-  accentColor,
-}: {
-  sections: SidebarSection[];
-  activeId: string;
-  onSelect: (id: string) => void;
-  accentColor: string;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={mobileStyles.tabBar}
-      contentContainerStyle={mobileStyles.tabBarContent}
-    >
-      {sections.map((section, sIdx) => (
-        <React.Fragment key={sIdx}>
-          {/* Section divider on mobile */}
-          {sIdx > 0 && <View style={mobileStyles.sectionDivider} />}
-          {section.items.map((item) => {
-            const isActive = item.id === activeId;
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  mobileStyles.tab,
-                  isActive && { backgroundColor: accentColor + '14', borderColor: accentColor },
-                ]}
-                onPress={() => onSelect(item.id)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={isActive ? (item.iconActive || item.icon) : item.icon}
-                  size={18}
-                  color={isActive ? accentColor : colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    mobileStyles.tabLabel,
-                    isActive && { color: accentColor, fontWeight: '700' },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                {item.badge ? (
-                  <View style={[mobileStyles.badge, { backgroundColor: colors.error }]}>
-                    <Text style={mobileStyles.badgeText}>{item.badge}</Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
-        </React.Fragment>
-      ))}
-    </ScrollView>
-  );
-}
-
 // ─── Sidebar Layout Component ────────────────────────────────
 export function SidebarLayout({
   sections,
@@ -116,19 +361,33 @@ export function SidebarLayout({
   headerIcon,
 }: SidebarLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH;
 
-  // On mobile, show a horizontal scrollable tab bar at the top
+  // Mobile: header with menu button + modal sidebar
   if (!isDesktop) {
     return (
       <View style={styles.mobileContainer}>
-        <MobileTabBar
+        <MobileHeader
+          title={title}
+          subtitle={subtitle}
+          headerIcon={headerIcon}
+          accentColor={accentColor}
+          onMenuPress={() => setMobileMenuVisible(true)}
+        />
+        <View style={styles.mobileContent}>{children}</View>
+        
+        <MobileSidebarModal
+          visible={mobileMenuVisible}
           sections={sections}
           activeId={activeId}
           onSelect={onSelect}
+          onClose={() => setMobileMenuVisible(false)}
           accentColor={accentColor}
+          title={title}
+          subtitle={subtitle}
+          headerIcon={headerIcon}
         />
-        <View style={styles.mobileContent}>{children}</View>
       </View>
     );
   }
@@ -454,52 +713,3 @@ const styles = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════
 // Mobile Styles
 // ═══════════════════════════════════════════════════════════════
-const mobileStyles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.outline,
-    maxHeight: 52,
-  },
-  tabBarContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    alignItems: 'center',
-  },
-  sectionDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: colors.outline,
-    marginHorizontal: 4,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: borderRadius.full,
-    borderWidth: 1,
-    borderColor: colors.outline,
-    backgroundColor: colors.surface,
-    gap: 6,
-  },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  badge: {
-    borderRadius: borderRadius.full,
-    minWidth: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-});

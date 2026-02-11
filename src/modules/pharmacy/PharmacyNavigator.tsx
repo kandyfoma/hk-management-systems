@@ -6,7 +6,10 @@ import { SuppliersScreen } from './screens/SuppliersScreen';
 import { StockAlertsScreen } from './screens/StockAlertsScreen';
 import { POSScreen } from './screens/POSScreen';
 import { PrescriptionsScreen } from './screens/PrescriptionsScreen';
+import { EnhancedPrescriptionsScreen } from './screens/EnhancedOrdonnancesScreen';
 import { SalesReportsScreen } from './screens/SalesReportsScreen';
+import { PharmacyReportsScreen } from './screens/PharmacyReportsScreen';
+import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 
@@ -23,7 +26,8 @@ const pharmacySections: SidebarSection[] = [
     title: 'Gestion',
     items: [
       { id: 'inventory', label: 'Inventaire', icon: 'cube-outline', iconActive: 'cube', badge: 7 },
-      { id: 'prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
+      { id: 'ordonnances', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text', badge: 12 },
+      { id: 'prescriptions', label: 'Prescriptions Basic', icon: 'receipt-outline', iconActive: 'receipt' },
       { id: 'suppliers', label: 'Fournisseurs', icon: 'business-outline', iconActive: 'business' },
       { id: 'stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle', badge: 3 },
     ],
@@ -31,6 +35,7 @@ const pharmacySections: SidebarSection[] = [
   {
     title: 'Rapports',
     items: [
+      { id: 'reports', label: 'Tous les Rapports', icon: 'document-outline', iconActive: 'document' },
       { id: 'sales-reports', label: 'Rapports Ventes', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
       { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
     ],
@@ -66,16 +71,28 @@ const pharmacyScreens: Record<string, { title: string; subtitle: string; icon: a
     ],
   },
   prescriptions: {
+    title: 'Prescriptions Basiques',
+    subtitle: 'Interface simple pour la gestion des prescriptions.',
+    icon: 'receipt',
+    features: [
+      'Affichage des prescriptions',
+      'Interface basique',
+      'Fonctionnalités essentielles',
+    ],
+  },
+  ordonnances: {
     title: 'Gestion des Ordonnances',
-    subtitle: 'Traiter et délivrer les ordonnances médicales de manière sécurisée.',
+    subtitle: 'Traiter et délivrer les ordonnances médicales de manière professionnelle.',
     icon: 'document-text',
     features: [
       'Réception et validation d\'ordonnances',
       'Vérification des interactions médicamenteuses',
       'Délivrance partielle ou complète',
-      'Historique par patient',
-      'Liaison avec le dossier médical',
-      'Suivi des ordonnances en attente',
+      'Historique par patient et médecin',
+      'Analytics et rapports avancés',
+      'Suivi des ordonnances en temps réel',
+      'Interface professionnelle moderne',
+      'Filtres et recherche avancée',
     ],
   },
   suppliers: {
@@ -117,6 +134,21 @@ const pharmacyScreens: Record<string, { title: string; subtitle: string; icon: a
       'Comparaison inter-périodes',
     ],
   },
+  reports: {
+    title: 'Centre de Rapports',
+    subtitle: 'Hub centralisé pour tous vos rapports pharmacie.',
+    icon: 'document',
+    features: [
+      'Rapports rapides pré-configurés',
+      'Analytics avancées avec visualisations',
+      'Alertes de conformité automatiques',
+      'Export multi-formats (PDF, Excel)',
+      'Planification automatique des rapports',
+      'Tableau de bord de compliance',
+      'Métriques de performance temps réel',
+      'Historique et archivage',
+    ],
+  },
   analytics: {
     title: 'Analytiques Avancées',
     subtitle: 'Indicateurs de performance et tableaux de bord analytiques.',
@@ -139,7 +171,7 @@ export function PharmacyNavigator() {
   const renderContent = () => {
     switch (activeScreen) {
       case 'dashboard':
-        return <PharmacyDashboardContent />;
+        return <PharmacyDashboardContent onNavigate={setActiveScreen} />;
       case 'inventory':
         return <InventoryScreen />;
       case 'suppliers':
@@ -150,8 +182,14 @@ export function PharmacyNavigator() {
         return <POSScreen />;
       case 'prescriptions':
         return <PrescriptionsScreen />;
+      case 'ordonnances':
+        return <EnhancedPrescriptionsScreen />;
       case 'sales-reports':
         return <SalesReportsScreen />;
+      case 'reports':
+        return <PharmacyReportsScreen />;
+      case 'analytics':
+        return <AnalyticsScreen />;
       default:
         // For screens that don't have components yet, show placeholder
         const screenDef = pharmacyScreens[activeScreen];
@@ -166,7 +204,7 @@ export function PharmacyNavigator() {
             />
           );
         }
-        return <PharmacyDashboardContent />;
+        return <PharmacyDashboardContent onNavigate={setActiveScreen} />;
     }
   };
 

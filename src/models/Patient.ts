@@ -26,6 +26,14 @@ export interface Patient {
   currentMedications: string[];
   insuranceProvider?: string;
   insuranceNumber?: string;
+
+  // Occupational Health Context (populated when patient is in OH module)
+  employeeId?: string;
+  company?: string;
+  sector?: string; // IndustrySector — kept as string for loose coupling
+  site?: string;
+  department?: string;
+  jobTitle?: string;
   
   // System Information
   patientNumber: string; // Unique hospital identifier

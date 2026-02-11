@@ -15,20 +15,41 @@ import {
   LabTest,
   LabResult,
   LabOrderStatus,
-  LabTestType,
-  TestPriority,
+  LabPriority,
   SampleType,
-  LaboratoryUtils,
   LAB_TEST_PANELS,
 } from '../../../models/Laboratory';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
-// ─── Sample Data ─────────────────────────────────────────────
+type UILabOrder = LabOrder & {
+  patientName: string;
+  doctorName: string;
+  totalTests: number;
+  completedTests: number;
+  orderDateTime?: string;
+};
+
 const today = new Date().toISOString().split('T')[0];
 
-const sampleLabOrders: (LabOrder & { patientName: string; doctorName: string })[] = [
+const sampleLabTests: LabTest[] = [
+  { id: 'T1', orderId: '1', testCode: 'TROP', testName: 'Troponine I', category: 'biochemistry', status: 'in_progress', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T2', orderId: '1', testCode: 'CKMB', testName: 'CK-MB', category: 'biochemistry', status: 'pending', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T3', orderId: '1', testCode: 'BNP', testName: 'BNP', category: 'biochemistry', status: 'pending', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T4', orderId: '2', testCode: 'CBC', testName: 'Numération Formule Sanguine', category: 'hematology', status: 'in_progress', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T5', orderId: '2', testCode: 'CRP', testName: 'CRP', category: 'biochemistry', status: 'pending', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T6', orderId: '3', testCode: 'CULT', testName: 'Hémoculture', category: 'microbiology', status: 'completed', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T7', orderId: '3', testCode: 'CRP', testName: 'CRP', category: 'biochemistry', status: 'completed', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T8', orderId: '3', testCode: 'LAC', testName: 'Lactate', category: 'biochemistry', status: 'completed', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T9', orderId: '3', testCode: 'ABG', testName: 'Gaz du Sang', category: 'biochemistry', status: 'completed', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+  { id: 'T10', orderId: '4', testCode: 'BETA', testName: 'β-HCG', category: 'endocrinology', status: 'pending', results: [], hasCriticalValue: false, hasAbnormalValue: false, createdAt: new Date().toISOString() },
+];
+
+const testsByOrder = (orderId: string) => sampleLabTests.filter(t => t.orderId === orderId);
+const completedCount = (orderId: string) => testsByOrder(orderId).filter(t => t.status === 'completed' || t.status === 'verified').length;
+
+const sampleLabOrders: UILabOrder[] = [
   {
     id: '1',
     orderNumber: 'LAB260001',
@@ -39,19 +60,21 @@ const sampleLabOrders: (LabOrder & { patientName: string; doctorName: string })[
     doctorName: 'Dr. Mbeki',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
-    orderDate: today,
+    orderDate: `${today}T08:30:00`,
     orderDateTime: `${today}T08:30:00`,
-    status: 'collected',
+    status: 'sample_collected',
     priority: 'urgent',
-    tests: ['1', '2', '3'],
-    totalTests: 3,
-    completedTests: 0,
-    clinicalInfo: 'Douleurs thoraciques, essoufflement',
+    tests: testsByOrder('1'),
+    totalTests: testsByOrder('1').length,
+    completedTests: completedCount('1'),
+    sampleType: 'blood_venous',
+    clinicalNotes: 'Douleurs thoraciques, essoufflement',
     diagnosis: 'Suspicion infarctus du myocarde',
-    fasting: true,
+    fastingRequired: true,
     specialInstructions: 'Prélèvement à jeun depuis 12h',
+    criticalValueAlerted: false,
+    billable: true,
     createdAt: new Date().toISOString(),
-    createdBy: 'D001',
   },
   {
     id: '2',
@@ -63,18 +86,20 @@ const sampleLabOrders: (LabOrder & { patientName: string; doctorName: string })[
     doctorName: 'Dr. Kalombo',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
-    orderDate: today,
+    orderDate: `${today}T09:15:00`,
     orderDateTime: `${today}T09:15:00`,
-    status: 'in_progress',
+    status: 'processing',
     priority: 'routine',
-    tests: ['4', '5'],
-    totalTests: 2,
-    completedTests: 1,
-    clinicalInfo: 'Contrôle post-opératoire',
+    tests: testsByOrder('2'),
+    totalTests: testsByOrder('2').length,
+    completedTests: completedCount('2'),
+    sampleType: 'blood_venous',
+    clinicalNotes: 'Contrôle post-opératoire',
     diagnosis: 'Appendicectomie J+3',
-    fasting: false,
+    fastingRequired: false,
+    criticalValueAlerted: false,
+    billable: true,
     createdAt: new Date().toISOString(),
-    createdBy: 'D002',
   },
   {
     id: '3',
@@ -86,18 +111,20 @@ const sampleLabOrders: (LabOrder & { patientName: string; doctorName: string })[
     doctorName: 'Dr. Mbeki',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
-    orderDate: today,
+    orderDate: `${today}T07:00:00`,
     orderDateTime: `${today}T07:00:00`,
     status: 'completed',
     priority: 'stat',
-    tests: ['6', '7', '8', '9'],
-    totalTests: 4,
-    completedTests: 4,
-    clinicalInfo: 'Fièvre haute, confusion',
+    tests: testsByOrder('3'),
+    totalTests: testsByOrder('3').length,
+    completedTests: completedCount('3'),
+    sampleType: 'blood_venous',
+    clinicalNotes: 'Fièvre haute, confusion',
     diagnosis: 'Septicémie suspectée',
-    fasting: false,
+    fastingRequired: false,
+    criticalValueAlerted: false,
+    billable: true,
     createdAt: new Date().toISOString(),
-    createdBy: 'D001',
   },
   {
     id: '4',
@@ -109,124 +136,20 @@ const sampleLabOrders: (LabOrder & { patientName: string; doctorName: string })[
     doctorName: 'Dr. Nkumu',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
-    orderDate: today,
+    orderDate: `${today}T10:30:00`,
     orderDateTime: `${today}T10:30:00`,
     status: 'ordered',
     priority: 'routine',
-    tests: ['10'],
-    totalTests: 1,
-    completedTests: 0,
-    clinicalInfo: 'Grossesse 12 SA',
+    tests: testsByOrder('4'),
+    totalTests: testsByOrder('4').length,
+    completedTests: completedCount('4'),
+    sampleType: 'urine_midstream',
+    clinicalNotes: 'Grossesse 12 SA',
     diagnosis: 'Bilan prénatal',
-    fasting: true,
+    fastingRequired: true,
+    criticalValueAlerted: false,
+    billable: true,
     createdAt: new Date().toISOString(),
-    createdBy: 'D003',
-  },
-];
-
-const sampleLabTests: (LabTest & { testName: string })[] = [
-  {
-    id: '1',
-    labOrderId: '1',
-    testCode: 'TROP',
-    testName: 'Troponine I',
-    testType: 'chemistry',
-    sampleType: 'serum',
-    status: 'received',
-    priority: 'urgent',
-    orderedAt: `${today}T08:30:00`,
-    sampleCollectedAt: `${today}T08:45:00`,
-    sampleReceivedAt: `${today}T09:00:00`,
-    turnaroundTime: 60,
-    createdAt: new Date().toISOString(),
-    createdBy: 'T001',
-  },
-  {
-    id: '2',
-    labOrderId: '1',
-    testCode: 'CKMB',
-    testName: 'CK-MB',
-    testType: 'chemistry',
-    sampleType: 'serum',
-    status: 'in_progress',
-    priority: 'urgent',
-    orderedAt: `${today}T08:30:00`,
-    sampleCollectedAt: `${today}T08:45:00`,
-    sampleReceivedAt: `${today}T09:00:00`,
-    turnaroundTime: 60,
-    createdAt: new Date().toISOString(),
-    createdBy: 'T001',
-  },
-  {
-    id: '3',
-    labOrderId: '1',
-    testCode: 'BNP',
-    testName: 'BNP',
-    testType: 'chemistry',
-    sampleType: 'plasma',
-    status: 'pending',
-    priority: 'urgent',
-    orderedAt: `${today}T08:30:00`,
-    turnaroundTime: 90,
-    createdAt: new Date().toISOString(),
-    createdBy: 'T001',
-  },
-  {
-    id: '4',
-    labOrderId: '2',
-    testCode: 'CBC',
-    testName: 'Numération Formule Sanguine',
-    testType: 'hematology',
-    sampleType: 'whole_blood',
-    status: 'completed',
-    priority: 'routine',
-    orderedAt: `${today}T09:15:00`,
-    sampleCollectedAt: `${today}T09:30:00`,
-    sampleReceivedAt: `${today}T09:45:00`,
-    analysisStartedAt: `${today}T10:00:00`,
-    analysisCompletedAt: `${today}T10:15:00`,
-    resultReleasedAt: `${today}T10:30:00`,
-    turnaroundTime: 45,
-    createdAt: new Date().toISOString(),
-    createdBy: 'T001',
-  },
-  {
-    id: '5',
-    labOrderId: '2',
-    testCode: 'CRP',
-    testName: 'Protéine C-Réactive',
-    testType: 'chemistry',
-    sampleType: 'serum',
-    status: 'in_progress',
-    priority: 'routine',
-    orderedAt: `${today}T09:15:00`,
-    sampleCollectedAt: `${today}T09:30:00`,
-    sampleReceivedAt: `${today}T09:45:00`,
-    analysisStartedAt: `${today}T10:30:00`,
-    turnaroundTime: 60,
-    createdAt: new Date().toISOString(),
-    createdBy: 'T001',
-  },
-];
-
-const sampleLabResults: LabResult[] = [
-  {
-    id: '1',
-    labTestId: '4',
-    resultNumber: 'RES260001',
-    resultType: 'numerical',
-    numericValue: 12.5,
-    unit: 'g/dL',
-    referenceRange: '12.0-16.0',
-    interpretation: 'normal',
-    isAbnormal: false,
-    isCritical: false,
-    testMethod: 'Automated analyzer',
-    performedBy: 'Tech001',
-    performedByName: 'John Lab',
-    analyzedAt: `${today}T10:15:00`,
-    createdAt: new Date().toISOString(),
-    createdBy: 'Tech001',
   },
 ];
 
@@ -278,14 +201,17 @@ const secStyles = StyleSheet.create({
 // ─── Status Badge Component ──────────────────────────────────
 function StatusBadge({ status }: { status: LabOrderStatus }) {
   const config: Record<LabOrderStatus, { color: string; label: string }> = {
-    'ordered': { color: colors.info, label: 'Commandé' },
-    'collected': { color: '#8B5CF6', label: 'Prélevé' },
-    'received': { color: colors.warning, label: 'Reçu' },
-    'in_progress': { color: colors.primary, label: 'En Cours' },
-    'completed': { color: colors.success, label: 'Terminé' },
-    'verified': { color: '#10B981', label: 'Vérifié' },
-    'released': { color: '#059669', label: 'Libéré' },
-    'cancelled': { color: colors.error, label: 'Annulé' },
+    ordered: { color: colors.info, label: 'Commandé' },
+    acknowledged: { color: '#4F46E5', label: 'Accusé' },
+    sample_pending: { color: colors.warning, label: 'Échantillon en attente' },
+    sample_collected: { color: '#8B5CF6', label: 'Prélevé' },
+    sample_received: { color: colors.warning, label: 'Reçu au labo' },
+    processing: { color: colors.primary, label: 'En traitement' },
+    partial_results: { color: '#22C55E', label: 'Résultats partiels' },
+    completed: { color: colors.success, label: 'Terminé' },
+    verified: { color: '#10B981', label: 'Vérifié' },
+    reported: { color: '#0EA5E9', label: 'Communiqué' },
+    cancelled: { color: colors.error, label: 'Annulé' },
   };
   const { color, label } = config[status];
   return (
@@ -297,12 +223,13 @@ function StatusBadge({ status }: { status: LabOrderStatus }) {
 }
 
 // ─── Priority Badge Component ────────────────────────────────
-function PriorityBadge({ priority }: { priority: TestPriority }) {
-  const config: Record<TestPriority, { color: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-    'stat': { color: colors.error, label: 'STAT', icon: 'flash' },
-    'urgent': { color: colors.warning, label: 'Urgent', icon: 'alert' },
-    'routine': { color: colors.info, label: 'Routine', icon: 'time' },
-    'timed': { color: '#8B5CF6', label: 'Programmé', icon: 'calendar' },
+function PriorityBadge({ priority }: { priority: LabPriority }) {
+  const config: Record<LabPriority, { color: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+    stat: { color: colors.error, label: 'STAT', icon: 'flash' },
+    urgent: { color: colors.warning, label: 'Urgent', icon: 'alert' },
+    routine: { color: colors.info, label: 'Routine', icon: 'time' },
+    timed: { color: '#8B5CF6', label: 'Programmé', icon: 'calendar' },
+    asap: { color: '#F97316', label: 'ASAP', icon: 'time' },
   };
   const { color, label, icon } = config[priority];
   return (
@@ -315,7 +242,7 @@ function PriorityBadge({ priority }: { priority: TestPriority }) {
 
 // ─── Sample Type Badge ───────────────────────────────────────
 function SampleTypeBadge({ sampleType }: { sampleType: SampleType }) {
-  const label = LaboratoryUtils.getSampleTypeLabel(sampleType);
+  const label = getSampleTypeLabel(sampleType);
   return (
     <View style={styles.sampleBadge}>
       <Ionicons name="water" size={12} color={colors.info} />
@@ -324,17 +251,44 @@ function SampleTypeBadge({ sampleType }: { sampleType: SampleType }) {
   );
 }
 
+function getSampleTypeLabel(sampleType: SampleType): string {
+  const labels: Partial<Record<SampleType, string>> = {
+    blood_venous: 'Sang veineux',
+    blood_arterial: 'Sang artériel',
+    blood_capillary: 'Sang capillaire',
+    urine_random: 'Urine',
+    urine_midstream: 'Urine milieu jet',
+    urine_24hr: 'Urine 24h',
+    stool: 'Selles',
+    sputum: 'Expectoration',
+    swab_throat: 'Prélèvement gorge',
+    swab_nasal: 'Prélèvement nasal',
+    swab_wound: 'Prélèvement plaie',
+    csf: 'LCR',
+    pleural_fluid: 'Liquide pleural',
+    ascitic_fluid: 'Liquide ascitique',
+    synovial_fluid: 'Liquide synovial',
+    biopsy: 'Biopsie',
+    other: 'Autre',
+  };
+  return labels[sampleType] || sampleType;
+}
+
 // ─── Lab Order Card ──────────────────────────────────────────
 function LabOrderCard({ order }: { order: typeof sampleLabOrders[0] }) {
   const [expanded, setExpanded] = useState(false);
-  const orderTests = sampleLabTests.filter(t => t.labOrderId === order.id);
+  const orderTests = sampleLabTests.filter(t => t.orderId === order.id);
   const progress = order.totalTests > 0 ? (order.completedTests / order.totalTests) * 100 : 0;
+  const clinicalText = order.clinicalNotes || order.diagnosis || 'Aucune note clinique';
+  const fasting = order.fastingRequired;
+  const orderSampleType: SampleType = order.sampleType || 'blood_venous';
 
-  const priorityColors: Record<TestPriority, string> = {
-    'stat': colors.error,
-    'urgent': colors.warning,
-    'routine': colors.info,
-    'timed': '#8B5CF6',
+  const priorityColors: Record<LabPriority, string> = {
+    stat: colors.error,
+    urgent: colors.warning,
+    routine: colors.info,
+    timed: '#8B5CF6',
+    asap: '#F97316',
   };
 
   return (
@@ -388,9 +342,9 @@ function LabOrderCard({ order }: { order: typeof sampleLabOrders[0] }) {
       {/* Clinical Info */}
       <View style={styles.clinicalInfo}>
         <Text style={styles.clinicalInfoText} numberOfLines={2}>
-          {order.clinicalInfo}
+          {clinicalText}
         </Text>
-        {order.fasting && (
+        {fasting && (
           <View style={styles.fastingBadge}>
             <Ionicons name="moon" size={12} color="#EC4899" />
             <Text style={styles.fastingText}>À jeun</Text>
@@ -415,7 +369,7 @@ function LabOrderCard({ order }: { order: typeof sampleLabOrders[0] }) {
                 </View>
               </View>
               <View style={styles.testItemRight}>
-                <SampleTypeBadge sampleType={test.sampleType} />
+                <SampleTypeBadge sampleType={orderSampleType} />
                 <Text style={styles.testStatus}>
                   {getTestStatusLabel(test.status)}
                 </Text>
@@ -433,7 +387,7 @@ function LabOrderCard({ order }: { order: typeof sampleLabOrders[0] }) {
             <Text style={styles.actionBtnText}>Prélever</Text>
           </TouchableOpacity>
         )}
-        {order.status === 'collected' && (
+        {order.status === 'sample_collected' && (
           <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSecondary]} activeOpacity={0.7}>
             <Ionicons name="enter" size={16} color={colors.primary} />
             <Text style={[styles.actionBtnText, { color: colors.primary }]}>Réceptionner</Text>
@@ -488,10 +442,10 @@ function QuickPanelCard({
   color 
 }: { 
   name: string; 
-  tests: string[]; 
+  tests: readonly string[]; 
   color: string;
 }) {
-  const testsArray = Array.isArray(tests) ? tests : [];
+  const testsArray = Array.isArray(tests) ? [...tests] : [];
   return (
     <View style={[styles.panelCard, { borderTopColor: color }]}>
       <Text style={styles.panelName}>{name || 'Unknown Panel'}</Text>
@@ -517,7 +471,7 @@ function QuickPanelCard({
 export function LaboratoryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<LabOrderStatus | 'all'>('all');
-  const [filterPriority, setFilterPriority] = useState<TestPriority | 'all'>('all');
+  const [filterPriority, setFilterPriority] = useState<LabPriority | 'all'>('all');
 
   // Filter orders
   const filteredOrders = sampleLabOrders.filter(order => {
@@ -537,9 +491,9 @@ export function LaboratoryScreen() {
   // Stats
   const stats = {
     total: sampleLabOrders.length,
-    pending: sampleLabOrders.filter(o => o.status === 'ordered' || o.status === 'collected').length,
-    inProgress: sampleLabOrders.filter(o => o.status === 'in_progress' || o.status === 'received').length,
-    completed: sampleLabOrders.filter(o => o.status === 'completed' || o.status === 'verified').length,
+    pending: sampleLabOrders.filter(o => o.status === 'ordered' || o.status === 'sample_pending').length,
+    inProgress: sampleLabOrders.filter(o => o.status === 'sample_collected' || o.status === 'sample_received' || o.status === 'processing' || o.status === 'partial_results').length,
+    completed: sampleLabOrders.filter(o => o.status === 'completed' || o.status === 'verified' || o.status === 'reported').length,
     stat: sampleLabOrders.filter(o => o.priority === 'stat').length,
   };
 
@@ -652,8 +606,8 @@ export function LaboratoryScreen() {
           {[
             { key: 'all', label: 'Tous', color: colors.primary },
             { key: 'ordered', label: 'Commandés', color: colors.info },
-            { key: 'collected', label: 'Prélevés', color: '#8B5CF6' },
-            { key: 'in_progress', label: 'En Cours', color: colors.primary },
+            { key: 'sample_collected', label: 'Prélevés', color: '#8B5CF6' },
+            { key: 'processing', label: 'En Cours', color: colors.primary },
             { key: 'completed', label: 'Terminés', color: colors.success },
           ].map((filter) => {
             const isSelected = filterStatus === filter.key;
@@ -684,6 +638,8 @@ export function LaboratoryScreen() {
           { key: 'stat', label: 'STAT', color: colors.error },
           { key: 'urgent', label: 'Urgent', color: colors.warning },
           { key: 'routine', label: 'Routine', color: colors.info },
+          { key: 'asap', label: 'ASAP', color: '#F97316' },
+          { key: 'timed', label: 'Programmé', color: '#8B5CF6' },
         ].map((filter) => {
           const isSelected = filterPriority === filter.key;
           return (

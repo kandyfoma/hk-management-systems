@@ -4,7 +4,7 @@ import { OccHealthDashboardContent } from './screens/OccHealthDashboard';
 import { OccHealthConsultationScreen } from './screens/OccHealthConsultationScreen';
 import { PreviousVisitsScreen } from './screens/PreviousVisitsScreen';
 import { CertificatesScreen } from './screens/CertificatesScreen';
-import { WorkersScreen } from './screens/WorkersScreen';
+import { OHPatientsScreen } from './screens/OHPatientsScreen';
 import { IncidentsScreen } from './screens/IncidentsScreen';
 import { DiseasesScreen } from './screens/DiseasesScreen';
 import { SurveillanceScreen } from './screens/SurveillanceScreen';
@@ -25,7 +25,7 @@ const occHealthSections: SidebarSection[] = [
     title: 'Principal',
     items: [
       { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
-      { id: 'workers', label: 'Travailleurs', icon: 'people-outline', iconActive: 'people' },
+      { id: 'patients', label: 'Patients', icon: 'people-outline', iconActive: 'people' },
     ],
   },
   {
@@ -58,9 +58,9 @@ const occHealthSections: SidebarSection[] = [
 
 // ─── Screen Definitions ──────────────────────────────────────
 const occHealthScreens: Record<string, { title: string; subtitle: string; icon: any; features: string[] }> = {
-  workers: {
-    title: 'Gestion des Travailleurs',
-    subtitle: 'Registre complet des travailleurs par secteur et entreprise.',
+  patients: {
+    title: 'Patients — Santé au Travail',
+    subtitle: 'Registre des patients par secteur d\'activité et entreprise.',
     icon: 'people',
     features: [
       'Enregistrement multi-secteur (mines, BTP, banque, industrie, santé...)',
@@ -97,7 +97,7 @@ const occHealthScreens: Record<string, { title: string; subtitle: string; icon: 
       'Suivi des dates d\'expiration',
       'Alertes de renouvellement automatiques',
       'Classifications: Apte, Apte avec restrictions, Inapte',
-      'Historique des certificats par travailleur',
+      'Historique des certificats par patient',
       'Impression et signature numérique',
     ],
   },
@@ -170,7 +170,7 @@ const occHealthScreens: Record<string, { title: string; subtitle: string; icon: 
       'Attribution par poste et risque',
       'Suivi des dates de péremption/remplacement',
       'Contrôle de conformité EPI',
-      'Historique de distribution par travailleur',
+      'Historique de distribution par patient',
       'Alertes de renouvellement',
     ],
   },
@@ -255,8 +255,8 @@ export function OccHealthNavigator() {
       return <CertificatesScreen />;
     }
 
-    if (activeScreen === 'workers') {
-      return <WorkersScreen />;
+    if (activeScreen === 'patients') {
+      return <OHPatientsScreen />;
     }
 
     if (activeScreen === 'incidents') {

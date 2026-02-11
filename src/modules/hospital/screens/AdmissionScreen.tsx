@@ -22,7 +22,24 @@ const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
 // ─── Sample Data ─────────────────────────────────────────────
-const sampleAdmissions: (Admission & { patientName: string; wardName: string; bedNumber: string })[] = [
+type UIAdmission = Admission & {
+  patientName: string;
+  wardName: string;
+  bedNumber: string;
+  primaryDiagnosis: string;
+  chiefComplaint?: string;
+  secondaryDiagnoses?: string[];
+  allergies?: string[];
+  dietaryRequirements?: string;
+  codeStatus?: string;
+  admittingDoctorName?: string;
+  attendingDoctorName?: string;
+  admissionDate?: string;
+  admissionTime?: string;
+  expectedDischargeDate?: string;
+};
+
+const sampleAdmissions: UIAdmission[] = [
   {
     id: '1',
     admissionNumber: 'ADM260001',
@@ -33,26 +50,33 @@ const sampleAdmissions: (Admission & { patientName: string; wardName: string; be
     facilityId: 'FAC001',
     type: 'emergency',
     status: 'admitted',
-    careLevel: 'high',
-    wardId: 'W002',
+    careLevel: 'critical',
+    currentWardId: 'W002',
     wardName: 'Soins Intensifs',
-    bedId: 'B101',
+    currentBedId: 'B101',
     bedNumber: 'USI-01',
     admissionDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    admitDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     admissionTime: '14:30',
     admittingDoctorId: 'D001',
     admittingDoctorName: 'Dr. Kalala',
     attendingDoctorId: 'D001',
     attendingDoctorName: 'Dr. Kalala',
     primaryDiagnosis: 'Insuffisance cardiaque aiguë',
+    admissionDiagnosis: 'Insuffisance cardiaque aiguë',
     admissionReason: 'Dyspnée sévère, œdème des membres inférieurs',
     chiefComplaint: 'Essoufflement progressif depuis 1 semaine',
     precautions: ['fall_risk', 'cardiac_monitoring'],
+    consultingDoctorIds: ['D001'],
     allergiesVerified: true,
+    dietaryRestrictions: ['régime sans sel'],
     allergies: ['Pénicilline'],
     dietaryRequirements: 'Régime sans sel',
     specialInstructions: 'Surveillance continue des signes vitaux',
     codeStatus: 'full_code',
+    transferHistory: [],
+    insuranceVerified: true,
+    metadata: {},
     createdAt: new Date().toISOString(),
   },
   {
@@ -63,26 +87,33 @@ const sampleAdmissions: (Admission & { patientName: string; wardName: string; be
     encounterId: 'E260002',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
-    type: 'scheduled',
+    type: 'elective',
     status: 'admitted',
-    careLevel: 'intermediate',
-    wardId: 'W005',
+    careLevel: 'moderate',
+    currentWardId: 'W005',
     wardName: 'Chirurgie',
-    bedId: 'B401',
+    currentBedId: 'B401',
     bedNumber: 'CHI-01',
     admissionDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    admitDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     admissionTime: '08:00',
     admittingDoctorId: 'D002',
     admittingDoctorName: 'Dr. Mbala',
     attendingDoctorId: 'D002',
     attendingDoctorName: 'Dr. Mbala',
     primaryDiagnosis: 'Appendicite aiguë',
+    admissionDiagnosis: 'Appendicite aiguë',
     secondaryDiagnoses: ['Diabète type 2'],
     admissionReason: 'Appendicectomie programmée',
     chiefComplaint: 'Douleur abdominale droite',
-    precautions: ['npo', 'diabetic'],
+    precautions: ['nothing_by_mouth', 'diabetic_monitoring'],
+    consultingDoctorIds: ['D002'],
     allergiesVerified: true,
+    dietaryRestrictions: [],
     codeStatus: 'full_code',
+    transferHistory: [],
+    insuranceVerified: true,
+    metadata: {},
     createdAt: new Date().toISOString(),
   },
   {
@@ -95,24 +126,31 @@ const sampleAdmissions: (Admission & { patientName: string; wardName: string; be
     facilityId: 'FAC001',
     type: 'observation',
     status: 'admitted',
-    careLevel: 'routine',
-    wardId: 'W001',
+    careLevel: 'minimal',
+    currentWardId: 'W001',
     wardName: 'Médecine Générale',
-    bedId: 'B001',
+    currentBedId: 'B001',
     bedNumber: 'MG-101',
     admissionDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    admitDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     admissionTime: '16:45',
     admittingDoctorId: 'D001',
     admittingDoctorName: 'Dr. Kalala',
     attendingDoctorId: 'D001',
     attendingDoctorName: 'Dr. Kalala',
     primaryDiagnosis: 'Pneumonie communautaire',
+    admissionDiagnosis: 'Pneumonie communautaire',
     admissionReason: 'Fièvre persistante, toux productive',
     chiefComplaint: 'Fièvre et toux depuis 5 jours',
-    precautions: ['infection_control'],
+    precautions: ['contact_precaution'],
+    consultingDoctorIds: ['D001'],
     allergiesVerified: true,
     dietaryRequirements: 'Régime normal',
+    dietaryRestrictions: [],
     codeStatus: 'full_code',
+    transferHistory: [],
+    insuranceVerified: true,
+    metadata: {},
     createdAt: new Date().toISOString(),
   },
   {
@@ -125,22 +163,29 @@ const sampleAdmissions: (Admission & { patientName: string; wardName: string; be
     facilityId: 'FAC001',
     type: 'maternity',
     status: 'admitted',
-    careLevel: 'intermediate',
-    wardId: 'W004',
+    careLevel: 'moderate',
+    currentWardId: 'W004',
     wardName: 'Maternité',
-    bedId: 'B301',
+    currentBedId: 'B301',
     bedNumber: 'MAT-01',
     admissionDate: new Date().toISOString(),
+    admitDate: new Date().toISOString(),
     admissionTime: '06:30',
     admittingDoctorId: 'D004',
     admittingDoctorName: 'Dr. Tshilombo',
     attendingDoctorId: 'D004',
     attendingDoctorName: 'Dr. Tshilombo',
     primaryDiagnosis: 'Travail actif G2P1',
+    admissionDiagnosis: 'Travail actif G2P1',
     admissionReason: 'Contractions régulières, dilatation 5cm',
     chiefComplaint: 'Contractions depuis 4 heures',
     allergiesVerified: true,
+    consultingDoctorIds: ['D004'],
+    dietaryRestrictions: [],
     codeStatus: 'full_code',
+    transferHistory: [],
+    insuranceVerified: true,
+    metadata: {},
     createdAt: new Date().toISOString(),
   },
   {
@@ -153,23 +198,31 @@ const sampleAdmissions: (Admission & { patientName: string; wardName: string; be
     facilityId: 'FAC001',
     type: 'transfer_in',
     status: 'discharge_pending',
-    careLevel: 'routine',
-    wardId: 'W001',
+    careLevel: 'minimal',
+    currentWardId: 'W001',
     wardName: 'Médecine Générale',
-    bedId: 'B002',
+    currentBedId: 'B002',
     bedNumber: 'MG-102',
     admissionDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    admitDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     admissionTime: '10:00',
     admittingDoctorId: 'D001',
     admittingDoctorName: 'Dr. Kalala',
     attendingDoctorId: 'D001',
     attendingDoctorName: 'Dr. Kalala',
     primaryDiagnosis: 'Hypertension artérielle mal contrôlée',
+    admissionDiagnosis: 'Hypertension artérielle mal contrôlée',
     admissionReason: 'Transfert pour bilan cardiologique',
     chiefComplaint: 'Céphalées, tension élevée',
     expectedDischargeDate: new Date().toISOString().split('T')[0],
+    estimatedDischargeDate: new Date().toISOString().split('T')[0],
+    consultingDoctorIds: ['D001'],
     allergiesVerified: true,
+    dietaryRestrictions: [],
     codeStatus: 'full_code',
+    transferHistory: [],
+    insuranceVerified: true,
+    metadata: {},
     createdAt: new Date().toISOString(),
   },
 ];
@@ -245,13 +298,13 @@ const secStyles = StyleSheet.create({
 function StatusBadge({ status }: { status: AdmissionStatus }) {
   const color = AdmissionUtils.getStatusColor(status);
   const labels: Record<AdmissionStatus, string> = {
-    'pre_admission': 'Pré-admission',
-    'admitted': 'Admis',
-    'in_treatment': 'En Traitement',
-    'discharge_pending': 'Sortie Prévue',
-    'discharged': 'Sorti',
-    'transferred': 'Transféré',
-    'deceased': 'Décédé',
+    admitted: 'Admis',
+    transferred: 'Transféré',
+    discharge_pending: 'Sortie Prévue',
+    discharged: 'Sorti',
+    deceased: 'Décédé',
+    absconded: 'Abscondé',
+    cancelled: 'Annulé',
   };
   return (
     <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
@@ -264,12 +317,12 @@ function StatusBadge({ status }: { status: AdmissionStatus }) {
 // ─── Care Level Badge ────────────────────────────────────────
 function CareLevelBadge({ level }: { level: CareLevel }) {
   const config: Record<CareLevel, { label: string; color: string }> = {
-    'minimal': { label: 'Minimal', color: colors.success },
-    'routine': { label: 'Routine', color: colors.info },
-    'intermediate': { label: 'Intermédiaire', color: colors.warning },
-    'high': { label: 'Élevé', color: '#EA580C' },
-    'intensive': { label: 'Intensif', color: colors.error },
-    'critical': { label: 'Critique', color: '#7C3AED' },
+    minimal: { label: 'Minimal', color: colors.success },
+    moderate: { label: 'Modéré', color: colors.warning },
+    intensive: { label: 'Intensif', color: colors.error },
+    critical: { label: 'Critique', color: '#7C3AED' },
+    palliative: { label: 'Palliatif', color: colors.info },
+    rehabilitation: { label: 'Rééducation', color: colors.primary },
   };
   const c = config[level];
   return (
@@ -490,15 +543,15 @@ export function AdmissionScreen() {
             >
               <Text style={[styles.filterChipText, !selectedCareLevel && { color: '#FFF' }]}>Tous</Text>
             </TouchableOpacity>
-            {(['routine', 'intermediate', 'high', 'intensive', 'critical'] as CareLevel[]).map((level) => {
+            {(['minimal', 'moderate', 'intensive', 'critical', 'palliative', 'rehabilitation'] as CareLevel[]).map((level) => {
               const isSelected = selectedCareLevel === level;
               const labels: Record<CareLevel, string> = {
                 minimal: 'Minimal',
-                routine: 'Routine',
-                intermediate: 'Intermédiaire',
-                high: 'Élevé',
+                moderate: 'Modéré',
                 intensive: 'Intensif',
                 critical: 'Critique',
+                palliative: 'Palliatif',
+                rehabilitation: 'Rééducation',
               };
               return (
                 <TouchableOpacity

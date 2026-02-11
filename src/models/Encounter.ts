@@ -184,6 +184,53 @@ export class EncounterUtils {
   }
 
   /**
+   * Get icon name for encounter type (used in UI badges)
+   */
+  static getTypeIcon(type: EncounterType): string {
+    switch (type) {
+      case 'emergency': return 'flash';
+      case 'inpatient': return 'home';
+      case 'outpatient': return 'walk';
+      case 'follow_up': return 'refresh';
+      case 'consultation': return 'medkit';
+      case 'procedure': return 'construct';
+      case 'day_case': return 'sunny';
+      case 'lab_only': return 'flask';
+      default: return 'medkit';
+    }
+  }
+
+  /**
+   * Get human label for encounter type
+   */
+  static getTypeLabel(type: EncounterType): string {
+    switch (type) {
+      case 'emergency': return 'Urgences';
+      case 'inpatient': return 'Hospitalisation';
+      case 'outpatient': return 'Consultation Externe';
+      case 'follow_up': return 'Suivi';
+      case 'consultation': return 'Consultation';
+      case 'procedure': return 'Procédure';
+      case 'day_case': return 'Hôpital de Jour';
+      case 'lab_only': return 'Laboratoire';
+      default: return type;
+    }
+  }
+
+  /**
+   * Get human label for triage priority
+   */
+  static getPriorityLabel(priority: TriagePriority): string {
+    switch (priority) {
+      case 'emergency': return 'Urgence';
+      case 'urgent': return 'Urgent';
+      case 'semi_urgent': return 'Semi-urgent';
+      case 'routine': return 'Routine';
+      default: return priority;
+    }
+  }
+
+  /**
    * Determine if encounter can be cancelled
    */
   static canCancel(encounter: Encounter): boolean {

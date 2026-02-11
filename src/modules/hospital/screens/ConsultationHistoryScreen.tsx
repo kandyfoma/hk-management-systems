@@ -94,7 +94,7 @@ const SAMPLE_CONSULTATIONS: ConsultationRecord[] = [
     disposition: 'discharged',
     doctorName: 'Dr. Kabongo Pierre',
     departmentName: 'Cardiologie',
-    status: 'completed',
+    status: 'discharged',
     notes: 'Patient à revoir dans 2 semaines avec résultats ECG et bilan lipidique.',
     followUpDate: '2024-01-29',
   },
@@ -127,7 +127,7 @@ const SAMPLE_CONSULTATIONS: ConsultationRecord[] = [
     disposition: 'admitted',
     doctorName: 'Dr. Mutombo Sarah',
     departmentName: 'Médecine Interne',
-    status: 'in_progress',
+    status: 'in_consultation',
     notes: 'Hospitalisation pour surveillance et antibiothérapie IV.',
   },
   {
@@ -158,7 +158,7 @@ const SAMPLE_CONSULTATIONS: ConsultationRecord[] = [
     disposition: 'discharged',
     doctorName: 'Dr. Kalala Joseph',
     departmentName: 'Endocrinologie',
-    status: 'completed',
+    status: 'discharged',
     notes: 'HbA1c = 7.2%. Bon contrôle. Continuer traitement actuel.',
     followUpDate: '2024-04-12',
   },
@@ -188,7 +188,7 @@ const SAMPLE_CONSULTATIONS: ConsultationRecord[] = [
     disposition: 'discharged',
     doctorName: 'Dr. Mbuyi Anne',
     departmentName: 'Neurologie',
-    status: 'completed',
+    status: 'discharged',
     notes: 'Tenir un journal des migraines. Revoir si fréquence augmente.',
   },
   {
@@ -218,7 +218,7 @@ const SAMPLE_CONSULTATIONS: ConsultationRecord[] = [
     disposition: 'discharged',
     doctorName: 'Dr. Tshimanga Claire',
     departmentName: 'Gynécologie',
-    status: 'completed',
+    status: 'discharged',
     followUpDate: '2024-02-10',
   },
 ];
@@ -1078,7 +1078,8 @@ const styles = StyleSheet.create({
 
   // Stats
   statsContainer: {
-    flexDirection: 'row',
+    flexDirection: isDesktop ? 'row' : 'row',
+    flexWrap: 'wrap',
     gap: 10,
     padding: 16,
     backgroundColor: colors.surface,
@@ -1091,6 +1092,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: borderRadius.md,
     gap: 4,
+    minWidth: isDesktop ? 0 : '48%',
+    marginBottom: isDesktop ? 0 : 8,
   },
   statValue: {
     fontSize: 18,
@@ -1145,7 +1148,9 @@ const styles = StyleSheet.create({
   },
   filterChips: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
+    rowGap: 8,
   },
   filterChip: {
     paddingHorizontal: 12,
@@ -1222,6 +1227,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   cardHeaderLeft: {
     flexDirection: 'row',
@@ -1375,6 +1382,7 @@ const styles = StyleSheet.create({
   footerStats: {
     flexDirection: 'row',
     gap: 16,
+    flexWrap: 'wrap',
   },
   footerStat: {
     flexDirection: 'row',
@@ -1560,6 +1568,7 @@ const styles = StyleSheet.create({
   // Modal Footer
   modalFooter: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     padding: 20,
     borderTopWidth: 1,

@@ -455,8 +455,8 @@ const styles = StyleSheet.create({
   expiringText: { fontSize: 8, fontWeight: '700', color: '#F59E0B' },
 
   ppeCardBody: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.outline, marginBottom: 10 },
-  stockRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  stockItem: { alignItems: 'center' },
+  stockRow: { flexDirection: 'row', justifyContent: 'space-around', flexWrap: 'wrap', gap: isDesktop ? 0 : 8 },
+  stockItem: { alignItems: 'center', minWidth: isDesktop ? 'auto' : 70 },
   stockValue: { fontSize: 18, fontWeight: '700', color: colors.text },
   stockLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
 
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 13, color: colors.textSecondary },
   detailValue: { fontSize: 13, fontWeight: '500', color: colors.text, maxWidth: '55%', textAlign: 'right' },
 
-  stockDetailRow: { flexDirection: 'row', gap: 12 },
+  stockDetailRow: { flexDirection: isDesktop ? 'row' : 'column', gap: 12 },
   stockDetailCard: { flex: 1, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, padding: 12, alignItems: 'center' },
   stockDetailValue: { fontSize: 22, fontWeight: '700', color: colors.text },
   stockDetailLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },

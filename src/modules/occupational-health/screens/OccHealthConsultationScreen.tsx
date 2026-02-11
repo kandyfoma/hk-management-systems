@@ -48,6 +48,7 @@ type ConsultationStep =
   | 'visit_reason'
   | 'vital_signs'
   | 'physical_exam'
+  | 'sector_questions'
   | 'sector_tests'
   | 'mental_ergonomic'
   | 'fitness_decision'
@@ -58,10 +59,218 @@ const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons
   { key: 'visit_reason', label: 'Motif de Visite', icon: 'clipboard' },
   { key: 'vital_signs', label: 'Signes Vitaux', icon: 'pulse' },
   { key: 'physical_exam', label: 'Examen Physique', icon: 'body' },
+  { key: 'sector_questions', label: 'Questionnaire Sectoriel', icon: 'list' },
   { key: 'sector_tests', label: 'Tests Sectoriels', icon: 'flask' },
   { key: 'mental_ergonomic', label: 'Santé Mentale & Ergonomie', icon: 'happy' },
   { key: 'fitness_decision', label: 'Décision d\'Aptitude', icon: 'shield-checkmark' },
   { key: 'summary', label: 'Résumé & Certificat', icon: 'document-text' },
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  SECTOR-SPECIFIC QUESTIONNAIRES
+//  Each sector group has tailored interview questions that
+//  address the unique risks and exposures of that industry.
+// ═══════════════════════════════════════════════════════════════
+
+type SectorQuestionType = 'yes_no' | 'choice' | 'text' | 'number' | 'multi_select';
+
+interface SectorQuestion {
+  id: string;
+  question: string;
+  type: SectorQuestionType;
+  category: string;
+  categoryIcon: keyof typeof Ionicons.glyphMap;
+  required?: boolean;
+  options?: string[];                // For choice / multi_select
+  unit?: string;                     // For number
+  placeholder?: string;              // For text / number
+  alertCondition?: (answer: any) => boolean;  // Highlights answer in red if true
+  alertMessage?: string;
+}
+
+interface SectorQuestionnaireConfig {
+  sectors: IndustrySector[];
+  label: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  questions: SectorQuestion[];
+  physicalExamEmphasis: (keyof PhysicalExamination)[];   // Systems to highlight
+  vitalAlerts: { field: keyof VitalSigns; label: string; icon: keyof typeof Ionicons.glyphMap }[];
+}
+
+const SECTOR_QUESTIONNAIRES: SectorQuestionnaireConfig[] = [
+  // ─── MINING / CONSTRUCTION / OIL & GAS ─────────────────
+  {
+    sectors: ['mining', 'construction', 'oil_gas', 'energy_utilities'],
+    label: 'Risques Physiques & Chimiques Élevés',
+    description: 'Questions adaptées aux environnements à haut risque physique et chimique.',
+    icon: 'construct',
+    color: '#D97706',
+    questions: [
+      { id: 'dust_exposure_years', question: 'Nombre d\'années d\'exposition aux poussières?', type: 'number', category: 'Exposition Respiratoire', categoryIcon: 'cloud', unit: 'ans', placeholder: '0', alertCondition: (v) => v && parseInt(v) >= 10, alertMessage: 'Exposition prolongée — risque de pneumoconiose' },
+      { id: 'respiratory_symptoms', question: 'Présentez-vous des symptômes respiratoires?', type: 'multi_select', category: 'Exposition Respiratoire', categoryIcon: 'cloud', options: ['Toux chronique', 'Dyspnée à l\'effort', 'Sifflement', 'Hémoptysie', 'Essoufflement', 'Aucun'] },
+      { id: 'dust_mask_usage', question: 'Portez-vous régulièrement un masque anti-poussière?', type: 'choice', category: 'Exposition Respiratoire', categoryIcon: 'cloud', options: ['Toujours', 'Souvent', 'Parfois', 'Jamais'], alertCondition: (v) => v === 'Parfois' || v === 'Jamais', alertMessage: 'Non-conformité EPI respiratoire' },
+      { id: 'hearing_changes', question: 'Avez-vous remarqué des changements auditifs?', type: 'multi_select', category: 'Audition & Bruit', categoryIcon: 'ear', options: ['Acouphènes', 'Difficulté à comprendre les conversations', 'Baisse auditive progressive', 'Douleur auriculaire', 'Aucun'] },
+      { id: 'noise_exposure_hours', question: 'Durée d\'exposition quotidienne au bruit intense (>85 dB)?', type: 'number', category: 'Audition & Bruit', categoryIcon: 'ear', unit: 'h/jour', placeholder: '0', alertCondition: (v) => v && parseFloat(v) >= 6, alertMessage: 'Exposition prolongée — dépistage audiométrique prioritaire' },
+      { id: 'ear_protection', question: 'Portez-vous une protection auditive en zone bruyante?', type: 'choice', category: 'Audition & Bruit', categoryIcon: 'ear', options: ['Toujours', 'Souvent', 'Parfois', 'Jamais'], alertCondition: (v) => v === 'Parfois' || v === 'Jamais', alertMessage: 'Non-conformité EPI auditif' },
+      { id: 'fall_history', question: 'Avez-vous déjà subi une chute de hauteur au travail?', type: 'yes_no', category: 'Risques Physiques', categoryIcon: 'trending-down', alertCondition: (v) => v === 'Oui', alertMessage: 'Antécédent de chute — évaluation musculo-squelettique approfondie' },
+      { id: 'vibration_symptoms', question: 'Symptômes liés aux vibrations?', type: 'multi_select', category: 'Risques Physiques', categoryIcon: 'trending-down', options: ['Doigts blancs (Raynaud)', 'Engourdissement mains', 'Douleur lombaire', 'Fatigue musculaire', 'Aucun'] },
+      { id: 'confined_space_experience', question: 'Travaillez-vous en espace confiné?', type: 'choice', category: 'Risques Physiques', categoryIcon: 'trending-down', options: ['Régulièrement', 'Occasionnellement', 'Jamais'] },
+      { id: 'heat_illness_history', question: 'Avez-vous déjà souffert de malaise lié à la chaleur?', type: 'yes_no', category: 'Environnement', categoryIcon: 'sunny', alertCondition: (v) => v === 'Oui', alertMessage: 'Risque de récidive — plan de prévention thermique nécessaire' },
+      { id: 'chemical_exposure_type', question: 'Substances chimiques manipulées?', type: 'multi_select', category: 'Environnement', categoryIcon: 'sunny', options: ['Solvants', 'Acides/Bases', 'Métaux lourds', 'Amiante', 'Silice', 'Hydrocarbures', 'Pesticides', 'Aucun'] },
+      { id: 'skin_problems', question: 'Problèmes cutanés liés au travail?', type: 'yes_no', category: 'Environnement', categoryIcon: 'sunny', alertCondition: (v) => v === 'Oui', alertMessage: 'Dermatose professionnelle possible' },
+    ],
+    physicalExamEmphasis: ['respiratory', 'musculoskeletal', 'ent', 'dermatological'],
+    vitalAlerts: [
+      { field: 'oxygenSaturation', label: 'SpO2 — critique pour travailleurs exposés aux poussières', icon: 'water' },
+      { field: 'respiratoryRate', label: 'FR — surveillance fonction respiratoire', icon: 'cloud' },
+    ],
+  },
+
+  // ─── BANKING / IT / GOVERNMENT / EDUCATION ──────────────
+  {
+    sectors: ['banking_finance', 'telecom_it', 'government', 'education', 'ngo'],
+    label: 'Environnement de Bureau & Sédentarité',
+    description: 'Questions adaptées au travail de bureau, écrans et sédentarité.',
+    icon: 'desktop',
+    color: '#2563EB',
+    questions: [
+      { id: 'screen_hours', question: 'Heures passées devant un écran par jour?', type: 'number', category: 'Travail sur Écran', categoryIcon: 'desktop', unit: 'h/jour', placeholder: '0', alertCondition: (v) => v && parseFloat(v) >= 7, alertMessage: 'Exposition prolongée aux écrans — pauses visuelles recommandées' },
+      { id: 'screen_breaks', question: 'Faites-vous des pauses régulières (20-20-20)?', type: 'choice', category: 'Travail sur Écran', categoryIcon: 'desktop', options: ['Oui, régulièrement', 'Parfois', 'Rarement', 'Jamais'], alertCondition: (v) => v === 'Rarement' || v === 'Jamais', alertMessage: 'Risque accru de fatigue visuelle et TMS' },
+      { id: 'eye_symptoms', question: 'Symptômes oculaires?', type: 'multi_select', category: 'Travail sur Écran', categoryIcon: 'desktop', options: ['Fatigue visuelle', 'Yeux secs', 'Maux de tête', 'Vision floue', 'Sensibilité lumineuse', 'Aucun'] },
+      { id: 'workstation_setup', question: 'Votre poste de travail est-il adapté?', type: 'multi_select', category: 'Ergonomie du Poste', categoryIcon: 'laptop', options: ['Écran à hauteur des yeux', 'Siège réglable', 'Repose-pieds', 'Support clavier', 'Éclairage adapté', 'Aucun aménagement'] },
+      { id: 'posture_complaints', question: 'Douleurs liées à la posture?', type: 'multi_select', category: 'Ergonomie du Poste', categoryIcon: 'laptop', options: ['Nuque/Cou', 'Épaules', 'Haut du dos', 'Bas du dos', 'Poignets/Canal carpien', 'Aucune'] },
+      { id: 'sitting_hours', question: 'Heures assises sans interruption?', type: 'number', category: 'Ergonomie du Poste', categoryIcon: 'laptop', unit: 'h', placeholder: '0', alertCondition: (v) => v && parseFloat(v) >= 4, alertMessage: 'Sédentarité prolongée — risque cardiovasculaire et TMS' },
+      { id: 'physical_activity', question: 'Pratiquez-vous une activité physique régulière?', type: 'choice', category: 'Mode de Vie', categoryIcon: 'fitness', options: ['≥ 3x/semaine', '1-2x/semaine', 'Occasionnellement', 'Jamais'], alertCondition: (v) => v === 'Jamais', alertMessage: 'Sédentarité — recommandation d\'activité physique' },
+      { id: 'headache_frequency', question: 'Fréquence des maux de tête?', type: 'choice', category: 'Mode de Vie', categoryIcon: 'fitness', options: ['Jamais', 'Rarement', 'Hebdomadaire', 'Quotidien'], alertCondition: (v) => v === 'Quotidien' || v === 'Hebdomadaire', alertMessage: 'Céphalées fréquentes — explorer cause liée au poste' },
+      { id: 'repetitive_strain', question: 'Ressentez-vous des douleurs répétitives (saisie, souris)?', type: 'yes_no', category: 'Mode de Vie', categoryIcon: 'fitness', alertCondition: (v) => v === 'Oui', alertMessage: 'TMS possibles — évaluation ergonomique approfondie' },
+    ],
+    physicalExamEmphasis: ['ophthalmological', 'musculoskeletal', 'cardiovascular'],
+    vitalAlerts: [
+      { field: 'visualAcuity', label: 'Acuité visuelle — essentielle pour travailleurs sur écran', icon: 'eye' },
+      { field: 'bloodPressureSystolic', label: 'TA — surveillance cardiovasculaire (sédentarité)', icon: 'heart' },
+    ],
+  },
+
+  // ─── HEALTHCARE ─────────────────────────────────────────
+  {
+    sectors: ['healthcare'],
+    label: 'Risques Biologiques & Sanitaires',
+    description: 'Questions spécifiques aux professionnels de santé exposés aux risques biologiques.',
+    icon: 'medkit',
+    color: '#0EA5E9',
+    questions: [
+      { id: 'needlestick_history', question: 'Avez-vous eu un accident d\'exposition au sang (AES)?', type: 'yes_no', category: 'Risque Biologique', categoryIcon: 'alert-circle', alertCondition: (v) => v === 'Oui', alertMessage: 'AES documenté — vérifier sérologies et suivi' },
+      { id: 'aes_count', question: 'Nombre d\'AES dans les 12 derniers mois?', type: 'number', category: 'Risque Biologique', categoryIcon: 'alert-circle', unit: '', placeholder: '0', alertCondition: (v) => v && parseInt(v) >= 1, alertMessage: 'AES récent — suivi sérologique obligatoire' },
+      { id: 'vaccination_hepb', question: 'Vaccination Hépatite B complète?', type: 'choice', category: 'Statut Vaccinal', categoryIcon: 'shield-checkmark', options: ['Oui, 3 doses', 'Partielle', 'Non vacciné', 'Inconnu'], alertCondition: (v) => v !== 'Oui, 3 doses', alertMessage: 'Vaccination HBV incomplète — mise à jour urgente' },
+      { id: 'vaccination_tetanus', question: 'Rappel tétanos à jour?', type: 'choice', category: 'Statut Vaccinal', categoryIcon: 'shield-checkmark', options: ['Oui (< 10 ans)', 'Non', 'Inconnu'], alertCondition: (v) => v !== 'Oui (< 10 ans)', alertMessage: 'Rappel tétanos nécessaire' },
+      { id: 'vaccination_flu', question: 'Vaccination antigrippale cette saison?', type: 'yes_no', category: 'Statut Vaccinal', categoryIcon: 'shield-checkmark' },
+      { id: 'tb_contact', question: 'Contact avec un patient tuberculeux récemment?', type: 'yes_no', category: 'Risque Infectieux', categoryIcon: 'medkit', alertCondition: (v) => v === 'Oui', alertMessage: 'Contact TB — dépistage IDR/Quantiferon recommandé' },
+      { id: 'ppe_compliance', question: 'Portez-vous les EPI recommandés systématiquement?', type: 'choice', category: 'Risque Infectieux', categoryIcon: 'medkit', options: ['Toujours', 'Souvent', 'Parfois', 'Jamais'], alertCondition: (v) => v === 'Parfois' || v === 'Jamais', alertMessage: 'Non-conformité EPI — risque d\'exposition biologique' },
+      { id: 'shift_work_impact', question: 'Impact du travail posté sur votre santé?', type: 'multi_select', category: 'Conditions de Travail', categoryIcon: 'moon', options: ['Troubles du sommeil', 'Fatigue chronique', 'Irritabilité', 'Troubles digestifs', 'Isolement social', 'Aucun impact'] },
+      { id: 'chemical_handling', question: 'Manipulez-vous des produits chimiques (désinfectants, cytotoxiques)?', type: 'choice', category: 'Conditions de Travail', categoryIcon: 'moon', options: ['Quotidiennement', 'Hebdomadaire', 'Rarement', 'Jamais'] },
+      { id: 'skin_reactions', question: 'Réactions cutanées aux produits (gants, désinfectants)?', type: 'yes_no', category: 'Conditions de Travail', categoryIcon: 'moon', alertCondition: (v) => v === 'Oui', alertMessage: 'Dermatite de contact possible — exploration allergologique' },
+    ],
+    physicalExamEmphasis: ['dermatological', 'respiratory', 'mentalHealth'],
+    vitalAlerts: [
+      { field: 'temperature', label: 'Température — surveillance infectieuse', icon: 'thermometer' },
+    ],
+  },
+
+  // ─── MANUFACTURING ──────────────────────────────────────
+  {
+    sectors: ['manufacturing'],
+    label: 'Risques Industriels & Mécaniques',
+    description: 'Questions pour les travailleurs exposés aux risques mécaniques et chimiques industriels.',
+    icon: 'cog',
+    color: '#7C3AED',
+    questions: [
+      { id: 'machine_accident', question: 'Avez-vous déjà eu un accident avec une machine?', type: 'yes_no', category: 'Risques Mécaniques', categoryIcon: 'cog', alertCondition: (v) => v === 'Oui', alertMessage: 'Antécédent d\'accident machine — évaluation séquelles' },
+      { id: 'vibration_tool_use', question: 'Utilisez-vous des outils vibrants?', type: 'choice', category: 'Risques Mécaniques', categoryIcon: 'cog', options: ['Quotidiennement', 'Régulièrement', 'Occasionnellement', 'Jamais'] },
+      { id: 'noise_level_perception', question: 'Devez-vous élever la voix pour communiquer au travail?', type: 'choice', category: 'Risques Mécaniques', categoryIcon: 'cog', options: ['Toujours', 'Souvent', 'Parfois', 'Jamais'], alertCondition: (v) => v === 'Toujours' || v === 'Souvent', alertMessage: 'Environnement >85 dB probable — audiométrie requise' },
+      { id: 'chemical_products', question: 'Produits chimiques utilisés au poste?', type: 'multi_select', category: 'Exposition Chimique', categoryIcon: 'flask', options: ['Solvants', 'Peintures', 'Colles/Résines', 'Huiles de coupe', 'Acides', 'Produits de nettoyage', 'Aucun'] },
+      { id: 'fume_extraction', question: 'Existe-t-il une aspiration/ventilation au poste?', type: 'choice', category: 'Exposition Chimique', categoryIcon: 'flask', options: ['Oui, fonctionnelle', 'Oui, défaillante', 'Non'], alertCondition: (v) => v === 'Non' || v === 'Oui, défaillante', alertMessage: 'Ventilation insuffisante — risque d\'inhalation' },
+      { id: 'skin_contact_chemicals', question: 'Contact cutané avec des produits chimiques?', type: 'choice', category: 'Exposition Chimique', categoryIcon: 'flask', options: ['Fréquent', 'Occasionnel', 'Rare', 'Jamais'], alertCondition: (v) => v === 'Fréquent', alertMessage: 'Contact chimique fréquent — dépistage dermatologique' },
+      { id: 'manual_handling', question: 'Manutention manuelle régulière (charges lourdes)?', type: 'choice', category: 'Ergonomie Industrielle', categoryIcon: 'fitness', options: ['> 25 kg régulièrement', '10-25 kg régulièrement', '< 10 kg', 'Aucune'], alertCondition: (v) => v === '> 25 kg régulièrement', alertMessage: 'Charges lourdes — risque TMS et lombalgies' },
+      { id: 'repetitive_movements', question: 'Gestes répétitifs au poste de travail?', type: 'yes_no', category: 'Ergonomie Industrielle', categoryIcon: 'fitness', alertCondition: (v) => v === 'Oui', alertMessage: 'Gestes répétitifs — surveillance TMS' },
+      { id: 'ppe_available', question: 'Quels EPI sont fournis et portés?', type: 'multi_select', category: 'Ergonomie Industrielle', categoryIcon: 'fitness', options: ['Casque', 'Lunettes', 'Gants', 'Bouchons d\'oreilles', 'Chaussures de sécurité', 'Masque respiratoire', 'Tablier', 'Aucun fourni'] },
+    ],
+    physicalExamEmphasis: ['musculoskeletal', 'respiratory', 'dermatological', 'ent'],
+    vitalAlerts: [
+      { field: 'oxygenSaturation', label: 'SpO2 — exposition chimique/poussières', icon: 'water' },
+    ],
+  },
+
+  // ─── AGRICULTURE ────────────────────────────────────────
+  {
+    sectors: ['agriculture'],
+    label: 'Risques Agricoles & Phytosanitaires',
+    description: 'Questions pour les travailleurs agricoles exposés aux pesticides et risques biologiques.',
+    icon: 'leaf',
+    color: '#16A34A',
+    questions: [
+      { id: 'pesticide_use', question: 'Utilisez-vous ou manipulez-vous des pesticides?', type: 'choice', category: 'Exposition Phytosanitaire', categoryIcon: 'leaf', options: ['Quotidiennement', 'Hebdomadaire', 'Saisonnier', 'Jamais'] },
+      { id: 'pesticide_protection', question: 'Portez-vous des EPI lors de l\'épandage?', type: 'choice', category: 'Exposition Phytosanitaire', categoryIcon: 'leaf', options: ['Complets (gants+masque+combinaison)', 'Partiels', 'Aucun'], alertCondition: (v) => v === 'Aucun' || v === 'Partiels', alertMessage: 'Protection insuffisante — risque d\'intoxication' },
+      { id: 'intoxication_symptoms', question: 'Symptômes après manipulation de produits?', type: 'multi_select', category: 'Exposition Phytosanitaire', categoryIcon: 'leaf', options: ['Nausées', 'Vertiges', 'Maux de tête', 'Irritation cutanée', 'Troubles visuels', 'Hypersalivation', 'Aucun'] },
+      { id: 'animal_contact', question: 'Contact avec des animaux au travail?', type: 'choice', category: 'Risque Biologique', categoryIcon: 'bug', options: ['Quotidien', 'Régulier', 'Occasionnel', 'Jamais'] },
+      { id: 'zoonosis_history', question: 'Avez-vous déjà contracté une maladie animale (brucellose, leptospirose...)?', type: 'yes_no', category: 'Risque Biologique', categoryIcon: 'bug', alertCondition: (v) => v === 'Oui', alertMessage: 'Antécédent de zoonose — surveillance sérologique' },
+      { id: 'outdoor_heat_exposure', question: 'Travaillez-vous en extérieur par forte chaleur?', type: 'choice', category: 'Environnement', categoryIcon: 'sunny', options: ['Quotidiennement', 'Souvent', 'Parfois', 'Rarement'] },
+      { id: 'hydration_practice', question: 'Vous hydratez-vous régulièrement au travail?', type: 'choice', category: 'Environnement', categoryIcon: 'sunny', options: ['Oui, régulièrement', 'Parfois', 'Rarement'], alertCondition: (v) => v === 'Rarement', alertMessage: 'Hydratation insuffisante — risque coup de chaleur' },
+      { id: 'skin_lesions', question: 'Lésions cutanées ou irritations chroniques?', type: 'yes_no', category: 'Environnement', categoryIcon: 'sunny', alertCondition: (v) => v === 'Oui', alertMessage: 'Dermatose d\'origine professionnelle possible' },
+      { id: 'back_pain', question: 'Souffrez-vous de douleurs dorsales liées au travail?', type: 'choice', category: 'Ergonomie', categoryIcon: 'fitness', options: ['Fréquemment', 'Occasionnellement', 'Rarement', 'Jamais'], alertCondition: (v) => v === 'Fréquemment', alertMessage: 'Lombalgies fréquentes — adaptation du poste' },
+    ],
+    physicalExamEmphasis: ['dermatological', 'respiratory', 'neurological', 'musculoskeletal'],
+    vitalAlerts: [
+      { field: 'temperature', label: 'Température — travailleurs extérieurs', icon: 'thermometer' },
+    ],
+  },
+
+  // ─── TRANSPORT ──────────────────────────────────────────
+  {
+    sectors: ['transport'],
+    label: 'Risques Routiers & Conduite',
+    description: 'Questions pour les conducteurs et personnels de transport.',
+    icon: 'car',
+    color: '#0891B2',
+    questions: [
+      { id: 'daily_driving_hours', question: 'Heures de conduite quotidienne?', type: 'number', category: 'Conduite', categoryIcon: 'car', unit: 'h/jour', placeholder: '0', alertCondition: (v) => v && parseFloat(v) >= 8, alertMessage: 'Temps de conduite excessif — risque de fatigue' },
+      { id: 'drowsiness_episodes', question: 'Épisodes de somnolence au volant?', type: 'choice', category: 'Conduite', categoryIcon: 'car', options: ['Jamais', 'Rarement', 'Parfois', 'Fréquemment'], alertCondition: (v) => v === 'Parfois' || v === 'Fréquemment', alertMessage: 'Somnolence au volant — dépistage apnée du sommeil' },
+      { id: 'accident_history', question: 'Accidents de la route dans les 3 dernières années?', type: 'number', category: 'Conduite', categoryIcon: 'car', unit: '', placeholder: '0', alertCondition: (v) => v && parseInt(v) >= 2, alertMessage: 'Accidents multiples — évaluation aptitude à la conduite' },
+      { id: 'vision_changes', question: 'Changements visuels récents?', type: 'multi_select', category: 'Aptitude Sensorielle', categoryIcon: 'eye', options: ['Vision floue', 'Vision nocturne réduite', 'Éblouissement', 'Vision périphérique réduite', 'Port de lunettes', 'Aucun'] },
+      { id: 'hearing_difficulty', question: 'Difficultés auditives en conduite?', type: 'yes_no', category: 'Aptitude Sensorielle', categoryIcon: 'eye' },
+      { id: 'medication_driving', question: 'Prenez-vous des médicaments pouvant affecter la conduite?', type: 'yes_no', category: 'Aptitude Sensorielle', categoryIcon: 'eye', alertCondition: (v) => v === 'Oui', alertMessage: 'Médicaments & conduite — évaluation risques' },
+      { id: 'sleep_quality_driver', question: 'Qualité de sommeil (ronflements, apnée)?', type: 'choice', category: 'Fatigue & Sommeil', categoryIcon: 'moon', options: ['Sommeil réparateur', 'Réveils fréquents', 'Ronflements forts', 'Apnée suspectée'], alertCondition: (v) => v === 'Ronflements forts' || v === 'Apnée suspectée', alertMessage: 'Suspicion SAOS — polysomnographie recommandée' },
+      { id: 'substance_use_driver', question: 'Consommation de substances stimulantes en conduite?', type: 'choice', category: 'Fatigue & Sommeil', categoryIcon: 'moon', options: ['Aucune', 'Café excessif', 'Stimulants', 'Autre'], alertCondition: (v) => v === 'Stimulants' || v === 'Autre', alertMessage: 'Usage de stimulants — risque de dépendance et accident' },
+      { id: 'vibration_whole_body', question: 'Vibrations du véhicule — douleurs lombaires?', type: 'yes_no', category: 'Fatigue & Sommeil', categoryIcon: 'moon', alertCondition: (v) => v === 'Oui', alertMessage: 'Vibrations corps entier — évaluation rachidienne' },
+    ],
+    physicalExamEmphasis: ['ophthalmological', 'cardiovascular', 'neurological'],
+    vitalAlerts: [
+      { field: 'visualAcuity', label: 'Acuité visuelle — obligatoire pour conducteurs', icon: 'eye' },
+      { field: 'bloodPressureSystolic', label: 'TA — aptitude cardiovasculaire conduite', icon: 'heart' },
+    ],
+  },
+
+  // ─── HOSPITALITY / RETAIL ───────────────────────────────
+  {
+    sectors: ['hospitality', 'retail'],
+    label: 'Commerce & Services',
+    description: 'Questions pour le personnel en contact avec le public.',
+    icon: 'restaurant',
+    color: '#F59E0B',
+    questions: [
+      { id: 'standing_hours', question: 'Heures debout par jour?', type: 'number', category: 'Posture & Ergonomie', categoryIcon: 'body', unit: 'h/jour', placeholder: '0', alertCondition: (v) => v && parseFloat(v) >= 6, alertMessage: 'Station debout prolongée — risque varices et TMS' },
+      { id: 'heavy_carrying', question: 'Portez-vous régulièrement des charges lourdes?', type: 'choice', category: 'Posture & Ergonomie', categoryIcon: 'body', options: ['Régulièrement (>10 kg)', 'Occasionnellement', 'Rarement', 'Jamais'] },
+      { id: 'slip_fall_risk', question: 'Avez-vous subi une glissade ou chute au travail?', type: 'yes_no', category: 'Posture & Ergonomie', categoryIcon: 'body', alertCondition: (v) => v === 'Oui', alertMessage: 'Antécédent chute — vérification chaussures et sols' },
+      { id: 'food_handler', question: 'Manipulez-vous des aliments?', type: 'yes_no', category: 'Hygiène & Sécurité', categoryIcon: 'restaurant' },
+      { id: 'hygiene_training', question: 'Formation en hygiène alimentaire reçue?', type: 'choice', category: 'Hygiène & Sécurité', categoryIcon: 'restaurant', options: ['Oui, récente (<2 ans)', 'Oui, ancienne', 'Non'], alertCondition: (v) => v === 'Non', alertMessage: 'Formation hygiène requise' },
+      { id: 'client_aggression', question: 'Avez-vous été confronté à des agressions verbales/physiques?', type: 'choice', category: 'Risques Psychosociaux', categoryIcon: 'people', options: ['Jamais', 'Rarement', 'Parfois', 'Fréquemment'], alertCondition: (v) => v === 'Fréquemment', alertMessage: 'Violence au travail — soutien psychologique' },
+      { id: 'work_schedule', question: 'Travaillez-vous en horaires décalés?', type: 'choice', category: 'Risques Psychosociaux', categoryIcon: 'people', options: ['Horaires réguliers', 'Horaires variables', 'Travail de nuit', 'Week-ends réguliers'] },
+      { id: 'leg_pain', question: 'Douleurs aux jambes en fin de journée?', type: 'yes_no', category: 'Risques Psychosociaux', categoryIcon: 'people', alertCondition: (v) => v === 'Oui', alertMessage: 'Insuffisance veineuse possible — bas de contention' },
+    ],
+    physicalExamEmphasis: ['musculoskeletal', 'cardiovascular', 'dermatological'],
+    vitalAlerts: [],
+  },
 ];
 
 // ─── Sample workers (would come from DB in production) ───────
@@ -247,6 +456,11 @@ function getBMICategory(bmi?: number): { label: string; color: string } {
   return { label: 'Obésité', color: colors.error };
 }
 
+// Get sector questionnaire config for a given sector
+function getSectorQuestionnaire(sector: IndustrySector): SectorQuestionnaireConfig | null {
+  return SECTOR_QUESTIONNAIRES.find(q => q.sectors.includes(sector)) || null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
@@ -312,6 +526,9 @@ export function OccHealthConsultationScreen({
   const [ergonomicNotes, setErgonomicNotes] = useState('');
   const [mskComplaints, setMskComplaints] = useState<MusculoskeletalComplaint[]>([]);
 
+  // ─── Sector-specific questionnaire answers ──
+  const [sectorAnswers, setSectorAnswers] = useState<Record<string, any>>({});
+
   // ─── Fitness decision ──
   const [fitnessDecision, setFitnessDecision] = useState<FitnessStatus>('fit');
   const [restrictions, setRestrictions] = useState<string[]>([]);
@@ -346,6 +563,7 @@ export function OccHealthConsultationScreen({
     ergonomicNeeded: boolean;
     ergonomicNotes: string;
     mskComplaints: MusculoskeletalComplaint[];
+    sectorAnswers: Record<string, any>;
     fitnessDecision: FitnessStatus;
     restrictions: string[];
     recommendations: string;
@@ -384,6 +602,7 @@ export function OccHealthConsultationScreen({
         ergonomicNeeded,
         ergonomicNotes,
         mskComplaints,
+        sectorAnswers,
         fitnessDecision,
         restrictions,
         recommendations,
@@ -414,7 +633,7 @@ export function OccHealthConsultationScreen({
     draftId, selectedWorker, examType, visitReason, referredBy, vitals, physicalExam,
     orderedTests, audiometryDone, spirometryDone, visionDone, drugScreeningDone,
     bloodWorkDone, xrayDone, mentalScreening, ergonomicNeeded, ergonomicNotes,
-    mskComplaints, fitnessDecision, restrictions, recommendations, followUpNeeded,
+    mskComplaints, sectorAnswers, fitnessDecision, restrictions, recommendations, followUpNeeded,
     followUpDate, consultationNotes, currentStep,
   ]);
 
@@ -456,6 +675,7 @@ export function OccHealthConsultationScreen({
         setErgonomicNeeded(parsed.ergonomicNeeded);
         setErgonomicNotes(parsed.ergonomicNotes);
         setMskComplaints(parsed.mskComplaints);
+        setSectorAnswers(parsed.sectorAnswers || {});
         setFitnessDecision(parsed.fitnessDecision);
         setRestrictions(parsed.restrictions);
         setRecommendations(parsed.recommendations);
@@ -589,6 +809,12 @@ export function OccHealthConsultationScreen({
     return sectorProfile.recommendedScreenings;
   }, [sectorProfile]);
 
+  // Sector-specific questionnaire for the selected worker
+  const sectorQuestionnaire = useMemo(
+    () => selectedWorker ? getSectorQuestionnaire(selectedWorker.sector) : null,
+    [selectedWorker]
+  );
+
   // ─── Navigation ──
   const goNext = () => {
     const idx = currentStepIdx;
@@ -675,6 +901,7 @@ export function OccHealthConsultationScreen({
         certificateNumber,
         certificateIssued: true,
         notes: consultationNotes,
+        sectorQuestionnaireAnswers: Object.keys(sectorAnswers).length > 0 ? sectorAnswers : undefined,
         createdAt: currentDate,
       };
 
@@ -756,6 +983,7 @@ export function OccHealthConsultationScreen({
     setErgonomicNeeded(false);
     setErgonomicNotes('');
     setMskComplaints([]);
+    setSectorAnswers({});
     setFitnessDecision('fit');
     setRestrictions([]);
     setRestrictionInput('');
@@ -1026,6 +1254,28 @@ export function OccHealthConsultationScreen({
             </Text>
           </View>
         )}
+
+        {/* Sector-specific vital sign emphasis */}
+        {sectorQuestionnaire && sectorQuestionnaire.vitalAlerts.length > 0 && (
+          <View style={[sectorQuestionStyles.sectorBadge, { backgroundColor: sectorQuestionnaire.color + '08', borderColor: sectorQuestionnaire.color + '30', marginTop: 16 }]}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Ionicons name="star" size={14} color={sectorQuestionnaire.color} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: sectorQuestionnaire.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Points de vigilance sectorielle
+                </Text>
+              </View>
+              {sectorQuestionnaire.vitalAlerts.map((alert, idx) => (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Ionicons name={alert.icon} size={14} color={sectorQuestionnaire.color} />
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
+                    {alert.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
       </View>
     );
   };
@@ -1045,22 +1295,41 @@ export function OccHealthConsultationScreen({
       { key: 'mentalHealth', label: 'État Mental', icon: 'happy' },
     ];
 
+    // Sort emphasized systems first based on sector questionnaire
+    const emphasizedKeys = sectorQuestionnaire?.physicalExamEmphasis || [];
+    const sortedSystems = [...systems].sort((a, b) => {
+      const aEmph = emphasizedKeys.includes(a.key) ? 1 : 0;
+      const bEmph = emphasizedKeys.includes(b.key) ? 1 : 0;
+      return bEmph - aEmph;
+    });
+
     return (
       <View>
         <StepHeader
           title="Examen Physique"
-          subtitle="Évaluez chaque système. Cliquez pour basculer entre Normal et Anormal."
+          subtitle="Évaluez chaque système. Les systèmes prioritaires pour ce secteur sont mis en avant."
           icon="body"
         />
 
-        {systems.map((sys) => {
+        {/* Sector emphasis notice */}
+        {sectorQuestionnaire && emphasizedKeys.length > 0 && (
+          <View style={[sectorQuestionStyles.sectorBadge, { backgroundColor: sectorQuestionnaire.color + '08', borderColor: sectorQuestionnaire.color + '30', marginBottom: 16 }]}>
+            <Ionicons name="star" size={16} color={sectorQuestionnaire.color} />
+            <Text style={[styles.alertText, { marginLeft: 8, color: sectorQuestionnaire.color }]}>
+              <Text style={{ fontWeight: '700' }}>Priorité sectorielle:</Text> Les systèmes marqués ★ nécessitent une attention particulière pour le secteur {sectorProfile?.label || ''}.
+            </Text>
+          </View>
+        )}
+
+        {sortedSystems.map((sys) => {
           const val = physicalExam[sys.key] as string;
           const isNormal = val === 'normal';
           const notesKey = (sys.key + 'Notes') as keyof PhysicalExamination;
           const notes = physicalExam[notesKey] as string | undefined;
+          const isEmphasized = emphasizedKeys.includes(sys.key);
 
           return (
-            <View key={sys.key} style={styles.examSystem}>
+            <View key={sys.key} style={[styles.examSystem, isEmphasized && { borderColor: sectorQuestionnaire?.color || ACCENT, borderWidth: 1.5, backgroundColor: (sectorQuestionnaire?.color || ACCENT) + '04' }]}>
               <TouchableOpacity
                 style={styles.examSystemHeader}
                 onPress={() => {
@@ -1070,7 +1339,14 @@ export function OccHealthConsultationScreen({
                 activeOpacity={0.7}
               >
                 <Ionicons name={sys.icon} size={18} color={isNormal ? colors.success : colors.error} />
-                <Text style={styles.examSystemLabel}>{sys.label}</Text>
+                <Text style={styles.examSystemLabel}>
+                  {isEmphasized ? '★ ' : ''}{sys.label}
+                </Text>
+                {isEmphasized && (
+                  <View style={[styles.recBadge, { backgroundColor: (sectorQuestionnaire?.color || ACCENT) + '14', marginRight: 6 }]}>
+                    <Text style={[styles.recBadgeText, { color: sectorQuestionnaire?.color || ACCENT }]}>Prioritaire</Text>
+                  </View>
+                )}
                 <View style={[styles.examStatusChip, { backgroundColor: isNormal ? colors.successLight : colors.errorLight }]}>
                   <View style={[styles.examStatusDot, { backgroundColor: isNormal ? colors.success : colors.error }]} />
                   <Text style={[styles.examStatusText, { color: isNormal ? colors.success : colors.error }]}>
@@ -1094,7 +1370,240 @@ export function OccHealthConsultationScreen({
     );
   };
 
-  // ─── Step 5: Sector-Specific Tests ──
+  // ─── Step 5: Sector-Specific Questionnaire ──
+  const renderSectorQuestions = () => {
+    if (!sectorQuestionnaire || !selectedWorker) {
+      return (
+        <View>
+          <StepHeader
+            title="Questionnaire Sectoriel"
+            subtitle="Aucun questionnaire spécifique pour ce secteur."
+            icon="list"
+          />
+          <View style={styles.notApplicableCard}>
+            <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+            <Text style={styles.notApplicableText}>
+              Pas de questionnaire sectoriel spécifique requis.
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Group questions by category
+    const categories = sectorQuestionnaire.questions.reduce((acc, q) => {
+      if (!acc[q.category]) acc[q.category] = { icon: q.categoryIcon, questions: [] };
+      acc[q.category].questions.push(q);
+      return acc;
+    }, {} as Record<string, { icon: keyof typeof Ionicons.glyphMap; questions: SectorQuestion[] }>);
+
+    const answeredCount = Object.keys(sectorAnswers).filter(k =>
+      sectorAnswers[k] !== undefined && sectorAnswers[k] !== '' &&
+      !(Array.isArray(sectorAnswers[k]) && sectorAnswers[k].length === 0)
+    ).length;
+    const totalCount = sectorQuestionnaire.questions.length;
+    const alertCount = sectorQuestionnaire.questions.filter(q => {
+      const answer = sectorAnswers[q.id];
+      return q.alertCondition && answer !== undefined && q.alertCondition(answer);
+    }).length;
+
+    return (
+      <View>
+        <StepHeader
+          title="Questionnaire Sectoriel"
+          subtitle={`Questions adaptées au secteur ${sectorQuestionnaire.label}.`}
+          icon="list"
+        />
+
+        {/* Sector profile badge */}
+        <View style={[sectorQuestionStyles.sectorBadge, { backgroundColor: sectorQuestionnaire.color + '08', borderColor: sectorQuestionnaire.color + '30' }]}>
+          <View style={[sectorQuestionStyles.sectorBadgeIcon, { backgroundColor: sectorQuestionnaire.color + '14' }]}>
+            <Ionicons name={sectorQuestionnaire.icon} size={20} color={sectorQuestionnaire.color} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[sectorQuestionStyles.sectorBadgeTitle, { color: sectorQuestionnaire.color }]}>
+              {sectorQuestionnaire.label}
+            </Text>
+            <Text style={sectorQuestionStyles.sectorBadgeDesc}>
+              {sectorQuestionnaire.description}
+            </Text>
+          </View>
+        </View>
+
+        {/* Progress indicator */}
+        <View style={sectorQuestionStyles.progressBar}>
+          <View style={sectorQuestionStyles.progressInfo}>
+            <Text style={sectorQuestionStyles.progressText}>
+              {answeredCount}/{totalCount} questions répondues
+            </Text>
+            {alertCount > 0 && (
+              <View style={sectorQuestionStyles.alertCountBadge}>
+                <Ionicons name="alert-circle" size={12} color="#FFF" />
+                <Text style={sectorQuestionStyles.alertCountText}>{alertCount} alerte{alertCount > 1 ? 's' : ''}</Text>
+              </View>
+            )}
+          </View>
+          <View style={sectorQuestionStyles.progressTrack}>
+            <View style={[sectorQuestionStyles.progressFill, { width: `${(answeredCount / totalCount) * 100}%`, backgroundColor: sectorQuestionnaire.color }]} />
+          </View>
+        </View>
+
+        {/* Questions grouped by category */}
+        {Object.entries(categories).map(([catName, cat]) => (
+          <View key={catName} style={sectorQuestionStyles.categorySection}>
+            <View style={sectorQuestionStyles.categoryHeader}>
+              <Ionicons name={cat.icon} size={16} color={sectorQuestionnaire.color} />
+              <Text style={[sectorQuestionStyles.categoryTitle, { color: sectorQuestionnaire.color }]}>{catName}</Text>
+            </View>
+
+            {cat.questions.map((q) => {
+              const answer = sectorAnswers[q.id];
+              const hasAlert = q.alertCondition && answer !== undefined && q.alertCondition(answer);
+
+              return (
+                <View key={q.id} style={[sectorQuestionStyles.questionCard, hasAlert && { borderColor: colors.error, backgroundColor: colors.errorLight }]}>
+                  <Text style={[sectorQuestionStyles.questionText, hasAlert && { color: colors.errorDark }]}>
+                    {q.question}
+                  </Text>
+
+                  {/* Yes/No question */}
+                  {q.type === 'yes_no' && (
+                    <View style={sectorQuestionStyles.yesNoRow}>
+                      {['Oui', 'Non'].map(opt => (
+                        <TouchableOpacity
+                          key={opt}
+                          style={[
+                            sectorQuestionStyles.yesNoBtn,
+                            answer === opt && {
+                              backgroundColor: opt === 'Oui' && hasAlert ? colors.error + '14' : ACCENT + '14',
+                              borderColor: opt === 'Oui' && hasAlert ? colors.error : ACCENT,
+                            },
+                          ]}
+                          onPress={() => setSectorAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                        >
+                          <Text style={[
+                            sectorQuestionStyles.yesNoBtnText,
+                            answer === opt && { color: opt === 'Oui' && hasAlert ? colors.error : ACCENT, fontWeight: '700' },
+                          ]}>{opt}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Choice question */}
+                  {q.type === 'choice' && q.options && (
+                    <View style={sectorQuestionStyles.choiceRow}>
+                      {q.options.map(opt => (
+                        <TouchableOpacity
+                          key={opt}
+                          style={[
+                            styles.choiceChip,
+                            answer === opt && {
+                              backgroundColor: hasAlert ? colors.error + '14' : ACCENT + '14',
+                              borderColor: hasAlert ? colors.error : ACCENT,
+                            },
+                          ]}
+                          onPress={() => setSectorAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                        >
+                          <Text style={[
+                            styles.choiceChipText,
+                            answer === opt && { color: hasAlert ? colors.error : ACCENT, fontWeight: '700' },
+                          ]}>{opt}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Multi-select question */}
+                  {q.type === 'multi_select' && q.options && (
+                    <View style={sectorQuestionStyles.choiceRow}>
+                      {q.options.map(opt => {
+                        const selected = Array.isArray(answer) && answer.includes(opt);
+                        return (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[
+                              styles.choiceChip,
+                              selected && { backgroundColor: ACCENT + '14', borderColor: ACCENT },
+                            ]}
+                            onPress={() => {
+                              setSectorAnswers(prev => {
+                                const current = Array.isArray(prev[q.id]) ? [...prev[q.id]] : [];
+                                if (opt === 'Aucun' || opt === 'Aucun impact' || opt === 'Aucun aménagement' || opt === 'Aucun fourni') {
+                                  return { ...prev, [q.id]: [opt] };
+                                }
+                                // Remove "none" options when selecting a symptom
+                                const filtered = current.filter(v => v !== 'Aucun' && v !== 'Aucun impact' && v !== 'Aucun aménagement' && v !== 'Aucun fourni');
+                                if (filtered.includes(opt)) {
+                                  return { ...prev, [q.id]: filtered.filter(v => v !== opt) };
+                                }
+                                return { ...prev, [q.id]: [...filtered, opt] };
+                              });
+                            }}
+                          >
+                            <Text style={[
+                              styles.choiceChipText,
+                              selected && { color: ACCENT, fontWeight: '700' },
+                            ]}>{opt}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Number question */}
+                  {q.type === 'number' && (
+                    <View style={sectorQuestionStyles.numberRow}>
+                      <TextInput
+                        style={[sectorQuestionStyles.numberInput, hasAlert && { borderColor: colors.error }]}
+                        value={answer?.toString() || ''}
+                        onChangeText={v => setSectorAnswers(prev => ({ ...prev, [q.id]: v }))}
+                        placeholder={q.placeholder || '0'}
+                        placeholderTextColor={colors.placeholder}
+                        keyboardType="numeric"
+                      />
+                      {q.unit && <Text style={sectorQuestionStyles.numberUnit}>{q.unit}</Text>}
+                    </View>
+                  )}
+
+                  {/* Text question */}
+                  {q.type === 'text' && (
+                    <TextInput
+                      style={[styles.input, { marginTop: 8 }]}
+                      value={answer || ''}
+                      onChangeText={v => setSectorAnswers(prev => ({ ...prev, [q.id]: v }))}
+                      placeholder={q.placeholder || 'Réponse...'}
+                      placeholderTextColor={colors.placeholder}
+                    />
+                  )}
+
+                  {/* Alert message */}
+                  {hasAlert && q.alertMessage && (
+                    <View style={sectorQuestionStyles.alertInline}>
+                      <Ionicons name="warning" size={14} color={colors.error} />
+                      <Text style={sectorQuestionStyles.alertInlineText}>{q.alertMessage}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ))}
+
+        {/* Alert summary */}
+        {alertCount > 0 && (
+          <View style={[styles.alertBox, { marginTop: 16 }]}>
+            <Ionicons name="alert-circle" size={18} color={colors.error} />
+            <Text style={[styles.alertText, { marginLeft: 8 }]}>
+              <Text style={{ fontWeight: '800' }}>{alertCount} point{alertCount > 1 ? 's' : ''} d'attention</Text> détecté{alertCount > 1 ? 's' : ''} dans le questionnaire sectoriel. Vérifiez les réponses signalées en rouge.
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // ─── Step 6: Sector-Specific Tests ──
   const renderSectorTests = () => {
     if (!sectorProfile) return null;
 
@@ -1525,6 +2034,51 @@ export function OccHealthConsultationScreen({
           } />
         </View>
 
+        {/* Sector Questionnaire Alerts Summary */}
+        {sectorQuestionnaire && (() => {
+          const alerts = sectorQuestionnaire.questions.filter(q => {
+            const answer = sectorAnswers[q.id];
+            return q.alertCondition && answer !== undefined && q.alertCondition(answer);
+          });
+          const answeredCount = Object.keys(sectorAnswers).filter(k =>
+            sectorAnswers[k] !== undefined && sectorAnswers[k] !== '' &&
+            !(Array.isArray(sectorAnswers[k]) && sectorAnswers[k].length === 0)
+          ).length;
+          return (
+            <View style={[styles.sectionCard, { marginTop: 16 }]}>
+              <View style={styles.sectionCardHeader}>
+                <Ionicons name="list" size={18} color={sectorQuestionnaire.color} />
+                <Text style={[styles.sectionCardTitle, { color: sectorQuestionnaire.color }]}>
+                  Questionnaire Sectoriel — {sectorQuestionnaire.label}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
+                {answeredCount}/{sectorQuestionnaire.questions.length} questions répondues
+              </Text>
+              {alerts.length > 0 ? (
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.error, marginBottom: 6 }}>
+                    ⚠ {alerts.length} alerte{alerts.length > 1 ? 's' : ''} détectée{alerts.length > 1 ? 's' : ''}:
+                  </Text>
+                  {alerts.map((q, i) => (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 }}>
+                      <Ionicons name="warning" size={12} color={colors.error} style={{ marginTop: 2 }} />
+                      <Text style={{ fontSize: 12, color: colors.errorDark, flex: 1, lineHeight: 18 }}>
+                        {q.alertMessage || q.question}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                  <Text style={{ fontSize: 12, color: colors.success }}>Aucune alerte sectorielle</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
+
         {/* Restrictions */}
         {restrictions.length > 0 && (
           <View style={[styles.sectionCard, { marginTop: 16 }]}>
@@ -1571,6 +2125,7 @@ export function OccHealthConsultationScreen({
       case 'visit_reason': return renderVisitReason();
       case 'vital_signs': return renderVitalSigns();
       case 'physical_exam': return renderPhysicalExam();
+      case 'sector_questions': return renderSectorQuestions();
       case 'sector_tests': return renderSectorTests();
       case 'mental_ergonomic': return renderMentalErgonomic();
       case 'fitness_decision': return renderFitnessDecision();
@@ -1707,7 +2262,7 @@ export function OccHealthConsultationScreen({
             <Ionicons name="arrow-forward" size={18} color="#FFF" />
           </TouchableOpacity>
         ) : (
-          <View style={{ width: 120 }} />
+          <View style={{ width: isDesktop ? 120 : 80 }} />
         )}
       </View>
 
@@ -1794,10 +2349,10 @@ function VitalField({ label, value, placeholder, onChange, icon, unit, isText, a
   icon: keyof typeof Ionicons.glyphMap; unit?: string; isText?: boolean; alert?: boolean | number;
 }) {
   return (
-    <View style={[styles.vitalField, isAlert ? { borderColor: '#EF4444', backgroundColor: '#EF444408' } : {}]}>
+    <View style={[styles.vitalField, isAlert ? { borderColor: '#EF4444', backgroundColor: '#EF444408' } : undefined]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <Ionicons name={icon} size={14} color={isAlert ? '#EF4444' : colors.textSecondary} />
-        <Text style={[styles.vitalLabel, isAlert && { color: '#EF4444' }]}>{label}</Text>
+        <Text style={[styles.vitalLabel, isAlert ? { color: '#EF4444' } : undefined]}>{label}</Text>
       </View>
       <TextInput
         style={styles.vitalInput}
@@ -1876,7 +2431,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   stepHeaderTitle: { fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
-  stepHeaderSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2, maxWidth: isDesktop ? 500 : 280 },
+  stepHeaderSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2, maxWidth: isDesktop ? 500 : '100%', lineHeight: 18 },
 
   // ── Worker Card ──
   workerCard: {
@@ -2147,4 +2702,81 @@ const styles = StyleSheet.create({
   workerItemName: { fontSize: 14, fontWeight: '600', color: colors.text },
   workerItemMeta: { fontSize: 11, color: colors.textSecondary },
   workerItemSector: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  SECTOR QUESTIONNAIRE STYLES
+// ═══════════════════════════════════════════════════════════════
+
+const sectorQuestionStyles = StyleSheet.create({
+  // ── Sector Badge ──
+  sectorBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14,
+    borderRadius: borderRadius.lg, borderWidth: 1, marginBottom: 8,
+  },
+  sectorBadgeIcon: {
+    width: 40, height: 40, borderRadius: borderRadius.md,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sectorBadgeTitle: { fontSize: 14, fontWeight: '700' },
+  sectorBadgeDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+
+  // ── Progress ──
+  progressBar: { marginBottom: 20, padding: 12, backgroundColor: colors.surface, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.outline },
+  progressInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  progressText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.outlineVariant, overflow: 'hidden' as const },
+  progressFill: { height: 6, borderRadius: 3 },
+  alertCountBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12,
+    backgroundColor: colors.error,
+  },
+  alertCountText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
+
+  // ── Category ──
+  categorySection: { marginBottom: 20 },
+  categoryHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingBottom: 8, marginBottom: 8,
+    borderBottomWidth: 1, borderBottomColor: colors.outline,
+  },
+  categoryTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+
+  // ── Question Card ──
+  questionCard: {
+    padding: 14, marginBottom: 10,
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: colors.outline,
+  },
+  questionText: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 10, lineHeight: 20 },
+
+  // ── Yes/No ──
+  yesNoRow: { flexDirection: 'row', gap: isDesktop ? 10 : 6 },
+  yesNoBtn: {
+    flex: 1, alignItems: 'center' as const, paddingVertical: isDesktop ? 10 : 8,
+    borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.outline,
+    backgroundColor: colors.surface, minHeight: 44, // Ensure touch target size
+  },
+  yesNoBtnText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+
+  // ── Choice / Multi-select ──
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: isDesktop ? 8 : 6, alignItems: 'flex-start' },
+
+  // ── Number ──
+  numberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  numberInput: {
+    width: isDesktop ? 100 : 80, padding: isDesktop ? 10 : 8, fontSize: 16, fontWeight: '600', color: colors.text,
+    borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md,
+    backgroundColor: colors.surface, textAlign: 'center' as const, minHeight: 44,
+  },
+  numberUnit: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+
+  // ── Alert Inline ──
+  alertInline: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: borderRadius.sm,
+    backgroundColor: colors.error + '08',
+  },
+  alertInlineText: { fontSize: 11, color: colors.error, fontWeight: '600', flex: 1 },
 });

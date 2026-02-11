@@ -168,7 +168,7 @@ function IncidentCard({ incident, onPress }: { incident: WorkplaceIncident; onPr
           </View>
           <View style={styles.incidentInfoItem}>
             <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.incidentInfoText}>{incident.affectedWorkers.length} travailleur(s)</Text>
+            <Text style={styles.incidentInfoText}>{incident.affectedWorkers.length} patient(s) affecté(s)</Text>
           </View>
         </View>
       </View>
@@ -379,7 +379,7 @@ function IncidentDetailModal({ visible, incident, onClose }: { visible: boolean;
 
             {incident.affectedWorkers.length > 0 && (
               <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Travailleurs Affectés</Text>
+                <Text style={styles.detailSectionTitle}>Patients Affectés</Text>
                 {incident.affectedWorkers.map((aw, i) => (
                   <View key={i} style={styles.affectedWorkerCard}>
                     <Text style={styles.affectedWorkerName}>{aw.workerName}</Text>

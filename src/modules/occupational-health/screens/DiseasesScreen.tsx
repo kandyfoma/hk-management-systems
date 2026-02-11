@@ -203,7 +203,7 @@ function DiseaseDetailModal({ visible, disease, onClose }: { visible: boolean; d
             </View>
 
             <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Travailleur</Text>
+              <Text style={styles.detailSectionTitle}>Patient</Text>
               <DetailRow label="Nom" value={disease.workerName} />
               <DetailRow label="Secteur" value={SECTOR_PROFILES[disease.workerSector].label} />
             </View>
@@ -290,7 +290,7 @@ function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClo
   ];
 
   const handleSave = () => {
-    if (!workerName.trim()) { Alert.alert('Erreur', 'Le nom du travailleur est obligatoire.'); return; }
+    if (!workerName.trim()) { Alert.alert('Erreur', 'Le nom du patient est obligatoire.'); return; }
     const sectorProfile = SECTOR_PROFILES[sector];
     const newDisease: OccupationalDisease = {
       id: `od-${Date.now()}`, workerId: `w-${Date.now()}`, workerName: workerName.trim(),
@@ -316,7 +316,7 @@ function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClo
               <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Nom du Travailleur *</Text>
+              <Text style={styles.formLabel}>Nom du Patient *</Text>
               <TextInput style={styles.formInput} value={workerName} onChangeText={setWorkerName} placeholder="Nom complet" />
             </View>
             <View style={styles.formSection}>

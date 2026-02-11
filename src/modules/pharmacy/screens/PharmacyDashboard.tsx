@@ -121,7 +121,11 @@ const secStyles = StyleSheet.create({
 });
 
 // ─── Component ───────────────────────────────────────────────
-export function PharmacyDashboardContent() {
+interface PharmacyDashboardProps {
+  onNavigate?: (screenId: string) => void;
+}
+
+export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps = {}) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
@@ -130,7 +134,7 @@ export function PharmacyDashboardContent() {
           <Text style={styles.headerTitle}>Tableau de Bord Pharmacie</Text>
           <Text style={styles.headerSubtitle}>Aperçu de l'activité pharmaceutique</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('pos')}>
           <Ionicons name="add" size={20} color="#FFF" />
           <Text style={styles.addBtnText}>Nouvelle Vente</Text>
         </TouchableOpacity>
@@ -144,6 +148,7 @@ export function PharmacyDashboardContent() {
         accentColor={colors.primary}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
+        onCtaPress={() => onNavigate?.('analytics')}
       />
       <View style={styles.metricsGrid}>
         {metrics.map((m, i) => (
@@ -171,13 +176,14 @@ export function PharmacyDashboardContent() {
         accentColor={colors.secondary}
         ctaLabel="Ajouter Produit"
         ctaIcon="add-circle-outline"
+        onCtaPress={() => onNavigate?.('inventory')}
       />
       <View style={styles.row}>
         {/* Top Selling Drugs */}
         <View style={[styles.card, isDesktop && { flex: 3 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Médicaments les Plus Vendus</Text>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('inventory')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>
@@ -210,7 +216,7 @@ export function PharmacyDashboardContent() {
         <View style={[styles.card, isDesktop && { flex: 2 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Ventes Récentes</Text>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('sales-reports')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>

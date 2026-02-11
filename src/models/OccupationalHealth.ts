@@ -273,9 +273,12 @@ export interface WorkSite {
 
 // ─── Worker / Employee ───────────────────────────────────────
 // ─── Occupational Health Patient Extension ──────────────────────────────────
-// Extends base Patient model with occupational health-specific fields
+// A Patient in the OH context is still a Patient — but with required employment
+// fields. The base Patient model has optional sector/company/jobTitle fields that
+// become mandatory here. This means the same person is always a Patient; when
+// they enter Occupational Health, their employment context is enriched.
 export interface OccupationalHealthPatient extends Patient {
-  // Employment Information  
+  // Employment Information (required in OH context, optional on base Patient)
   employeeId: string;
   enterpriseId?: string;
   company: string;
@@ -298,7 +301,8 @@ export interface OccupationalHealthPatient extends Patient {
   riskLevel: SectorRiskLevel;
 }
 
-// Legacy alias for backward compatibility
+// Legacy alias — prefer OccupationalHealthPatient
+/** @deprecated Use OccupationalHealthPatient instead */
 export type Worker = OccupationalHealthPatient;
 
 export interface VaccinationRecord {
@@ -359,6 +363,7 @@ export interface MedicalExamination {
   certificateNumber?: string;
   certificateIssued: boolean;
   notes?: string;
+  sectorQuestionnaireAnswers?: Record<string, any>;
   createdAt: string;
   updatedAt?: string;
 }
@@ -788,20 +793,30 @@ export interface HazardIdentification {
 
 // ─── Utility Functions ───────────────────────────────────────
 export class OccHealthUtils {
-  static getWorkerFullName(worker: Worker): string {
-    const parts = [worker.firstName];
-    if (worker.middleName) parts.push(worker.middleName);
-    parts.push(worker.lastName);
+  static getPatientFullName(patient: OccupationalHealthPatient): string {
+    const parts = [patient.firstName];
+    if (patient.middleName) parts.push(patient.middleName);
+    parts.push(patient.lastName);
     return parts.join(' ');
   }
 
-  static getWorkerAge(worker: Worker): number {
-    const birthDate = new Date(worker.dateOfBirth);
+  /** @deprecated Use getPatientFullName */
+  static getWorkerFullName(worker: Worker): string {
+    return this.getPatientFullName(worker);
+  }
+
+  static getPatientAge(patient: OccupationalHealthPatient): number {
+    const birthDate = new Date(patient.dateOfBirth);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
     return age;
+  }
+
+  /** @deprecated Use getPatientAge */
+  static getWorkerAge(worker: Worker): number {
+    return this.getPatientAge(worker);
   }
 
   static isCertificateExpired(cert: FitnessCertificate): boolean {

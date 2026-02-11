@@ -252,10 +252,10 @@ export function TriageScreen() {
         bloodPressureDiastolic: diastolic ? parseInt(diastolic) : undefined,
         respiratoryRate: respiratoryRate ? parseInt(respiratoryRate) : undefined,
         oxygenSaturation: oxygenSat ? parseFloat(oxygenSat) : undefined,
-        weightEstimated: undefined,
-        pupilsEqual: undefined,
+        weightEstimated: false,
+        pupilsEqual: true,
       },
-      requiresIsolation: isolationRequired,
+      isolationRequired,
       assignedArea,
     };
 

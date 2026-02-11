@@ -42,27 +42,48 @@ const timeSlots = [
   '15:30', '16:00', '16:30', '17:00'
 ];
 
-const sampleAppointments: (Appointment & { patientName: string; doctorName: string })[] = [
+type UIAppointment = Appointment & {
+  patientName: string;
+  doctorName: string;
+  providerId: string;
+  scheduledDate: string;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
+  title: string;
+  department: string;
+  departmentId?: string;
+  slotId: string;
+  duration: number;
+  priority?: 'normal' | 'urgent' | 'high';
+};
+
+const sampleAppointments: UIAppointment[] = [
   {
     id: '1',
     appointmentNumber: 'A260001',
     patientId: 'P1001',
     patientName: 'Marie Kabamba',
     providerId: 'D001',
+    doctorId: 'D001',
     doctorName: 'Dr. Kalala',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
     type: 'consultation',
     title: 'Consultation Générale',
+    reason: 'Consultation Générale',
     status: 'confirmed',
     priority: 'normal',
     scheduledDate: today.toISOString().split('T')[0],
     scheduledStartTime: '09:00',
     scheduledEndTime: '09:30',
+    date: today.toISOString().split('T')[0],
+    startTime: '09:00',
+    endTime: '09:30',
     duration: 30,
     departmentId: 'DEP001',
     department: 'Médecine Générale',
     slotId: 'SLOT001',
+    createdBy: 'system',
     createdAt: new Date().toISOString(),
   },
   {
@@ -71,20 +92,26 @@ const sampleAppointments: (Appointment & { patientName: string; doctorName: stri
     patientId: 'P1002',
     patientName: 'Jean Mukendi',
     providerId: 'D001',
+    doctorId: 'D001',
     doctorName: 'Dr. Kalala',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
     type: 'follow_up',
     title: 'Suivi Diabète',
+    reason: 'Suivi Diabète',
     status: 'scheduled',
     priority: 'normal',
     scheduledDate: today.toISOString().split('T')[0],
     scheduledStartTime: '10:00',
     scheduledEndTime: '10:30',
+    date: today.toISOString().split('T')[0],
+    startTime: '10:00',
+    endTime: '10:30',
     duration: 30,
     departmentId: 'DEP001',
     department: 'Médecine Générale',
     slotId: 'SLOT002',
+    createdBy: 'system',
     createdAt: new Date().toISOString(),
   },
   {
@@ -93,21 +120,27 @@ const sampleAppointments: (Appointment & { patientName: string; doctorName: stri
     patientId: 'P1003',
     patientName: 'Pierre Kasongo',
     providerId: 'D002',
+    doctorId: 'D002',
     doctorName: 'Dr. Mbala',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
     type: 'emergency',
     title: 'Urgence - Douleur Abdominale',
+    reason: 'Urgence - Douleur Abdominale',
     status: 'checked_in',
     priority: 'urgent',
     scheduledDate: today.toISOString().split('T')[0],
     scheduledStartTime: '08:30',
     scheduledEndTime: '09:00',
+    date: today.toISOString().split('T')[0],
+    startTime: '08:30',
+    endTime: '09:00',
     duration: 30,
     departmentId: 'DEP002',
     department: 'Chirurgie',
     slotId: 'SLOT003',
     notes: 'Patient présente douleur abdominale aiguë depuis 2 jours',
+    createdBy: 'system',
     createdAt: new Date().toISOString(),
   },
   {
@@ -116,20 +149,26 @@ const sampleAppointments: (Appointment & { patientName: string; doctorName: stri
     patientId: 'P1004',
     patientName: 'Sophie Mwamba',
     providerId: 'D003',
+    doctorId: 'D003',
     doctorName: 'Dr. Mukoko',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
     type: 'procedure',
     title: 'Échographie Abdominale',
+    reason: 'Échographie Abdominale',
     status: 'in_progress',
     priority: 'normal',
     scheduledDate: today.toISOString().split('T')[0],
     scheduledStartTime: '11:00',
     scheduledEndTime: '11:45',
+    date: today.toISOString().split('T')[0],
+    startTime: '11:00',
+    endTime: '11:45',
     duration: 45,
     departmentId: 'DEP003',
     department: 'Radiologie',
     slotId: 'SLOT004',
+    createdBy: 'system',
     createdAt: new Date().toISOString(),
   },
   {
@@ -138,20 +177,26 @@ const sampleAppointments: (Appointment & { patientName: string; doctorName: stri
     patientId: 'P1005',
     patientName: 'David Mutombo',
     providerId: 'D001',
+    doctorId: 'D001',
     doctorName: 'Dr. Kalala',
     organizationId: 'ORG001',
     facilityId: 'FAC001',
     type: 'consultation',
     title: 'Consultation Cardiologie',
+    reason: 'Consultation Cardiologie',
     status: 'completed',
     priority: 'normal',
     scheduledDate: today.toISOString().split('T')[0],
     scheduledStartTime: '08:00',
     scheduledEndTime: '08:30',
+    date: today.toISOString().split('T')[0],
+    startTime: '08:00',
+    endTime: '08:30',
     duration: 30,
     departmentId: 'DEP004',
     department: 'Cardiologie',
     slotId: 'SLOT005',
+    createdBy: 'system',
     createdAt: new Date().toISOString(),
   },
 ];
