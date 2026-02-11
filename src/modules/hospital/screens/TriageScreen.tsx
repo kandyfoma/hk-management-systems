@@ -230,6 +230,40 @@ export function TriageScreen() {
   });
   const levelConfig = TRIAGE_LEVEL_CONFIG[suggestedLevel];
 
+  // Handle triage submission
+  const handleSubmitTriage = () => {
+    const triageData: Partial<Triage> = {
+      chiefComplaint,
+      symptomOnset: 'today', // This should be collected from form
+      consciousnessLevel: consciousness,
+      airwayStatus: airway,
+      breathingStatus: breathing,
+      circulationStatus: circulation,
+      mobilityStatus: mobility,
+      redFlags,
+      hasRedFlags: redFlags.length > 0,
+      level: suggestedLevel,
+      category: TriageUtils.getCategoryFromLevel(suggestedLevel),
+      painLevel: painLevel || 0,
+      vitals: {
+        temperature: temperature ? parseFloat(temperature) : undefined,
+        heartRate: heartRate ? parseInt(heartRate) : undefined,
+        bloodPressureSystolic: systolic ? parseInt(systolic) : undefined,
+        bloodPressureDiastolic: diastolic ? parseInt(diastolic) : undefined,
+        respiratoryRate: respiratoryRate ? parseInt(respiratoryRate) : undefined,
+        oxygenSaturation: oxygenSat ? parseFloat(oxygenSat) : undefined,
+        weightEstimated: undefined,
+        pupilsEqual: undefined,
+      },
+      requiresIsolation: isolationRequired,
+      assignedArea,
+    };
+
+    console.log('Triage Data:', triageData);
+    // TODO: Call API to save triage
+    alert(`Triage enregistré avec succès!\nNiveau: ${suggestedLevel} - ${levelConfig.name}`);
+  };
+
   // Toggle red flag
   const toggleRedFlag = (flag: RedFlag) => {
     setRedFlags(prev => 
@@ -666,6 +700,7 @@ export function TriageScreen() {
         <TouchableOpacity 
           style={[styles.submitBtn, { backgroundColor: levelConfig.color }]} 
           activeOpacity={0.7}
+          onPress={handleSubmitTriage}
         >
           <Ionicons name="checkmark-circle" size={20} color="#FFF" />
           <Text style={styles.submitBtnText}>Enregistrer Triage (Niveau {suggestedLevel})</Text>

@@ -4,6 +4,15 @@ import { OccHealthDashboardContent } from './screens/OccHealthDashboard';
 import { OccHealthConsultationScreen } from './screens/OccHealthConsultationScreen';
 import { PreviousVisitsScreen } from './screens/PreviousVisitsScreen';
 import { CertificatesScreen } from './screens/CertificatesScreen';
+import { WorkersScreen } from './screens/WorkersScreen';
+import { IncidentsScreen } from './screens/IncidentsScreen';
+import { DiseasesScreen } from './screens/DiseasesScreen';
+import { SurveillanceScreen } from './screens/SurveillanceScreen';
+import { RiskAssessmentScreen } from './screens/RiskAssessmentScreen';
+import { PPEManagementScreen } from './screens/PPEManagementScreen';
+import { ReportsScreen } from './screens/ReportsScreen';
+import { ComplianceScreen } from './screens/ComplianceScreen';
+import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 
@@ -246,17 +255,40 @@ export function OccHealthNavigator() {
       return <CertificatesScreen />;
     }
 
-    const screenDef = occHealthScreens[activeScreen];
-    if (screenDef) {
-      return (
-        <PlaceholderScreen
-          title={screenDef.title}
-          subtitle={screenDef.subtitle}
-          icon={screenDef.icon}
-          accentColor={ACCENT}
-          features={screenDef.features}
-        />
-      );
+    if (activeScreen === 'workers') {
+      return <WorkersScreen />;
+    }
+
+    if (activeScreen === 'incidents') {
+      return <IncidentsScreen />;
+    }
+
+    if (activeScreen === 'diseases') {
+      return <DiseasesScreen />;
+    }
+
+    if (activeScreen === 'surveillance') {
+      return <SurveillanceScreen />;
+    }
+
+    if (activeScreen === 'risk-assessment') {
+      return <RiskAssessmentScreen />;
+    }
+
+    if (activeScreen === 'ppe-management') {
+      return <PPEManagementScreen />;
+    }
+
+    if (activeScreen === 'reports') {
+      return <ReportsScreen />;
+    }
+
+    if (activeScreen === 'compliance') {
+      return <ComplianceScreen />;
+    }
+
+    if (activeScreen === 'analytics') {
+      return <AnalyticsScreen />;
     }
 
     return <OccHealthDashboardContent />;

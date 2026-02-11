@@ -491,18 +491,19 @@ function QuickPanelCard({
   tests: string[]; 
   color: string;
 }) {
+  const testsArray = Array.isArray(tests) ? tests : [];
   return (
     <View style={[styles.panelCard, { borderTopColor: color }]}>
-      <Text style={styles.panelName}>{name}</Text>
-      <Text style={styles.panelTests}>{tests.length} tests</Text>
+      <Text style={styles.panelName}>{name || 'Unknown Panel'}</Text>
+      <Text style={styles.panelTests}>{testsArray.length} tests</Text>
       <View style={styles.panelTestList}>
-        {tests.slice(0, 4).map((test, idx) => (
+        {testsArray.slice(0, 4).map((test, idx) => (
           <Text key={idx} style={styles.panelTestItem} numberOfLines={1}>
             • {test}
           </Text>
         ))}
-        {tests.length > 4 && (
-          <Text style={styles.panelMore}>+{tests.length - 4} autres</Text>
+        {testsArray.length > 4 && (
+          <Text style={styles.panelMore}>+{testsArray.length - 4} autres</Text>
         )}
       </View>
       <TouchableOpacity style={[styles.panelBtn, { backgroundColor: color + '15' }]} activeOpacity={0.7}>
@@ -623,7 +624,7 @@ export function LaboratoryScreen() {
           <QuickPanelCard
             key={key}
             name={panel.name}
-            tests={panel.tests}
+            tests={panel.parameters}
             color={
               key === 'BMP' ? colors.info :
               key === 'CMP' ? colors.primary :

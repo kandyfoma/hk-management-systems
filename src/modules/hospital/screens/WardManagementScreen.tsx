@@ -23,18 +23,53 @@ import {
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
+// ─── Local types for sample data (extending models) ─────────
+interface SampleBed {
+  id: string;
+  bedNumber: string;
+  wardId: string;
+  roomNumber: string;
+  type: string; // BedType or custom
+  status: string; // BedStatus or custom
+  isActive: boolean;
+  createdAt: string;
+  patientName?: string;
+  hasMonitor?: boolean;
+  hasVentilator?: boolean;
+}
+
+interface SampleWard {
+  id: string;
+  name: string;
+  code: string;
+  type: WardType;
+  floor: number;
+  building: string;
+  organizationId: string;
+  totalBeds: number;
+  occupiedBeds: number;
+  availableBeds: number;
+  reservedBeds: number;
+  nurseStationPhone: string;
+  headNurseId?: string;
+  headNurseName?: string;
+  isActive: boolean;
+  gender: 'male' | 'female' | 'mixed';
+  ageGroup: 'pediatric' | 'adult' | 'all';
+  createdAt: string;
+  beds: SampleBed[];
+}
+
 // ─── Sample Data ─────────────────────────────────────────────
-const sampleWards: (Ward & { beds: (Bed & { patientName?: string })[] })[] = [
+const sampleWards: SampleWard[] = [
   {
     id: 'W001',
-    wardNumber: 'WD260001',
     name: 'Médecine Générale',
     code: 'MG',
     type: 'general',
     floor: 2,
     building: 'Bâtiment Principal',
     organizationId: 'ORG001',
-    facilityId: 'FAC001',
     totalBeds: 20,
     occupiedBeds: 14,
     availableBeds: 5,
@@ -47,24 +82,22 @@ const sampleWards: (Ward & { beds: (Bed & { patientName?: string })[] })[] = [
     ageGroup: 'adult',
     createdAt: new Date().toISOString(),
     beds: [
-      { id: 'B001', bedNumber: 'MG-101', wardId: 'W001', roomNumber: '101', type: 'standard', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Jean Mukendi' },
-      { id: 'B002', bedNumber: 'MG-102', wardId: 'W001', roomNumber: '101', type: 'standard', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Pierre Kasongo' },
-      { id: 'B003', bedNumber: 'MG-103', wardId: 'W001', roomNumber: '102', type: 'standard', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B004', bedNumber: 'MG-104', wardId: 'W001', roomNumber: '102', type: 'standard', status: 'cleaning', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B005', bedNumber: 'MG-105', wardId: 'W001', roomNumber: '103', type: 'semi_private', status: 'reserved', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B006', bedNumber: 'MG-106', wardId: 'W001', roomNumber: '103', type: 'semi_private', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B001', bedNumber: 'MG-101', wardId: 'W001', roomNumber: '101', type: 'standard', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Jean Mukendi' },
+      { id: 'B002', bedNumber: 'MG-102', wardId: 'W001', roomNumber: '101', type: 'standard', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Pierre Kasongo' },
+      { id: 'B003', bedNumber: 'MG-103', wardId: 'W001', roomNumber: '102', type: 'standard', status: 'available', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B004', bedNumber: 'MG-104', wardId: 'W001', roomNumber: '102', type: 'standard', status: 'cleaning', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B005', bedNumber: 'MG-105', wardId: 'W001', roomNumber: '103', type: 'semi_private', status: 'reserved', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B006', bedNumber: 'MG-106', wardId: 'W001', roomNumber: '103', type: 'semi_private', status: 'available', isActive: true, createdAt: new Date().toISOString() },
     ],
   },
   {
     id: 'W002',
-    wardNumber: 'WD260002',
     name: 'Soins Intensifs (USI)',
     code: 'USI',
     type: 'icu',
     floor: 1,
     building: 'Bâtiment Principal',
     organizationId: 'ORG001',
-    facilityId: 'FAC001',
     totalBeds: 8,
     occupiedBeds: 6,
     availableBeds: 2,
@@ -77,22 +110,20 @@ const sampleWards: (Ward & { beds: (Bed & { patientName?: string })[] })[] = [
     ageGroup: 'adult',
     createdAt: new Date().toISOString(),
     beds: [
-      { id: 'B101', bedNumber: 'USI-01', wardId: 'W002', roomNumber: 'USI-A', type: 'icu', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString(), patientName: 'Marie Kabamba' },
-      { id: 'B102', bedNumber: 'USI-02', wardId: 'W002', roomNumber: 'USI-A', type: 'icu', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString(), patientName: 'David Mutombo' },
-      { id: 'B103', bedNumber: 'USI-03', wardId: 'W002', roomNumber: 'USI-B', type: 'icu', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString() },
-      { id: 'B104', bedNumber: 'USI-04', wardId: 'W002', roomNumber: 'USI-B', type: 'icu', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, hasMonitor: true, hasVentilator: false, createdAt: new Date().toISOString() },
+      { id: 'B101', bedNumber: 'USI-01', wardId: 'W002', roomNumber: 'USI-A', type: 'icu', status: 'occupied', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString(), patientName: 'Marie Kabamba' },
+      { id: 'B102', bedNumber: 'USI-02', wardId: 'W002', roomNumber: 'USI-A', type: 'icu', status: 'occupied', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString(), patientName: 'David Mutombo' },
+      { id: 'B103', bedNumber: 'USI-03', wardId: 'W002', roomNumber: 'USI-B', type: 'icu', status: 'available', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString() },
+      { id: 'B104', bedNumber: 'USI-04', wardId: 'W002', roomNumber: 'USI-B', type: 'icu', status: 'available', isActive: true, hasMonitor: true, hasVentilator: false, createdAt: new Date().toISOString() },
     ],
   },
   {
     id: 'W003',
-    wardNumber: 'WD260003',
     name: 'Pédiatrie',
     code: 'PED',
     type: 'pediatric',
     floor: 3,
     building: 'Bâtiment Principal',
     organizationId: 'ORG001',
-    facilityId: 'FAC001',
     totalBeds: 15,
     occupiedBeds: 8,
     availableBeds: 7,
@@ -103,22 +134,20 @@ const sampleWards: (Ward & { beds: (Bed & { patientName?: string })[] })[] = [
     ageGroup: 'pediatric',
     createdAt: new Date().toISOString(),
     beds: [
-      { id: 'B201', bedNumber: 'PED-01', wardId: 'W003', roomNumber: '301', type: 'pediatric', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Petit Ange (5 ans)' },
-      { id: 'B202', bedNumber: 'PED-02', wardId: 'W003', roomNumber: '301', type: 'pediatric', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Grace (7 ans)' },
-      { id: 'B203', bedNumber: 'PED-03', wardId: 'W003', roomNumber: '302', type: 'pediatric', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B204', bedNumber: 'PED-04', wardId: 'W003', roomNumber: '302', type: 'pediatric', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B201', bedNumber: 'PED-01', wardId: 'W003', roomNumber: '301', type: 'pediatric', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Petit Ange (5 ans)' },
+      { id: 'B202', bedNumber: 'PED-02', wardId: 'W003', roomNumber: '301', type: 'pediatric', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Grace (7 ans)' },
+      { id: 'B203', bedNumber: 'PED-03', wardId: 'W003', roomNumber: '302', type: 'pediatric', status: 'available', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B204', bedNumber: 'PED-04', wardId: 'W003', roomNumber: '302', type: 'pediatric', status: 'available', isActive: true, createdAt: new Date().toISOString() },
     ],
   },
   {
     id: 'W004',
-    wardNumber: 'WD260004',
     name: 'Maternité',
     code: 'MAT',
     type: 'maternity',
     floor: 2,
     building: 'Bâtiment B',
     organizationId: 'ORG001',
-    facilityId: 'FAC001',
     totalBeds: 12,
     occupiedBeds: 9,
     availableBeds: 3,
@@ -129,21 +158,19 @@ const sampleWards: (Ward & { beds: (Bed & { patientName?: string })[] })[] = [
     ageGroup: 'adult',
     createdAt: new Date().toISOString(),
     beds: [
-      { id: 'B301', bedNumber: 'MAT-01', wardId: 'W004', roomNumber: 'M1', type: 'delivery', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Sophie Mwamba' },
-      { id: 'B302', bedNumber: 'MAT-02', wardId: 'W004', roomNumber: 'M1', type: 'standard', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Clarisse Ndaya' },
-      { id: 'B303', bedNumber: 'MAT-03', wardId: 'W004', roomNumber: 'M2', type: 'standard', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B301', bedNumber: 'MAT-01', wardId: 'W004', roomNumber: 'M1', type: 'delivery', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Sophie Mwamba' },
+      { id: 'B302', bedNumber: 'MAT-02', wardId: 'W004', roomNumber: 'M1', type: 'standard', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Clarisse Ndaya' },
+      { id: 'B303', bedNumber: 'MAT-03', wardId: 'W004', roomNumber: 'M2', type: 'standard', status: 'available', isActive: true, createdAt: new Date().toISOString() },
     ],
   },
   {
     id: 'W005',
-    wardNumber: 'WD260005',
     name: 'Chirurgie',
     code: 'CHI',
     type: 'surgical',
     floor: 1,
     building: 'Bâtiment Principal',
     organizationId: 'ORG001',
-    facilityId: 'FAC001',
     totalBeds: 18,
     occupiedBeds: 12,
     availableBeds: 4,
@@ -154,9 +181,9 @@ const sampleWards: (Ward & { beds: (Bed & { patientName?: string })[] })[] = [
     ageGroup: 'adult',
     createdAt: new Date().toISOString(),
     beds: [
-      { id: 'B401', bedNumber: 'CHI-01', wardId: 'W005', roomNumber: 'S1', type: 'post_op', status: 'occupied', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString(), patientName: 'Francois Katumba' },
-      { id: 'B402', bedNumber: 'CHI-02', wardId: 'W005', roomNumber: 'S1', type: 'standard', status: 'maintenance', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B403', bedNumber: 'CHI-03', wardId: 'W005', roomNumber: 'S2', type: 'standard', status: 'available', organizationId: 'ORG001', facilityId: 'FAC001', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B401', bedNumber: 'CHI-01', wardId: 'W005', roomNumber: 'S1', type: 'post_op', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Francois Katumba' },
+      { id: 'B402', bedNumber: 'CHI-02', wardId: 'W005', roomNumber: 'S1', type: 'standard', status: 'maintenance', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'B403', bedNumber: 'CHI-03', wardId: 'W005', roomNumber: 'S2', type: 'standard', status: 'available', isActive: true, createdAt: new Date().toISOString() },
     ],
   },
 ];
@@ -238,7 +265,7 @@ function BedStatusBadge({ status }: { status: BedStatus }) {
     cleaning: 'Nettoyage',
     maintenance: 'Maintenance',
     blocked: 'Bloqué',
-    discharge_pending: 'Sortie Prévue',
+    out_of_service: 'Hors Service',
   };
   return (
     <View style={[styles.bedStatusBadge, { backgroundColor: color }]}>
@@ -248,8 +275,8 @@ function BedStatusBadge({ status }: { status: BedStatus }) {
 }
 
 // ─── Bed Card Component ──────────────────────────────────────
-function BedCard({ bed }: { bed: Bed & { patientName?: string } }) {
-  const color = BedUtils.getStatusColor(bed.status);
+function BedCard({ bed }: { bed: SampleBed }) {
+  const color = BedUtils.getStatusColor(bed.status as BedStatus);
   const isAvailable = bed.status === 'available';
   
   return (
@@ -296,7 +323,7 @@ function WardCard({ ward, expanded, onToggle }: {
   onToggle: () => void;
 }) {
   const config = WARD_TYPE_CONFIG[ward.type] || { color: colors.primary, icon: 'bed' };
-  const occupancyRate = WardUtils.getOccupancyRate(ward);
+  const occupancyRate = ward.totalBeds > 0 ? Math.round((ward.occupiedBeds / ward.totalBeds) * 100) : 0;
   const occupancyColor = occupancyRate > 90 ? colors.error : occupancyRate > 70 ? colors.warning : colors.success;
 
   return (

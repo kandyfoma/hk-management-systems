@@ -16,6 +16,15 @@ import { OccHealthDashboardContent } from '../modules/occupational-health/screen
 import { OccHealthConsultationScreen } from '../modules/occupational-health/screens/OccHealthConsultationScreen';
 import { PreviousVisitsScreen } from '../modules/occupational-health/screens/PreviousVisitsScreen';
 import { CertificatesScreen } from '../modules/occupational-health/screens/CertificatesScreen';
+import { WorkersScreen } from '../modules/occupational-health/screens/WorkersScreen';
+import { IncidentsScreen } from '../modules/occupational-health/screens/IncidentsScreen';
+import { DiseasesScreen } from '../modules/occupational-health/screens/DiseasesScreen';
+import { SurveillanceScreen } from '../modules/occupational-health/screens/SurveillanceScreen';
+import { RiskAssessmentScreen } from '../modules/occupational-health/screens/RiskAssessmentScreen';
+import { PPEManagementScreen } from '../modules/occupational-health/screens/PPEManagementScreen';
+import { ReportsScreen } from '../modules/occupational-health/screens/ReportsScreen';
+import { ComplianceScreen } from '../modules/occupational-health/screens/ComplianceScreen';
+import { AnalyticsScreen } from '../modules/occupational-health/screens/AnalyticsScreen';
 import { PlaceholderScreen } from '../modules/shared/PlaceholderScreen';
 import { POSScreen } from '../modules/pharmacy/screens/POSScreen';
 import { InventoryScreen } from '../modules/pharmacy/screens/InventoryScreen';
@@ -35,6 +44,8 @@ import { MedicationAdministrationScreen } from '../modules/hospital/screens/Medi
 import { LaboratoryScreen } from '../modules/hospital/screens/LaboratoryScreen';
 import { ClinicalNotesScreen } from '../modules/hospital/screens/ClinicalNotesScreen';
 import { HospitalBillingScreen } from '../modules/hospital/screens/HospitalBillingScreen';
+import { HospitalConsultationScreen } from '../modules/hospital/screens/HospitalConsultationScreen';
+import { ConsultationHistoryScreen } from '../modules/hospital/screens/ConsultationHistoryScreen';
 import { SidebarLayout, SidebarSection } from '../components/SidebarLayout';
 import { colors, borderRadius } from '../theme/theme';
 import { Patient } from '../models/Patient';
@@ -162,6 +173,8 @@ const createDynamicSections = (
     // Add features based on license
     if (hasFeature('patient_management')) {
       hospitalItems.push({ id: 'hp-patients', label: 'Gestion Patients', icon: 'body-outline', iconActive: 'body' });
+      hospitalItems.push({ id: 'hp-consultation', label: 'Consultation', icon: 'medical-outline', iconActive: 'medical' } as any);
+      hospitalItems.push({ id: 'hp-consultation-history', label: 'Historique Consult.', icon: 'time-outline', iconActive: 'time' } as any);
     }
     
     if (hasFeature('appointment_scheduling') || hasFeature('advanced_scheduling')) {
@@ -299,6 +312,9 @@ function DesktopApp() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
+  // Hospital consultation state
+  const [consultationPatientId, setConsultationPatientId] = useState<string | null>(null);
+
   // Occupational health draft management
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
 
@@ -310,6 +326,17 @@ function DesktopApp() {
   const handleEditPatient = (patient: Patient) => {
     setEditingPatient(patient);
     setPatientView('edit');
+  };
+
+  // Hospital consultation handlers
+  const handleStartConsultation = (patient: Patient) => {
+    setConsultationPatientId(patient.id);
+    setActiveScreen('hp-consultation');
+  };
+
+  const handleConsultationComplete = () => {
+    setConsultationPatientId(null);
+    setActiveScreen('hp-consultation-history');
   };
 
   const handleResumeDraft = (draftId: string) => {
@@ -392,13 +419,29 @@ function DesktopApp() {
     if (activeScreen === 'hp-lab-results') return <LaboratoryScreen />;
     if (activeScreen === 'hp-clinical-notes') return <ClinicalNotesScreen />;
     if (activeScreen === 'hp-billing') return <HospitalBillingScreen />;
+    if (activeScreen === 'hp-consultation') {
+      return (
+        <HospitalConsultationScreen
+          patientId={consultationPatientId || undefined}
+          onBack={() => setActiveScreen('hp-patients')}
+          onComplete={handleConsultationComplete}
+        />
+      );
+    }
+    if (activeScreen === 'hp-consultation-history') {
+      return (
+        <ConsultationHistoryScreen
+          onBack={() => setActiveScreen('hp-dashboard')}
+        />
+      );
+    }
     if (activeScreen === 'hp-patients') {
       if (patientView === 'detail' && selectedPatientId) {
         return (
           <PatientDetailScreen
             patientId={selectedPatientId}
             onBack={handleBackToPatientList}
-            onNewEncounter={() => {}}
+            onNewEncounter={handleStartConsultation}
             onEditPatient={handleEditPatient}
           />
         );
@@ -434,9 +477,32 @@ function DesktopApp() {
 
     // Occupational Health screens
     if (activeScreen === 'oh-dashboard') return <OccHealthDashboardContent />;
-    if (activeScreen === 'oh-exams') return <OccHealthConsultationScreen draftToLoad={draftToLoad} onDraftLoaded={() => setDraftToLoad(null)} />;
-    if (activeScreen === 'oh-previous-visits') return <PreviousVisitsScreen onResumeDraft={handleResumeDraft} onNewConsultation={handleNewConsultation} />;
-    if (activeScreen === 'oh-certificates') return <CertificatesScreen />;
+    if (activeScreen === 'oh-exams') return (
+      <OccHealthConsultationScreen 
+        draftToLoad={draftToLoad} 
+        onDraftLoaded={() => setDraftToLoad(null)}
+        onNavigateBack={() => setActiveScreen('oh-dashboard')}
+      />
+    );
+    if (activeScreen === 'oh-previous-visits') return (
+      <PreviousVisitsScreen 
+        onResumeDraft={handleResumeDraft} 
+        onNewConsultation={handleNewConsultation}
+      />
+    );
+    if (activeScreen === 'oh-certificates') return (
+      <CertificatesScreen 
+        onNavigateBack={() => setActiveScreen('oh-dashboard')}
+        showBackButton={true}
+      />
+    );
+    if (activeScreen === 'oh-workers') return <WorkersScreen />;
+    if (activeScreen === 'oh-incidents') return <IncidentsScreen />;
+    if (activeScreen === 'oh-diseases') return <DiseasesScreen />;
+    if (activeScreen === 'oh-surveillance') return <SurveillanceScreen />;
+    if (activeScreen === 'oh-risk') return <RiskAssessmentScreen />;
+    if (activeScreen === 'oh-ppe') return <PPEManagementScreen />;
+    if (activeScreen === 'oh-reports') return <ReportsScreen />;
     if (occHealthScreens[activeScreen]) {
       const s = occHealthScreens[activeScreen];
       return <PlaceholderScreen title={s.title} subtitle={s.subtitle} icon={s.icon} accentColor="#D97706" features={s.features} />;

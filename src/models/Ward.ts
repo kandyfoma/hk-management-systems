@@ -189,6 +189,29 @@ export interface BedAssignment {
   createdAt: string;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Ward Type Configuration for UI
+// ═══════════════════════════════════════════════════════════════
+
+export const WARD_TYPE_CONFIG: Record<WardType, { label: string; color: string; icon: string }> = {
+  general: { label: 'Général', color: '#3B82F6', icon: 'bed-outline' },
+  surgical: { label: 'Chirurgie', color: '#8B5CF6', icon: 'cut-outline' },
+  pediatric: { label: 'Pédiatrie', color: '#EC4899', icon: 'happy-outline' },
+  maternity: { label: 'Maternité', color: '#F97316', icon: 'heart-outline' },
+  obstetrics: { label: 'Obstétrique', color: '#F97316', icon: 'female-outline' },
+  icu: { label: 'Soins Intensifs', color: '#EF4444', icon: 'pulse-outline' },
+  ccu: { label: 'Cardiologie', color: '#DC2626', icon: 'heart-circle-outline' },
+  nicu: { label: 'Néonatologie', color: '#F472B6', icon: 'sparkles-outline' },
+  emergency: { label: 'Urgences', color: '#EF4444', icon: 'flash-outline' },
+  isolation: { label: 'Isolement', color: '#F59E0B', icon: 'warning-outline' },
+  psychiatric: { label: 'Psychiatrie', color: '#6366F1', icon: 'brain-outline' },
+  rehabilitation: { label: 'Rééducation', color: '#10B981', icon: 'fitness-outline' },
+  oncology: { label: 'Oncologie', color: '#7C3AED', icon: 'ribbon-outline' },
+  dialysis: { label: 'Dialyse', color: '#0891B2', icon: 'water-outline' },
+  vip: { label: 'VIP', color: '#D97706', icon: 'star-outline' },
+  day_case: { label: 'Ambulatoire', color: '#059669', icon: 'sunny-outline' },
+};
+
 export class WardUtils {
   /**
    * Calculate ward occupancy statistics

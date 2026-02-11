@@ -7,18 +7,19 @@ import {
   TouchableOpacity,
   Dimensions,
   TextInput,
+  Modal,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
   HospitalInvoice,
   InvoiceItem,
-  ServiceCatalogItem,
-  PaymentTransaction,
   InvoiceStatus,
   ServiceCategory,
   PaymentMethod,
-  HospitalBillingUtils,
+  HospitalInvoiceUtils,
+  ServiceCatalog,
 } from '../../../models/HospitalBilling';
 
 const { width } = Dimensions.get('window');
@@ -45,9 +46,9 @@ const sampleInvoices: (HospitalInvoice & { patientName: string })[] = [
       {
         id: 'ITM001',
         invoiceId: '1',
-        serviceCode: 'BED-ICU',
+        serviceId: 'SVC001',
         serviceName: 'Chambre USI (par jour)',
-        category: 'room_charges',
+        category: 'room_board',
         quantity: 3,
         unitPrice: 150000,
         totalPrice: 450000,
@@ -57,7 +58,7 @@ const sampleInvoices: (HospitalInvoice & { patientName: string })[] = [
       {
         id: 'ITM002',
         invoiceId: '1',
-        serviceCode: 'CONS-CARD',
+        serviceId: 'SVC002',
         serviceName: 'Consultation Cardiologie',
         category: 'consultation',
         quantity: 2,
@@ -120,7 +121,7 @@ const sampleInvoices: (HospitalInvoice & { patientName: string })[] = [
         invoiceId: '2',
         serviceCode: 'SURG-APP',
         serviceName: 'Appendicectomie',
-        category: 'surgical',
+        category: 'surgery',
         quantity: 1,
         unitPrice: 500000,
         totalPrice: 500000,
@@ -132,7 +133,7 @@ const sampleInvoices: (HospitalInvoice & { patientName: string })[] = [
         invoiceId: '2',
         serviceCode: 'BED-GEN',
         serviceName: 'Chambre Standard (par jour)',
-        category: 'room_charges',
+        category: 'room_board',
         quantity: 4,
         unitPrice: 80000,
         totalPrice: 320000,
@@ -229,7 +230,7 @@ const sampleInvoices: (HospitalInvoice & { patientName: string })[] = [
         invoiceId: '4',
         serviceCode: 'BED-MAT',
         serviceName: 'Chambre Maternité (par jour)',
-        category: 'room_charges',
+        category: 'room_board',
         quantity: 2,
         unitPrice: 100000,
         totalPrice: 200000,
@@ -252,12 +253,12 @@ const sampleInvoices: (HospitalInvoice & { patientName: string })[] = [
 const sampleServiceCatalog: ServiceCatalogItem[] = [
   { id: '1', serviceCode: 'CONS-GEN', serviceName: 'Consultation Générale', category: 'consultation', unitPrice: 25000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
   { id: '2', serviceCode: 'CONS-SPEC', serviceName: 'Consultation Spécialiste', category: 'consultation', unitPrice: 50000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
-  { id: '3', serviceCode: 'BED-GEN', serviceName: 'Chambre Standard', category: 'room_charges', unitPrice: 80000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
-  { id: '4', serviceCode: 'BED-ICU', serviceName: 'Chambre USI', category: 'room_charges', unitPrice: 150000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
+  { id: '3', serviceCode: 'BED-GEN', serviceName: 'Chambre Standard', category: 'room_board', unitPrice: 80000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
+  { id: '4', serviceCode: 'BED-ICU', serviceName: 'Chambre USI', category: 'room_board', unitPrice: 150000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
   { id: '5', serviceCode: 'LAB-CBC', serviceName: 'NFS Complète', category: 'laboratory', unitPrice: 15000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
-  { id: '6', serviceCode: 'RAD-XR', serviceName: 'Radiographie', category: 'radiology', unitPrice: 35000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
-  { id: '7', serviceCode: 'RAD-CT', serviceName: 'Scanner', category: 'radiology', unitPrice: 250000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
-  { id: '8', serviceCode: 'SURG-MIN', serviceName: 'Chirurgie Mineure', category: 'surgical', unitPrice: 300000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
+  { id: '6', serviceCode: 'RAD-XR', serviceName: 'Radiographie', category: 'imaging', unitPrice: 35000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
+  { id: '7', serviceCode: 'RAD-CT', serviceName: 'Scanner', category: 'imaging', unitPrice: 250000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
+  { id: '8', serviceCode: 'SURG-MIN', serviceName: 'Chirurgie Mineure', category: 'surgery', unitPrice: 300000, currency: 'CDF', isActive: true, createdAt: new Date().toISOString(), createdBy: 'SYS' },
 ];
 
 // ─── Section Header Component ────────────────────────────────
@@ -307,8 +308,8 @@ const secStyles = StyleSheet.create({
 
 // ─── Status Badge Component ──────────────────────────────────
 function StatusBadge({ status }: { status: InvoiceStatus }) {
-  const color = HospitalBillingUtils.getStatusColor(status);
-  const label = HospitalBillingUtils.getStatusLabel(status);
+  const color = HospitalInvoiceUtils.getStatusColor(status);
+  const label = HospitalInvoiceUtils.getStatusLabel(status);
   return (
     <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
       <View style={[styles.statusDot, { backgroundColor: color }]} />
@@ -319,23 +320,22 @@ function StatusBadge({ status }: { status: InvoiceStatus }) {
 
 // ─── Category Badge Component ────────────────────────────────
 function CategoryBadge({ category }: { category: ServiceCategory }) {
-  const label = HospitalBillingUtils.getCategoryLabel(category);
+  const label = HospitalInvoiceUtils.getCategoryLabel(category);
   const colorMap: Record<ServiceCategory, string> = {
     'consultation': colors.primary,
-    'room_charges': '#8B5CF6',
     'nursing': '#EC4899',
     'laboratory': colors.info,
-    'radiology': colors.warning,
+    'imaging': colors.warning,
     'pharmacy': '#10B981',
-    'surgical': colors.error,
-    'anesthesia': '#F59E0B',
+    'room_board': '#8B5CF6',
+    'surgery': colors.error,
+    'procedure': '#F59E0B',
+    'therapy': '#06B6D4',
     'emergency': '#EF4444',
-    'physiotherapy': '#06B6D4',
-    'dialysis': '#6366F1',
-    'blood_bank': '#DC2626',
-    'equipment': '#64748B',
     'supplies': '#94A3B8',
-    'miscellaneous': colors.textSecondary,
+    'equipment': '#64748B',
+    'administration': '#6366F1',
+    'other': colors.textSecondary,
   };
   return (
     <View style={[styles.categoryBadge, { backgroundColor: colorMap[category] + '15' }]}>
@@ -490,20 +490,36 @@ function InvoiceCard({ invoice }: { invoice: typeof sampleInvoices[0] }) {
       {/* Actions */}
       <View style={styles.invoiceActions}>
         {invoice.status === 'pending' || invoice.status === 'partially_paid' || invoice.status === 'overdue' ? (
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} activeOpacity={0.7}>
+          <TouchableOpacity 
+            style={[styles.actionBtn, styles.actionBtnPrimary]} 
+            activeOpacity={0.7}
+            onPress={() => handlePayment(invoice)}
+          >
             <Ionicons name="cash" size={16} color="#FFF" />
             <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Encaisser</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSecondary]} activeOpacity={0.7}>
+          <TouchableOpacity 
+            style={[styles.actionBtn, styles.actionBtnSecondary]} 
+            activeOpacity={0.7}
+            onPress={() => handleViewInvoice(invoice.id)}
+          >
             <Ionicons name="eye" size={16} color={colors.primary} />
             <Text style={[styles.actionBtnText, { color: colors.primary }]}>Voir</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={[styles.actionBtn, styles.actionBtnOutline]} 
+          activeOpacity={0.7}
+          onPress={() => handlePrintInvoice(invoice.invoiceNumber)}
+        >
           <Ionicons name="print" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={[styles.actionBtn, styles.actionBtnOutline]} 
+          activeOpacity={0.7}
+          onPress={() => handleEmailInvoice(invoice.invoiceNumber, invoice.patientName)}
+        >
           <Ionicons name="mail" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -512,7 +528,7 @@ function InvoiceCard({ invoice }: { invoice: typeof sampleInvoices[0] }) {
 }
 
 // ─── Service Catalog Card ────────────────────────────────────
-function ServiceCard({ service }: { service: ServiceCatalogItem }) {
+function ServiceCard({ service, onAdd }: { service: ServiceCatalog; onAdd: (service: ServiceCatalog) => void }) {
   return (
     <View style={styles.serviceCard}>
       <View style={styles.serviceCardLeft}>
@@ -524,7 +540,11 @@ function ServiceCard({ service }: { service: ServiceCatalogItem }) {
       </View>
       <View style={styles.serviceCardRight}>
         <Text style={styles.servicePrice}>{formatCurrency(service.unitPrice)}</Text>
-        <TouchableOpacity style={styles.addServiceBtn} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={styles.addServiceBtn} 
+          activeOpacity={0.7}
+          onPress={() => onAdd(service)}
+        >
           <Ionicons name="add" size={18} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -537,6 +557,78 @@ export function HospitalBillingScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all');
   const [activeTab, setActiveTab] = useState<'invoices' | 'catalog'>('invoices');
+  const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
+  
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentInvoice, setPaymentInvoice] = useState<typeof sampleInvoices[0] | null>(null);
+  
+  // New invoice form
+  const [newInvoiceForm, setNewInvoiceForm] = useState({
+    patientId: '',
+    patientName: '',
+    encounterId: '',
+    type: 'outpatient' as const,
+    services: [] as { serviceId: string; serviceName: string; quantity: number; unitPrice: number }[],
+  });
+  
+  // Payment form
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    method: 'cash_cdf' as PaymentMethod,
+    reference: '',
+    notes: '',
+  });
+
+  // Action handlers
+  const handlePayment = (invoiceId: string, patientName: string, amount: number) => {
+    alert(`Traitement du paiement pour ${patientName}\nMontant: ${amount.toLocaleString('fr-CD')} CDF`);
+  };
+
+  const handlePrintInvoice = (invoiceNumber: string) => {
+    alert(`Impression de la facture ${invoiceNumber}`);
+  };
+
+  const handleEmailInvoice = (invoiceNumber: string, patientName: string) => {
+    alert(`Envoi par email de la facture ${invoiceNumber} pour ${patientName}`);
+  };
+
+  const handleViewInvoice = (invoiceId: string) => {
+    setSelectedInvoice(invoiceId);
+    alert(`Affichage des détails de la facture ${invoiceId}`);
+  };
+
+  const handleCreateInvoice = () => {
+    setNewInvoiceForm({
+      patientId: '',
+      patientName: '',
+      encounterId: '',
+      type: 'outpatient',
+      services: [],
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleAddService = () => {
+    alert('Ajout d\'un service à la facture');
+  };
+
+  const handleConfirmCreateInvoice = () => {
+    setShowCreateModal(false);
+    alert(`Facture créée pour ${newInvoiceForm.patientName || 'patient'} (${newInvoiceForm.type})`);
+  };
+
+  const handleConfirmPayment = () => {
+    setShowPaymentModal(false);
+    if (paymentInvoice) {
+      alert(`Paiement validé pour ${paymentInvoice.patientName}\nMontant: ${paymentForm.amount} CDF`);
+    }
+  };
+
+  const handleAddServiceToInvoice = (service: ServiceCatalog) => {
+    alert(`Service "${service.serviceName}" ajouté à la facture\nPrix: ${service.unitPrice.toLocaleString('fr-CD')} CDF`);
+  };
 
   // Filter invoices
   const filteredInvoices = sampleInvoices.filter(invoice => {
@@ -569,7 +661,11 @@ export function HospitalBillingScreen() {
           <Text style={styles.headerTitle}>💰 Facturation</Text>
           <Text style={styles.headerSubtitle}>Gestion des factures et paiements</Text>
         </View>
-        <TouchableOpacity style={styles.newInvoiceBtn} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={styles.newInvoiceBtn} 
+          activeOpacity={0.7}
+          onPress={handleCreateInvoice}
+        >
           <Ionicons name="add" size={20} color="#FFF" />
           <Text style={styles.newInvoiceBtnText}>Nouvelle Facture</Text>
         </TouchableOpacity>
@@ -743,10 +839,10 @@ export function HospitalBillingScreen() {
             {[
               { key: 'all', label: 'Tous' },
               { key: 'consultation', label: 'Consultations' },
-              { key: 'room_charges', label: 'Chambres' },
+              { key: 'room_board', label: 'Chambres' },
               { key: 'laboratory', label: 'Laboratoire' },
-              { key: 'radiology', label: 'Imagerie' },
-              { key: 'surgical', label: 'Chirurgie' },
+              { key: 'imaging', label: 'Imagerie' },
+              { key: 'surgery', label: 'Chirurgie' },
             ].map((cat) => (
               <TouchableOpacity
                 key={cat.key}
@@ -760,7 +856,7 @@ export function HospitalBillingScreen() {
 
           <View style={styles.servicesList}>
             {sampleServiceCatalog.map((service) => (
-              <ServiceCard key={service.id} service={service} />
+              <ServiceCard key={service.id} service={service} onAdd={handleAddServiceToInvoice} />
             ))}
           </View>
         </>

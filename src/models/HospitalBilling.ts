@@ -440,6 +440,25 @@ export class HospitalInvoiceUtils {
   }
 
   /**
+   * Get invoice status display label
+   */
+  static getStatusLabel(status: InvoiceStatus): string {
+    switch (status) {
+      case 'draft': return 'Draft';
+      case 'pending': return 'Pending';
+      case 'partially_paid': return 'Partially Paid';
+      case 'paid': return 'Paid';
+      case 'overdue': return 'Overdue';
+      case 'disputed': return 'Disputed';
+      case 'cancelled': return 'Cancelled';
+      case 'written_off': return 'Written Off';
+      case 'insurance_pending': return 'Insurance Pending';
+      case 'insurance_denied': return 'Insurance Denied';
+      default: return status;
+    }
+  }
+
+  /**
    * Get service category display label
    */
   static getCategoryLabel(category: ServiceCategory): string {

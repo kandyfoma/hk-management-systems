@@ -244,6 +244,43 @@ export class AdmissionUtils {
   }
 
   /**
+   * Format length of stay as readable string
+   */
+  static formatLengthOfStay(admission: Admission): string {
+    const days = this.calculateLengthOfStay(admission);
+    
+    if (days === 1) {
+      return '1 day';
+    } else if (days < 7) {
+      return `${days} days`;
+    } else if (days < 30) {
+      const weeks = Math.floor(days / 7);
+      const remainingDays = days % 7;
+      if (weeks === 1 && remainingDays === 0) {
+        return '1 week';
+      } else if (remainingDays === 0) {
+        return `${weeks} weeks`;
+      } else if (weeks === 1) {
+        return `1 week, ${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+      } else {
+        return `${weeks} weeks, ${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+      }
+    } else {
+      const months = Math.floor(days / 30);
+      const remainingDays = days % 30;
+      if (months === 1 && remainingDays === 0) {
+        return '1 month';
+      } else if (remainingDays === 0) {
+        return `${months} months`;
+      } else if (months === 1) {
+        return `1 month, ${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+      } else {
+        return `${months} months, ${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+      }
+    }
+  }
+
+  /**
    * Add bed transfer to admission
    */
   static addBedTransfer(

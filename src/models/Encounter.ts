@@ -165,6 +165,25 @@ export class EncounterUtils {
   }
 
   /**
+   * Get display color for encounter status
+   */
+  static getStatusColor(status: EncounterStatus): string {
+    switch (status) {
+      case 'registered': return '#6366F1';      // Indigo
+      case 'triaged': return '#8B5CF6';         // Violet
+      case 'waiting': return '#F59E0B';         // Amber
+      case 'in_consultation': return '#3B82F6'; // Blue
+      case 'orders_pending': return '#F97316';  // Orange
+      case 'admitted': return '#10B981';        // Emerald
+      case 'ready_for_discharge': return '#22C55E'; // Green
+      case 'discharged': return '#6B7280';      // Gray
+      case 'cancelled': return '#EF4444';       // Red
+      case 'no_show': return '#9CA3AF';         // Light Gray
+      default: return '#6B7280';                // Gray
+    }
+  }
+
+  /**
    * Determine if encounter can be cancelled
    */
   static canCancel(encounter: Encounter): boolean {

@@ -146,7 +146,13 @@ function CertificateCard({
 }
 
 // ─── Main Component ──────────────────────────────────────────
-export function CertificatesScreen() {
+export function CertificatesScreen({
+  onNavigateBack,
+  showBackButton = false
+}: {
+  onNavigateBack?: () => void;
+  showBackButton?: boolean;
+}) {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -346,7 +352,17 @@ export function CertificatesScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        {showBackButton && onNavigateBack && (
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={onNavigateBack}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.text} />
+            <Text style={styles.backButtonText}>Retour</Text>
+          </TouchableOpacity>
+        )}
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>Certificats d'Aptitude</Text>
           <Text style={styles.subtitle}>Gestion des certificats médicaux d'aptitude au travail</Text>
         </View>
@@ -541,6 +557,13 @@ const styles = StyleSheet.create({
     padding: isDesktop ? 32 : 16, paddingBottom: 16,
     backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.outline,
   },
+  backButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 8,
+    borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.outline,
+    backgroundColor: colors.surface,
+  },
+  backButtonText: { fontSize: 13, fontWeight: '600', color: colors.text },
   title: { fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   subtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
   refreshBtn: {

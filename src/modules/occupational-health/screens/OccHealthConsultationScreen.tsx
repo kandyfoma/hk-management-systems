@@ -252,12 +252,15 @@ function getBMICategory(bmi?: number): { label: string; color: string } {
 // ═══════════════════════════════════════════════════════════════
 
 export function OccHealthConsultationScreen({ 
-  draftToLoad, 
-  onDraftLoaded 
-}: { 
+  draftToLoad,
+  onDraftLoaded,
+  onNavigateBack
+}: {
   draftToLoad?: string | null;
   onDraftLoaded?: () => void;
+  onNavigateBack?: () => void;
 }) {
+  console.log('🏥 OccHealthConsultationScreen mounted', { draftToLoad });
   // ─── Step state ──
   const [currentStep, setCurrentStep] = useState<ConsultationStep>('worker_identification');
   const currentStepIdx = STEPS.findIndex(s => s.key === currentStep);
@@ -266,6 +269,14 @@ export function OccHealthConsultationScreen({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorker, setSelectedWorker] = useState<OccupationalHealthPatient | null>(null);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
+
+  // Auto-select first worker for testing if none selected
+  useEffect(() => {
+    if (!selectedWorker && !draftToLoad && SAMPLE_WORKERS.length > 0) {
+      console.log('🤖 Auto-selecting first worker for testing:', SAMPLE_WORKERS[0].firstName);
+      setSelectedWorker(SAMPLE_WORKERS[0]);
+    }
+  }, [selectedWorker, draftToLoad]);
 
   // ─── Visit reason ──
   const [examType, setExamType] = useState<ExamType>('periodic');
@@ -348,6 +359,8 @@ export function OccHealthConsultationScreen({
 
   // Save current state as draft
   const saveDraft = useCallback(async () => {
+    console.log('🔄 Save draft called', { selectedWorker: selectedWorker?.firstName, draftId });
+    
     try {
       const id = draftId || `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const now = new Date().toISOString();
@@ -382,15 +395,19 @@ export function OccHealthConsultationScreen({
         updatedAt: now,
       };
 
+      console.log('💾 Saving draft to AsyncStorage with key:', `consultation_draft_${id}`);
       await AsyncStorage.setItem(`consultation_draft_${id}`, JSON.stringify(draft));
       
       setDraftId(id);
       setIsDraft(true);
       setLastSaved(new Date());
       
+      console.log('✅ Draft saved successfully:', id);
+      Alert.alert('Succès', 'Brouillon sauvegardé avec succès');
+      
       return id;
     } catch (error) {
-      console.error('Error saving draft:', error);
+      console.error('❌ Error saving draft:', error);
       Alert.alert('Erreur', 'Impossible de sauvegarder le brouillon');
     }
   }, [
@@ -603,6 +620,7 @@ export function OccHealthConsultationScreen({
 
   // ─── Handlers ──
   const handleSelectWorker = (w: Worker) => {
+    console.log('👤 Worker selected:', w.firstName, w.lastName, w.id);
     setSelectedWorker(w);
     setShowWorkerModal(false);
     setSearchQuery('');
@@ -1590,7 +1608,18 @@ export function OccHealthConsultationScreen({
           </View>
           <TouchableOpacity
             style={[styles.saveDraftBtn, !selectedWorker && { opacity: 0.5 }]}
-            onPress={selectedWorker ? saveDraft : undefined}
+            onPress={() => {
+              console.log('🖱️ Save button pressed', { 
+                selectedWorker: selectedWorker?.firstName,
+                hasSelectedWorker: !!selectedWorker 
+              });
+              if (selectedWorker) {
+                saveDraft();
+              } else {
+                console.warn('⚠️ No selected worker for saving');
+                Alert.alert('Attention', 'Veuillez sélectionner un travailleur avant de sauvegarder');
+              }
+            }}
             disabled={!selectedWorker}
             activeOpacity={0.7}
           >
