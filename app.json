@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "HK Management Systems",
+    "slug": "hk-management-systems",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#122056"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hk.managementsystems",
+      "icon": {
+        "source": "./assets/icon.png"
+      }
+    },
+    "android": {
+      "package": "com.hk.managementsystems",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#122056"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "HK Management Systems",
+      "shortName": "HK Systems",
+      "description": "Système de gestion hospitalière et pharmaceutique pour la RD Congo",
+      "themeColor": "#122056",
+      "backgroundColor": "#FAFAFD"
+    }
+  }
+}
