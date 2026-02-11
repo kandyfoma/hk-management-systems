@@ -20,6 +20,7 @@ export interface License {
 export type ModuleType = 
   | 'PHARMACY'
   | 'HOSPITAL'
+  | 'OCCUPATIONAL_HEALTH'
   | 'COMBINED'
   | 'TRIAL';
 
@@ -136,9 +137,52 @@ export const HOSPITAL_FEATURES = {
   ]
 } as const;
 
+export const OCC_HEALTH_FEATURES = {
+  BASIC: [
+    'worker_management',
+    'medical_examinations',
+    'fitness_certificates',
+    'basic_incident_reporting',
+    'basic_reporting'
+  ],
+  PROFESSIONAL: [
+    'worker_management',
+    'medical_examinations',
+    'fitness_certificates',
+    'incident_management',
+    'occupational_disease_tracking',
+    'surveillance_programs',
+    'audiometry_spirometry',
+    'drug_screening',
+    'ppe_management',
+    'advanced_reporting',
+    'risk_assessment'
+  ],
+  ENTERPRISE: [
+    'worker_management',
+    'medical_examinations',
+    'fitness_certificates',
+    'incident_management',
+    'occupational_disease_tracking',
+    'surveillance_programs',
+    'audiometry_spirometry',
+    'drug_screening',
+    'ppe_management',
+    'advanced_reporting',
+    'risk_assessment',
+    'regulatory_compliance',
+    'advanced_analytics',
+    'multi_site',
+    'api_access',
+    'custom_workflows',
+    'predictive_analytics'
+  ]
+} as const;
+
 export const TRIAL_FEATURES = [
   ...PHARMACY_FEATURES.PROFESSIONAL,
-  ...HOSPITAL_FEATURES.PROFESSIONAL
+  ...HOSPITAL_FEATURES.PROFESSIONAL,
+  ...OCC_HEALTH_FEATURES.PROFESSIONAL
 ] as const;
 
 export interface LicenseCreate extends Omit<License, 'id' | 'createdAt' | 'isActive' | 'autoRenew'> {
@@ -184,6 +228,8 @@ export class LicenseUtils {
         return [...(PHARMACY_FEATURES[tier as keyof typeof PHARMACY_FEATURES] || [])];
       case 'HOSPITAL':
         return [...(HOSPITAL_FEATURES[tier as keyof typeof HOSPITAL_FEATURES] || [])];
+      case 'OCCUPATIONAL_HEALTH':
+        return [...(OCC_HEALTH_FEATURES[tier as keyof typeof OCC_HEALTH_FEATURES] || [])];
       default:
         return [];
     }

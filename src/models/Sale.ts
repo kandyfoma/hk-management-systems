@@ -145,6 +145,7 @@ export type PaymentMethod =
   | 'CHEQUE'
   | 'INSURANCE'
   | 'CREDIT'             // On-account / pay later
+  | 'PRESCRIPTION'       // Prescription dispensing
   | 'OTHER';
 
 // ═══════════════════════════════════════════════════════════════
@@ -346,6 +347,7 @@ export class SaleUtils {
       CHEQUE: 'Chèque',
       INSURANCE: 'Assurance',
       CREDIT: 'Crédit',
+      PRESCRIPTION: 'Ordonnance',
       OTHER: 'Autre',
     };
     return labels[method] || method;
@@ -363,6 +365,7 @@ export class SaleUtils {
       CHEQUE: 'document-text',
       INSURANCE: 'shield-checkmark',
       CREDIT: 'time',
+      PRESCRIPTION: 'medical',
       OTHER: 'ellipsis-horizontal',
     };
     return icons[method] || 'cash';

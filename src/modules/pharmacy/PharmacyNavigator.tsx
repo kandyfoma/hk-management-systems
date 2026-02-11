@@ -5,6 +5,8 @@ import { InventoryScreen } from './screens/InventoryScreen';
 import { SuppliersScreen } from './screens/SuppliersScreen';
 import { StockAlertsScreen } from './screens/StockAlertsScreen';
 import { POSScreen } from './screens/POSScreen';
+import { PrescriptionsScreen } from './screens/PrescriptionsScreen';
+import { SalesReportsScreen } from './screens/SalesReportsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 
@@ -146,24 +148,26 @@ export function PharmacyNavigator() {
         return <StockAlertsScreen />;
       case 'pos':
         return <POSScreen />;
+      case 'prescriptions':
+        return <PrescriptionsScreen />;
+      case 'sales-reports':
+        return <SalesReportsScreen />;
       default:
-        break;
+        // For screens that don't have components yet, show placeholder
+        const screenDef = pharmacyScreens[activeScreen];
+        if (screenDef) {
+          return (
+            <PlaceholderScreen
+              title={screenDef.title}
+              subtitle={screenDef.subtitle}
+              icon={screenDef.icon}
+              accentColor={colors.primary}
+              features={screenDef.features}
+            />
+          );
+        }
+        return <PharmacyDashboardContent />;
     }
-
-    const screenDef = pharmacyScreens[activeScreen];
-    if (screenDef) {
-      return (
-        <PlaceholderScreen
-          title={screenDef.title}
-          subtitle={screenDef.subtitle}
-          icon={screenDef.icon}
-          accentColor={colors.primary}
-          features={screenDef.features}
-        />
-      );
-    }
-
-    return <PharmacyDashboardContent />;
   };
 
   return (

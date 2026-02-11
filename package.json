@@ -16,6 +16,7 @@
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/stack": "^7.7.1",
     "@reduxjs/toolkit": "^2.11.2",
+    "@types/react": "^18.3.11",
     "expo": "~54.0.33",
     "expo-barcode-scanner": "^13.0.1",
     "expo-crypto": "^15.0.8",
@@ -24,8 +25,8 @@
     "expo-secure-store": "^15.0.8",
     "expo-sqlite": "^16.0.10",
     "expo-status-bar": "~3.0.9",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "^2.30.0",
     "react-native-paper": "^5.15.0",
@@ -38,7 +39,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@types/react": "~19.1.0",
+    "@types/react-native": "^0.73.0",
     "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   },

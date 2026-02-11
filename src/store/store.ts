@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import { authSlice } from './slices/authSlice';
 import { pharmacySlice } from './slices/pharmacySlice';
 import { hospitalSlice } from './slices/hospitalSlice';
+import { occHealthSlice } from './slices/occHealthSlice';
 import { settingsSlice } from './slices/settingsSlice';
 
 export const store = configureStore({
@@ -9,6 +10,7 @@ export const store = configureStore({
     auth: authSlice.reducer,
     pharmacy: pharmacySlice.reducer,
     hospital: hospitalSlice.reducer,
+    occupationalHealth: occHealthSlice.reducer,
     settings: settingsSlice.reducer,
   },
   middleware: (getDefaultMiddleware) =>

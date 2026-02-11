@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { SidebarLayout, SidebarSection } from '../../components/SidebarLayout';
 import { HospitalDashboardContent } from './screens/HospitalDashboard';
+import { HospitalPrescriptionsScreen } from './screens/HospitalPrescriptionsScreen';
+import { PatientListScreen } from './screens/PatientListScreen';
+import { PatientDetailScreen } from './screens/PatientDetailScreen';
+import { PatientRegistrationScreen } from './screens/PatientRegistrationScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
+import { Patient } from '../../models/Patient';
 
 // ─── Sidebar Menu Configuration ──────────────────────────────
 const hospitalSections: SidebarSection[] = [
@@ -17,6 +22,7 @@ const hospitalSections: SidebarSection[] = [
     title: 'Services Cliniques',
     items: [
       { id: 'appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar', badge: 5 },
+      { id: 'prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'medical-records', label: 'Dossiers Médicaux', icon: 'folder-open-outline', iconActive: 'folder-open' },
       { id: 'lab-results', label: 'Résultats Labo', icon: 'flask-outline', iconActive: 'flask', badge: 2 },
       { id: 'wards', label: 'Services & Lits', icon: 'bed-outline', iconActive: 'bed' },
@@ -58,6 +64,19 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
       'Gestion des annulations et reports',
       'Vue journalière, hebdomadaire, mensuelle',
       'Statistiques de fréquentation',
+    ],
+  },
+  prescriptions: {
+    title: 'Création d\'Ordonnances',
+    subtitle: 'Prescrire des médicaments et créer des ordonnances pour les patients.',
+    icon: 'document-text',
+    features: [
+      'Prescription de médicaments',
+      'Recherche dans le catalogue pharmaceutique',
+      'Vérification des interactions médicamenteuses',
+      'Posologie et durée de traitement',
+      'Historique des prescriptions par patient',
+      'Transmission automatique à la pharmacie',
     ],
   },
   'medical-records': {
@@ -144,9 +163,81 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
 export function HospitalNavigator() {
   const [activeScreen, setActiveScreen] = useState('dashboard');
 
+  // Sub-navigation state for patients module
+  const [patientView, setPatientView] = useState<'list' | 'detail' | 'register'>('list');
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+
+  const handleSelectPatient = useCallback((patient: Patient) => {
+    setSelectedPatientId(patient.id);
+    setPatientView('detail');
+  }, []);
+
+  const handleNewPatient = useCallback(() => {
+    setPatientView('register');
+  }, []);
+
+  const handleBackToPatientList = useCallback(() => {
+    setPatientView('list');
+    setSelectedPatientId(null);
+  }, []);
+
+  const handlePatientCreated = useCallback((patient: Patient) => {
+    setSelectedPatientId(patient.id);
+    setPatientView('detail');
+  }, []);
+
+  // Reset patient sub-navigation when switching away
+  const handleScreenChange = useCallback((screen: string) => {
+    setActiveScreen(screen);
+    if (screen !== 'patients') {
+      setPatientView('list');
+      setSelectedPatientId(null);
+    }
+  }, []);
+
   const renderContent = () => {
     if (activeScreen === 'dashboard') {
       return <HospitalDashboardContent />;
+    }
+
+    if (activeScreen === 'prescriptions') {
+      return <HospitalPrescriptionsScreen />;
+    }
+
+    if (activeScreen === 'patients') {
+      switch (patientView) {
+        case 'detail':
+          if (selectedPatientId) {
+            return (
+              <PatientDetailScreen
+                patientId={selectedPatientId}
+                onBack={handleBackToPatientList}
+                onNewEncounter={() => {/* TODO: wire encounter creation */}}
+                onEditPatient={() => {/* TODO: wire patient editing */}}
+              />
+            );
+          }
+          return (
+            <PatientListScreen
+              onSelectPatient={handleSelectPatient}
+              onNewPatient={handleNewPatient}
+            />
+          );
+        case 'register':
+          return (
+            <PatientRegistrationScreen
+              onBack={handleBackToPatientList}
+              onPatientCreated={handlePatientCreated}
+            />
+          );
+        default:
+          return (
+            <PatientListScreen
+              onSelectPatient={handleSelectPatient}
+              onNewPatient={handleNewPatient}
+            />
+          );
+      }
     }
 
     const screenDef = hospitalScreens[activeScreen];
@@ -169,7 +260,7 @@ export function HospitalNavigator() {
     <SidebarLayout
       sections={hospitalSections}
       activeId={activeScreen}
-      onSelect={setActiveScreen}
+      onSelect={handleScreenChange}
       accentColor={colors.info}
       title="Hôpital"
       subtitle="Module de gestion"

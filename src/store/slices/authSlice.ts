@@ -122,18 +122,30 @@ export const selectAuthError = (state: { auth: AuthState }) => state.auth.error;
 
 // Complex selectors
 export const selectHasModuleAccess = (module: ModuleType) => (state: { auth: AuthState }) => {
-  return state.auth.activeModules.includes(module);
+  return (state.auth?.activeModules ?? []).includes(module);
 };
 
 export const selectModuleFeatures = (module: ModuleType) => (state: { auth: AuthState }) => {
-  const license = state.auth.licenses.find(l => l.moduleType === module && l.isActive);
+  const license = (state.auth?.licenses ?? []).find(l => l.moduleType === module && l.isActive);
   return license?.features || [];
 };
 
 export const selectHasFeature = (feature: string) => (state: { auth: AuthState }) => {
-  return state.auth.licenses.some(license => 
+  return (state.auth?.licenses ?? []).some(license => 
     license.isActive && 
     !isLicenseExpired(license) && 
     license.features.includes(feature)
   );
+};
+
+// Flat set of all active features — safe for memoized usage in components
+export const selectAllFeatures = (state: { auth: AuthState }): string[] => {
+  const licenses = state.auth?.licenses ?? [];
+  const features: string[] = [];
+  for (const license of licenses) {
+    if (license.isActive && !isLicenseExpired(license)) {
+      features.push(...license.features);
+    }
+  }
+  return features;
 };

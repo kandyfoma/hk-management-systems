@@ -23,6 +23,15 @@ import {
   Sale, SaleCreate, SaleItem, SalePayment,
   CartState, CartItem, SaleUtils,
 } from '../models/Sale';
+import {
+  Prescription, PrescriptionCreate, PrescriptionUpdate,
+  PrescriptionItem, PrescriptionItemCreate, PrescriptionItemUpdate,
+  PrescriptionStatus, PrescriptionItemStatus,
+  PrescriptionUtils,
+} from '../models/Prescription';
+import { Patient, PatientCreate, PatientUpdate, PatientUtils, MedicalRecord, VitalSigns } from '../models/Patient';
+import { Encounter, EncounterCreate, EncounterUpdate, EncounterUtils } from '../models/Encounter';
+import { PaymentMethod } from '../models/Sale';
 
 // ═══════════════════════════════════════════════════════════════
 // In-Memory Tables
@@ -46,6 +55,14 @@ interface Tables {
   stock_count_items: StockCountItem[];
   // ── Sales / POS Tables ────────────────────────────────────
   sales: Sale[];
+  // ── Patient Tables ────────────────────────────────────────
+  patients: Patient[];
+  medical_records: MedicalRecord[];
+  // ── Encounter Tables ─────────────────────────────────────
+  encounters: Encounter[];
+  // ── Prescription Tables ───────────────────────────────────
+  prescriptions: Prescription[];
+  prescription_items: PrescriptionItem[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -70,6 +87,11 @@ export class DatabaseService {
     stock_counts: [],
     stock_count_items: [],
     sales: [],
+    patients: [],
+    medical_records: [],
+    encounters: [],
+    prescriptions: [],
+    prescription_items: [],
   };
 
   private constructor() {
@@ -110,6 +132,190 @@ export class DatabaseService {
 
   async getOrganization(id: string): Promise<Organization | null> {
     return this.tables.organizations.find((o) => o.id === id) ?? null;
+  }
+
+  async getCurrentOrganization(): Promise<Organization | null> {
+    // For now, return the first active organization
+    // In a real app, this would be based on the logged-in user's context
+    return this.tables.organizations.find((o) => o.isActive) ?? null;
+  }
+
+  // ── Patients ──────────────────────────────────────────────
+
+  async createPatient(data: PatientCreate): Promise<Patient> {
+    const now = new Date().toISOString();
+    const patientCount = this.tables.patients.length + 1;
+    const patient: Patient = {
+      ...data,
+      id: (data as any).id || this.generateId(),
+      patientNumber: data.patientNumber || `PAT${String(patientCount).padStart(5, '0')}`,
+      registrationDate: data.registrationDate || now,
+      createdAt: data.createdAt || now,
+    };
+    this.tables.patients.push(patient);
+    return patient;
+  }
+
+  async getAllPatients(): Promise<Patient[]> {
+    return [...this.tables.patients];
+  }
+
+  async getPatient(id: string): Promise<Patient | null> {
+    return this.tables.patients.find(p => p.id === id) ?? null;
+  }
+
+  async getPatientByNumber(patientNumber: string): Promise<Patient | null> {
+    return this.tables.patients.find(p => p.patientNumber === patientNumber) ?? null;
+  }
+
+  async updatePatient(id: string, data: PatientUpdate): Promise<Patient | null> {
+    const idx = this.tables.patients.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+    this.tables.patients[idx] = {
+      ...this.tables.patients[idx],
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+    return this.tables.patients[idx];
+  }
+
+  async searchPatients(query: string): Promise<Patient[]> {
+    const q = query.toLowerCase().trim();
+    if (!q) return [...this.tables.patients];
+    return this.tables.patients.filter(p =>
+      p.firstName.toLowerCase().includes(q) ||
+      p.lastName.toLowerCase().includes(q) ||
+      p.patientNumber.toLowerCase().includes(q) ||
+      (p.phone && p.phone.includes(q)) ||
+      (p.nationalId && p.nationalId.toLowerCase().includes(q)) ||
+      (p.email && p.email.toLowerCase().includes(q))
+    );
+  }
+
+  async getPatientsByOrganization(organizationId: string): Promise<Patient[]> {
+    // In the current in-memory setup, all patients belong to the active org
+    return [...this.tables.patients];
+  }
+
+  async getPatientStats(): Promise<{
+    total: number;
+    active: number;
+    newThisMonth: number;
+    byGender: { male: number; female: number; other: number };
+  }> {
+    const patients = this.tables.patients;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    return {
+      total: patients.length,
+      active: patients.filter(p => p.status === 'active').length,
+      newThisMonth: patients.filter(p => p.createdAt >= startOfMonth).length,
+      byGender: {
+        male: patients.filter(p => p.gender === 'male').length,
+        female: patients.filter(p => p.gender === 'female').length,
+        other: patients.filter(p => p.gender === 'other').length,
+      },
+    };
+  }
+
+  // ── Medical Records ───────────────────────────────────────
+
+  async createMedicalRecord(data: Omit<MedicalRecord, 'id' | 'createdAt'> & { id?: string }): Promise<MedicalRecord> {
+    const now = new Date().toISOString();
+    const record: MedicalRecord = {
+      ...data,
+      id: data.id || this.generateId(),
+      createdAt: now,
+    };
+    this.tables.medical_records.push(record);
+    // Update patient lastVisit
+    const patientIdx = this.tables.patients.findIndex(p => p.id === data.patientId);
+    if (patientIdx !== -1) {
+      this.tables.patients[patientIdx].lastVisit = now;
+    }
+    return record;
+  }
+
+  async getMedicalRecordsByPatient(patientId: string): Promise<MedicalRecord[]> {
+    return this.tables.medical_records
+      .filter(r => r.patientId === patientId)
+      .sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+  }
+
+  // ── Encounters ────────────────────────────────────────────
+
+  async createEncounter(data: EncounterCreate): Promise<Encounter> {
+    const now = new Date().toISOString();
+    const encounter: Encounter = {
+      ...data,
+      id: (data as any).id || this.generateId(),
+      encounterNumber: data.encounterNumber || EncounterUtils.generateEncounterNumber(),
+      createdAt: data.createdAt || now,
+      updatedAt: now,
+    };
+    this.tables.encounters.push(encounter);
+    // Update patient lastVisit
+    const patientIdx = this.tables.patients.findIndex(p => p.id === data.patientId);
+    if (patientIdx !== -1) {
+      this.tables.patients[patientIdx].lastVisit = now;
+      this.tables.patients[patientIdx].updatedAt = now;
+    }
+    return encounter;
+  }
+
+  async getEncounter(id: string): Promise<Encounter | null> {
+    return this.tables.encounters.find(e => e.id === id) ?? null;
+  }
+
+  async getEncountersByPatient(patientId: string): Promise<Encounter[]> {
+    return this.tables.encounters
+      .filter(e => e.patientId === patientId)
+      .sort((a, b) => b.arrivalDate.localeCompare(a.arrivalDate));
+  }
+
+  async getEncountersByOrganization(organizationId: string): Promise<Encounter[]> {
+    return this.tables.encounters
+      .filter(e => e.organizationId === organizationId)
+      .sort((a, b) => b.arrivalDate.localeCompare(a.arrivalDate));
+  }
+
+  async getActiveEncounters(organizationId: string): Promise<Encounter[]> {
+    return this.tables.encounters
+      .filter(e => e.organizationId === organizationId && EncounterUtils.isActive(e))
+      .sort((a, b) => b.arrivalDate.localeCompare(a.arrivalDate));
+  }
+
+  async updateEncounter(id: string, data: EncounterUpdate): Promise<Encounter | null> {
+    const idx = this.tables.encounters.findIndex(e => e.id === id);
+    if (idx === -1) return null;
+    this.tables.encounters[idx] = {
+      ...this.tables.encounters[idx],
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+    return this.tables.encounters[idx];
+  }
+
+  async getEncounterStats(organizationId: string): Promise<{
+    total: number;
+    active: number;
+    todayCount: number;
+    byStatus: Record<string, number>;
+    byType: Record<string, number>;
+  }> {
+    const encounters = this.tables.encounters.filter(e => e.organizationId === organizationId);
+    const today = new Date().toISOString().split('T')[0];
+    const byStatus: Record<string, number> = {};
+    const byType: Record<string, number> = {};
+    let active = 0;
+    let todayCount = 0;
+    for (const e of encounters) {
+      byStatus[e.status] = (byStatus[e.status] || 0) + 1;
+      byType[e.type] = (byType[e.type] || 0) + 1;
+      if (EncounterUtils.isActive(e)) active++;
+      if (e.arrivalDate.startsWith(today)) todayCount++;
+    }
+    return { total: encounters.length, active, todayCount, byStatus, byType };
   }
 
   // ── License ───────────────────────────────────────────────
@@ -1049,23 +1255,39 @@ export class DatabaseService {
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         maxUsers: 3,
         features: [
+          // Pharmacy features
           'pos_system',
-          'patient_management',
           'basic_inventory',
-          'appointment_scheduling',
-          'basic_reporting',
+          'advanced_inventory',
           'prescription_management',
           'stock_alerts',
           'supplier_management',
+          'basic_reporting',
+          'advanced_reporting',
+          'customer_management',
+          // Hospital features
+          'patient_management',
+          'appointment_scheduling',
+          'advanced_scheduling',
           'medical_records',
           'lab_integration',
           'multi_department',
           'basic_billing',
-          'advanced_reporting',
-          'staff_management',
-          'advanced_scheduling',
           'billing_management',
-          'advanced_inventory',
+          'staff_management',
+          'prescription_writing',
+          // Occupational Health features
+          'worker_management',
+          'medical_examinations',
+          'fitness_certificates',
+          'incident_management',
+          'basic_incident_reporting',
+          'occupational_disease_tracking',
+          'surveillance_programs',
+          'audiometry_spirometry',
+          'drug_screening',
+          'ppe_management',
+          'risk_assessment',
         ],
         billingCycle: 'TRIAL',
       });
@@ -1182,6 +1404,9 @@ export class DatabaseService {
 
       // ── INVENTORY TEST DATA ───────────────────────────────
       await this.insertInventoryTestData(testOrg.id);
+      
+      // ── PATIENTS AND PRESCRIPTIONS TEST DATA ─────────────
+      await this.insertPatientTestData(testOrg.id);
     } catch (error) {
       console.error('Error inserting test data:', error);
     }
@@ -1527,6 +1752,685 @@ export class DatabaseService {
       `${this.tables.inventory_items.length} inventory items,`,
       `${this.tables.inventory_batches.length} batches,`,
       `${this.tables.inventory_alerts.length} alerts`);
+  }
+
+  /** Seed sample patients and prescriptions for testing */
+  private async insertPatientTestData(organizationId: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    // Create sample patients
+    const patients = await Promise.all([
+      this.createPatient({
+        firstName: 'Marie',
+        lastName: 'Kasongo',
+        dateOfBirth: new Date('1985-03-15').toISOString(),
+        gender: 'female',
+        phone: '+243 812 345 678',
+        email: 'marie.kasongo@email.cd',
+        address: '123 Avenue de la Paix',
+        city: 'Kinshasa',
+        country: 'RD Congo',
+        emergencyContactName: 'Jean Kasongo',
+        emergencyContactPhone: '+243 998 765 432',
+        allergies: ['Pénicilline'],
+        chronicConditions: ['Hypertension', 'Diabète type 2'],
+        currentMedications: [],
+        bloodType: 'O+',
+        status: 'active',
+      }),
+      this.createPatient({
+        firstName: 'Joseph',
+        lastName: 'Mukendi',
+        dateOfBirth: new Date('1978-08-22').toISOString(),
+        gender: 'male',
+        phone: '+243 899 123 456',
+        address: '45 Boulevard du 30 Juin',
+        city: 'Kinshasa',
+        country: 'RD Congo',
+        emergencyContactName: 'Marie Mukendi',
+        emergencyContactPhone: '+243 812 987 654',
+        allergies: ['Aspirine'],
+        chronicConditions: ['Asthme'],
+        currentMedications: [],
+        bloodType: 'A+',
+        status: 'active',
+      }),
+      this.createPatient({
+        firstName: 'Grace',
+        lastName: 'Tshilanda',
+        dateOfBirth: new Date('1995-12-08').toISOString(),
+        gender: 'female',
+        phone: '+243 970 555 789',
+        address: '78 Avenue Mobutu',
+        city: 'Kinshasa',
+        country: 'RD Congo',
+        emergencyContactName: 'Papa Tshilanda',
+        emergencyContactPhone: '+243 811 222 333',
+        allergies: [],
+        chronicConditions: [],
+        currentMedications: [],
+        bloodType: 'B+',
+        status: 'active',
+      }),
+    ]);
+
+    // Create sample encounters for the patients
+    const encNow = new Date().toISOString();
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const encDoctorId = this.tables.users[0]?.id || 'doc-001';
+
+    await Promise.all([
+      // Marie — active consultation today
+      this.createEncounter({
+        patientId: patients[0].id,
+        organizationId,
+        facilityId: '',
+        type: 'outpatient',
+        status: 'in_consultation',
+        arrivalDate: encNow,
+        chiefComplaint: 'Douleurs abdominales depuis 3 jours, nausées',
+        assignedDoctorId: encDoctorId,
+        priority: 'urgent',
+        department: 'Médecine Générale',
+      }),
+      // Marie — past discharged visit
+      this.createEncounter({
+        patientId: patients[0].id,
+        organizationId,
+        facilityId: '',
+        type: 'outpatient',
+        status: 'discharged',
+        arrivalDate: twoWeeksAgo,
+        dischargeDate: twoWeeksAgo,
+        chiefComplaint: 'Contrôle hypertension et glycémie',
+        assignedDoctorId: encDoctorId,
+        priority: 'routine',
+        department: 'Médecine Interne',
+        notes: 'Bilan satisfaisant, continuer traitement actuel.',
+      }),
+      // Joseph — triaged, waiting
+      this.createEncounter({
+        patientId: patients[1].id,
+        organizationId,
+        facilityId: '',
+        type: 'outpatient',
+        status: 'triaged',
+        arrivalDate: encNow,
+        chiefComplaint: 'Toux persistante avec crachats, essoufflement',
+        assignedDoctorId: encDoctorId,
+        priority: 'semi_urgent',
+        department: 'Pneumologie',
+      }),
+      // Joseph — past emergency visit
+      this.createEncounter({
+        patientId: patients[1].id,
+        organizationId,
+        facilityId: '',
+        type: 'emergency',
+        status: 'discharged',
+        arrivalDate: oneWeekAgo,
+        dischargeDate: oneWeekAgo,
+        chiefComplaint: 'Crise d\'asthme sévère',
+        assignedDoctorId: encDoctorId,
+        priority: 'emergency',
+        department: 'Urgences',
+      }),
+      // Grace — registered, waiting
+      this.createEncounter({
+        patientId: patients[2].id,
+        organizationId,
+        facilityId: '',
+        type: 'follow_up',
+        status: 'registered',
+        arrivalDate: encNow,
+        chiefComplaint: 'Suivi post-traitement, résultats laboratoire',
+        priority: 'routine',
+        department: 'Médecine Générale',
+      }),
+      // Grace — past follow-up
+      this.createEncounter({
+        patientId: patients[2].id,
+        organizationId,
+        facilityId: '',
+        type: 'outpatient',
+        status: 'discharged',
+        arrivalDate: threeDaysAgo,
+        dischargeDate: threeDaysAgo,
+        chiefComplaint: 'Maux de tête récurrents, fatigue',
+        assignedDoctorId: encDoctorId,
+        priority: 'routine',
+        department: 'Médecine Générale',
+        notes: 'Bilan sanguin prescrit. Paracétamol pour 3 jours.',
+      }),
+    ]);
+
+    // Get some medications for prescriptions
+    const amoxicillin = this.tables.products.find(p => p.name.includes('Amoxicilline'));
+    const paracetamol = this.tables.products.find(p => p.name.includes('Paracétamol'));
+    const metformin = this.tables.products.find(p => p.name.includes('Metformine'));
+
+    if (!amoxicillin || !paracetamol || !metformin) {
+      console.warn('⚠️ Some medications not found for prescription creation');
+      // Still create sales even without prescriptions
+      await this.createSampleSales(organizationId);
+      return;
+    }
+
+    // Helper to build a PrescriptionItem with all required fields
+    const makeItem = (med: typeof amoxicillin, dosage: string, freq: string, dur: string, qty: number, instructions?: string): PrescriptionItem => ({
+      id: this.generateId(),
+      prescriptionId: '',
+      medicationName: med!.name,
+      genericName: med!.genericName,
+      dosage,
+      frequency: freq,
+      duration: dur,
+      quantity: qty,
+      route: 'oral' as const,
+      instructions,
+      quantityDispensed: 0,
+      quantityRemaining: qty,
+      status: 'pending' as const,
+      isSubstitutionAllowed: true,
+      isControlled: false,
+      requiresCounseling: false,
+      createdAt: now,
+    });
+
+    // Create sample prescriptions
+    const doctorId = this.tables.users[0]?.id || 'doc-001';
+    const prescriptions = await Promise.all([
+      this.createPrescription({
+        encounterId: 'enc-001',
+        patientId: patients[0].id,
+        doctorId,
+        organizationId,
+        facilityId: '',
+        date: now,
+        status: 'pending',
+        items: [
+          makeItem(amoxicillin, '500mg', '3 fois par jour', '7 jours', 21, 'Prendre après les repas'),
+          makeItem(paracetamol, '500mg', 'Au besoin (max 4/jour)', '5 jours', 20, 'En cas de douleur ou fièvre'),
+        ],
+        instructions: 'Prendre avec les repas. Boire beaucoup d\'eau.',
+        allergiesChecked: true,
+        interactionsChecked: true,
+      }),
+      this.createPrescription({
+        encounterId: 'enc-002',
+        patientId: patients[1].id,
+        doctorId,
+        organizationId,
+        facilityId: '',
+        date: now,
+        status: 'partially_dispensed',
+        items: [
+          makeItem(metformin, '850mg', '2 fois par jour', '30 jours', 60, 'Prendre avec les repas principaux'),
+          makeItem(paracetamol, '500mg', 'Au besoin', '7 jours', 14, 'En cas de maux de tête'),
+        ],
+        instructions: 'Traitement du diabète. Surveillance régulière.',
+        allergiesChecked: true,
+        interactionsChecked: true,
+      }),
+      this.createPrescription({
+        encounterId: 'enc-003',
+        patientId: patients[2].id,
+        doctorId,
+        organizationId,
+        facilityId: '',
+        date: now,
+        status: 'pending',
+        items: [
+          makeItem(paracetamol, '500mg', '2 fois par jour', '3 jours', 6, 'Prendre le matin et le soir'),
+        ],
+        instructions: 'Traitement préventif. Contrôle dans 15 jours.',
+        allergiesChecked: true,
+        interactionsChecked: false,
+      }),
+    ]);
+
+    // Create sample sales for testing reports
+    await this.createSampleSales(organizationId);
+
+    console.log('✅ Patient test data inserted —',
+      `${patients.length} patients,`,
+      `${prescriptions.length} prescriptions,`,
+      `${this.tables.prescription_items.length} prescription items,`,
+      `${this.tables.sales.length} sales`);
+  }
+
+  /** Create sample sales for testing reports */
+  private async createSampleSales(organizationId: string): Promise<void> {
+    const products = this.tables.products.filter(p => p.organizationId === organizationId);
+    if (products.length === 0) return;
+
+    const inventoryItems = this.tables.inventory_items.filter(i => i.organizationId === organizationId);
+    if (inventoryItems.length === 0) return;
+
+    // Helper function to create a sale
+    const createSampleSale = async (
+      daysAgo: number,
+      items: Array<{ productId: string; quantity: number }>,
+      paymentMethods: Array<{ method: PaymentMethod; percentage: number }>
+    ) => {
+      const saleDate = new Date();
+      saleDate.setDate(saleDate.getDate() - daysAgo);
+
+      const cartItems: CartItem[] = items.map(item => {
+        const product = products.find(p => p.id === item.productId)!;
+        const inventoryItem = inventoryItems.find(i => i.productId === product.id)!;
+        
+        return {
+          productId: product.id,
+          product: {
+            name: product.name,
+            sku: product.sku || '',
+            genericName: product.genericName,
+            dosageForm: product.dosageForm,
+            strength: product.strength,
+            category: product.category,
+            sellingPrice: product.sellingPrice,
+            costPrice: product.costPrice,
+            taxRate: product.taxRate,
+            currency: product.currency,
+            barcode: product.barcode,
+            requiresPrescription: product.requiresPrescription,
+          },
+          quantity: item.quantity,
+          unitPrice: product.sellingPrice,
+          discountPercent: 0,
+          discountAmount: 0,
+          taxAmount: item.quantity * product.sellingPrice * (product.taxRate / 100),
+          lineTotal: item.quantity * product.sellingPrice,
+          inventoryItemId: inventoryItem.id,
+          batchId: undefined,
+          maxQuantity: inventoryItem.quantityAvailable,
+        };
+      });
+
+      const subtotal = cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const totalTax = cartItems.reduce((sum, item) => sum + item.taxAmount, 0);
+      const totalAmount = subtotal + totalTax;
+
+      const payments: SalePayment[] = paymentMethods.map(pm => ({
+        id: this.generateId(),
+        saleId: '',
+        method: pm.method,
+        amount: totalAmount * (pm.percentage / 100),
+        reference: `PAY-${this.generateId().slice(-6)}`,
+        receivedAt: saleDate.toISOString(),
+      }));
+
+      const cart: CartState = {
+        items: cartItems,
+        saleType: 'WALK_IN' as any,
+        globalDiscountType: 'NONE',
+        globalDiscountValue: 0,
+      };
+
+      // Process the sale with the specific date
+      const sale = await this.processSale(
+        cart,
+        payments,
+        'admin',
+        'Admin HK',
+        organizationId,
+        '',
+      );
+
+      // Manually update the created date for testing
+      const saleIndex = this.tables.sales.findIndex(s => s.id === sale.id);
+      if (saleIndex !== -1) {
+        this.tables.sales[saleIndex].createdAt = saleDate.toISOString();
+      }
+    };
+
+    // Create sales for the last 30 days
+    const paracetamol = products.find(p => p.name.includes('Paracétamol'));
+    const amoxicillin = products.find(p => p.name.includes('Amoxicilline'));
+    const metformin = products.find(p => p.name.includes('Metformine'));
+    const serum = products.find(p => p.name.includes('Sérum'));
+    const gloves = products.find(p => p.name.includes('Gants'));
+
+    if (!paracetamol || !amoxicillin || !metformin) return;
+
+    // Recent sales (last week) - higher volume
+    for (let day = 0; day < 7; day++) {
+      // Morning sale - multiple items
+      await createSampleSale(day, [
+        { productId: paracetamol.id, quantity: Math.floor(Math.random() * 5) + 1 },
+        { productId: amoxicillin.id, quantity: Math.floor(Math.random() * 3) + 1 },
+      ], [{ method: 'CASH', percentage: 100 }]);
+
+      // Afternoon sale - prescription
+      await createSampleSale(day, [
+        { productId: metformin.id, quantity: Math.floor(Math.random() * 2) + 1 },
+      ], [{ method: 'PRESCRIPTION', percentage: 100 }]);
+
+      // Evening sale - mixed payment
+      if (Math.random() > 0.3) {
+        await createSampleSale(day, [
+          { productId: paracetamol.id, quantity: Math.floor(Math.random() * 3) + 2 },
+          ...(serum ? [{ productId: serum.id, quantity: 1 }] : []),
+        ], [
+          { method: 'CASH', percentage: 60 },
+          { method: 'MOBILE_MONEY', percentage: 40 },
+        ]);
+      }
+    }
+
+    // Older sales (2-4 weeks ago) - medium volume
+    for (let day = 7; day < 28; day += 2) {
+      await createSampleSale(day, [
+        { productId: paracetamol.id, quantity: Math.floor(Math.random() * 3) + 1 },
+      ], [{ method: 'CASH', percentage: 100 }]);
+
+      if (Math.random() > 0.5) {
+        await createSampleSale(day, [
+          { productId: amoxicillin.id, quantity: Math.floor(Math.random() * 2) + 1 },
+        ], [{ method: 'CARD', percentage: 100 }]);
+      }
+    }
+
+    // Older sales (1-3 months ago) - lower volume
+    for (let day = 28; day < 90; day += 5) {
+      if (Math.random() > 0.4) {
+        await createSampleSale(day, [
+          { productId: products[Math.floor(Math.random() * Math.min(products.length, 5))].id, quantity: 1 },
+        ], [{ method: 'CASH', percentage: 100 }]);
+      }
+    }
+
+    console.log('✅ Sample sales created for testing reports');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  PRESCRIPTIONS
+  // ══════════════════════════════════════════════════════════
+
+  async createPrescription(data: PrescriptionCreate): Promise<Prescription> {
+    const now = new Date().toISOString();
+    const prescription = PrescriptionUtils.createPrescription({
+      ...data,
+      id: data.id || this.generateId(),
+      createdAt: data.createdAt || now,
+    });
+
+    this.tables.prescriptions.push(prescription);
+
+    // Create prescription items
+    for (const itemData of data.items) {
+      const item: PrescriptionItem = {
+        ...itemData,
+        id: itemData.id || this.generateId(),
+        prescriptionId: prescription.id,
+        quantityDispensed: 0,
+        quantityRemaining: itemData.quantity,
+        status: 'pending',
+        createdAt: now,
+      };
+      this.tables.prescription_items.push(item);
+    }
+
+    return prescription;
+  }
+
+  async getPrescription(id: string): Promise<Prescription | null> {
+    const prescription = this.tables.prescriptions.find(p => p.id === id);
+    if (!prescription) return null;
+
+    const items = this.tables.prescription_items.filter(i => i.prescriptionId === id);
+    return { ...prescription, items };
+  }
+
+  async getPrescriptionsByOrganization(organizationId: string, options?: {
+    status?: PrescriptionStatus;
+    patientId?: string;
+    doctorId?: string;
+    facilityId?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }): Promise<Prescription[]> {
+    let results = this.tables.prescriptions.filter(p => p.organizationId === organizationId);
+
+    if (options?.status) {
+      results = results.filter(p => p.status === options.status);
+    }
+    if (options?.patientId) {
+      results = results.filter(p => p.patientId === options.patientId);
+    }
+    if (options?.doctorId) {
+      results = results.filter(p => p.doctorId === options.doctorId);
+    }
+    if (options?.facilityId) {
+      results = results.filter(p => p.facilityId === options.facilityId);
+    }
+    if (options?.startDate) {
+      results = results.filter(p => p.date >= options.startDate!);
+    }
+    if (options?.endDate) {
+      results = results.filter(p => p.date <= options.endDate!);
+    }
+
+    // Sort by date (newest first)
+    results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (options?.limit) {
+      results = results.slice(0, options.limit);
+    }
+
+    // Enrich with items
+    return Promise.all(results.map(async p => {
+      const items = this.tables.prescription_items.filter(i => i.prescriptionId === p.id);
+      return { ...p, items };
+    }));
+  }
+
+  async updatePrescription(id: string, data: PrescriptionUpdate): Promise<Prescription | null> {
+    const idx = this.tables.prescriptions.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+
+    this.tables.prescriptions[idx] = {
+      ...this.tables.prescriptions[idx],
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Recalculate status based on items
+    const prescription = await this.getPrescription(id);
+    if (!prescription) return null;
+
+    const recalculated = PrescriptionUtils.recalculateStatus(prescription);
+    this.tables.prescriptions[idx] = recalculated;
+
+    return recalculated;
+  }
+
+  async deletePrescription(id: string): Promise<boolean> {
+    const idx = this.tables.prescriptions.findIndex(p => p.id === id);
+    if (idx === -1) return false;
+
+    // Delete prescription items
+    this.tables.prescription_items = this.tables.prescription_items.filter(i => i.prescriptionId !== id);
+    
+    // Delete prescription
+    this.tables.prescriptions.splice(idx, 1);
+    return true;
+  }
+
+  async updatePrescriptionItem(itemId: string, data: PrescriptionItemUpdate): Promise<PrescriptionItem | null> {
+    const idx = this.tables.prescription_items.findIndex(i => i.id === itemId);
+    if (idx === -1) return null;
+
+    const item = this.tables.prescription_items[idx];
+    const updatedItem = {
+      ...item,
+      ...data,
+      quantityRemaining: (data.quantity ?? item.quantity) - (data.quantityDispensed ?? item.quantityDispensed),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Update status based on dispensed quantity
+    if (updatedItem.quantityDispensed >= updatedItem.quantity) {
+      updatedItem.status = 'fully_dispensed';
+    } else if (updatedItem.quantityDispensed > 0) {
+      updatedItem.status = 'partially_dispensed';
+    } else {
+      updatedItem.status = 'pending';
+    }
+
+    this.tables.prescription_items[idx] = updatedItem;
+
+    // Update prescription status
+    await this.updatePrescription(item.prescriptionId, {});
+
+    return updatedItem;
+  }
+
+  /**
+   * Dispense medication for a prescription item (pharmacy workflow)
+   */
+  async dispensePrescriptionItem(itemId: string, data: {
+    productId: string;
+    quantityToDispense: number;
+    batchIds?: string[];
+    pharmacistId: string;
+    notes?: string;
+    counselingNotes?: string;
+    substituted?: boolean;
+  }): Promise<{ prescriptionItem: PrescriptionItem; sale: Sale | null }> {
+    const item = this.tables.prescription_items.find(i => i.id === itemId);
+    if (!item) throw new Error('Prescription item not found');
+
+    const product = await this.getProduct(data.productId);
+    if (!product) throw new Error('Product not found');
+
+    const inventoryItem = this.tables.inventory_items.find(i => i.productId === data.productId);
+    if (!inventoryItem) throw new Error('Product not in inventory');
+
+    const prescription = await this.getPrescription(item.prescriptionId);
+    if (!prescription) throw new Error('Prescription not found');
+
+    // Check stock availability
+    if (inventoryItem.quantityAvailable < data.quantityToDispense) {
+      throw new Error('Insufficient stock available');
+    }
+
+    // Update prescription item
+    const newQuantityDispensed = item.quantityDispensed + data.quantityToDispense;
+    const updatedItem = await this.updatePrescriptionItem(itemId, {
+      productId: data.productId,
+      quantityDispensed: newQuantityDispensed,
+      batchesUsed: data.batchIds,
+      unitPrice: product.sellingPrice,
+      totalPrice: (item.totalPrice || 0) + (data.quantityToDispense * product.sellingPrice),
+      dispensedBy: data.pharmacistId,
+      dispensedDate: new Date().toISOString(),
+      pharmacistNotes: data.notes,
+      patientCounseling: data.counselingNotes,
+      status: data.substituted ? 'substituted' : undefined,
+    });
+
+    if (!updatedItem) throw new Error('Failed to update prescription item');
+
+    // Create sale for dispensed medication
+    const cart = SaleUtils.createEmptyCart();
+    cart.items = [{
+      productId: data.productId,
+      product: {
+        name: product.name,
+        sku: product.sku,
+        genericName: product.genericName,
+        strength: product.strength,
+        dosageForm: product.dosageForm,
+        category: product.category,
+        requiresPrescription: product.requiresPrescription,
+        sellingPrice: product.sellingPrice,
+        costPrice: product.costPrice,
+        taxRate: product.taxRate,
+        currency: product.currency,
+        barcode: product.barcode,
+        imageUrl: product.imageUrl,
+      },
+      quantity: data.quantityToDispense,
+      unitPrice: product.sellingPrice,
+      discountPercent: 0,
+      discountAmount: 0,
+      taxAmount: data.quantityToDispense * product.sellingPrice * (product.taxRate / 100),
+      lineTotal: data.quantityToDispense * product.sellingPrice,
+      inventoryItemId: inventoryItem.id,
+      batchId: data.batchIds?.[0],
+      maxQuantity: inventoryItem.quantityAvailable,
+    }];
+
+    // Process sale
+    const payments: SalePayment[] = [{
+      id: this.generateId(),
+      saleId: '',
+      method: 'PRESCRIPTION' as PaymentMethod,
+      amount: data.quantityToDispense * product.sellingPrice,
+      reference: `RX-${prescription.prescriptionNumber}`,
+      receivedAt: new Date().toISOString(),
+    }];
+
+    const sale = await this.processSale(
+      cart, 
+      payments,
+      data.pharmacistId, 
+      'Pharmacist',
+      prescription.organizationId, 
+      prescription.facilityId,
+    );
+
+    return { prescriptionItem: updatedItem, sale };
+  }
+
+  /**
+   * Get prescription statistics for pharmacy dashboard
+   */
+  async getPrescriptionStats(organizationId: string, facilityId?: string): Promise<any> {
+    let prescriptions = this.tables.prescriptions.filter(p => p.organizationId === organizationId);
+    
+    if (facilityId) {
+      prescriptions = prescriptions.filter(p => p.facilityId === facilityId);
+    }
+
+    const stats = {
+      total: prescriptions.length,
+      byStatus: {
+        pending: 0,
+        partially_dispensed: 0,
+        fully_dispensed: 0,
+        cancelled: 0,
+        expired: 0,
+      },
+      pendingItems: 0,
+      averageItemsPerPrescription: 0,
+      totalValue: 0,
+    };
+
+    let totalItems = 0;
+    let totalValue = 0;
+
+    for (const prescription of prescriptions) {
+      stats.byStatus[prescription.status]++;
+      
+      const items = this.tables.prescription_items.filter(i => i.prescriptionId === prescription.id);
+      totalItems += items.length;
+      
+      const pendingItems = items.filter(i => !['fully_dispensed', 'cancelled'].includes(i.status));
+      stats.pendingItems += pendingItems.length;
+      
+      totalValue += items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+    }
+
+    stats.averageItemsPerPrescription = prescriptions.length > 0 ? totalItems / prescriptions.length : 0;
+    stats.totalValue = totalValue;
+
+    return stats;
   }
 }
 
