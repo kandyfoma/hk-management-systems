@@ -246,6 +246,14 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
       key: 'HOSPITAL-HP2024XY-B6C4',
     },
     {
+      type: 'OCCUPATIONAL_HEALTH',
+      title: 'Santé au Travail',
+      desc: 'Santé & sécurité professionnelle',
+      icon: 'shield-checkmark-outline' as keyof typeof Ionicons.glyphMap,
+      color: colors.secondary,
+      key: 'OCCHEALTH-OH2024XY-P8Q3',
+    },
+    {
       type: 'COMBINED',
       title: 'Combinée',
       desc: 'Accès complet',
@@ -494,28 +502,27 @@ const ls = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingVertical: isDesktop ? 24 : 12,
+    paddingVertical: isDesktop ? 16 : 12,
     paddingHorizontal: isDesktop ? 20 : 16,
-    minHeight: '100%',
   },
   content: { width: '100%', maxWidth: MAX_CARD_W, alignItems: 'center' },
 
   // Logo
-  logoSection: { alignItems: 'center', marginBottom: isDesktop ? 28 : 20 },
+  logoSection: { alignItems: 'center', marginBottom: isDesktop ? 16 : 20 },
   logoCircle: {
-    width: isDesktop ? 72 : 64, height: isDesktop ? 72 : 64, borderRadius: isDesktop ? 36 : 32,
+    width: isDesktop ? 56 : 64, height: isDesktop ? 56 : 64, borderRadius: isDesktop ? 28 : 32,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: isDesktop ? 14 : 12,
+    marginBottom: isDesktop ? 10 : 12,
     ...shadows.lg,
   },
-  brandName: { fontSize: isDesktop ? 26 : 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
-  brandTag: { fontSize: isDesktop ? 14 : 13, color: colors.textSecondary, marginTop: 4 },
+  brandName: { fontSize: isDesktop ? 24 : 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  brandTag: { fontSize: isDesktop ? 13 : 13, color: colors.textSecondary, marginTop: 2 },
 
   // Steps
   steps: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    marginBottom: isDesktop ? 28 : 20, gap: 0,
+    marginBottom: isDesktop ? 16 : 20, gap: 0,
   },
   stepActive: { alignItems: 'center', gap: 4 },
   stepDotActive: {
@@ -538,12 +545,12 @@ const ls = StyleSheet.create({
   // Card
   card: {
     width: '100%', backgroundColor: colors.surface,
-    borderRadius: isDesktop ? 20 : 16, padding: isDesktop ? 36 : 24,
+    borderRadius: isDesktop ? 20 : 16, padding: isDesktop ? 28 : 24,
     borderWidth: 1, borderColor: colors.outline,
     ...shadows.md,
   },
-  cardTitle: { fontSize: isDesktop ? 22 : 20, fontWeight: '700', color: colors.text, marginBottom: 8 },
-  cardDesc: { fontSize: isDesktop ? 15 : 14, color: colors.textSecondary, lineHeight: 22, marginBottom: isDesktop ? 24 : 20 },
+  cardTitle: { fontSize: isDesktop ? 20 : 20, fontWeight: '700', color: colors.text, marginBottom: 6 },
+  cardDesc: { fontSize: isDesktop ? 14 : 14, color: colors.textSecondary, lineHeight: 20, marginBottom: isDesktop ? 16 : 20 },
 
   // Status
   statusBanner: {
@@ -561,24 +568,46 @@ const ls = StyleSheet.create({
 
   // Type Grid
   typeGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: isDesktop ? 10 : 8, marginBottom: isDesktop ? 22 : 18,
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: isDesktop ? 8 : 8, 
+    marginBottom: isDesktop ? 14 : 18,
   },
   typeCard: {
-    flex: 1, minWidth: isDesktop ? 120 : '45%' as any,
+    flexBasis: isDesktop ? '31.5%' as any : '48%' as any,
+    flexGrow: 1,
     backgroundColor: colors.surface,
-    borderRadius: isDesktop ? 16 : 14, padding: isDesktop ? 18 : 14,
-    borderWidth: 1.5, borderColor: colors.outline,
-    alignItems: 'center', position: 'relative',
+    borderRadius: 14, 
+    padding: isDesktop ? 12 : 14,
+    borderWidth: 1.5, 
+    borderColor: colors.outline,
+    alignItems: 'center', 
+    position: 'relative',
   },
   typeIcon: {
-    width: isDesktop ? 48 : 40, height: isDesktop ? 48 : 40, borderRadius: isDesktop ? 14 : 12,
-    alignItems: 'center', justifyContent: 'center', marginBottom: isDesktop ? 10 : 8,
+    width: isDesktop ? 36 : 40, 
+    height: isDesktop ? 36 : 40, 
+    borderRadius: 12,
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: isDesktop ? 6 : 8,
   },
-  typeTitle: { fontSize: isDesktop ? 14 : 13, fontWeight: '700', color: colors.text, marginBottom: 3 },
-  typeDesc: { fontSize: isDesktop ? 12 : 11, color: colors.textTertiary, textAlign: 'center' },
+  typeTitle: { 
+    fontSize: isDesktop ? 13 : 13, 
+    fontWeight: '700', 
+    color: colors.text, 
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  typeDesc: { 
+    fontSize: 11, 
+    color: colors.textTertiary, 
+    textAlign: 'center',
+    lineHeight: 15,
+  },
   typeCheck: {
-    position: 'absolute', top: 8, right: 8,
-    width: 20, height: 20, borderRadius: 10,
+    position: 'absolute', top: 6, right: 6,
+    width: 18, height: 18, borderRadius: 9,
     alignItems: 'center', justifyContent: 'center',
   },
 

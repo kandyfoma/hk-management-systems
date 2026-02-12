@@ -84,9 +84,6 @@ export interface EncounterCreate extends Omit<Encounter, 'id' | 'encounterNumber
   createdAt?: string;
   accessCount?: number;
 }
-  encounterNumber?: string;
-  createdAt?: string;
-}
 
 export interface EncounterUpdate extends Partial<Omit<Encounter, 'id' | 'patientId' | 'organizationId' | 'encounterNumber' | 'createdAt'>> {
   updatedAt?: string;
@@ -126,6 +123,7 @@ export class EncounterUtils {
       encounterNumber: data.encounterNumber || this.generateEncounterNumber(),
       createdAt: data.createdAt || now,
       updatedAt: now,
+      accessCount: data.accessCount || 0,
     };
   }
 

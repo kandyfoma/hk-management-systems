@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../components/GlobalUI';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme/theme';
+import { getTextColor, getIconBackgroundColor, getSecondaryTextColor, getTertiaryTextColor, getBadgeBackgroundColor } from '../utils/colorContrast';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -364,37 +365,21 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
       />
       <View style={styles.metricsGrid}>
         {metricCards.map((card) => (
-          <View key={card.id} style={styles.metricCard}>
-            <View style={styles.metricHeader}>
-              <View style={[styles.metricIconContainer, { backgroundColor: card.bgColor }]}>
-                <Ionicons name={card.icon} size={22} color={card.color} />
-              </View>
-              <View
-                style={[
-                  styles.changeBadge,
-                  {
-                    backgroundColor:
-                      card.changeType === 'up' ? colors.successLight : colors.errorLight,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={card.changeType === 'up' ? 'arrow-up' : 'arrow-down'}
-                  size={12}
-                  color={card.changeType === 'up' ? colors.successDark : colors.errorDark}
-                />
-                <Text
-                  style={[
-                    styles.changeText,
-                    {
-                      color:
-                        card.changeType === 'up' ? colors.successDark : colors.errorDark,
-                    },
-                  ]}
-                >
-                  {card.change}
-                </Text>
-              </View>
+          <View key={card.id} style={[styles.metricCard, { backgroundColor: card.color }]}>
+            <View style={styles.metricIconContainer}>
+              <Ionicons name={card.icon} size={22} color="#FFFFFF" />
+            </View>
+            <Text style={styles.metricValue}>{card.value}</Text>
+            <Text style={styles.metricTitle}>{card.title}</Text>
+            <View style={styles.changeBadge}>
+              <Ionicons
+                name={card.changeType === 'up' ? 'arrow-up' : 'arrow-down'}
+                size={12}
+                color="rgba(255,255,255,0.8)"
+              />
+              <Text style={styles.changeText}>
+                {card.change}
+              </Text>
             </View>
             <Text style={styles.metricValue}>{card.value}</Text>
             <Text style={styles.metricTitle}>{card.title}</Text>
@@ -697,10 +682,10 @@ const styles = StyleSheet.create({
     flex: isDesktop ? 1 : undefined,
     width: isDesktop ? undefined : isTablet ? '48%' : '100%',
     minWidth: isDesktop ? 220 : undefined,
-    backgroundColor: colors.surface,
     borderRadius: borderRadius.xl,
     padding: 20,
-    ...shadows.sm,
+    alignItems: 'center',
+    ...shadows.md,
   },
   metricHeader: {
     flexDirection: 'row',
@@ -709,11 +694,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   metricIconContainer: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 12,
   },
   changeBadge: {
     flexDirection: 'row',
@@ -722,21 +708,22 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: borderRadius.full,
     gap: 2,
+    marginTop: 8,
   },
   changeText: {
     fontSize: 11,
     fontWeight: '600',
   },
   metricValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 4,
+    textAlign: 'center',
   },
   metricTitle: {
     fontSize: 13,
-    color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '600',
+    textAlign: 'center',
   },
 
   // ── Content Row ─────────────────────────────────────

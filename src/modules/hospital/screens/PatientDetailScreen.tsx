@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Dimensions,
+  ActivityIndicator, Dimensions, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/theme';
@@ -23,18 +23,21 @@ interface Props {
   onBack?: () => void;
   onNewEncounter?: (patient: Patient) => void;
   onEditPatient?: (patient: Patient) => void;
+  onGoToTriage?: (patient: Patient, encounterId: string) => void;
+  onGoToConsultation?: (patient: Patient, encounterId: string) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // Component
 // ═══════════════════════════════════════════════════════════════
 
-export function PatientDetailScreen({ patientId, onBack, onNewEncounter, onEditPatient }: Props) {
+export function PatientDetailScreen({ patientId, onBack, onNewEncounter, onEditPatient, onGoToTriage, onGoToConsultation }: Props) {
   const [loading, setLoading] = useState(true);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+  const [actionLoading, setActionLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -58,6 +61,107 @@ export function PatientDetailScreen({ patientId, onBack, onNewEncounter, onEditP
 
   const activeEncounters = useMemo(() => encounters.filter(e => EncounterUtils.isActive(e)), [encounters]);
   const pastEncounters = useMemo(() => encounters.filter(e => !EncounterUtils.isActive(e)), [encounters]);
+
+  // ─── Create encounter + draft invoice ─────────────────────
+  const createEncounterWithBilling = async (
+    encounterType: 'outpatient' | 'consultation',
+    initialStatus: 'registered' | 'in_consultation',
+    priority: 'routine' | 'semi_urgent' | 'urgent' | 'emergency',
+  ): Promise<{ encounter: Encounter; invoiceId: string } | null> => {
+    if (!patient) return null;
+    setActionLoading(true);
+    try {
+      const db = DatabaseService.getInstance();
+      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
+      if (!license) throw new Error('License not found');
+      const org = await db.getOrganization(license.organizationId);
+      if (!org) throw new Error('Organization not found');
+
+      // 1. Create the encounter
+      const encounter = await db.createEncounter({
+        patientId: patient.id,
+        organizationId: org.id,
+        facilityId: 'facility-main',
+        type: encounterType,
+        status: initialStatus,
+        arrivalDate: new Date().toISOString(),
+        chiefComplaint: '',
+        priority,
+      });
+
+      // 2. Create a draft invoice linked to the encounter
+      const invoice = await db.createHospitalInvoice({
+        encounterId: encounter.id,
+        patientId: patient.id,
+        organizationId: org.id,
+        facilityId: 'facility-main',
+        status: 'draft',
+        type: encounterType === 'consultation' ? 'consultation_only' : 'outpatient',
+        currency: 'CDF',
+        taxRate: 0,
+        notes: `Facture auto-créée — ${encounterType === 'consultation' ? 'Consultation' : 'Triage'} pour ${PatientUtils.getFullName(patient)}`,
+      });
+
+      // 3. Auto-add the initial service line item
+      const serviceName = initialStatus === 'in_consultation'
+        ? 'Consultation Médicale'
+        : 'Triage / Évaluation Infirmière';
+      const servicePrice = initialStatus === 'in_consultation' ? 15000 : 5000; // CDF
+      await db.addInvoiceItem(invoice.id, {
+        serviceId: `svc-${initialStatus}`,
+        category: initialStatus === 'in_consultation' ? 'consultation' : 'nursing',
+        description: serviceName,
+        quantity: 1,
+        unitPrice: servicePrice,
+        totalPrice: servicePrice,
+        netPrice: servicePrice,
+        serviceDate: new Date().toISOString().split('T')[0],
+      });
+
+      // 4. Update patient last visit
+      await db.updatePatient(patient.id, {
+        lastVisit: new Date().toISOString().split('T')[0],
+      });
+
+      console.log(`✅ Encounter ${encounter.encounterNumber} + Invoice ${invoice.invoiceNumber} created`);
+      await loadData(); // Refresh
+      return { encounter, invoiceId: invoice.id };
+    } catch (err) {
+      console.error('Error creating encounter with billing:', err);
+      Alert.alert('Erreur', 'Impossible de créer la visite. Veuillez réessayer.');
+      return null;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendToTriage = async () => {
+    if (!patient) return;
+    const result = await createEncounterWithBilling('outpatient', 'registered', 'routine');
+    if (result) {
+      Alert.alert(
+        '✅ Patient envoyé au Triage',
+        `Visite ${result.encounter.encounterNumber} créée.\nFacture brouillon initiée.`,
+        [
+          { text: 'OK', onPress: () => onGoToTriage?.(patient, result.encounter.id) },
+        ],
+      );
+    }
+  };
+
+  const handleSendToConsultation = async () => {
+    if (!patient) return;
+    const result = await createEncounterWithBilling('consultation', 'in_consultation', 'routine');
+    if (result) {
+      Alert.alert(
+        '✅ Patient envoyé en Consultation',
+        `Visite ${result.encounter.encounterNumber} créée.\nFacture brouillon initiée.`,
+        [
+          { text: 'OK', onPress: () => onGoToConsultation?.(patient, result.encounter.id) },
+        ],
+      );
+    }
+  };
 
   // ─── Loading / Not found ──────────────────────────────────
 
@@ -141,6 +245,49 @@ export function PatientDetailScreen({ patientId, onBack, onNewEncounter, onEditP
             <QuickStat label="Dernière visite" value={lastVisitFmt} icon="time-outline" />
             <QuickStat label="Visites" value={`${encounters.length}`} icon="pulse-outline" />
             <QuickStat label="Actives" value={`${activeEncounters.length}`} icon="alert-circle-outline" color={activeEncounters.length > 0 ? '#EF4444' : colors.textSecondary} />
+          </View>
+
+          {/* ── Triage / Consultation Actions ─────────── */}
+          <View style={s.workflowActions}>
+            <TouchableOpacity
+              style={[s.workflowBtn, s.workflowBtnTriage]}
+              onPress={handleSendToTriage}
+              activeOpacity={0.7}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="fitness-outline" size={18} color="#FFF" />
+                  <View style={s.workflowBtnContent}>
+                    <Text style={s.workflowBtnLabel}>Envoyer au Triage</Text>
+                    <Text style={s.workflowBtnSub}>Évaluation infirmière + facturation</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.7)" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.workflowBtn, s.workflowBtnConsult]}
+              onPress={handleSendToConsultation}
+              activeOpacity={0.7}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="medkit-outline" size={18} color="#FFF" />
+                  <View style={s.workflowBtnContent}>
+                    <Text style={s.workflowBtnLabel}>Envoyer en Consultation</Text>
+                    <Text style={s.workflowBtnSub}>Consultation médicale + facturation</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.7)" />
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -410,10 +557,10 @@ function EncounterCard({ encounter, isActive }: { encounter: Encounter; isActive
             <Text style={s.encDateText}>Sortie: {dischargeFmt}</Text>
           </View>
         )}
-        {encounter.department && (
+        {encounter.departmentId && (
           <View style={s.encDateRow}>
-            <Ionicons name="business-outline" size={13} color={colors.textTertiary} />
-            <Text style={s.encDateText}>Service: {encounter.department}</Text>
+            <Ionicons name="business-outline" size={12} color={colors.textTertiary} />
+            <Text style={s.encDateText}>Service: {encounter.departmentId}</Text>
           </View>
         )}
       </View>
@@ -614,6 +761,25 @@ const s = StyleSheet.create({
   quickStat: { flex: 1, alignItems: 'center', gap: 4 },
   quickStatValue: { fontSize: 14, fontWeight: '700', color: colors.text },
   quickStatLabel: { fontSize: 11, color: colors.textTertiary },
+
+  // Workflow actions (Triage / Consultation buttons)
+  workflowActions: {
+    flexDirection: 'row', gap: 12,
+    borderTopWidth: 1, borderTopColor: colors.outlineVariant, paddingTop: 14, marginTop: 14,
+  },
+  workflowBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12,
+  },
+  workflowBtnTriage: {
+    backgroundColor: '#D97706', // amber-600
+  },
+  workflowBtnConsult: {
+    backgroundColor: '#2563EB', // blue-600
+  },
+  workflowBtnContent: { flex: 1 },
+  workflowBtnLabel: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  workflowBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 1 },
 
   // Alert banner
   alertBanner: {

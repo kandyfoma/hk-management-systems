@@ -443,6 +443,13 @@ function DesktopApp() {
             onBack={handleBackToPatientList}
             onNewEncounter={handleStartConsultation}
             onEditPatient={handleEditPatient}
+            onGoToTriage={(patient, encounterId) => {
+              console.log(`➡️ Navigate to triage for encounter ${encounterId}`);
+              // Future: navigate to triage screen
+            }}
+            onGoToConsultation={(patient, encounterId) => {
+              handleStartConsultation(patient);
+            }}
           />
         );
       }

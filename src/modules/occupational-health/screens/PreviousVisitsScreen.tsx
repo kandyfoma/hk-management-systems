@@ -31,6 +31,7 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
   company: string;
   sector: string;
   jobTitle: string;
+  status: 'completed' | 'draft';
 })[] = [
   {
     id: 'EXAM-001',
@@ -42,7 +43,6 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     workerSector: 'mining',
     examType: 'periodic',
     examDate: '2024-01-15',
-    examinerId: 'DOC-001',
     examinerName: 'Dr. Mukendi',
     vitals: {
       temperature: 36.8,
@@ -69,14 +69,14 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     },
     fitnessDecision: 'fit_with_restrictions',
     restrictions: ['Pas de travail en hauteur > 3m', 'Port obligatoire EPI auditif'],
-    recommendations: 'Suivi cardiovasculaire tous les 6 mois. Ergothérapie pour le dos.',
+    recommendations: ['Suivi cardiovasculaire tous les 6 mois', 'Ergothérapie pour le dos'],
     certificateNumber: 'CERT-2024-001',
-    certificateValidUntil: '2024-07-15',
-    followUpRequired: true,
-    followUpDate: '2024-04-15',
     notes: 'Travailleur expérimenté. Exposition prolongée au bruit et vibrations.',
     createdAt: '2024-01-15T09:30:00Z',
     status: 'completed',
+    expiryDate: '2024-07-15',
+    examinerDoctorId: 'DOC-001',
+    certificateIssued: true,
   },
   {
     id: 'EXAM-002', 
@@ -88,7 +88,6 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     workerSector: 'banking_finance',
     examType: 'pre_employment',
     examDate: '2024-01-10',
-    examinerId: 'DOC-002',
     examinerName: 'Dr. Tshilombo',
     vitals: {
       temperature: 36.5,
@@ -112,13 +111,15 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
       ophthalmological: 'normal',
     },
     fitnessDecision: 'fit',
-    recommendations: 'Aménagement ergonomique du poste. Pause régulière écran.',
+    recommendations: ['Aménagement ergonomique du poste', 'Pause régulière écran'],
     certificateNumber: 'CERT-2024-002',
-    certificateValidUntil: '2025-01-10',
-    followUpRequired: false,
     notes: 'Nouvelle employée. Profil compatible poste bureautique.',
     createdAt: '2024-01-10T14:15:00Z',
     status: 'completed',
+    expiryDate: '2025-01-10',
+    examinerDoctorId: 'DOC-002',
+    restrictions: [],
+    certificateIssued: true,
   },
   {
     id: 'EXAM-003',
@@ -130,7 +131,6 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     workerSector: 'construction',
     examType: 'return_to_work',
     examDate: '2024-01-08',
-    examinerId: 'DOC-001',
     examinerName: 'Dr. Mukendi',
     vitals: {
       temperature: 36.7,
@@ -156,14 +156,14 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     },
     fitnessDecision: 'fit_with_restrictions',
     restrictions: ['Éviter soudure aérienne prolongée', 'Contrôle TA mensuel'],
-    recommendations: 'Kinésithérapie épaule. Surveillance cardiovasculaire.',
+    recommendations: ['Kinésithérapie épaule', 'Surveillance cardiovasculaire'],
     certificateNumber: 'CERT-2024-003',
-    certificateValidUntil: '2024-04-08',
-    followUpRequired: true,
-    followUpDate: '2024-02-08',
     notes: 'Reprise après accident travail. Amélioration épaule.',
     createdAt: '2024-01-08T11:20:00Z',
     status: 'completed',
+    expiryDate: '2024-04-08',
+    examinerDoctorId: 'DOC-001',
+    certificateIssued: true,
   },
   {
     id: 'EXAM-004',
@@ -175,7 +175,6 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     workerSector: 'healthcare',
     examType: 'periodic',
     examDate: '2024-01-05',
-    examinerId: 'DOC-002',
     examinerName: 'Dr. Tshilombo',
     vitals: {
       temperature: 36.4,
@@ -200,13 +199,15 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
       ophthalmological: 'normal',
     },
     fitnessDecision: 'fit',
-    recommendations: 'Rotation équipes nuit/jour. Exercices TMS.',
+    recommendations: ['Rotation équipes nuit/jour', 'Exercices TMS'],
     certificateNumber: 'CERT-2024-004',
-    certificateValidUntil: '2024-07-05',
-    followUpRequired: false,
     notes: 'Bonne adaptation travail hospitalier.',
     createdAt: '2024-01-05T10:45:00Z',
     status: 'completed',
+    expiryDate: '2024-07-05',
+    examinerDoctorId: 'DOC-002',
+    restrictions: [],
+    certificateIssued: true,
   },
   {
     id: 'EXAM-DRAFT-001',
@@ -218,7 +219,6 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
     workerSector: 'telecom_it',
     examType: 'periodic',
     examDate: '2024-01-20',
-    examinerId: 'DOC-001',
     examinerName: 'Dr. Mukendi',
     vitals: {
       temperature: 36.6,
@@ -230,10 +230,23 @@ const SAMPLE_EXAMINATIONS: (MedicalExamination & {
       generalAppearance: 'normal',
       cardiovascular: 'normal',
       respiratory: 'normal',
+      musculoskeletal: 'normal',
+      neurological: 'normal',
+      dermatological: 'normal',
+      ent: 'normal',
+      abdomen: 'normal',
+      mentalHealth: 'normal',
+      ophthalmological: 'normal',
     },
     notes: 'Consultation en cours - données partielles',
     createdAt: '2024-01-20T09:00:00Z',
     status: 'draft',
+    expiryDate: '2024-07-20',
+    examinerDoctorId: 'DOC-001',
+    fitnessDecision: 'pending_evaluation',
+    restrictions: [],
+    recommendations: [],
+    certificateIssued: false,
   },
 ];
 
@@ -309,7 +322,7 @@ function ExamCard({
         <View style={styles.examCardFooter}>
           <TouchableOpacity 
             style={styles.resumeDraftBtn}
-            onPress={() => onResumeDraft?.(exam.id)}
+            onPress={() => onResumeDraft?.()}
             activeOpacity={0.7}
           >
             <Ionicons name="play" size={16} color={ACCENT} />
@@ -386,7 +399,7 @@ export function PreviousVisitsScreen({
   const handleResumeDraft = (exam: typeof SAMPLE_EXAMINATIONS[0]) => {
     if (exam.status === 'draft' && onResumeDraft) {
       // Show loading feedback
-      Alert.alert(
+      console.log(
         'Chargement du Brouillon',
         `Reprise de la consultation pour ${exam.workerName}...`,
         [],
@@ -395,7 +408,7 @@ export function PreviousVisitsScreen({
       
       // Small delay to show the alert, then navigate
       setTimeout(() => {
-        Alert.dismissAll?.();
+        console.log('Dismissing alert');
         onResumeDraft(exam.id);
       }, 1000);
     } else {

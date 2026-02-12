@@ -89,15 +89,15 @@ const REPORTS: ReportData[] = [
 // ─── Metric Card ─────────────────────────────────────────────
 function MetricCard({ metric, inverted = false }: { metric: ReportData['metrics'][0]; inverted?: boolean }) {
   return (
-    <View style={styles.metricCard}>
-      <View style={[styles.metricIcon, { backgroundColor: metric.color + '14' }]}>
-        <Ionicons name={metric.icon as any} size={18} color={metric.color} />
+    <View style={[styles.metricCard, { backgroundColor: metric.color }]}>
+      <View style={styles.metricIcon}>
+        <Ionicons name={metric.icon as any} size={18} color="#FFFFFF" />
       </View>
       <Text style={styles.metricValue}>{metric.value}</Text>
       <Text style={styles.metricLabel}>{metric.label}</Text>
       {metric.trend && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 }}>
-          <Ionicons name={getTrendIcon(metric.trend) as any} size={12} color={getTrendColor(metric.trend, inverted)} />
+          <Ionicons name={getTrendIcon(metric.trend) as any} size={12} color="rgba(255,255,255,0.8)" />
           <Text style={{ fontSize: 10, color: getTrendColor(metric.trend, inverted), fontWeight: '600' }}>{metric.trendValue}</Text>
         </View>
       )}
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: '700', color: ACCENT, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  metricCard: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, padding: 14, alignItems: 'center', minWidth: isDesktop ? 130 : 100, flex: 1 },
+  metricCard: { borderRadius: borderRadius.lg, padding: 16, alignItems: 'center', minWidth: isDesktop ? 130 : 100, flex: 1, ...shadows.md },
   metricIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   metricValue: { fontSize: 20, fontWeight: '700', color: colors.text },
   metricLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },

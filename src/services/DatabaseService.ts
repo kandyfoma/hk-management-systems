@@ -32,6 +32,7 @@ import {
 } from '../models/Prescription';
 import { Patient, PatientCreate, PatientUpdate, PatientUtils, MedicalRecord, VitalSigns } from '../models/Patient';
 import { Encounter, EncounterCreate, EncounterUpdate, EncounterUtils } from '../models/Encounter';
+import { HospitalInvoice, HospitalInvoiceCreate, HospitalInvoiceUpdate, InvoiceItem, HospitalInvoiceUtils } from '../models/HospitalBilling';
 import { PaymentMethod } from '../models/Sale';
 import { 
   COMPREHENSIVE_PATIENTS, 
@@ -76,6 +77,8 @@ interface Tables {
   // ── Prescription Tables ───────────────────────────────────
   prescriptions: Prescription[];
   prescription_items: PrescriptionItem[];
+  // ── Hospital Billing Tables ───────────────────────────────
+  hospital_invoices: HospitalInvoice[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -107,6 +110,7 @@ export class DatabaseService {
     encounters: [],
     prescriptions: [],
     prescription_items: [],
+    hospital_invoices: [],
   };
 
   private constructor() {
@@ -134,6 +138,9 @@ export class DatabaseService {
         suppliers: this.tables.suppliers,
         inventory_items: this.tables.inventory_items,
         organizations: this.tables.organizations,
+        licenses: this.tables.licenses,
+        users: this.tables.users,
+        user_module_access: this.tables.user_module_access,
         sales: Array.from(this.sales.values()),
         purchase_orders: this.tables.purchase_orders,
         stock_movements: this.tables.stock_movements,
@@ -162,6 +169,9 @@ export class DatabaseService {
         if (data.suppliers) this.tables.suppliers = data.suppliers;
         if (data.inventory_items) this.tables.inventory_items = data.inventory_items;
         if (data.organizations) this.tables.organizations = data.organizations;
+        if (data.licenses) this.tables.licenses = data.licenses;
+        if (data.users) this.tables.users = data.users;
+        if (data.user_module_access) this.tables.user_module_access = data.user_module_access;
         if (data.purchase_orders) this.tables.purchase_orders = data.purchase_orders;
         if (data.stock_movements) this.tables.stock_movements = data.stock_movements;
         
@@ -187,13 +197,182 @@ export class DatabaseService {
     const dataLoaded = await this.loadDataFromPersistentStorage();
     
     if (!dataLoaded) {
-      // If no existing data, load seed data
-      console.log('🌱 Loading comprehensive seed data...');
-      await this.loadComprehensiveData();
+      // If no existing data, load seed data including test licenses
+      console.log('🌱 Loading test data with licenses...');
+      await this.insertTestData();
+    } else {
+      // Ensure we have licenses and admin user even if old storage didn't include them
+      const hasLicenses = this.tables.licenses && this.tables.licenses.length > 0;
+      const hasUsers = this.tables.users && this.tables.users.length > 0;
+      
+      if (!hasLicenses || !hasUsers) {
+        console.log(`📄 Missing data — licenses: ${hasLicenses}, users: ${hasUsers}. Re-seeding...`);
+        await this.createTestLicenses();
+        await this.createTestAdminUser();
+      }
     }
     
     // Save data after initialization
     await this.saveDataToPersistentStorage();
+  }
+
+  // Create just the test licenses without full test data
+  async createTestLicenses(): Promise<void> {
+    try {
+      // Create test organization if it doesn't exist
+      let testOrg = this.tables.organizations.find(org => org.name === 'HK Healthcare Group');
+      
+      if (!testOrg) {
+        testOrg = await this.createOrganization({
+          name: 'HK Healthcare Group',
+          businessType: 'HEALTHCARE_GROUP',
+          address: '123 Avenue de la Santé',
+          city: 'Kinshasa',
+          country: 'RD Congo',
+          phone: '+243 999 123 456',
+          email: 'contact@hkhealthcare.cd',
+          contactPerson: 'Admin HK',
+        });
+      }
+
+      // Trial license
+      await this.createLicense({
+        licenseKey: 'TRIAL-HK2024XY-Z9M3',
+        organizationId: testOrg.id,
+        moduleType: 'TRIAL',
+        licenseTier: 'TRIAL',
+        issuedDate: new Date().toISOString(),
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 3,
+        features: [
+          'pos_system', 'basic_inventory', 'advanced_inventory', 'prescription_management',
+          'stock_alerts', 'supplier_management', 'basic_reporting', 'advanced_reporting',
+          'customer_management', 'patient_management', 'appointment_scheduling',
+          'advanced_scheduling', 'medical_records', 'lab_integration', 'multi_department',
+          'basic_billing', 'billing_management', 'staff_management', 'prescription_writing',
+          'worker_management', 'medical_examinations', 'fitness_certificates',
+          'incident_management', 'basic_incident_reporting', 'occupational_disease_tracking',
+          'surveillance_programs', 'audiometry_spirometry', 'drug_screening',
+          'ppe_management', 'risk_assessment',
+        ],
+        billingCycle: 'TRIAL',
+      });
+
+      // Pharmacy license
+      await this.createLicense({
+        licenseKey: 'PHARMACY-PH2024XY-M9N3',
+        organizationId: testOrg.id,
+        moduleType: 'PHARMACY',
+        licenseTier: 'PROFESSIONAL',
+        issuedDate: new Date().toISOString(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 10,
+        features: ['pos_system', 'basic_inventory', 'advanced_inventory', 'prescription_management', 'supplier_management', 'stock_alerts', 'basic_reporting', 'advanced_reporting'],
+        billingCycle: 'ANNUAL',
+      });
+
+      // Hospital license
+      await this.createLicense({
+        licenseKey: 'HOSPITAL-HP2024XY-B6C4',
+        organizationId: testOrg.id,
+        moduleType: 'HOSPITAL',
+        licenseTier: 'PROFESSIONAL',
+        issuedDate: new Date().toISOString(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 20,
+        features: ['patient_management', 'appointment_scheduling', 'advanced_scheduling', 'medical_records', 'lab_integration', 'multi_department', 'basic_billing', 'billing_management', 'staff_management', 'basic_reporting', 'advanced_reporting'],
+        billingCycle: 'ANNUAL',
+      });
+
+      // Occupational Health license
+      await this.createLicense({
+        licenseKey: 'OCCHEALTH-OH2024XY-P8Q3',
+        organizationId: testOrg.id,
+        moduleType: 'OCCUPATIONAL_HEALTH',
+        licenseTier: 'PROFESSIONAL',
+        issuedDate: new Date().toISOString(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 15,
+        features: ['worker_management', 'medical_examinations', 'fitness_certificates', 'incident_management', 'basic_incident_reporting', 'occupational_disease_tracking', 'surveillance_programs', 'audiometry_spirometry', 'drug_screening', 'ppe_management', 'risk_assessment', 'basic_reporting', 'advanced_reporting'],
+        billingCycle: 'ANNUAL',
+      });
+
+      // Combined license
+      await this.createLicense({
+        licenseKey: 'COMBINED-CB2024XY-K7L2',
+        organizationId: testOrg.id,
+        moduleType: 'COMBINED',
+        licenseTier: 'ENTERPRISE',
+        issuedDate: new Date().toISOString(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 50,
+        features: [
+          'pos_system', 'basic_inventory', 'advanced_inventory', 'prescription_management',
+          'supplier_management', 'stock_alerts', 'patient_management', 'appointment_scheduling',
+          'advanced_scheduling', 'medical_records', 'lab_integration', 'multi_department',
+          'basic_billing', 'billing_management', 'staff_management', 'prescription_writing',
+          'worker_management', 'medical_examinations', 'fitness_certificates', 'incident_management',
+          'basic_incident_reporting', 'occupational_disease_tracking', 'surveillance_programs',
+          'audiometry_spirometry', 'drug_screening', 'ppe_management', 'risk_assessment',
+          'basic_reporting', 'advanced_reporting', 'customer_management',
+        ],
+        billingCycle: 'ANNUAL',
+      });
+
+      console.log('✅ Test licenses created successfully');
+    } catch (error) {
+      console.error('Error creating test licenses:', error);
+    }
+  }
+
+  // Create the default admin user if none exists
+  async createTestAdminUser(): Promise<void> {
+    try {
+      const existingAdmin = this.tables.users.find(u => u.phone === 'admin');
+      if (existingAdmin) {
+        console.log('👤 Admin user already exists');
+        return;
+      }
+
+      // Find org
+      const testOrg = this.tables.organizations.find(org => org.name === 'HK Healthcare Group');
+      if (!testOrg) {
+        console.error('❌ Cannot create admin user — test organization not found');
+        return;
+      }
+
+      // Create admin user
+      const adminUser = await this.createUser({
+        organizationId: testOrg.id,
+        phone: 'admin',
+        password: 'admin123',
+        firstName: 'Admin',
+        lastName: 'HK',
+        primaryRole: 'ADMIN' as any,
+      });
+
+      // Give admin access to trial module
+      const trialLicense = this.tables.licenses.find(l => l.moduleType === 'TRIAL');
+      if (trialLicense) {
+        await this.createUserModuleAccess({
+          userId: adminUser.id,
+          licenseId: trialLicense.id,
+          moduleType: 'TRIAL',
+          role: 'admin',
+          permissions: [
+            'manage_users', 'manage_patients', 'manage_inventory',
+            'view_reports', 'manage_billing', 'manage_appointments',
+            'access_lab_results', 'manage_system_settings',
+          ],
+          facilityAccess: [],
+          grantedAt: new Date().toISOString(),
+        });
+      }
+
+      console.log('✅ Admin user created successfully (phone: admin, password: admin123)');
+    } catch (error) {
+      console.error('Error creating admin user:', error);
+    }
   }
 
   private async autoSave(): Promise<void> {
@@ -1809,6 +1988,98 @@ export class DatabaseService {
     // No-op for in-memory
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // HOSPITAL BILLING / INVOICES
+  // ═══════════════════════════════════════════════════════════
+
+  async createHospitalInvoice(data: Partial<HospitalInvoice>): Promise<HospitalInvoice> {
+    const now = new Date().toISOString();
+    const year = new Date().getFullYear().toString().slice(-2);
+    const seq = (this.tables.hospital_invoices.length + 1).toString().padStart(4, '0');
+    const invoice: HospitalInvoice = {
+      id: data.id || this.generateId(),
+      encounterId: data.encounterId || '',
+      patientId: data.patientId || '',
+      organizationId: data.organizationId || '',
+      facilityId: data.facilityId || 'facility-main',
+      invoiceNumber: data.invoiceNumber || `INV${year}${seq}`,
+      date: data.date || now.split('T')[0],
+      dueDate: data.dueDate,
+      status: data.status || 'draft',
+      type: data.type || 'outpatient',
+      items: data.items || [],
+      subtotal: data.subtotal || 0,
+      taxAmount: data.taxAmount || 0,
+      discountAmount: data.discountAmount || 0,
+      totalAmount: data.totalAmount || 0,
+      amountPaid: data.amountPaid || 0,
+      amountDue: data.amountDue || 0,
+      paymentHistory: data.paymentHistory || [],
+      insuranceCoveredAmount: data.insuranceCoveredAmount || 0,
+      patientResponsibility: data.patientResponsibility || 0,
+      currency: data.currency || 'CDF',
+      taxRate: data.taxRate || 0,
+      primaryDiagnosis: data.primaryDiagnosis,
+      notes: data.notes,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.tables.hospital_invoices.push(invoice);
+    console.log(`💰 Hospital invoice created: ${invoice.invoiceNumber} for patient ${invoice.patientId}`);
+    return invoice;
+  }
+
+  async getHospitalInvoice(id: string): Promise<HospitalInvoice | undefined> {
+    return this.tables.hospital_invoices.find(inv => inv.id === id);
+  }
+
+  async getHospitalInvoiceByEncounter(encounterId: string): Promise<HospitalInvoice | undefined> {
+    return this.tables.hospital_invoices.find(inv => inv.encounterId === encounterId);
+  }
+
+  async getHospitalInvoicesByPatient(patientId: string): Promise<HospitalInvoice[]> {
+    return this.tables.hospital_invoices
+      .filter(inv => inv.patientId === patientId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getHospitalInvoicesByOrganization(orgId: string): Promise<HospitalInvoice[]> {
+    return this.tables.hospital_invoices
+      .filter(inv => inv.organizationId === orgId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async updateHospitalInvoice(id: string, updates: Partial<HospitalInvoice>): Promise<HospitalInvoice | undefined> {
+    const idx = this.tables.hospital_invoices.findIndex(inv => inv.id === id);
+    if (idx < 0) return undefined;
+    this.tables.hospital_invoices[idx] = {
+      ...this.tables.hospital_invoices[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    return this.tables.hospital_invoices[idx];
+  }
+
+  async addInvoiceItem(invoiceId: string, item: Omit<InvoiceItem, 'id' | 'invoiceId' | 'createdAt'>): Promise<HospitalInvoice | undefined> {
+    const invoice = this.tables.hospital_invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return undefined;
+    const newItem: InvoiceItem = {
+      ...item,
+      id: this.generateId(),
+      invoiceId,
+      createdAt: new Date().toISOString(),
+    };
+    invoice.items.push(newItem);
+    // Recalculate totals
+    invoice.subtotal = invoice.items.reduce((sum, i) => sum + (i.netPrice ?? i.totalPrice ?? 0), 0);
+    invoice.taxAmount = invoice.subtotal * (invoice.taxRate / 100);
+    invoice.totalAmount = invoice.subtotal + invoice.taxAmount - invoice.discountAmount;
+    invoice.amountDue = invoice.totalAmount - invoice.amountPaid;
+    invoice.patientResponsibility = invoice.amountDue - invoice.insuranceCoveredAmount;
+    invoice.updatedAt = new Date().toISOString();
+    return invoice;
+  }
+
   // ── Test Data ─────────────────────────────────────────────
 
   async insertTestData(): Promise<void> {
@@ -1925,6 +2196,33 @@ export class DatabaseService {
         billingCycle: 'ANNUAL',
       });
 
+      // Occupational Health license
+      await this.createLicense({
+        licenseKey: 'OCCHEALTH-OH2024XY-P8Q3',
+        organizationId: testOrg.id,
+        moduleType: 'OCCUPATIONAL_HEALTH',
+        licenseTier: 'PROFESSIONAL',
+        issuedDate: new Date().toISOString(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        maxUsers: 15,
+        features: [
+          'worker_management',
+          'medical_examinations',
+          'fitness_certificates',
+          'incident_management',
+          'basic_incident_reporting',
+          'occupational_disease_tracking',
+          'surveillance_programs',
+          'audiometry_spirometry',
+          'drug_screening',
+          'ppe_management',
+          'risk_assessment',
+          'basic_reporting',
+          'advanced_reporting',
+        ],
+        billingCycle: 'ANNUAL',
+      });
+
       // Combined license
       await this.createLicense({
         licenseKey: 'COMBINED-CB2024XY-K7L2',
@@ -1935,12 +2233,14 @@ export class DatabaseService {
         expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         maxUsers: 50,
         features: [
+          // Pharmacy features
           'pos_system',
           'basic_inventory',
           'advanced_inventory',
           'prescription_management',
           'supplier_management',
           'stock_alerts',
+          // Hospital features
           'patient_management',
           'appointment_scheduling',
           'advanced_scheduling',
@@ -1950,8 +2250,23 @@ export class DatabaseService {
           'basic_billing',
           'billing_management',
           'staff_management',
+          'prescription_writing',
+          // Occupational Health features
+          'worker_management',
+          'medical_examinations',
+          'fitness_certificates',
+          'incident_management',
+          'basic_incident_reporting',
+          'occupational_disease_tracking',
+          'surveillance_programs',
+          'audiometry_spirometry',
+          'drug_screening',
+          'ppe_management',
+          'risk_assessment',
+          // Shared
           'basic_reporting',
           'advanced_reporting',
+          'customer_management',
         ],
         billingCycle: 'ANNUAL',
       });
@@ -2020,26 +2335,73 @@ export class DatabaseService {
         COMPREHENSIVE_STOCK_MOVEMENTS
       } = await import('./seedData/comprehensiveSeedData');
       
+      // Get the real organization ID
+      const organization = this.tables.organizations[0];
+      const realOrgId = organization ? organization.id : 'ORG-001';
+      
       // 1. Add comprehensive patients (includes OccHealth workers)
       for (const patient of COMPREHENSIVE_PATIENTS) {
-        this.tables.patients.push(patient);
+        this.tables.patients.push({ ...patient, organizationId: realOrgId });
       }
       
-      // 2. Add pharmacy suppliers
+      // 2. Add pharmacy suppliers — fix organizationId
       for (const supplier of COMPREHENSIVE_SUPPLIERS) {
-        this.tables.suppliers.push(supplier);
+        this.tables.suppliers.push({ ...supplier, organizationId: realOrgId });
       }
       
-      // 3. Add comprehensive products
+      // 3. Add comprehensive products — fix organizationId
       for (const product of ADDITIONAL_PRODUCTS) {
-        this.tables.products.push(product);
+        this.tables.products.push({ ...product, organizationId: realOrgId });
       }
       
       // 4. Add inventory items with realistic stock levels
-      // TODO: Fix COMPREHENSIVE_INVENTORY structure to match InventoryItem interface
-      // for (const inventoryItem of COMPREHENSIVE_INVENTORY) {
-      //   this.tables.inventory_items.push(inventoryItem);
-      // }
+      // Create inventory items for our products
+      if (organization) {
+        for (const product of ADDITIONAL_PRODUCTS) {
+          const inventoryItem = {
+            id: `inv-${product.id.toLowerCase()}`,
+            organizationId: organization.id,
+            productId: product.id,
+            facilityId: 'facility-main-pharmacy',
+            facilityType: 'PHARMACY' as const,
+            quantityOnHand: Math.floor(Math.random() * 200) + 50, // Random stock 50-250
+            quantityReserved: Math.floor(Math.random() * 20),
+            quantityAvailable: 0, // Will be calculated
+            quantityOnOrder: Math.floor(Math.random() * 100),
+            quantityDamaged: Math.floor(Math.random() * 5),
+            quantityExpired: 0,
+            shelfLocation: `A${Math.floor(Math.random() * 5) + 1}-R${Math.floor(Math.random() * 3) + 1}-S${Math.floor(Math.random() * 4) + 1}`,
+            zone: 'General',
+            averageCost: product.costPrice,
+            totalStockValue: 0, // Will be calculated
+            lastPurchasePrice: product.costPrice * (0.9 + Math.random() * 0.2), // ±10% variation
+            lastPurchaseDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(), // Within last 30 days
+            averageDailyUsage: Math.random() * 5 + 1, // 1-6 units per day
+            daysOfStockRemaining: 0, // Will be calculated
+            lastMovementDate: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(), // Within last 7 days
+            lastCountDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+            status: 'IN_STOCK' as const,
+            isActive: true,
+            createdAt: product.createdAt,
+          };
+          
+          // Calculate derived fields
+          inventoryItem.quantityAvailable = inventoryItem.quantityOnHand - inventoryItem.quantityReserved;
+          inventoryItem.totalStockValue = inventoryItem.quantityOnHand * inventoryItem.averageCost;
+          inventoryItem.daysOfStockRemaining = Math.floor(inventoryItem.quantityAvailable / inventoryItem.averageDailyUsage);
+          
+          // Determine status based on stock levels
+          if (inventoryItem.quantityOnHand <= product.minStockLevel) {
+            inventoryItem.status = 'LOW_STOCK';
+          } else if (inventoryItem.quantityOnHand === 0) {
+            inventoryItem.status = 'OUT_OF_STOCK';
+          } else if (inventoryItem.quantityOnHand >= product.maxStockLevel) {
+            inventoryItem.status = 'OVER_STOCK';
+          }
+          
+          this.tables.inventory_items.push(inventoryItem);
+        }
+      }
       
       // 5. Add purchase orders
       // TODO: Fix COMPREHENSIVE_PURCHASE_ORDERS structure to match PurchaseOrder interface
@@ -2049,22 +2411,22 @@ export class DatabaseService {
       
       // 6. Add stock movements (audit trail)
       for (const movement of COMPREHENSIVE_STOCK_MOVEMENTS) {
-        this.tables.stock_movements.push(movement);
+        this.tables.stock_movements.push({ ...movement, organizationId: realOrgId });
       }
       
       // 7. Add realistic encounters
       for (const encounter of COMPREHENSIVE_ENCOUNTERS) {
-        this.tables.encounters.push(encounter);
+        this.tables.encounters.push({ ...encounter, organizationId: realOrgId });
       }
       
       // 8. Add prescriptions with proper relationships
       for (const prescription of COMPREHENSIVE_PRESCRIPTIONS) {
-        this.tables.prescriptions.push(prescription);
+        this.tables.prescriptions.push({ ...prescription, organizationId: realOrgId });
       }
       
       // 9. Add sales data linking to prescriptions
       for (const sale of COMPREHENSIVE_SALES) {
-        this.tables.sales.push(sale);
+        this.tables.sales.push({ ...sale, organizationId: realOrgId });
       }
       
       console.log(`✅ Comprehensive data loaded:`);

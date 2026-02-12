@@ -22,6 +22,7 @@ import {
   InventoryItem, InventoryBatch, StockMovement, InventoryAlert,
   InventoryUtils,
 } from '../../../models/Inventory';
+import { getTextColor, getIconBackgroundColor, getSecondaryTextColor, getTertiaryTextColor } from '../../../utils/colorContrast';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const IS_DESKTOP = SCREEN_W >= 1024;
@@ -545,14 +546,19 @@ function KPICard({ icon, label, value, accent, hint, hintColor }: {
   icon: keyof typeof Ionicons.glyphMap; label: string; value: string; accent: string;
   hint?: string; hintColor?: string;
 }) {
+  const textColor = getTextColor(accent);
+  const iconBgColor = getIconBackgroundColor(textColor);
+  const secondaryTextColor = getSecondaryTextColor(textColor);
+  const tertiaryTextColor = getTertiaryTextColor(textColor);
+  
   return (
-    <View style={styles.kpiCard}>
-      <View style={[styles.kpiIcon, { backgroundColor: accent + '14' }]}>
-        <Ionicons name={icon} size={20} color={accent} />
+    <View style={[styles.kpiCard, { backgroundColor: accent }]}>
+      <View style={[styles.kpiIcon, { backgroundColor: iconBgColor }]}>
+        <Ionicons name={icon} size={22} color={textColor} />
       </View>
-      <Text style={styles.kpiVal}>{value}</Text>
-      <Text style={styles.kpiLbl}>{label}</Text>
-      {hint && <Text style={[styles.kpiHint, { color: hintColor || colors.textTertiary }]}>{hint}</Text>}
+      <Text style={[styles.kpiVal, { color: textColor }]}>{value}</Text>
+      <Text style={[styles.kpiLbl, { color: secondaryTextColor }]}>{label}</Text>
+      {hint && <Text style={[styles.kpiHint, { color: hintColor || tertiaryTextColor }]}>{hint}</Text>}
     </View>
   );
 }
@@ -1548,11 +1554,11 @@ const styles = StyleSheet.create({
   btnOutlineText: { fontSize: 13, fontWeight: '600', color: colors.primary },
 
   // KPIs
-  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-  kpiCard: { flex: IS_DESKTOP ? 1 : undefined, width: IS_DESKTOP ? undefined : '31%' as any, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 14, alignItems: 'center', ...shadows.sm, minWidth: IS_DESKTOP ? 120 : undefined, borderWidth: 1, borderColor: colors.outline },
-  kpiIcon: { width: 40, height: 40, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  kpiVal: { fontSize: 20, fontWeight: '800', color: colors.text },
-  kpiLbl: { fontSize: 10, color: colors.textSecondary, fontWeight: '500', marginTop: 1, textAlign: 'center' },
+  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
+  kpiCard: { flex: IS_DESKTOP ? 1 : undefined, width: IS_DESKTOP ? undefined : '31%' as any, borderRadius: borderRadius.xl, padding: 18, alignItems: 'center', ...shadows.md, minWidth: IS_DESKTOP ? 130 : undefined },
+  kpiIcon: { width: 36, height: 36, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  kpiVal: { fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  kpiLbl: { fontSize: 12, fontWeight: '600', marginTop: 4, textAlign: 'center' },
   kpiHint: { fontSize: 9, fontWeight: '600', marginTop: 3 },
 
   // ABC

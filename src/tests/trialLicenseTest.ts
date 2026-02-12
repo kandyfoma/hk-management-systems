@@ -79,10 +79,12 @@ async function testTrialLicenseWithPhoneAuth() {
     if (loginResult.user) {
       const hasPharmacyAccess = await authService.hasModuleAccess(loginResult.user.id, 'PHARMACY');
       const hasHospitalAccess = await authService.hasModuleAccess(loginResult.user.id, 'HOSPITAL');
+      const hasOccHealthAccess = await authService.hasModuleAccess(loginResult.user.id, 'OCCUPATIONAL_HEALTH');
       const userModules = await authService.getUserModules(loginResult.user.id);
       
       console.log(`   Pharmacy Access: ${hasPharmacyAccess ? '✅' : '❌'}`);
       console.log(`   Hospital Access: ${hasHospitalAccess ? '✅' : '❌'}`);
+      console.log(`   Occupational Health Access: ${hasOccHealthAccess ? '✅' : '❌'}`);
       console.log(`   Available Modules: ${userModules.join(', ')}`);
     }
     

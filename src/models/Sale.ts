@@ -78,7 +78,6 @@ export interface Sale {
   receiptPrinted: boolean;       // Whether receipt was printed
   printCount: number;            // How many times receipt was printed
 }
-}
 
 export type SaleType =
   | 'COUNTER'           // Walk-in counter sale

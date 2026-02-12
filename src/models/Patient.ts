@@ -139,6 +139,7 @@ export class PatientUtils {
       chronicConditions: data.chronicConditions || [],
       currentMedications: data.currentMedications || [],
       status: data.status || 'active',
+      accessCount: data.accessCount || 0,
     };
   }
 

@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DatabaseService from '../../../services/DatabaseService';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import { getTextColor } from '../../../utils/colorContrast';
 import {
   SECTOR_PROFILES, OccHealthUtils,
   type IndustrySector, type FitnessStatus, type SectorRiskLevel,
@@ -43,6 +44,7 @@ const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
     registrationDate: '2015-06-01',
     status: 'active',
     createdAt: '2015-06-01T00:00:00.000Z',
+    accessCount: 0,
     // OH fields
     employeeId: 'EMP-001',
     company: 'Kamoto Copper Company',
@@ -82,6 +84,7 @@ const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
     registrationDate: '2019-01-15',
     status: 'active',
     createdAt: '2019-01-15T00:00:00.000Z',
+    accessCount: 0,
     employeeId: 'EMP-002',
     company: 'Rawbank S.A.',
     sector: 'banking_finance',
@@ -120,6 +123,7 @@ const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
     registrationDate: '2017-03-10',
     status: 'active',
     createdAt: '2017-03-10T00:00:00.000Z',
+    accessCount: 0,
     employeeId: 'EMP-003',
     company: 'Brasserie Simba',
     sector: 'manufacturing',
@@ -158,6 +162,7 @@ const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
     registrationDate: '2016-08-20',
     status: 'active',
     createdAt: '2016-08-20T00:00:00.000Z',
+    accessCount: 0,
     employeeId: 'EMP-004',
     company: 'Hôpital Sendwe',
     sector: 'healthcare',
@@ -196,6 +201,7 @@ const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
     registrationDate: '2021-02-01',
     status: 'active',
     createdAt: '2021-02-01T00:00:00.000Z',
+    accessCount: 0,
     employeeId: 'EMP-005',
     company: 'Vodacom Congo',
     sector: 'telecom_it',
@@ -234,6 +240,7 @@ const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
     registrationDate: '2010-04-15',
     status: 'active',
     createdAt: '2010-04-15T00:00:00.000Z',
+    accessCount: 0,
     employeeId: 'EMP-006',
     company: 'Tenke Fungurume Mining',
     sector: 'mining',
@@ -525,6 +532,7 @@ function AddPatientModal({
       registrationDate: now,
       status: 'active',
       createdAt: now,
+      accessCount: 0,
       // OH fields
       employeeId: employeeId.trim(),
       company: company.trim() || 'Non spécifié',
@@ -766,15 +774,18 @@ export function OHPatientsScreen() {
           { label: 'Inaptes', value: stats.unfit, icon: 'close-circle', color: '#EF4444' },
           { label: 'En attente', value: stats.pending, icon: 'time', color: '#6366F1' },
           { label: 'Exam. en retard', value: stats.overdue, icon: 'alert-circle', color: '#DC2626' },
-        ].map((s, i) => (
-          <View key={i} style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: s.color + '14' }]}>
-              <Ionicons name={s.icon as any} size={20} color={s.color} />
+        ].map((s, i) => {
+          const textColor = getTextColor(s.color);
+          return (
+            <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                <Ionicons name={s.icon as any} size={20} color={textColor} />
+              </View>
+              <Text style={[styles.statValue, { color: textColor }]}>{s.value}</Text>
+              <Text style={[styles.statLabel, { color: textColor, opacity: 0.9 }]}>{s.label}</Text>
             </View>
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       {/* Search & Filters */}
@@ -821,8 +832,11 @@ export function OHPatientsScreen() {
       {/* Patients List */}
       <Text style={styles.resultsCount}>{filteredPatients.length} patient(s) trouvé(s)</Text>
       <View style={styles.patientsList}>
-        {filteredPatients.map(p => (
-          <PatientCard key={p.id} patient={p} onPress={() => { setSelectedPatient(p); setShowDetail(true); }} />
+        {filteredPatients.map((p, index) => (
+          <React.Fragment key={p.id}>
+            <PatientCard patient={p} onPress={() => { setSelectedPatient(p); setShowDetail(true); }} />
+            {index < filteredPatients.length - 1 && <View style={styles.patientSeparator} />}
+          </React.Fragment>
         ))}
         {filteredPatients.length === 0 && (
           <View style={styles.emptyState}>
@@ -856,10 +870,17 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  statCard: { flex: 1, minWidth: isDesktop ? 140 : 100, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 16, alignItems: 'center', ...shadows.sm },
+  statCard: { 
+    flex: 1, 
+    minWidth: isDesktop ? 140 : 100, 
+    borderRadius: borderRadius.xl, 
+    padding: 16, 
+    alignItems: 'center', 
+    ...shadows.lg 
+  },
   statIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  statValue: { fontSize: 22, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
+  statValue: { fontSize: 22, fontWeight: '700' },
+  statLabel: { fontSize: 11, marginTop: 2, textAlign: 'center' },
 
   filterBar: { gap: 10, marginBottom: 16 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.lg, paddingHorizontal: 14, paddingVertical: 10, gap: 8, borderWidth: 1, borderColor: colors.outline, ...shadows.xs },
@@ -872,7 +893,13 @@ const styles = StyleSheet.create({
 
   resultsCount: { fontSize: 13, color: colors.textSecondary, marginBottom: 12 },
 
-  patientsList: { gap: 12 },
+  patientsList: { },
+  patientSeparator: { 
+    height: 1, 
+    backgroundColor: colors.outline, 
+    marginVertical: 12, 
+    opacity: 0.5,
+  },
   patientCard: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 16, ...shadows.sm },
   patientCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   patientAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },

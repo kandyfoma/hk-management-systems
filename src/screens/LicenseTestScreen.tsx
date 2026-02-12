@@ -26,7 +26,7 @@ export const LicenseTestScreen: React.FC = () => {
   const activeModules = useSelector(selectActiveModules);
   const licenses = useSelector(selectLicenses);
   const [testResults, setTestResults] = useState<string[]>([]);
-  const { showToast } = useToast();
+  const toast = useToast();
 
   const addTestResult = (message: string) => {
     setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -35,21 +35,21 @@ export const LicenseTestScreen: React.FC = () => {
   const testDatabaseSetup = async () => {
     try {
       addTestResult('Testing database setup...');
-      showToast('Testing database setup...', 'info');
+      toast.info('Testing database setup...');
       const db = DatabaseService.getInstance();
       await db.insertTestData();
       addTestResult('✅ Database setup completed successfully');
-      showToast('Database setup completed successfully', 'success');
+      toast.success('Database setup completed successfully');
     } catch (error) {
       addTestResult(`❌ Database setup failed: ${error}`);
-      showToast('Database setup failed', 'error');
+      toast.error('Database setup failed');
     }
   };
 
   const testLicenseValidation = async () => {
     try {
       addTestResult('Testing license validation...');
-      showToast('Testing license validation...', 'info');
+      toast.info('Testing license validation...');
       const licenseService = LicenseService.getInstance();
       
       // Test with trial key
@@ -58,10 +58,10 @@ export const LicenseTestScreen: React.FC = () => {
         addTestResult('✅ Trial license validation successful');
         addTestResult(`Organization: ${result.organization?.name}`);
         addTestResult(`License Type: ${result.license?.moduleType} - ${result.license?.licenseTier}`);
-        showToast('Trial license validation successful', 'success');
+        toast.success('Trial license validation successful');
       } else {
         addTestResult(`❌ License validation failed: ${result.errors.join(', ')}`);
-        showToast('License validation failed', 'error');
+        toast.error('License validation failed');
       }
     } catch (error) {
       addTestResult(`❌ License validation error: ${error}`);
@@ -137,10 +137,12 @@ export const LicenseTestScreen: React.FC = () => {
       
       const hasPharmacyAccess = await authService.hasModuleAccess(user.id, 'PHARMACY');
       const hasHospitalAccess = await authService.hasModuleAccess(user.id, 'HOSPITAL');
+      const hasOccHealthAccess = await authService.hasModuleAccess(user.id, 'OCCUPATIONAL_HEALTH');
       const userModules = await authService.getUserModules(user.id);
 
       addTestResult(`Pharmacy Access: ${hasPharmacyAccess ? '✅' : '❌'}`);
       addTestResult(`Hospital Access: ${hasHospitalAccess ? '✅' : '❌'}`);
+      addTestResult(`Occupational Health Access: ${hasOccHealthAccess ? '✅' : '❌'}`);
       addTestResult(`Available Modules: ${userModules.join(', ')}`);
     } catch (error) {
       addTestResult(`❌ Module access test error: ${error}`);
@@ -266,6 +268,14 @@ export const LicenseTestScreen: React.FC = () => {
         <View style={styles.licenseCard}>
           <Text style={styles.licenseKey}>HOSPITAL-HP2024XY-B6C4</Text>
           <Text style={styles.licenseDesc}>Hospital module only</Text>
+        </View>
+        <View style={styles.licenseCard}>
+          <Text style={styles.licenseKey}>OCCHEALTH-OH2024XY-P8Q3</Text>
+          <Text style={styles.licenseDesc}>Occupational Health module only</Text>
+        </View>
+        <View style={styles.licenseCard}>
+          <Text style={styles.licenseKey}>COMBINED-FULL2024-X7Y9</Text>
+          <Text style={styles.licenseDesc}>All modules (Pharmacy + Hospital + Occ Health)</Text>
         </View>
       </View>
     </ScrollView>

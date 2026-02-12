@@ -152,18 +152,16 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
       />
       <View style={styles.metricsGrid}>
         {metrics.map((m, i) => (
-          <View key={i} style={styles.metricCard}>
-            <View style={styles.metricTop}>
-              <View style={[styles.metricIcon, { backgroundColor: m.color + '14' }]}>
-                <Ionicons name={m.icon} size={22} color={m.color} />
-              </View>
-              <View style={[styles.changeBadge, { backgroundColor: m.changeType === 'up' ? colors.successLight : colors.errorLight }]}>
-                <Ionicons name={m.changeType === 'up' ? 'arrow-up' : 'arrow-down'} size={12} color={m.changeType === 'up' ? colors.successDark : colors.errorDark} />
-                <Text style={{ fontSize: 11, fontWeight: '600', color: m.changeType === 'up' ? colors.successDark : colors.errorDark }}>{m.change}</Text>
-              </View>
+          <View key={i} style={[styles.metricCard, { backgroundColor: m.color }]}>
+            <View style={styles.metricIcon}>
+              <Ionicons name={m.icon} size={22} color="#FFFFFF" />
             </View>
             <Text style={styles.metricValue}>{m.value}</Text>
             <Text style={styles.metricLabel}>{m.title}</Text>
+            <View style={styles.changeBadge}>
+              <Ionicons name={m.changeType === 'up' ? 'arrow-up' : 'arrow-down'} size={12} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.changeText}>{m.change}</Text>
+            </View>
           </View>
         ))}
       </View>
@@ -256,12 +254,13 @@ const styles = StyleSheet.create({
   addBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
 
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 24 },
-  metricCard: { flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '47%' as any, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 18, minWidth: isDesktop ? 200 : undefined, ...shadows.sm },
+  metricCard: { flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '47%' as any, borderRadius: borderRadius.xl, padding: 18, alignItems: 'center', minWidth: isDesktop ? 200 : undefined, ...shadows.md },
   metricTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  metricIcon: { width: 44, height: 44, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center' },
-  changeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.full, gap: 2 },
-  metricValue: { fontSize: 22, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  metricLabel: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+  metricIcon: { width: 36, height: 36, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 10 },
+  changeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: borderRadius.full, gap: 2, backgroundColor: 'rgba(255,255,255,0.15)', marginTop: 8 },
+  changeText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
+  metricValue: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginBottom: 4, textAlign: 'center' },
+  metricLabel: { fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: '600', textAlign: 'center' },
 
   row: { flexDirection: isDesktop ? 'row' : 'column', gap: 16 },
   card: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 20, borderWidth: 1, borderColor: colors.outline, ...shadows.sm },

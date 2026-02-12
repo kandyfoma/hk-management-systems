@@ -233,6 +233,14 @@ export function HospitalNavigator() {
                 onBack={handleBackToPatientList}
                 onNewEncounter={() => {/* TODO: wire encounter creation */}}
                 onEditPatient={() => {/* TODO: wire patient editing */}}
+                onGoToTriage={(patient, encounterId) => {
+                  console.log(`➡️ Navigate to triage for encounter ${encounterId}`);
+                  // TODO: navigate to triage screen with encounterId
+                }}
+                onGoToConsultation={(patient, encounterId) => {
+                  console.log(`➡️ Navigate to consultation for encounter ${encounterId}`);
+                  // TODO: navigate to consultation screen with encounterId
+                }}
               />
             );
           }

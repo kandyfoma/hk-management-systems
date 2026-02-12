@@ -117,7 +117,7 @@ export class AuthService {
       const allLicenses = await this.licenseService.getLicensesForOrganization(organization.id);
       console.log('📄 All licenses found:', allLicenses.length);
       allLicenses.forEach((lic, i) => {
-        console.log(`  License ${i+1}: key=${lic.licenseKey}, orgId=${lic.organizationId}, active=${lic.isActive}, expired=${lic.expiryDate < new Date().toISOString()}`);
+        console.log(`  License ${i+1}: key=${lic.licenseKey}, orgId=${lic.organizationId}, active=${lic.isActive}, expired=${lic.expiryDate ? lic.expiryDate < new Date().toISOString() : 'no expiry'}`);
       });
       
       const licenses = await this.licenseService.getActiveLicenses(organization.id);
@@ -307,6 +307,7 @@ export class AuthService {
     switch (moduleType) {
       case 'PHARMACY': return 'pharmacist';
       case 'HOSPITAL': return 'doctor';
+      case 'OCCUPATIONAL_HEALTH': return 'occ_health_nurse';
       case 'TRIAL': return 'admin';
       default: return 'admin';
     }

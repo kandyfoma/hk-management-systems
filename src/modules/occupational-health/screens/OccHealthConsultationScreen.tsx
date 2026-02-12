@@ -292,6 +292,7 @@ const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
     chronicConditions: [], 
     currentMedications: [],
     createdAt: '2015-06-01',
+    accessCount: 0,
     // Occupational Health extensions
     employeeId: 'EMP-0421', 
     company: 'Gécamines SA', 
@@ -324,6 +325,7 @@ const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
     chronicConditions: [], 
     currentMedications: [],
     createdAt: '2019-01-15',
+    accessCount: 0,
     // Occupational Health extensions
     employeeId: 'EMP-1087', 
     company: 'Rawbank', 
@@ -356,6 +358,7 @@ const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
     chronicConditions: ['Hypertension légère'], 
     currentMedications: ['Amlodipine 5mg'],
     createdAt: '2020-03-10',
+    accessCount: 0,
     // Occupational Health extensions
     employeeId: 'EMP-0562', 
     company: 'Bâtiment Congo SARL', 
@@ -388,6 +391,7 @@ const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
     chronicConditions: [], 
     currentMedications: [],
     createdAt: '2021-09-01',
+    accessCount: 0,
     // Occupational Health extensions
     employeeId: 'EMP-2301', 
     company: 'Hôpital Général de Référence', 
@@ -423,6 +427,7 @@ const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
     chronicConditions: [], 
     currentMedications: [],
     createdAt: '2022-02-01',
+    accessCount: 0,
     // Occupational Health extensions
     employeeId: 'EMP-3412', 
     company: 'Vodacom Congo', 

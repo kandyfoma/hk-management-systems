@@ -434,9 +434,9 @@ export function DiseasesScreen() {
           { label: 'Résolues', value: stats.resolved, icon: 'checkmark-circle', color: '#22C55E' },
           { label: 'Indemn. en attente', value: stats.pendingComp, icon: 'cash', color: '#6366F1' },
         ].map((s, i) => (
-          <View key={i} style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: s.color + '14' }]}>
-              <Ionicons name={s.icon as any} size={18} color={s.color} />
+          <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
+            <View style={styles.statIcon}>
+              <Ionicons name={s.icon as any} size={18} color="#FFFFFF" />
             </View>
             <Text style={styles.statValue}>{s.value}</Text>
             <Text style={styles.statLabel}>{s.label}</Text>
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  statCard: { flex: 1, minWidth: isDesktop ? 130 : 100, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 14, alignItems: 'center', ...shadows.sm },
+  statCard: { flex: 1, minWidth: isDesktop ? 130 : 100, borderRadius: borderRadius.xl, padding: 16, alignItems: 'center', ...shadows.md },
   statIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   statValue: { fontSize: 20, fontWeight: '700', color: colors.text },
   statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },

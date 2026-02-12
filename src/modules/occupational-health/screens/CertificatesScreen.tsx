@@ -378,23 +378,23 @@ export function CertificatesScreen({
 
       {/* Stats Cards */}
       <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
+        <View style={[styles.statCard, { backgroundColor: colors.primary }]}>
+          <Ionicons name="shield-checkmark" size={20} color="#FFFFFF" />
           <Text style={styles.statNumber}>{stats.total}</Text>
           <Text style={styles.statLabel}>Total</Text>
         </View>
-        <View style={styles.statCard}>
-          <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+        <View style={[styles.statCard, { backgroundColor: colors.success }]}>
+          <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
           <Text style={styles.statNumber}>{stats.valid}</Text>
           <Text style={styles.statLabel}>Valides</Text>
         </View>
-        <View style={styles.statCard}>
-          <Ionicons name="warning" size={20} color={colors.warning} />
+        <View style={[styles.statCard, { backgroundColor: colors.warning }]}>
+          <Ionicons name="warning" size={20} color="#FFFFFF" />
           <Text style={styles.statNumber}>{stats.expiringSoon}</Text>
           <Text style={styles.statLabel}>Expire Bientôt</Text>
         </View>
-        <View style={styles.statCard}>
-          <Ionicons name="close-circle" size={20} color={colors.error} />
+        <View style={[styles.statCard, { backgroundColor: colors.error }]}>
+          <Ionicons name="close-circle" size={20} color="#FFFFFF" />
           <Text style={styles.statNumber}>{stats.expired}</Text>
           <Text style={styles.statLabel}>Expirés</Text>
         </View>
@@ -579,11 +579,10 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1, alignItems: 'center', padding: 16,
-    backgroundColor: colors.surface, borderRadius: borderRadius.lg,
-    borderWidth: 1, borderColor: colors.outline, ...shadows.sm,
+    borderRadius: borderRadius.lg, ...shadows.md,
   },
-  statNumber: { fontSize: 20, fontWeight: '800', color: colors.text, marginTop: 4 },
-  statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
+  statNumber: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', marginTop: 4 },
+  statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.9)', marginTop: 2, textAlign: 'center', fontWeight: '600' },
 
   // Search
   searchSection: { 

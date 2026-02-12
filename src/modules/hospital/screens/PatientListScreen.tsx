@@ -8,6 +8,7 @@ import { colors, shadows } from '../../../theme/theme';
 import DatabaseService from '../../../services/DatabaseService';
 import { Patient, PatientUtils } from '../../../models/Patient';
 import { Encounter, EncounterUtils } from '../../../models/Encounter';
+import { getTextColor, getIconBackgroundColor, getSecondaryTextColor } from '../../../utils/colorContrast';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -238,12 +239,14 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
           </View>
         ) : (
           <View style={s.grid}>
-            {sorted.map(patient => (
-              <PatientCard
-                key={patient.id}
-                patient={patient}
-                onPress={() => onSelectPatient?.(patient)}
-              />
+            {sorted.map((patient, index) => (
+              <React.Fragment key={patient.id}>
+                <PatientCard
+                  patient={patient}
+                  onPress={() => onSelectPatient?.(patient)}
+                />
+                {index < sorted.length - 1 && <View style={s.separator} />}
+              </React.Fragment>
             ))}
           </View>
         )}
@@ -257,13 +260,17 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
 // ═══════════════════════════════════════════════════════════════
 
 function KPICard({ icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
+  const textColor = getTextColor(color);
+  const iconBgColor = getIconBackgroundColor(textColor);
+  const secondaryTextColor = getSecondaryTextColor(textColor);
+  
   return (
-    <View style={s.kpiCard}>
-      <View style={[s.kpiIcon, { backgroundColor: color + '14' }]}>
-        <Ionicons name={icon} size={22} color={color} />
+    <View style={[s.kpiCard, { backgroundColor: color }]}>
+      <View style={[s.kpiIcon, { backgroundColor: iconBgColor }]}>
+        <Ionicons name={icon} size={22} color={textColor} />
       </View>
-      <Text style={s.kpiValue}>{value}</Text>
-      <Text style={s.kpiLabel}>{label}</Text>
+      <Text style={[s.kpiValue, { color: textColor }]}>{value}</Text>
+      <Text style={[s.kpiLabel, { color: secondaryTextColor }]}>{label}</Text>
     </View>
   );
 }
@@ -391,12 +398,20 @@ const s = StyleSheet.create({
     flexDirection: 'row', gap: 12, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8,
   },
   kpiCard: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: colors.outline,
+    flex: 1, borderRadius: 12, padding: 16,
+    alignItems: 'center', ...shadows.md,
   },
   kpiIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  kpiValue: { fontSize: 20, fontWeight: '700', color: colors.text },
-  kpiLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  kpiValue: { fontSize: 20, fontWeight: '800' },
+  kpiLabel: { fontSize: 12, marginTop: 2, fontWeight: '600' },
+
+  // Separator
+  separator: {
+    height: 1,
+    backgroundColor: colors.outlineVariant,
+    marginVertical: 8,
+    marginHorizontal: isDesktop ? 0 : 4,
+  },
 
   // Filter / Search
   filterRow: { paddingHorizontal: 24, paddingVertical: 10 },

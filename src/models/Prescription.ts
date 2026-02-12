@@ -84,8 +84,6 @@ export interface PrescriptionItem {
   // Audit fields
   createdBy?: string;             // User ID who created the item
   updatedBy?: string;             // User ID who last updated
-  dispensedBy?: string;           // User ID of pharmacist who dispensed
-}
 }
 
 export type PrescriptionItemStatus = 

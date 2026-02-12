@@ -1,5 +1,5 @@
 import DatabaseService from './DatabaseService';
-import { License, LicenseCreate, LicenseUpdate, LicenseUtils, ModuleType, LicenseTier, PHARMACY_FEATURES, HOSPITAL_FEATURES } from '../models/License';
+import { License, LicenseCreate, LicenseUpdate, LicenseUtils, ModuleType, LicenseTier, PHARMACY_FEATURES, HOSPITAL_FEATURES, OCC_HEALTH_FEATURES } from '../models/License';
 import { Organization } from '../models/Organization';
 
 export class LicenseService {
@@ -62,7 +62,7 @@ export class LicenseService {
       return {
         isValid,
         license: isValid ? license : undefined,
-        organization: isValid ? organization : undefined,
+        organization: isValid ? (organization || undefined) : undefined,
         errors
       };
     } catch (error) {
@@ -211,7 +211,7 @@ export class LicenseService {
         access.moduleType === moduleType && access.isActive
       ).length;
 
-      const maxAllowed = moduleLicense.maxUsers;
+      const maxAllowed = moduleLicense.maxUsers || null;
       const canAdd = maxAllowed === null || currentCount < maxAllowed;
       const availableSlots = maxAllowed === null ? null : Math.max(0, maxAllowed - currentCount);
 
@@ -266,7 +266,8 @@ export class LicenseService {
       maxFacilities: 1,
       features: [
         ...PHARMACY_FEATURES.PROFESSIONAL,
-        ...HOSPITAL_FEATURES.PROFESSIONAL
+        ...HOSPITAL_FEATURES.PROFESSIONAL,
+        ...OCC_HEALTH_FEATURES.PROFESSIONAL
       ],
       billingCycle: 'TRIAL',
       autoRenew: false
@@ -347,7 +348,7 @@ export class LicenseService {
       const features = [...new Set(activeLicenses.flatMap(l => l.features))];
       
       const totalUserCapacity = activeLicenses.reduce((sum, l) => {
-        if (l.maxUsers === null) return null; // Unlimited
+        if (l.maxUsers === null || l.maxUsers === undefined) return null; // Unlimited
         return (sum || 0) + l.maxUsers;
       }, 0 as number | null);
 

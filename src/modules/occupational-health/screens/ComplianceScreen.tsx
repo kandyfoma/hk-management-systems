@@ -286,9 +286,9 @@ export function ComplianceScreen() {
             { label: 'Partiels', value: stats.partial, icon: 'alert-circle', color: '#F59E0B' },
             { label: 'Non conformes', value: stats.nonCompliant, icon: 'close-circle', color: '#EF4444' },
           ].map((s, i) => (
-            <View key={i} style={styles.miniStatCard}>
-              <View style={[styles.miniStatIcon, { backgroundColor: s.color + '14' }]}>
-                <Ionicons name={s.icon as any} size={14} color={s.color} />
+            <View key={i} style={[styles.miniStatCard, { backgroundColor: s.color }]}>
+              <View style={styles.miniStatIcon}>
+                <Ionicons name={s.icon as any} size={14} color="#FFFFFF" />
               </View>
               <Text style={styles.miniStatValue}>{s.value}</Text>
               <Text style={styles.miniStatLabel}>{s.label}</Text>
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   scoreValue: { fontSize: 28, fontWeight: '700' },
   scoreLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   statsColumn: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  miniStatCard: { flex: 1, minWidth: isDesktop ? 120 : 90, backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: 12, alignItems: 'center', ...shadows.xs },
+  miniStatCard: { flex: 1, minWidth: isDesktop ? 120 : 90, borderRadius: borderRadius.lg, padding: 14, alignItems: 'center', ...shadows.md },
   miniStatIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   miniStatValue: { fontSize: 18, fontWeight: '700', color: colors.text },
   miniStatLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },

@@ -28,7 +28,7 @@ const SECTOR_ANALYTICS: { sector: IndustrySector; workers: number; incidents: nu
   { sector: 'construction', workers: 80, incidents: 12, ltifr: 4.2, compliance: 75, avgRiskScore: 13.8, fitness: 82 },
   { sector: 'healthcare', workers: 45, incidents: 3, ltifr: 1.5, compliance: 95, avgRiskScore: 8.5, fitness: 94 },
   { sector: 'banking_finance', workers: 35, incidents: 1, ltifr: 0.5, compliance: 92, avgRiskScore: 5.2, fitness: 96 },
-  { sector: 'telecommunications', workers: 25, incidents: 2, ltifr: 1.2, compliance: 90, avgRiskScore: 6.8, fitness: 93 },
+  { sector: 'telecom_it', workers: 25, incidents: 2, ltifr: 1.2, compliance: 90, avgRiskScore: 6.8, fitness: 93 },
 ];
 
 const RISK_DISTRIBUTION = [
@@ -172,9 +172,9 @@ export function AnalyticsScreen() {
           { label: 'Aptitude', value: `${globalStats.avgFitness}%`, icon: 'fitness', color: '#0891B2' },
           { label: 'Expositions', value: globalStats.totalExposures, icon: 'alert-circle', color: '#EF4444' },
         ].map((s, i) => (
-          <View key={i} style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: s.color + '14' }]}>
-              <Ionicons name={s.icon as any} size={18} color={s.color} />
+          <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
+            <View style={styles.statIcon}>
+              <Ionicons name={s.icon as any} size={18} color="#FFFFFF" />
             </View>
             <Text style={styles.statValue}>{s.value}</Text>
             <Text style={styles.statLabel}>{s.label}</Text>
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   viewTabTextActive: { color: '#FFF', fontWeight: '600' },
 
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
-  statCard: { flex: 1, minWidth: isDesktop ? 120 : 90, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 12, alignItems: 'center', ...shadows.xs },
+  statCard: { flex: 1, minWidth: isDesktop ? 120 : 90, borderRadius: borderRadius.xl, padding: 14, alignItems: 'center', ...shadows.md },
   statIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   statValue: { fontSize: 18, fontWeight: '700', color: colors.text },
   statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
