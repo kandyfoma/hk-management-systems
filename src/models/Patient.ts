@@ -42,17 +42,27 @@ export interface Patient {
   status: 'active' | 'inactive' | 'deceased';
   notes?: string;
   
-  // Metadata
+  // Audit fields
+  weight?: number;
+  height?: number;
+  
+  // Metadata & Audit
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
+  createdBy?: string; // User ID who created this patient
+  updatedBy?: string; // User ID who last updated this patient
+  lastAccessedBy?: string; // User ID who last accessed this patient
+  lastAccessedAt?: string; // ISO string - last access time
+  accessCount: number; // How many times patient record was accessed
   metadata?: Record<string, any>;
 }
 
-export interface PatientCreate extends Omit<Patient, 'id' | 'patientNumber' | 'registrationDate' | 'createdAt'> {
+export interface PatientCreate extends Omit<Patient, 'id' | 'patientNumber' | 'registrationDate' | 'createdAt' | 'accessCount'> {
   id?: string;
   patientNumber?: string;
   registrationDate?: string;
   createdAt?: string;
+  accessCount?: number;
 }
 
 export interface PatientUpdate extends Partial<Omit<Patient, 'id' | 'patientNumber' | 'registrationDate' | 'createdAt'>> {

@@ -35,13 +35,14 @@ const IS_DESKTOP = SCREEN_W >= 1024;
 // TYPES
 // ═══════════════════════════════════════════════════════════════
 
-interface EnrichedPrescription extends Prescription {
+interface EnrichedPrescription extends Omit<Prescription, 'totalItems' | 'completedItems' | 'progress'> {
   patientName?: string;
   doctorName?: string;
   facilityName?: string;
   progress?: number;
   totalItems?: number;
   completedItems?: number;
+  priority?: 'high' | 'medium' | 'low';
 }
 
 interface PrescriptionStats {
@@ -144,19 +145,19 @@ export function EnhancedPrescriptionsScreen() {
 
     const stats: PrescriptionStats = {
       total: prescriptions.length,
-      pending: prescriptions.filter(p => p.status === 'PENDING').length,
-      partial: prescriptions.filter(p => p.status === 'PARTIAL').length,
-      completed: prescriptions.filter(p => p.status === 'COMPLETED').length,
-      expired: prescriptions.filter(p => p.status === 'EXPIRED').length,
+      pending: prescriptions.filter(p => p.status === 'pending').length,
+      partial: prescriptions.filter(p => p.status === 'partially_dispensed').length,
+      completed: prescriptions.filter(p => p.status === 'fully_dispensed').length,
+      expired: prescriptions.filter(p => p.status === 'expired').length,
       todayReceived: prescriptions.filter(p => {
         const prescDate = new Date(p.createdAt);
         prescDate.setHours(0, 0, 0, 0);
         return prescDate.getTime() === today.getTime();
       }).length,
       todayProcessed: prescriptions.filter(p => {
-        const updatedDate = new Date(p.updatedAt);
+        const updatedDate = new Date(p.updatedAt || p.createdAt);
         updatedDate.setHours(0, 0, 0, 0);
-        return updatedDate.getTime() === today.getTime() && p.status === 'COMPLETED';
+        return updatedDate.getTime() === today.getTime() && p.status === 'fully_dispensed';
       }).length,
       averageProcessingTime: 45, // Mock data - in minutes
     };
@@ -179,7 +180,7 @@ export function EnhancedPrescriptionsScreen() {
           prescription.doctorName,
           prescription.facilityName,
           prescription.id,
-          ...prescription.items.map(item => item.productName),
+          ...prescription.items.map(item => item.medicationName),
         ].join(' ').toLowerCase();
         
         if (!searchableText.includes(query)) return false;
@@ -194,7 +195,7 @@ export function EnhancedPrescriptionsScreen() {
           prescDate.setHours(0, 0, 0, 0);
           return prescDate.getTime() === today.getTime();
         } else {
-          return prescription.status === activeFilter;
+          return prescription.status === activeFilter || (activeFilter === 'PENDING' && prescription.status === 'pending') || (activeFilter === 'COMPLETED' && prescription.status === 'fully_dispensed') || (activeFilter === 'PARTIAL' && prescription.status === 'partially_dispensed') || (activeFilter === 'EXPIRED' && prescription.status === 'expired');
         }
       }
 
@@ -273,7 +274,7 @@ export function EnhancedPrescriptionsScreen() {
   };
 
   // ─── Utility Functions ───────────────────────────────────────
-  const getStatusColor = (status: PrescriptionStatus) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING': return colors.warning;
       case 'PARTIAL': return colors.info;
@@ -283,7 +284,7 @@ export function EnhancedPrescriptionsScreen() {
     }
   };
 
-  const getStatusLabel = (status: PrescriptionStatus) => {
+  const getStatusLabel = (status: string) => {
     switch (status) {
       case 'PENDING': return 'En attente';
       case 'PARTIAL': return 'Partielle';
@@ -622,7 +623,7 @@ export function EnhancedPrescriptionsScreen() {
               {selectedPrescription.items.map((item, index) => (
                 <View key={index} style={styles.medicationItem}>
                   <View style={styles.medicationInfo}>
-                    <Text style={styles.medicationName}>{item.productName}</Text>
+                    <Text style={styles.medicationName}>{item.medicationName}</Text>
                     <Text style={styles.medicationDetails}>
                       {item.dosage} • {item.frequency} • {item.duration}
                     </Text>
@@ -635,8 +636,8 @@ export function EnhancedPrescriptionsScreen() {
                   </View>
                   
                   <View style={styles.medicationStatus}>
-                    <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status as PrescriptionStatus) }]} />
-                    <Text style={styles.medicationStatusText}>{getStatusLabel(item.status as PrescriptionStatus)}</Text>
+                    <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />
+                    <Text style={styles.medicationStatusText}>{getStatusLabel(item.status)}</Text>
                   </View>
                 </View>
               ))}
@@ -652,7 +653,7 @@ export function EnhancedPrescriptionsScreen() {
             <Text style={styles.modalButtonText}>Fermer</Text>
           </TouchableOpacity>
           
-          {selectedPrescription?.status === 'PENDING' && (
+          {selectedPrescription?.status === 'pending' && (
             <TouchableOpacity
               style={[styles.modalButton, styles.primaryButton]}
               onPress={() => {
@@ -742,7 +743,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: borderRadius.sm,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -785,7 +786,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
@@ -806,7 +807,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     marginRight: spacing.sm,
     gap: spacing.xs,
   },
@@ -849,7 +850,7 @@ const styles = StyleSheet.create({
   },
   viewModeButtons: {
     flexDirection: 'row',
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     borderRadius: borderRadius.sm,
     padding: 2,
   },
@@ -870,7 +871,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.sm,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     gap: spacing.xs,
   },
   sortButtonText: {
@@ -971,7 +972,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.sm,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     gap: spacing.xs,
   },
   actionButtonText: {
@@ -1031,7 +1032,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: borderRadius.sm,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1131,7 +1132,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.onBackground,
     alignItems: 'center',
     justifyContent: 'center',
   },

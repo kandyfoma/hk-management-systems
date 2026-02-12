@@ -32,6 +32,12 @@ export interface Prescription {
   createdAt: string;              // ISO timestamp
   updatedAt?: string;             // ISO timestamp
   metadata?: Record<string, any>; // Extensible data
+  // Audit fields
+  createdBy?: string;             // User ID who created the prescription
+  updatedBy?: string;             // User ID who last updated
+  lastAccessedBy?: string;        // User ID who last accessed
+  lastAccessedAt?: string;        // When prescription was last accessed
+  accessCount?: number;           // Number of times accessed
 }
 
 export type PrescriptionStatus = 
@@ -75,6 +81,11 @@ export interface PrescriptionItem {
   // Metadata
   createdAt: string;
   updatedAt?: string;
+  // Audit fields
+  createdBy?: string;             // User ID who created the item
+  updatedBy?: string;             // User ID who last updated
+  dispensedBy?: string;           // User ID of pharmacist who dispensed
+}
 }
 
 export type PrescriptionItemStatus = 

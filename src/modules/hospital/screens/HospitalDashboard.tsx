@@ -134,7 +134,11 @@ const secStyles = StyleSheet.create({
 });
 
 // ─── Component ───────────────────────────────────────────────
-export function HospitalDashboardContent() {
+interface HospitalDashboardProps {
+  onNavigate?: (screenId: string) => void;
+}
+
+export function HospitalDashboardContent({ onNavigate }: HospitalDashboardProps = {}) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
@@ -143,7 +147,7 @@ export function HospitalDashboardContent() {
           <Text style={styles.headerTitle}>Tableau de Bord Hôpital</Text>
           <Text style={styles.headerSubtitle}>Vue d'ensemble de l'activité hospitalière</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('hp-patients')}>
           <Ionicons name="person-add" size={20} color="#FFF" />
           <Text style={styles.addBtnText}>Nouveau Patient</Text>
         </TouchableOpacity>
@@ -157,6 +161,7 @@ export function HospitalDashboardContent() {
         accentColor={colors.info}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
+        onCtaPress={() => onNavigate?.('hp-billing')}
       />
       <View style={styles.metricsGrid}>
         {metrics.map((m, i) => (
@@ -184,13 +189,14 @@ export function HospitalDashboardContent() {
         accentColor={colors.secondary}
         ctaLabel="Ajouter Patient"
         ctaIcon="person-add-outline"
+        onCtaPress={() => onNavigate?.('hp-patients')}
       />
       <View style={styles.row}>
         {/* Recent Patients */}
         <View style={[styles.card, isDesktop && { flex: 3 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Patients Récents</Text>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('hp-patients')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.info} />
             </TouchableOpacity>

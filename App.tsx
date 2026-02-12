@@ -26,6 +26,56 @@ function AppContent() {
     initializeApp();
   }, []);
 
+  useEffect(() => {
+    // Set document title for web with multiple fallbacks
+    if (Platform.OS === 'web') {
+      const setDocumentTitle = () => {
+        if (typeof document !== 'undefined') {
+          const title = 'HK Management Systems - Système Hospitalier';
+          
+          // Method 1: Direct assignment
+          document.title = title;
+          
+          // Method 2: Create/update title element
+          let titleElement = document.querySelector('title');
+          if (!titleElement) {
+            titleElement = document.createElement('title');
+            document.head.appendChild(titleElement);
+          }
+          titleElement.textContent = title;
+          
+          // Method 3: Set og:title meta tag
+          let ogTitle = document.querySelector('meta[property="og:title"]');
+          if (!ogTitle) {
+            ogTitle = document.createElement('meta');
+            ogTitle.setAttribute('property', 'og:title');
+            document.head.appendChild(ogTitle);
+          }
+          ogTitle.setAttribute('content', title);
+          
+          // Update description meta
+          let descriptionMeta = document.querySelector('meta[name="description"]');
+          if (!descriptionMeta) {
+            descriptionMeta = document.createElement('meta');
+            descriptionMeta.setAttribute('name', 'description');
+            document.head.appendChild(descriptionMeta);
+          }
+          descriptionMeta.setAttribute('content', 'Système de gestion hospitalière et pharmaceutique pour la RD Congo');
+          
+          // Debug log
+          console.log('Document title set to:', document.title);
+        }
+      };
+      
+      // Set immediately
+      setDocumentTitle();
+      
+      // Also set after a short delay to ensure it sticks
+      setTimeout(setDocumentTitle, 100);
+      setTimeout(setDocumentTitle, 1000);
+    }
+  }, []);
+
   const initializeApp = async () => {
     try {
       console.log('🚀 Initializing app...');
@@ -35,18 +85,13 @@ function AppContent() {
         document.title = 'HK Management Systems';
       }
 
-      // Initialize services (database initializes automatically)
+      // Initialize services with persistent storage
       const db = DatabaseService.getInstance();
+      await db.initializeDatabase(); // This will load existing data or seed data
+      
       const authService = AuthService.getInstance();
       
-      // Insert test data if needed (for testing)
-      try {
-        await db.insertTestData();
-        console.log('📊 Test data inserted');
-      } catch (error) {
-        // Test data might already exist, which is fine
-        console.log('📊 Test data already exists or failed to insert:', error);
-      }
+      console.log('💾 Database initialized with persistent storage');
       
       // Check authentication
       const authResult = await authService.restoreSession();

@@ -265,9 +265,13 @@ const sectionStyles = StyleSheet.create({
 });
 
 // ─── Dashboard Screen ────────────────────────────────────────
-export function DashboardScreen() {
+interface DashboardScreenProps {
+  onNavigate?: (screenId: string) => void;
+}
+
+export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const { showToast } = useToast();
+  const { info } = useToast();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -314,19 +318,38 @@ export function DashboardScreen() {
         accentColor={colors.primary}
       />
       <View style={styles.quickActionsRow}>
-        {quickActions.map((action) => (
+        {quickActions.map((action) => {
+          const getScreenId = () => {
+            switch(action.id) {
+              case '1': return 'ph-pos'; // Nouvelle Vente
+              case '2': return 'hp-patients'; // Ajouter Patient
+              case '3': return 'ph-inventory'; // Réception Stock
+              case '4': return 'ph-reports'; // Rapport
+              default: return null;
+            }
+          };
+          
+          return (
           <TouchableOpacity 
             key={action.id} 
             style={styles.quickActionBtn} 
             activeOpacity={0.7}
-            onPress={() => showToast(`Action ${action.label} sélectionnée`, 'info')}
+            onPress={() => {
+              const screenId = getScreenId();
+              if (screenId && onNavigate) {
+                onNavigate(screenId);
+              } else {
+                info(`Action ${action.label} sélectionnée`);
+              }
+            }}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: action.color + '14' }]}>
               <Ionicons name={action.icon} size={22} color={action.color} />
             </View>
             <Text style={styles.quickActionLabel}>{action.label}</Text>
           </TouchableOpacity>
-        ))}
+          );
+        })}
       </View>
 
       {/* ══════ SECTION: Indicateurs Clés ══════ */}
@@ -337,6 +360,7 @@ export function DashboardScreen() {
         accentColor={colors.info}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
+        onCtaPress={() => onNavigate?.('ph-reports')}
       />
       <View style={styles.metricsGrid}>
         {metricCards.map((card) => (
@@ -386,6 +410,7 @@ export function DashboardScreen() {
         accentColor={colors.secondary}
         ctaLabel="Rapport Complet"
         ctaIcon="document-text-outline"
+        onCtaPress={() => onNavigate?.('ph-reports')}
       />
       <View style={styles.contentRow}>
         {/* Monthly Revenue Chart */}
@@ -395,7 +420,7 @@ export function DashboardScreen() {
               <Text style={styles.cardTitle}>Revenus Mensuels</Text>
               <Text style={styles.cardSubtitle}>Aperçu des ventes 2025</Text>
             </View>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-reports')}>
               <Text style={styles.viewAllText}>Voir Détails</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>
@@ -444,6 +469,7 @@ export function DashboardScreen() {
         accentColor={colors.accent}
         ctaLabel="Nouvelle Commande"
         ctaIcon="add-circle-outline"
+        onCtaPress={() => onNavigate?.('ph-pos')}
       />
       <View style={styles.contentRow}>
         {/* Recent Orders Table */}
@@ -453,7 +479,7 @@ export function DashboardScreen() {
               <Text style={styles.cardTitle}>Commandes Récentes</Text>
               <Text style={styles.cardSubtitle}>{recentOrders.length} commandes récentes</Text>
             </View>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-pos')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>

@@ -22,9 +22,31 @@ export interface Encounter {
   departmentId?: string;          // Which hospital department
   priority: TriagePriority;
   notes?: string;
-  // Metadata
+  
+  // Clinical Assessment
+  presentIllness?: string;        // History of present illness
+  vitalSigns?: {
+    temperature?: number;         // Celsius
+    bloodPressure?: string;       // "120/80"
+    heartRate?: number;           // BPM
+    respiratoryRate?: number;     // breaths/min
+    oxygenSaturation?: number;    // %
+  };
+  physicalExam?: string;          // Physical examination findings
+  assessment?: string;            // Clinical assessment/diagnosis
+  plan?: string;                  // Treatment plan
+  doctorId?: string;              // Primary attending doctor
+  doctorName?: string;            // Doctor's full name
+  facility?: string;              // Facility name
+  
+  // Metadata & Audit
   createdAt: string;              // ISO timestamp
   updatedAt?: string;             // ISO timestamp
+  createdBy?: string;             // User ID who created encounter
+  updatedBy?: string;             // User ID who last updated encounter
+  lastAccessedBy?: string;        // User ID who last accessed encounter
+  lastAccessedAt?: string;        // ISO timestamp - last access time
+  accessCount: number;            // Number of times accessed
   metadata?: Record<string, any>; // Extensible data
 }
 
@@ -56,8 +78,12 @@ export type TriagePriority =
   | 'semi_urgent'                 // Level 4: Green
   | 'routine';                    // Level 5: Blue
 
-export interface EncounterCreate extends Omit<Encounter, 'id' | 'encounterNumber' | 'createdAt'> {
+export interface EncounterCreate extends Omit<Encounter, 'id' | 'encounterNumber' | 'createdAt' | 'accessCount'> {
   id?: string;
+  encounterNumber?: string;
+  createdAt?: string;
+  accessCount?: number;
+}
   encounterNumber?: string;
   createdAt?: string;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -175,7 +175,7 @@ const mobileSidebarStyles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 12,
-    color: colors.sidebarTextSecondary,
+    color: colors.sidebarText,
     marginTop: 2,
   },
   closeButton: {
@@ -193,7 +193,7 @@ const mobileSidebarStyles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.sidebarTextSecondary,
+    color: colors.sidebarText,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
@@ -364,6 +364,76 @@ export function SidebarLayout({
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH;
 
+  // Track navigation history for back button
+  const [navHistory, setNavHistory] = useState<string[]>([]);
+  const isPoppingRef = useRef(false);
+
+  // Find the label for the current active screen
+  const getActiveLabel = useCallback((id: string): string => {
+    for (const section of sections) {
+      for (const item of section.items) {
+        if (item.id === id) return item.label;
+      }
+    }
+    return 'Tableau de Bord';
+  }, [sections]);
+
+  // Update browser tab title when active screen changes
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const label = getActiveLabel(activeId);
+      document.title = `${label} — HK Management Systems`;
+    }
+  }, [activeId, getActiveLabel]);
+
+  // Push to browser history when navigating (web only)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    if (isPoppingRef.current) {
+      isPoppingRef.current = false;
+      return;
+    }
+
+    // Push state for browser back/forward
+    const label = getActiveLabel(activeId);
+    window.history.pushState({ screenId: activeId }, label, `#${activeId}`);
+
+    // Track internal history for back button visibility
+    setNavHistory(prev => {
+      if (prev[prev.length - 1] === activeId) return prev;
+      return [...prev, activeId];
+    });
+  }, [activeId, getActiveLabel]);
+
+  // Listen for browser back/forward button
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.screenId) {
+        isPoppingRef.current = true;
+        onSelect(event.state.screenId);
+        setNavHistory(prev => prev.slice(0, -1));
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [onSelect]);
+
+  const canGoBack = navHistory.length > 1;
+
+  const handleGoBack = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.history.back();
+    } else if (navHistory.length > 1) {
+      const previousScreen = navHistory[navHistory.length - 2];
+      setNavHistory(prev => prev.slice(0, -1));
+      onSelect(previousScreen);
+    }
+  };
+
   // Mobile: header with menu button + modal sidebar
   if (!isDesktop) {
     return (
@@ -375,7 +445,21 @@ export function SidebarLayout({
           accentColor={accentColor}
           onMenuPress={() => setMobileMenuVisible(true)}
         />
-        <View style={styles.mobileContent}>{children}</View>
+        <View style={styles.mobileContent}>
+          {canGoBack && (
+            <View style={styles.mobileBackBar}>
+              <TouchableOpacity
+                style={styles.mobileBackButton}
+                onPress={handleGoBack}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-back" size={18} color={colors.primary} />
+                <Text style={styles.mobileBackText}>Retour</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {children}
+        </View>
         
         <MobileSidebarModal
           visible={mobileMenuVisible}
@@ -511,7 +595,24 @@ export function SidebarLayout({
       </View>
 
       {/* ── Main Content ─────────────────────────── */}
-      <View style={styles.content}>{children}</View>
+      <View style={styles.content}>
+        {/* Content Header with Back Button + Page Title */}
+        <View style={styles.contentHeader}>
+          <View style={styles.contentHeaderLeft}>
+            {canGoBack && (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={handleGoBack}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-back" size={20} color={colors.text} />
+              </TouchableOpacity>
+            )}
+            <Text style={styles.contentHeaderTitle}>{getActiveLabel(activeId)}</Text>
+          </View>
+        </View>
+        {children}
+      </View>
     </View>
   );
 }
@@ -707,6 +808,53 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  contentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+    minHeight: 48,
+  },
+  contentHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contentHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  mobileBackBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+  },
+  mobileBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  mobileBackText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
   },
 });
 

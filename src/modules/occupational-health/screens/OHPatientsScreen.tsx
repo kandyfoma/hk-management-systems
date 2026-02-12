@@ -4,6 +4,7 @@ import {
   StyleSheet, Dimensions, Modal, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DatabaseService from '../../../services/DatabaseService';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
@@ -644,15 +645,41 @@ export function OHPatientsScreen() {
 
   const loadPatients = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setPatients(JSON.parse(stored));
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_PATIENTS));
-    } catch { /* keep samples */ }
+      const db = DatabaseService.getInstance();
+      const occHealthPatients = await db.getOccHealthPatients();
+      if (occHealthPatients.length > 0) {
+        setPatients(occHealthPatients as OccupationalHealthPatient[]);
+        console.log(`📋 Loaded ${occHealthPatients.length} OccHealth patients from DatabaseService`);
+      } else {
+        // Fallback to sample data
+        setPatients(SAMPLE_PATIENTS);
+        console.log(`📋 Using ${SAMPLE_PATIENTS.length} sample OccHealth patients`);
+      }
+    } catch (error) {
+      console.error('Failed to load patients:', error);
+      setPatients(SAMPLE_PATIENTS);
+    }
   };
 
   const savePatients = async (list: OccupationalHealthPatient[]) => {
-    setPatients(list);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    try {
+      setPatients(list);
+      
+      // Save to DatabaseService
+      const db = DatabaseService.getInstance();
+      for (const patient of list) {
+        try {
+          await db.createPatient(patient);
+        } catch (error) {
+          // Patient might already exist, try updating
+          await db.updatePatient(patient.id, patient);
+        }
+      }
+      
+      console.log(`💾 Saved ${list.length} OccHealth patients to DatabaseService`);
+    } catch (error) {
+      console.error('Failed to save patients:', error);
+    }
   };
 
   const handleAddPatient = (p: OccupationalHealthPatient) => {

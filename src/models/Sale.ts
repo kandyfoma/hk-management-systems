@@ -62,10 +62,22 @@ export interface Sale {
   cashierId: string;             // FK → User
   cashierName: string;
 
-  // ─── Meta ───────────────────────────────────────────────
+  // ─── Meta & Audit ───────────────────────────────────────
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+  createdBy?: string;            // User ID who created sale
+  updatedBy?: string;            // User ID who last updated sale
+  processedBy?: string;          // User ID who processed the sale
+  authorizedBy?: string;         // User ID who authorized sale (if needed)
+  lastAccessedBy?: string;       // User ID who last accessed sale
+  lastAccessedAt?: string;       // ISO timestamp - last access time
+  accessCount: number;           // Number of times accessed
+  ipAddress?: string;            // IP address of sale creation
+  terminalId?: string;           // POS terminal identifier
+  receiptPrinted: boolean;       // Whether receipt was printed
+  printCount: number;            // How many times receipt was printed
+}
 }
 
 export type SaleType =

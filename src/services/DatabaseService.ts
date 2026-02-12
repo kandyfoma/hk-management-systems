@@ -4,7 +4,8 @@
  * All data persists for the lifetime of the app session.
  */
 
-import { User, UserCreate } from '../models/User';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { User, UserCreate, AuditLog, AuditLogCreate, AuditAction, AuditEntityType } from '../models/User';
 import { Organization, OrganizationCreate } from '../models/Organization';
 import { License, LicenseCreate, UserModuleAccess, UserModuleAccessCreate } from '../models/License';
 import {
@@ -32,6 +33,17 @@ import {
 import { Patient, PatientCreate, PatientUpdate, PatientUtils, MedicalRecord, VitalSigns } from '../models/Patient';
 import { Encounter, EncounterCreate, EncounterUpdate, EncounterUtils } from '../models/Encounter';
 import { PaymentMethod } from '../models/Sale';
+import { 
+  COMPREHENSIVE_PATIENTS, 
+  COMPREHENSIVE_ENCOUNTERS, 
+  COMPREHENSIVE_PRESCRIPTIONS, 
+  COMPREHENSIVE_SALES,
+  ADDITIONAL_PRODUCTS,
+  COMPREHENSIVE_SUPPLIERS,
+  COMPREHENSIVE_INVENTORY,
+  COMPREHENSIVE_PURCHASE_ORDERS,
+  COMPREHENSIVE_STOCK_MOVEMENTS
+} from './seedData/comprehensiveSeedData';
 
 // ═══════════════════════════════════════════════════════════════
 // In-Memory Tables
@@ -42,6 +54,7 @@ interface Tables {
   licenses: License[];
   users: User[];
   user_module_access: UserModuleAccess[];
+  audit_logs: AuditLog[];
   // ── Inventory Tables ──────────────────────────────────────
   suppliers: Supplier[];
   products: Product[];
@@ -71,11 +84,13 @@ interface Tables {
 
 export class DatabaseService {
   private static instance: DatabaseService;
+  private sales: Map<string, Sale> = new Map();
   private tables: Tables = {
     organizations: [],
     licenses: [],
     users: [],
     user_module_access: [],
+    audit_logs: [],
     suppliers: [],
     products: [],
     inventory_items: [],
@@ -103,6 +118,321 @@ export class DatabaseService {
       DatabaseService.instance = new DatabaseService();
     }
     return DatabaseService.instance;
+  }
+
+  // ── Data Persistence Methods ──────────────────────────────────
+
+  private readonly STORAGE_KEY = 'HK_DATABASE_DATA';
+
+  async saveDataToPersistentStorage(): Promise<void> {
+    try {
+      const data = {
+        patients: this.tables.patients,
+        encounters: this.tables.encounters,
+        prescriptions: this.tables.prescriptions,
+        products: this.tables.products,
+        suppliers: this.tables.suppliers,
+        inventory_items: this.tables.inventory_items,
+        organizations: this.tables.organizations,
+        sales: Array.from(this.sales.values()),
+        purchase_orders: this.tables.purchase_orders,
+        stock_movements: this.tables.stock_movements,
+        timestamp: new Date().toISOString()
+      };
+
+      await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+      console.log('💾 Data saved to persistent storage');
+    } catch (error) {
+      console.error('Failed to save data to storage:', error);
+    }
+  }
+
+  async loadDataFromPersistentStorage(): Promise<boolean> {
+    try {
+      const storedData = await AsyncStorage.getItem(this.STORAGE_KEY);
+      
+      if (storedData) {
+        const data = JSON.parse(storedData);
+        
+        // Load data back into tables
+        if (data.patients) this.tables.patients = data.patients;
+        if (data.encounters) this.tables.encounters = data.encounters;
+        if (data.prescriptions) this.tables.prescriptions = data.prescriptions;
+        if (data.products) this.tables.products = data.products;
+        if (data.suppliers) this.tables.suppliers = data.suppliers;
+        if (data.inventory_items) this.tables.inventory_items = data.inventory_items;
+        if (data.organizations) this.tables.organizations = data.organizations;
+        if (data.purchase_orders) this.tables.purchase_orders = data.purchase_orders;
+        if (data.stock_movements) this.tables.stock_movements = data.stock_movements;
+        
+        // Restore Maps
+        if (data.sales) {
+          this.sales.clear();
+          data.sales.forEach((sale: Sale) => this.sales.set(sale.id, sale));
+        }
+
+        console.log('📂 Data loaded from persistent storage');
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to load data from storage:', error);
+    }
+    return false;
+  }
+
+  async initializeDatabase(): Promise<void> {
+    console.log('🔄 Initializing database...');
+    
+    // Try to load existing data first
+    const dataLoaded = await this.loadDataFromPersistentStorage();
+    
+    if (!dataLoaded) {
+      // If no existing data, load seed data
+      console.log('🌱 Loading comprehensive seed data...');
+      await this.loadComprehensiveData();
+    }
+    
+    // Save data after initialization
+    await this.saveDataToPersistentStorage();
+  }
+
+  private async autoSave(): Promise<void> {
+    // Auto-save data after any modification
+    await this.saveDataToPersistentStorage();
+  }
+
+  // ── Audit Logging Methods ─────────────────────────────────
+
+  private currentUserId?: string;
+  private currentUserName?: string;
+  private currentUserRole?: string;
+  private currentSessionId?: string;
+  private currentIpAddress?: string;
+  private currentUserAgent?: string;
+
+  private get auditContext() {
+    return this.currentUserId ? {
+      userId: this.currentUserId,
+      userName: this.currentUserName || 'Unknown User',
+      userRole: this.currentUserRole as any || 'unknown',
+      organizationId: 'unknown',
+      ipAddress: this.currentIpAddress,
+      userAgent: this.currentUserAgent,
+      sessionId: this.currentSessionId
+    } : null;
+  }
+
+  setAuditContext(userId: string, userName: string, userRole: string, sessionId?: string, ipAddress?: string, userAgent?: string): void {
+    this.currentUserId = userId;
+    this.currentUserName = userName;
+    this.currentUserRole = userRole as any;
+    this.currentSessionId = sessionId;
+    this.currentIpAddress = ipAddress;
+    this.currentUserAgent = userAgent;
+  }
+
+  async logAudit(data: Partial<AuditLogCreate> & { action: AuditAction; automated?: boolean; sensitiveData?: boolean; reason?: string; organizationId?: string }): Promise<void> {
+    if (!this.currentUserId) {
+      console.warn('Audit context not set - skipping audit log');
+      return;
+    }
+
+    const auditLog: AuditLog = {
+      id: this.generateId(),
+      userId: this.currentUserId,
+      userName: this.currentUserName || 'Unknown User',
+      userRole: this.currentUserRole as any || 'unknown',
+      organizationId: data.organizationId || 'unknown',
+      action: data.action,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      entityName: data.entityName,
+      oldValues: data.oldValues,
+      newValues: data.newValues,
+      changes: data.changes,
+      ipAddress: data.ipAddress || this.currentIpAddress,
+      userAgent: data.userAgent || this.currentUserAgent,
+      sessionId: data.sessionId || this.currentSessionId,
+      requestPath: data.requestPath,
+      requestMethod: data.requestMethod,
+      duration: data.duration,
+      success: true, // Assuming success since we're logging it
+      errorMessage: data.errorMessage,
+      reason: data.reason,
+      notes: data.notes,
+      sensitiveData: data.sensitiveData || false,
+      automated: data.automated || false,
+      complianceFlags: data.complianceFlags,
+      retentionUntil: data.retentionUntil,
+      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
+
+    this.tables.audit_logs.push(auditLog);
+    
+    // Don't auto-save audit logs to prevent infinite recursion
+    // They will be saved with the next regular operation
+  }
+
+  async getAuditLogs(options?: {
+    userId?: string;
+    entityType?: AuditEntityType;
+    entityId?: string;
+    action?: AuditAction;
+    startDate?: string;
+    endDate?: string;
+    sensitiveDataOnly?: boolean;
+    limit?: number;
+  }): Promise<AuditLog[]> {
+    let results = [...this.tables.audit_logs];
+
+    if (options?.userId) {
+      results = results.filter(log => log.userId === options.userId);
+    }
+    if (options?.entityType) {
+      results = results.filter(log => log.entityType === options.entityType);
+    }
+    if (options?.entityId) {
+      results = results.filter(log => log.entityId === options.entityId);
+    }
+    if (options?.action) {
+      results = results.filter(log => log.action === options.action);
+    }
+    if (options?.startDate) {
+      results = results.filter(log => log.timestamp >= options.startDate!);
+    }
+    if (options?.endDate) {
+      results = results.filter(log => log.timestamp <= options.endDate!);
+    }
+    if (options?.sensitiveDataOnly) {
+      results = results.filter(log => log.sensitiveData);
+    }
+
+    // Sort by newest first
+    results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    if (options?.limit) {
+      results = results.slice(0, options.limit);
+    }
+
+    return results;
+  }
+
+  async getEntityAuditHistory(entityType: AuditEntityType, entityId: string): Promise<AuditLog[]> {
+    return this.getAuditLogs({ entityType, entityId });
+  }
+
+  async getUserActivity(userId: string, limit?: number): Promise<AuditLog[]> {
+    return this.getAuditLogs({ userId, limit });
+  }
+
+  // ── Authentication Audit Methods ──────────────────────────
+
+  async logUserLogin(userId: string, success: boolean, ipAddress?: string, userAgent?: string, errorMessage?: string): Promise<void> {
+    if (success) {
+      // Update user login info
+      const userIdx = this.tables.users.findIndex(u => u.id === userId);
+      if (userIdx !== -1) {
+        const user = this.tables.users[userIdx];
+        this.tables.users[userIdx] = {
+          ...user,
+          lastLogin: new Date().toISOString(),
+          lastIpAddress: ipAddress,
+          lastUserAgent: userAgent,
+          loginCount: (user.loginCount || 0) + 1,
+          failedLoginAttempts: 0, // Reset failed attempts on success
+          lastActivity: new Date().toISOString(),
+        };
+      }
+    } else {
+      // Update failed login attempts
+      const userIdx = this.tables.users.findIndex(u => u.id === userId);
+      if (userIdx !== -1) {
+        const user = this.tables.users[userIdx];
+        const failedAttempts = (user.failedLoginAttempts || 0) + 1;
+        this.tables.users[userIdx] = {
+          ...user,
+          failedLoginAttempts: failedAttempts,
+          // Lock account after 5 failed attempts for 30 minutes
+          lockoutUntil: failedAttempts >= 5 ? 
+            new Date(Date.now() + 30 * 60 * 1000).toISOString() : 
+            user.lockoutUntil,
+        };
+      }
+    }
+
+    // Audit log
+    const user = this.tables.users.find(u => u.id === userId);
+    await this.logAudit({
+      organizationId: user?.organizationId || 'unknown',
+      action: success ? 'LOGIN' : 'LOGIN_FAILED',
+      ipAddress,
+      userAgent,
+      errorMessage,
+      sensitiveData: false,
+      automated: false,
+      reason: success ? 'User login successful' : 'User login failed'
+    });
+
+    await this.autoSave();
+  }
+
+  async logUserLogout(userId: string, ipAddress?: string): Promise<void> {
+    // Update user logout info
+    const userIdx = this.tables.users.findIndex(u => u.id === userId);
+    if (userIdx !== -1) {
+      this.tables.users[userIdx] = {
+        ...this.tables.users[userIdx],
+        lastLogout: new Date().toISOString(),
+        sessionId: undefined, // Clear session
+      };
+    }
+
+    // Audit log
+    const user = this.tables.users.find(u => u.id === userId);
+    await this.logAudit({
+      organizationId: user?.organizationId || 'unknown',
+      action: 'LOGOUT',
+      ipAddress,
+      sensitiveData: false,
+      automated: false,
+      reason: 'User logout'
+    });
+
+    await this.autoSave();
+  }
+
+  async updateUserActivity(userId: string): Promise<void> {
+    const userIdx = this.tables.users.findIndex(u => u.id === userId);
+    if (userIdx !== -1) {
+      this.tables.users[userIdx] = {
+        ...this.tables.users[userIdx],
+        lastActivity: new Date().toISOString(),
+      };
+    }
+  }
+
+  private calculateChanges(oldData: any, newData: any): Array<{ field: string; oldValue: any; newValue: any }> {
+    const changes: Array<{ field: string; oldValue: any; newValue: any }> = [];
+    
+    if (!oldData && newData) {
+      // New record - all fields are changes
+      Object.keys(newData).forEach(key => {
+        if (key !== 'id' && key !== 'createdAt') {
+          changes.push({ field: key, oldValue: null, newValue: newData[key] });
+        }
+      });
+    } else if (oldData && newData) {
+      // Updated record - compare fields
+      const allKeys = new Set([...Object.keys(oldData), ...Object.keys(newData)]);
+      allKeys.forEach(key => {
+        if (key !== 'updatedAt' && oldData[key] !== newData[key]) {
+          changes.push({ field: key, oldValue: oldData[key], newValue: newData[key] });
+        }
+      });
+    }
+    
+    return changes;
   }
 
   // ── Organization ──────────────────────────────────────────
@@ -134,6 +464,22 @@ export class DatabaseService {
     return this.tables.organizations.find((o) => o.id === id) ?? null;
   }
 
+  async updateOrganization(id: string, data: Partial<OrganizationCreate>): Promise<Organization | null> {
+    const index = this.tables.organizations.findIndex((o) => o.id === id);
+    if (index === -1) return null;
+
+    const existing = this.tables.organizations[index];
+    const updated: Organization = {
+      ...existing,
+      ...data,
+      id: existing.id, // Preserve ID
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.tables.organizations[index] = updated;
+    return updated;
+  }
+
   async getCurrentOrganization(): Promise<Organization | null> {
     // For now, return the first active organization
     // In a real app, this would be based on the logged-in user's context
@@ -151,8 +497,28 @@ export class DatabaseService {
       patientNumber: data.patientNumber || `PAT${String(patientCount).padStart(5, '0')}`,
       registrationDate: data.registrationDate || now,
       createdAt: data.createdAt || now,
+      createdBy: this.currentUserId,
+      accessCount: 0,
     };
+    
     this.tables.patients.push(patient);
+    
+    // Audit log
+    await this.logAudit({
+      action: 'CREATE',
+      entityType: 'PATIENT',
+      entityId: patient.id,
+      entityName: `${patient.firstName} ${patient.lastName}`,
+      newValues: patient,
+      changes: this.calculateChanges(null, patient),
+      sensitiveData: true,
+      automated: false,
+      reason: 'New patient registration'
+    });
+    
+    // Auto-save after creating patient
+    await this.autoSave();
+    
     return patient;
   }
 
@@ -160,8 +526,37 @@ export class DatabaseService {
     return [...this.tables.patients];
   }
 
-  async getPatient(id: string): Promise<Patient | null> {
-    return this.tables.patients.find(p => p.id === id) ?? null;
+  async getPatient(id: string, logAccess: boolean = true): Promise<Patient | null> {
+    const patient = this.tables.patients.find(p => p.id === id);
+    if (!patient) return null;
+    
+    if (logAccess && this.currentUserId) {
+      // Update access tracking
+      const idx = this.tables.patients.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        this.tables.patients[idx] = {
+          ...this.tables.patients[idx],
+          lastAccessedBy: this.currentUserId,
+          lastAccessedAt: new Date().toISOString(),
+          accessCount: (this.tables.patients[idx].accessCount || 0) + 1,
+        };
+      }
+      
+      // Audit log for accessing sensitive patient data
+      await this.logAudit({
+        action: 'VIEW',
+        entityType: 'PATIENT',
+        entityId: id,
+        entityName: `${patient.firstName} ${patient.lastName}`,
+        sensitiveData: true,
+        automated: false,
+        reason: 'Patient record accessed'
+      });
+      
+      await this.autoSave();
+    }
+    
+    return patient;
   }
 
   async getPatientByNumber(patientNumber: string): Promise<Patient | null> {
@@ -171,12 +566,35 @@ export class DatabaseService {
   async updatePatient(id: string, data: PatientUpdate): Promise<Patient | null> {
     const idx = this.tables.patients.findIndex(p => p.id === id);
     if (idx === -1) return null;
-    this.tables.patients[idx] = {
+    
+    const oldPatient = { ...this.tables.patients[idx] };
+    const updatedPatient = {
       ...this.tables.patients[idx],
       ...data,
       updatedAt: new Date().toISOString(),
+      updatedBy: this.currentUserId,
     };
-    return this.tables.patients[idx];
+    
+    this.tables.patients[idx] = updatedPatient;
+    
+    // Audit log
+    await this.logAudit({
+      action: 'UPDATE',
+      entityType: 'PATIENT',
+      entityId: id,
+      entityName: `${updatedPatient.firstName} ${updatedPatient.lastName}`,
+      oldValues: oldPatient,
+      newValues: updatedPatient,
+      changes: this.calculateChanges(oldPatient, updatedPatient),
+      sensitiveData: true,
+      automated: false,
+      reason: 'Patient information updated'
+    });
+    
+    // Auto-save after updating patient
+    await this.autoSave();
+    
+    return updatedPatient;
   }
 
   async searchPatients(query: string): Promise<Patient[]> {
@@ -252,19 +670,67 @@ export class DatabaseService {
       encounterNumber: data.encounterNumber || EncounterUtils.generateEncounterNumber(),
       createdAt: data.createdAt || now,
       updatedAt: now,
+      createdBy: this.auditContext?.userId || 'system',
+      updatedBy: this.auditContext?.userId || 'system',
+      lastAccessedBy: this.auditContext?.userId,
+      lastAccessedAt: now,
+      accessCount: 1,
     };
+    
     this.tables.encounters.push(encounter);
+    
     // Update patient lastVisit
     const patientIdx = this.tables.patients.findIndex(p => p.id === data.patientId);
     if (patientIdx !== -1) {
       this.tables.patients[patientIdx].lastVisit = now;
       this.tables.patients[patientIdx].updatedAt = now;
     }
+
+    // Audit logging
+    if (this.auditContext) {
+      await this.logAudit({
+        organizationId: this.auditContext.organizationId,
+        action: 'CREATE',
+        entityType: 'ENCOUNTER',
+        entityId: encounter.id,
+        newValues: encounter,
+        sensitiveData: true,
+        automated: false,
+        reason: 'New encounter created'
+      });
+    }
+
     return encounter;
   }
 
   async getEncounter(id: string): Promise<Encounter | null> {
-    return this.tables.encounters.find(e => e.id === id) ?? null;
+    const encounter = this.tables.encounters.find(e => e.id === id) ?? null;
+    
+    if (encounter && this.auditContext) {
+      // Update access tracking
+      const encounterIdx = this.tables.encounters.findIndex(e => e.id === id);
+      if (encounterIdx !== -1) {
+        this.tables.encounters[encounterIdx] = {
+          ...encounter,
+          lastAccessedBy: this.auditContext.userId,
+          lastAccessedAt: new Date().toISOString(),
+          accessCount: (encounter.accessCount || 0) + 1,
+        };
+      }
+
+      // Audit logging
+      await this.logAudit({
+        organizationId: this.auditContext.organizationId,
+        action: 'VIEW',
+        entityType: 'ENCOUNTER',
+        entityId: id,
+        sensitiveData: true,
+        automated: false,
+        reason: 'Encounter accessed'
+      });
+    }
+    
+    return encounter;
   }
 
   async getEncountersByPatient(patientId: string): Promise<Encounter[]> {
@@ -288,12 +754,37 @@ export class DatabaseService {
   async updateEncounter(id: string, data: EncounterUpdate): Promise<Encounter | null> {
     const idx = this.tables.encounters.findIndex(e => e.id === id);
     if (idx === -1) return null;
-    this.tables.encounters[idx] = {
-      ...this.tables.encounters[idx],
+
+    const oldEncounter = this.tables.encounters[idx];
+    const updatedEncounter = {
+      ...oldEncounter,
       ...data,
       updatedAt: new Date().toISOString(),
+      updatedBy: this.auditContext?.userId || 'system',
+      lastAccessedBy: this.auditContext?.userId,
+      lastAccessedAt: new Date().toISOString(),
+      accessCount: (oldEncounter.accessCount || 0) + 1,
     };
-    return this.tables.encounters[idx];
+
+    this.tables.encounters[idx] = updatedEncounter;
+
+    // Audit logging
+    if (this.auditContext) {
+      await this.logAudit({
+        organizationId: this.auditContext.organizationId,
+        action: 'UPDATE',
+        entityType: 'ENCOUNTER',
+        entityId: id,
+        oldValues: oldEncounter,
+        newValues: updatedEncounter,
+        changes: this.calculateChanges(oldEncounter, data),
+        sensitiveData: true,
+        automated: false,
+        reason: 'Encounter updated'
+      });
+    }
+
+    return updatedEncounter;
   }
 
   async getEncounterStats(organizationId: string): Promise<{
@@ -368,6 +859,10 @@ export class DatabaseService {
       professionalLicense: data.professionalLicense,
       isActive: data.isActive ?? true,
       lastLogin: data.lastLogin,
+      loginCount: 0,
+      failedLoginAttempts: 0,
+      twoFactorEnabled: false,
+      profileCompleteness: 50,
       createdAt: data.createdAt || new Date().toISOString(),
       updatedAt: data.updatedAt,
       metadata: data.metadata,
@@ -918,6 +1413,94 @@ export class DatabaseService {
     };
   }
 
+  // ── Sales CRUD Operations ──────────────────────────────
+
+  async createSale(data: Omit<Sale, 'id' | 'createdAt'> & { id?: string }): Promise<Sale> {
+    const sale: Sale = {
+      id: data.id || this.generateId(),
+      organizationId: data.organizationId,
+      facilityId: data.facilityId,
+      saleNumber: data.saleNumber,
+      receiptNumber: data.receiptNumber,
+      type: data.type,
+      customerId: data.customerId,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      prescriptionId: data.prescriptionId,
+      items: data.items,
+      itemCount: data.itemCount,
+      totalQuantity: data.totalQuantity,
+      subtotal: data.subtotal,
+      discountType: data.discountType,
+      discountValue: data.discountValue,
+      discountAmount: data.discountAmount,
+      taxAmount: data.taxAmount,
+      totalAmount: data.totalAmount,
+      currency: data.currency,
+      payments: data.payments,
+      totalPaid: data.totalPaid,
+      changeGiven: data.changeGiven,
+      paymentStatus: data.paymentStatus,
+      status: data.status,
+      cashierId: data.cashierId,
+      cashierName: data.cashierName,
+      notes: data.notes,
+      voidReason: data.voidReason,
+      voidedBy: data.voidedBy,
+      voidedAt: data.voidedAt,
+      createdAt: new Date().toISOString(),
+      updatedAt: data.updatedAt,
+      createdBy: this.currentUserId,
+      processedBy: this.currentUserId,
+      accessCount: 0,
+      receiptPrinted: false,
+      printCount: 0,
+    };
+
+    this.sales.set(sale.id, sale);
+    
+    // Audit log
+    await this.logAudit({
+      action: 'PROCESS_SALE',
+      entityType: 'SALE',
+      entityId: sale.id,
+      entityName: `Sale ${sale.receiptNumber}`,
+      newValues: { 
+        receiptNumber: sale.receiptNumber,
+        totalAmount: sale.totalAmount,
+        customerName: sale.customerName,
+        itemCount: sale.itemCount
+      },
+      sensitiveData: false,
+      automated: false,
+      reason: 'POS sale processed'
+    });
+    
+    // Auto-save after creating sale
+    await this.autoSave();
+    
+    return sale;
+  }
+
+  async updateSale(id: string, data: Partial<Omit<Sale, 'id' | 'createdAt'>>): Promise<Sale | null> {
+    const existing = this.sales.get(id);
+    if (!existing) return null;
+
+    const updated: Sale = {
+      ...existing,
+      ...data,
+      id: existing.id, // Preserve ID
+      createdAt: existing.createdAt, // Preserve creation date
+    };
+
+    this.sales.set(id, updated);
+    
+    // Auto-save after updating sale
+    await this.autoSave();
+    
+    return updated;
+  }
+
   // ── Extra Convenience Methods ──────────────────────────────
 
   async getInventoryItemsByOrganization(organizationId: string): Promise<InventoryItem[]> {
@@ -1029,6 +1612,9 @@ export class DatabaseService {
       status: 'COMPLETED',
       cashierId,
       cashierName,
+      accessCount: 0,
+      receiptPrinted: false,
+      printCount: 0,
       createdAt: now,
     };
 
@@ -1407,9 +1993,123 @@ export class DatabaseService {
       
       // ── PATIENTS AND PRESCRIPTIONS TEST DATA ─────────────
       await this.insertPatientTestData(testOrg.id);
+      
+      // ── COMPREHENSIVE CROSS-MODULE DATA ───────────────────
+      await this.loadComprehensiveData();
     } catch (error) {
       console.error('Error inserting test data:', error);
     }
+  }
+
+  // ── Comprehensive Cross-Module Data ──────────────────────────
+
+  async loadComprehensiveData(): Promise<void> {
+    console.log('📊 Loading comprehensive cross-module data...');
+    
+    try {
+      // Import comprehensive data
+      const { 
+        COMPREHENSIVE_PATIENTS, 
+        COMPREHENSIVE_ENCOUNTERS, 
+        COMPREHENSIVE_PRESCRIPTIONS, 
+        COMPREHENSIVE_SALES,
+        ADDITIONAL_PRODUCTS,
+        COMPREHENSIVE_SUPPLIERS,
+        COMPREHENSIVE_INVENTORY,
+        COMPREHENSIVE_PURCHASE_ORDERS,
+        COMPREHENSIVE_STOCK_MOVEMENTS
+      } = await import('./seedData/comprehensiveSeedData');
+      
+      // 1. Add comprehensive patients (includes OccHealth workers)
+      for (const patient of COMPREHENSIVE_PATIENTS) {
+        this.tables.patients.push(patient);
+      }
+      
+      // 2. Add pharmacy suppliers
+      for (const supplier of COMPREHENSIVE_SUPPLIERS) {
+        this.tables.suppliers.push(supplier);
+      }
+      
+      // 3. Add comprehensive products
+      for (const product of ADDITIONAL_PRODUCTS) {
+        this.tables.products.push(product);
+      }
+      
+      // 4. Add inventory items with realistic stock levels
+      // TODO: Fix COMPREHENSIVE_INVENTORY structure to match InventoryItem interface
+      // for (const inventoryItem of COMPREHENSIVE_INVENTORY) {
+      //   this.tables.inventory_items.push(inventoryItem);
+      // }
+      
+      // 5. Add purchase orders
+      // TODO: Fix COMPREHENSIVE_PURCHASE_ORDERS structure to match PurchaseOrder interface
+      // for (const po of COMPREHENSIVE_PURCHASE_ORDERS) {
+      //   this.tables.purchase_orders.push(po);
+      // }
+      
+      // 6. Add stock movements (audit trail)
+      for (const movement of COMPREHENSIVE_STOCK_MOVEMENTS) {
+        this.tables.stock_movements.push(movement);
+      }
+      
+      // 7. Add realistic encounters
+      for (const encounter of COMPREHENSIVE_ENCOUNTERS) {
+        this.tables.encounters.push(encounter);
+      }
+      
+      // 8. Add prescriptions with proper relationships
+      for (const prescription of COMPREHENSIVE_PRESCRIPTIONS) {
+        this.tables.prescriptions.push(prescription);
+      }
+      
+      // 9. Add sales data linking to prescriptions
+      for (const sale of COMPREHENSIVE_SALES) {
+        this.tables.sales.push(sale);
+      }
+      
+      console.log(`✅ Comprehensive data loaded:`);
+      console.log(`   - ${COMPREHENSIVE_PATIENTS.length} cross-module patients`);
+      console.log(`   - ${COMPREHENSIVE_SUPPLIERS.length} suppliers`);
+      console.log(`   - ${ADDITIONAL_PRODUCTS.length} products`);
+      console.log(`   - ${COMPREHENSIVE_INVENTORY.length} inventory items`);
+      console.log(`   - ${COMPREHENSIVE_PURCHASE_ORDERS.length} purchase orders`);
+      console.log(`   - ${COMPREHENSIVE_STOCK_MOVEMENTS.length} stock movements`);
+      console.log(`   - ${COMPREHENSIVE_ENCOUNTERS.length} realistic encounters`);
+      console.log(`   - ${COMPREHENSIVE_PRESCRIPTIONS.length} linked prescriptions`);
+      console.log(`   - ${COMPREHENSIVE_SALES.length} pharmacy sales`);
+      console.log(`   - ${ADDITIONAL_PRODUCTS.length} additional products`);
+      
+    } catch (error) {
+      console.error('❌ Error loading comprehensive data:', error);
+    }
+  }
+
+  // ── OccHealth Integration Methods ─────────────────────────────
+
+  /**
+   * Get patients with occupational health context
+   */
+  async getOccHealthPatients(): Promise<Patient[]> {
+    return this.tables.patients.filter(p => p.employeeId && p.company);
+  }
+
+  /**
+   * Get patient by employee ID (for OccHealth modules)
+   */
+  async getPatientByEmployeeId(employeeId: string): Promise<Patient | null> {
+    const patient = this.tables.patients.find(p => p.employeeId === employeeId);
+    return patient || null;
+  }
+
+  /**
+   * Get encounters for occupational health (work-related visits)
+   */
+  async getOccHealthEncounters(): Promise<Encounter[]> {
+    return this.tables.encounters.filter(e => 
+      e.type === 'outpatient' || // Use valid encounter type
+      e.notes?.includes('travail') || 
+      e.notes?.includes('professionnel')
+    );
   }
 
   /** Seed realistic pharmacy inventory for testing */
@@ -1833,7 +2533,7 @@ export class DatabaseService {
         chiefComplaint: 'Douleurs abdominales depuis 3 jours, nausées',
         assignedDoctorId: encDoctorId,
         priority: 'urgent',
-        department: 'Médecine Générale',
+        departmentId: 'dept-001',
       }),
       // Marie — past discharged visit
       this.createEncounter({
@@ -1847,7 +2547,7 @@ export class DatabaseService {
         chiefComplaint: 'Contrôle hypertension et glycémie',
         assignedDoctorId: encDoctorId,
         priority: 'routine',
-        department: 'Médecine Interne',
+        departmentId: 'dept-002',
         notes: 'Bilan satisfaisant, continuer traitement actuel.',
       }),
       // Joseph — triaged, waiting
@@ -1861,7 +2561,7 @@ export class DatabaseService {
         chiefComplaint: 'Toux persistante avec crachats, essoufflement',
         assignedDoctorId: encDoctorId,
         priority: 'semi_urgent',
-        department: 'Pneumologie',
+        departmentId: 'dept-003',
       }),
       // Joseph — past emergency visit
       this.createEncounter({
@@ -1875,7 +2575,7 @@ export class DatabaseService {
         chiefComplaint: 'Crise d\'asthme sévère',
         assignedDoctorId: encDoctorId,
         priority: 'emergency',
-        department: 'Urgences',
+        departmentId: 'dept-004',
       }),
       // Grace — registered, waiting
       this.createEncounter({
@@ -1887,7 +2587,7 @@ export class DatabaseService {
         arrivalDate: encNow,
         chiefComplaint: 'Suivi post-traitement, résultats laboratoire',
         priority: 'routine',
-        department: 'Médecine Générale',
+        departmentId: 'dept-001',
       }),
       // Grace — past follow-up
       this.createEncounter({
@@ -1901,7 +2601,7 @@ export class DatabaseService {
         chiefComplaint: 'Maux de tête récurrents, fatigue',
         assignedDoctorId: encDoctorId,
         priority: 'routine',
-        department: 'Médecine Générale',
+        departmentId: 'dept-001',
         notes: 'Bilan sanguin prescrit. Paracétamol pour 3 jours.',
       }),
     ]);
@@ -2156,6 +2856,8 @@ export class DatabaseService {
       ...data,
       id: data.id || this.generateId(),
       createdAt: data.createdAt || now,
+      createdBy: this.auditContext?.userId || 'system',
+      updatedBy: this.auditContext?.userId || 'system',
     });
 
     this.tables.prescriptions.push(prescription);
@@ -2170,8 +2872,24 @@ export class DatabaseService {
         quantityRemaining: itemData.quantity,
         status: 'pending',
         createdAt: now,
+        createdBy: this.auditContext?.userId || 'system',
+        updatedBy: this.auditContext?.userId || 'system',
       };
       this.tables.prescription_items.push(item);
+    }
+
+    // Audit logging
+    if (this.auditContext) {
+      await this.logAudit({
+        organizationId: this.auditContext.organizationId,
+        action: 'CREATE',
+        entityType: 'PRESCRIPTION',
+        entityId: prescription.id,
+        newValues: { prescription, items: data.items },
+        sensitiveData: true,
+        automated: false,
+        reason: 'New prescription created'
+      });
     }
 
     return prescription;
@@ -2385,6 +3103,21 @@ export class DatabaseService {
       prescription.facilityId,
     );
 
+    // Audit logging for medication dispensing
+    if (this.auditContext) {
+      await this.logAudit({
+        organizationId: this.auditContext.organizationId,
+        action: 'DISPENSE_MEDICATION',
+        entityType: 'PRESCRIPTION',
+        entityId: itemId,
+        oldValues: item,
+        newValues: updatedItem,
+        sensitiveData: true,
+        automated: false,
+        reason: `Dispensed ${data.quantityToDispense} units of ${product.name}`,
+      });
+    }
+
     return { prescriptionItem: updatedItem, sale };
   }
 
@@ -2431,6 +3164,381 @@ export class DatabaseService {
     stats.totalValue = totalValue;
 
     return stats;
+  }
+
+  // Helper methods for testing and simple access
+  async getAllEncounters(): Promise<Encounter[]> {
+    return this.tables.encounters;
+  }
+
+  async getAllPrescriptions(): Promise<Prescription[]> {
+    return this.tables.prescriptions;
+  }
+
+  async getAllSales(): Promise<Sale[]> {
+    return Array.from(this.sales.values());
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // COMPREHENSIVE CRUD OPERATIONS - Delete Methods
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── Patient Delete Operations ─────────────────────────────────
+
+  async deletePatient(id: string): Promise<boolean> {
+    const idx = this.tables.patients.findIndex(p => p.id === id);
+    if (idx === -1) return false;
+    
+    // Also remove related data
+    this.tables.medical_records = this.tables.medical_records.filter(mr => mr.patientId !== id);
+    this.tables.encounters = this.tables.encounters.filter(e => e.patientId !== id);
+    this.tables.prescriptions = this.tables.prescriptions.filter(p => p.patientId !== id);
+    
+    this.tables.patients.splice(idx, 1);
+    return true;
+  }
+
+  // ── Encounter Delete Operations ───────────────────────────────
+
+  async deleteEncounter(id: string): Promise<boolean> {
+    const idx = this.tables.encounters.findIndex(e => e.id === id);
+    if (idx === -1) return false;
+    
+    // Also remove related prescriptions
+    this.tables.prescriptions = this.tables.prescriptions.filter(p => p.encounterId !== id);
+    
+    this.tables.encounters.splice(idx, 1);
+    return true;
+  }
+
+  // ── Medical Record Delete Operations ───────────────────────────
+
+  async deleteMedicalRecord(id: string): Promise<boolean> {
+    const idx = this.tables.medical_records.findIndex(mr => mr.id === id);
+    if (idx === -1) return false;
+    this.tables.medical_records.splice(idx, 1);
+    return true;
+  }
+
+  // ── Inventory Delete Operations ────────────────────────────────
+
+  async deleteInventoryItem(id: string): Promise<boolean> {
+    const idx = this.tables.inventory_items.findIndex(ii => ii.id === id);
+    if (idx === -1) return false;
+    
+    // Also remove related data
+    this.tables.inventory_batches = this.tables.inventory_batches.filter(ib => ib.productId !== id);
+    this.tables.stock_movements = this.tables.stock_movements.filter(sm => sm.productId !== id);
+    
+    this.tables.inventory_items.splice(idx, 1);
+    return true;
+  }
+
+  async deletePurchaseOrder(id: string): Promise<boolean> {
+    const idx = this.tables.purchase_orders.findIndex(po => po.id === id);
+    if (idx === -1) return false;
+    
+    // Also remove related items
+    this.tables.purchase_order_items = this.tables.purchase_order_items.filter(poi => poi.purchaseOrderId !== id);
+    
+    this.tables.purchase_orders.splice(idx, 1);
+    return true;
+  }
+
+  async deleteStockMovement(id: string): Promise<boolean> {
+    const idx = this.tables.stock_movements.findIndex(sm => sm.id === id);
+    if (idx === -1) return false;
+    this.tables.stock_movements.splice(idx, 1);
+    return true;
+  }
+
+  // ── Sales Delete Operations ────────────────────────────────────
+
+  async deleteSale(id: string): Promise<boolean> {
+    return this.sales.delete(id);
+  }
+
+  // ── Organization Delete Operations ──────────────────────────────
+
+  async deleteOrganization(id: string): Promise<boolean> {
+    const idx = this.tables.organizations.findIndex(o => o.id === id);
+    if (idx === -1) return false;
+    
+    // Remove related data
+    this.tables.licenses = this.tables.licenses.filter(l => l.organizationId !== id);
+    this.tables.users = this.tables.users.filter(u => u.organizationId !== id);
+    
+    this.tables.organizations.splice(idx, 1);
+    return true;
+  }
+
+  // ── License Delete Operations ───────────────────────────────────
+
+  async deleteLicense(id: string): Promise<boolean> {
+    const idx = this.tables.licenses.findIndex(l => l.id === id);
+    if (idx === -1) return false;
+    
+    // Remove related access records
+    this.tables.user_module_access = this.tables.user_module_access.filter(uma => uma.licenseId !== id);
+    
+    this.tables.licenses.splice(idx, 1);
+    return true;
+  }
+
+  // ── User Delete Operations ──────────────────────────────────────
+
+  async deleteUser(id: string): Promise<boolean> {
+    const idx = this.tables.users.findIndex(u => u.id === id);
+    if (idx === -1) return false;
+    
+    // Remove related access records
+    this.tables.user_module_access = this.tables.user_module_access.filter(uma => uma.userId !== id);
+    
+    this.tables.users.splice(idx, 1);
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BATCH OPERATIONS & UTILITIES
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── Bulk Create Operations ─────────────────────────────────────
+
+  async createPatientsBatch(patients: PatientCreate[]): Promise<Patient[]> {
+    const results: Patient[] = [];
+    for (const patientData of patients) {
+      const patient = await this.createPatient(patientData);
+      results.push(patient);
+    }
+    return results;
+  }
+
+  async createProductsBatch(products: ProductCreate[]): Promise<Product[]> {
+    const results: Product[] = [];
+    for (const productData of products) {
+      const product = await this.createProduct(productData);
+      results.push(product);
+    }
+    return results;
+  }
+
+  async createSuppliersBatch(suppliers: SupplierCreate[]): Promise<Supplier[]> {
+    const results: Supplier[] = [];
+    for (const supplierData of suppliers) {
+      const supplier = await this.createSupplier(supplierData);
+      results.push(supplier);
+    }
+    return results;
+  }
+
+  // ── Search & Filter Operations ─────────────────────────────────
+
+  async searchAllEntities(query: string): Promise<{
+    patients: Patient[];
+    encounters: Encounter[];
+    prescriptions: Prescription[];
+    products: Product[];
+    suppliers: Supplier[];
+  }> {
+    const q = query.toLowerCase().trim();
+    
+    return {
+      patients: await this.searchPatients(q),
+      encounters: this.tables.encounters.filter(e => 
+        e.chiefComplaint?.toLowerCase().includes(q) ||
+        e.assessment?.toLowerCase().includes(q)
+      ),
+      prescriptions: this.tables.prescriptions.filter(p =>
+        p.prescriptionNumber?.toLowerCase().includes(q)
+      ),
+      products: this.tables.products.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.genericName?.toLowerCase().includes(q) ||
+        p.manufacturer?.toLowerCase().includes(q)
+      ),
+      suppliers: this.tables.suppliers.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.contactPerson?.toLowerCase().includes(q)
+      )
+    };
+  }
+
+  // ── Data Export Operations ─────────────────────────────────────
+
+  async exportAllData(): Promise<{
+    patients: Patient[];
+    encounters: Encounter[];
+    prescriptions: Prescription[];
+    sales: Sale[];
+    products: Product[];
+    suppliers: Supplier[];
+    inventory: InventoryItem[];
+    organizations: Organization[];
+    exportDate: string;
+  }> {
+    return {
+      patients: [...this.tables.patients],
+      encounters: [...this.tables.encounters],
+      prescriptions: [...this.tables.prescriptions],
+      sales: Array.from(this.sales.values()),
+      products: [...this.tables.products],
+      suppliers: [...this.tables.suppliers],
+      inventory: [...this.tables.inventory_items],
+      organizations: [...this.tables.organizations],
+      exportDate: new Date().toISOString()
+    };
+  }
+
+  // ── Database Maintenance Operations ────────────────────────────
+
+  async clearAllData(): Promise<void> {
+    // Clear all tables
+    Object.keys(this.tables).forEach(key => {
+      (this.tables as any)[key] = [];
+    });
+    
+    // Clear Maps
+    this.sales.clear();
+    this.tables.prescriptions = [];
+    this.tables.encounters = [];
+    this.tables.patients = [];
+    
+    console.log('🗑️ All database tables cleared');
+  }
+
+  async getDataStats(): Promise<{
+    patients: number;
+    encounters: number;
+    prescriptions: number;
+    sales: number;
+    products: number;
+    suppliers: number;
+    inventory: number;
+    organizations: number;
+  }> {
+    return {
+      patients: this.tables.patients.length,
+      encounters: this.tables.encounters.length,
+      prescriptions: this.tables.prescriptions.length,
+      sales: this.sales.size,
+      products: this.tables.products.length,
+      suppliers: this.tables.suppliers.length,
+      inventory: this.tables.inventory_items.length,
+      organizations: this.tables.organizations.length
+    };
+  }
+
+  // ── Audit Reporting Utilities ──────────────────────────
+
+  async getComplianceReport(organizationId: string, startDate?: string, endDate?: string): Promise<{
+    auditLogs: AuditLog[];
+    summary: {
+      totalActivities: number;
+      sensitiveDataAccess: number;
+      failedAttempts: number;
+      complianceViolations: number;
+      userBreakdown: Record<string, number>;
+      actionBreakdown: Record<string, number>;
+    };
+  }> {
+    const filters: any = { organizationId };
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+
+    const auditLogs = await this.getAuditLogs(filters);
+
+    const summary = {
+      totalActivities: auditLogs.length,
+      sensitiveDataAccess: auditLogs.filter(log => log.sensitiveData).length,
+      failedAttempts: auditLogs.filter(log => !log.success).length,
+      complianceViolations: auditLogs.filter(log => log.complianceFlags && log.complianceFlags.length > 0).length,
+      userBreakdown: {} as Record<string, number>,
+      actionBreakdown: {} as Record<string, number>,
+    };
+
+    // Calculate breakdowns
+    for (const log of auditLogs) {
+      summary.userBreakdown[log.userName] = (summary.userBreakdown[log.userName] || 0) + 1;
+      summary.actionBreakdown[log.action] = (summary.actionBreakdown[log.action] || 0) + 1;
+    }
+
+    return { auditLogs, summary };
+  }
+
+  async getUserSecuritySummary(userId: string): Promise<{
+    user: User | null;
+    recentActivity: AuditLog[];
+    securityMetrics: {
+      loginCount: number;
+      failedAttempts: number;
+      isLocked: boolean;
+      lastLogin: string | undefined;
+      lastActivity: string | undefined;
+      riskScore: number;
+    };
+  }> {
+    const user = this.tables.users.find(u => u.id === userId) || null;
+    const recentActivity = await this.getAuditLogs({ userId, limit: 50 });
+
+    const now = new Date();
+    const lockoutTime = user?.lockoutUntil ? new Date(user.lockoutUntil) : null;
+    const isLocked = lockoutTime ? lockoutTime > now : false;
+
+    // Calculate risk score based on recent failed attempts, unusual activity times, etc.
+    const failedLoginsLast24h = recentActivity.filter(log => 
+      log.action === 'LOGIN_FAILED' && 
+      new Date(log.timestamp).getTime() > now.getTime() - 24 * 60 * 60 * 1000
+    ).length;
+
+    const riskScore = Math.min(100, failedLoginsLast24h * 20 + (user?.failedLoginAttempts || 0) * 10);
+
+    return {
+      user,
+      recentActivity,
+      securityMetrics: {
+        loginCount: user?.loginCount || 0,
+        failedAttempts: user?.failedLoginAttempts || 0,
+        isLocked,
+        lastLogin: user?.lastLogin,
+        lastActivity: user?.lastActivity,
+        riskScore,
+      }
+    };
+  }
+
+  async exportAuditData(filters: any, format: 'json' | 'csv' = 'json'): Promise<string> {
+    const auditLogs = await this.getAuditLogs(filters);
+
+    if (format === 'csv') {
+      const headers = [
+        'Timestamp', 'User', 'Role', 'Organization', 'Action', 'Entity Type', 
+        'Entity ID', 'Success', 'Sensitive Data', 'Compliance Flags', 
+        'IP Address', 'User Agent', 'Reason'
+      ];
+
+      const csvRows = [
+        headers.join(','),
+        ...auditLogs.map(log => [
+          log.timestamp,
+          log.userName,
+          log.userRole,
+          log.organizationId,
+          log.action,
+          log.entityType || '',
+          log.entityId || '',
+          log.success,
+          log.sensitiveData,
+          log.complianceFlags?.join(';') || '',
+          log.ipAddress || '',
+          log.userAgent || '',
+          log.reason || ''
+        ].map(value => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      ];
+
+      return csvRows.join('\n');
+    }
+
+    return JSON.stringify(auditLogs, null, 2);
   }
 }
 

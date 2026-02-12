@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { SidebarLayout, SidebarSection } from '../../components/SidebarLayout';
 import { HospitalDashboardContent } from './screens/HospitalDashboard';
 import { HospitalPrescriptionsScreen } from './screens/HospitalPrescriptionsScreen';
+import { ConsultationHistoryScreen } from './screens/ConsultationHistoryScreen';
 import { PatientListScreen } from './screens/PatientListScreen';
 import { PatientDetailScreen } from './screens/PatientDetailScreen';
 import { PatientRegistrationScreen } from './screens/PatientRegistrationScreen';
@@ -22,6 +23,7 @@ const hospitalSections: SidebarSection[] = [
     title: 'Services Cliniques',
     items: [
       { id: 'appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar', badge: 5 },
+      { id: 'consultations', label: 'Historique Consultations', icon: 'time-outline', iconActive: 'time' },
       { id: 'prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'medical-records', label: 'Dossiers Médicaux', icon: 'folder-open-outline', iconActive: 'folder-open' },
       { id: 'lab-results', label: 'Résultats Labo', icon: 'flask-outline', iconActive: 'flask', badge: 2 },
@@ -51,6 +53,19 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
       'Historique des consultations',
       'Photo et documents d\'identité',
       'Export de la base patients',
+    ],
+  },
+  consultations: {
+    title: 'Historique des Consultations',
+    subtitle: 'Consulter l\'historique complet des consultations médicales.',
+    icon: 'time',
+    features: [
+      'Historique complet par patient',
+      'Filtrage par type, statut et période',
+      'Détails des diagnostics et traitements',
+      'Recherche avancée',
+      'Statistiques de consultation',
+      'Export des données',
     ],
   },
   appointments: {
@@ -202,6 +217,10 @@ export function HospitalNavigator() {
 
     if (activeScreen === 'prescriptions') {
       return <HospitalPrescriptionsScreen />;
+    }
+
+    if (activeScreen === 'consultations') {
+      return <ConsultationHistoryScreen />;
     }
 
     if (activeScreen === 'patients') {

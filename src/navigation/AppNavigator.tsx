@@ -30,6 +30,9 @@ import { POSScreen } from '../modules/pharmacy/screens/POSScreen';
 import { InventoryScreen } from '../modules/pharmacy/screens/InventoryScreen';
 import { SuppliersScreen } from '../modules/pharmacy/screens/SuppliersScreen';
 import { StockAlertsScreen } from '../modules/pharmacy/screens/StockAlertsScreen';
+import { EnhancedPrescriptionsScreen } from '../modules/pharmacy/screens/EnhancedOrdonnancesScreen';
+import { SalesReportsScreen } from '../modules/pharmacy/screens/SalesReportsScreen';
+import { PharmacyReportsScreen } from '../modules/pharmacy/screens/PharmacyReportsScreen';
 import { ConnectivityScreen } from '../screens/ConnectivityScreen';
 import { PatientListScreen } from '../modules/hospital/screens/PatientListScreen';
 import { PatientDetailScreen } from '../modules/hospital/screens/PatientDetailScreen';
@@ -263,15 +266,6 @@ const createDynamicSections = (
 // ═══════════════════════════════════════════════════════════════
 // Pharmacy placeholder screen definitions
 // ═══════════════════════════════════════════════════════════════
-const pharmacyScreens: Record<string, { title: string; subtitle: string; icon: any; features: string[] }> = {
-  'ph-pos': { title: 'Point de Vente (POS)', subtitle: 'Système de caisse intelligent pour traiter les ventes rapidement.', icon: 'cart', features: ['Scan code-barres', 'Recherche rapide', 'Remises automatiques', 'Impression de reçus', 'Multi-paiement', 'Historique transactions'] },
-  'ph-inventory': { title: 'Inventaire Médicaments', subtitle: 'Gérer le stock complet avec suivi en temps réel.', icon: 'cube', features: ['Catalogue complet', 'Suivi lots & expiration', 'Alertes réapprovisionnement', 'Catégorisation DCI/marque', 'Import/Export stock', 'Historique mouvements'] },
-  'ph-prescriptions': { title: 'Gestion Ordonnances', subtitle: 'Traiter et délivrer les ordonnances médicales.', icon: 'document-text', features: ['Validation ordonnances', 'Interactions médicamenteuses', 'Délivrance partielle', 'Historique par patient', 'Liaison dossier médical', 'Ordonnances en attente'] },
-  'ph-suppliers': { title: 'Gestion Fournisseurs', subtitle: 'Gérer les fournisseurs, commandes et livraisons.', icon: 'people', features: ['Répertoire fournisseurs', 'Bons de commande', 'Suivi livraisons', 'Historique achats', 'Comparaison prix', 'Gestion retours'] },
-  'ph-stock-alerts': { title: 'Alertes de Stock', subtitle: 'Surveillance des niveaux de stock et expirations.', icon: 'alert-circle', features: ['Alertes stock bas', 'Proches expiration', 'Produits périmés', 'Seuils personnalisables', 'Notifications auto', 'Rapports alertes'] },
-  'ph-reports': { title: 'Rapports de Ventes', subtitle: 'Analyses détaillées des performances commerciales.', icon: 'bar-chart', features: ['Ventes jour/semaine/mois', 'Top produits vendus', 'Marge bénéficiaire', 'Tendances & prévisions', 'Export PDF/Excel', 'Comparaison périodes'] },
-};
-
 // ═══════════════════════════════════════════════════════════════
 // Hospital placeholder screen definitions
 // ═══════════════════════════════════════════════════════════════
@@ -303,7 +297,16 @@ const occHealthScreens: Record<string, { title: string; subtitle: string; icon: 
 // Desktop App — Unified Sidebar with Dynamic Modules
 // ═══════════════════════════════════════════════════════════════
 function DesktopApp() {
-  const [activeScreen, setActiveScreen] = useState('dashboard');
+  // Initialize activeScreen from URL hash if available, otherwise default to dashboard
+  const getInitialScreen = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) return hash;
+    }
+    return 'dashboard';
+  };
+  
+  const [activeScreen, setActiveScreen] = useState(getInitialScreen);
   const activeModules = useSelector(selectActiveModules);
   const allFeatures = useSelector(selectAllFeatures);
 
@@ -392,24 +395,21 @@ function DesktopApp() {
 
   const renderContent = () => {
     // Main screens
-    if (activeScreen === 'dashboard') return <DashboardScreen />;
+    if (activeScreen === 'dashboard') return <DashboardScreen onNavigate={handleScreenChange} />;
     if (activeScreen === 'connectivity') return <ConnectivityScreen />;
     if (activeScreen === 'settings') return <SettingsScreen />;
 
     // Pharmacy screens
-    if (activeScreen === 'ph-dashboard') return <PharmacyDashboardContent />;
+    if (activeScreen === 'ph-dashboard') return <PharmacyDashboardContent onNavigate={handleScreenChange} />;
     if (activeScreen === 'ph-pos') return <POSScreen />;
     if (activeScreen === 'ph-inventory') return <InventoryScreen />;
     if (activeScreen === 'ph-suppliers') return <SuppliersScreen />;
     if (activeScreen === 'ph-stock-alerts') return <StockAlertsScreen />;
-    // Remaining pharmacy screens that don't have components yet
-    if (pharmacyScreens[activeScreen]) {
-      const s = pharmacyScreens[activeScreen];
-      return <PlaceholderScreen title={s.title} subtitle={s.subtitle} icon={s.icon} accentColor={colors.primary} features={s.features} />;
-    }
+    if (activeScreen === 'ph-prescriptions') return <EnhancedPrescriptionsScreen />;
+    if (activeScreen === 'ph-reports') return <SalesReportsScreen />;
 
     // Hospital screens
-    if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent />;
+    if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent onNavigate={handleScreenChange} />;
     if (activeScreen === 'hp-emergency') return <EmergencyDashboardScreen />;
     if (activeScreen === 'hp-triage') return <TriageScreen />;
     if (activeScreen === 'hp-appointments') return <AppointmentSchedulerScreen />;
@@ -476,7 +476,7 @@ function DesktopApp() {
     }
 
     // Occupational Health screens
-    if (activeScreen === 'oh-dashboard') return <OccHealthDashboardContent />;
+    if (activeScreen === 'oh-dashboard') return <OccHealthDashboardContent onNavigate={handleScreenChange} />;
     if (activeScreen === 'oh-exams') return (
       <OccHealthConsultationScreen 
         draftToLoad={draftToLoad} 

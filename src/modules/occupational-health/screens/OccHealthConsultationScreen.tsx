@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DatabaseService from '../../../services/DatabaseService';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
@@ -483,14 +484,38 @@ export function OccHealthConsultationScreen({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorker, setSelectedWorker] = useState<OccupationalHealthPatient | null>(null);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
+  const [workers, setWorkers] = useState<OccupationalHealthPatient[]>(SAMPLE_WORKERS);
+
+  // Load workers from shared OccHealth patients storage
+  useEffect(() => {
+    const loadWorkers = async () => {
+      try {
+        const db = DatabaseService.getInstance();
+        const occHealthPatients = await db.getOccHealthPatients();
+        
+        if (occHealthPatients.length > 0) {
+          setWorkers(occHealthPatients as OccupationalHealthPatient[]);
+          console.log(`📋 Loaded ${occHealthPatients.length} workers from DatabaseService`);
+        } else {
+          // Fallback to sample workers
+          setWorkers(SAMPLE_WORKERS);
+          console.log(`📋 Using ${SAMPLE_WORKERS.length} sample workers`);
+        }
+      } catch (e) {
+        console.error('Failed to load workers:', e);
+        setWorkers(SAMPLE_WORKERS);
+      }
+    };
+    loadWorkers();
+  }, []);
 
   // Auto-select first worker for testing if none selected
   useEffect(() => {
-    if (!selectedWorker && !draftToLoad && SAMPLE_WORKERS.length > 0) {
-      console.log('🤖 Auto-selecting first worker for testing:', SAMPLE_WORKERS[0].firstName);
-      setSelectedWorker(SAMPLE_WORKERS[0]);
+    if (!selectedWorker && !draftToLoad && workers.length > 0) {
+      console.log('🤖 Auto-selecting first worker for testing:', workers[0].firstName);
+      setSelectedWorker(workers[0]);
     }
-  }, [selectedWorker, draftToLoad]);
+  }, [selectedWorker, draftToLoad, workers]);
 
   // ─── Visit reason ──
   const [examType, setExamType] = useState<ExamType>('periodic');
@@ -689,7 +714,7 @@ export function OccHealthConsultationScreen({
         setLastSaved(new Date(parsed.updatedAt));
       } else if (id === 'EXAM-DRAFT-001') {
         // Handle sample draft data
-        const sampleWorker = SAMPLE_WORKERS.find(w => w.id === 'W005');
+        const sampleWorker = workers.find(w => w.id === 'W005');
         if (sampleWorker) {
           setSelectedWorker(sampleWorker);
           setExamType('periodic');
@@ -834,15 +859,15 @@ export function OccHealthConsultationScreen({
 
   // ─── Worker search ──
   const filteredWorkers = useMemo(() => {
-    if (!searchQuery.trim()) return SAMPLE_WORKERS;
+    if (!searchQuery.trim()) return workers;
     const q = searchQuery.toLowerCase();
-    return SAMPLE_WORKERS.filter(w =>
+    return workers.filter(w =>
       w.firstName.toLowerCase().includes(q) ||
       w.lastName.toLowerCase().includes(q) ||
       w.employeeId.toLowerCase().includes(q) ||
       w.company.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, workers]);
 
   // ─── Handlers ──
   const handleSelectWorker = (w: Worker) => {

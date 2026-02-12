@@ -134,7 +134,7 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
           <Text style={styles.headerTitle}>Tableau de Bord Pharmacie</Text>
           <Text style={styles.headerSubtitle}>Aperçu de l'activité pharmaceutique</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('pos')}>
+        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('ph-pos')}>
           <Ionicons name="add" size={20} color="#FFF" />
           <Text style={styles.addBtnText}>Nouvelle Vente</Text>
         </TouchableOpacity>
@@ -148,7 +148,7 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
         accentColor={colors.primary}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
-        onCtaPress={() => onNavigate?.('analytics')}
+        onCtaPress={() => onNavigate?.('ph-reports')}
       />
       <View style={styles.metricsGrid}>
         {metrics.map((m, i) => (
@@ -176,14 +176,14 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
         accentColor={colors.secondary}
         ctaLabel="Ajouter Produit"
         ctaIcon="add-circle-outline"
-        onCtaPress={() => onNavigate?.('inventory')}
+        onCtaPress={() => onNavigate?.('ph-inventory')}
       />
       <View style={styles.row}>
         {/* Top Selling Drugs */}
         <View style={[styles.card, isDesktop && { flex: 3 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Médicaments les Plus Vendus</Text>
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('inventory')}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-inventory')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>
@@ -216,7 +216,7 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
         <View style={[styles.card, isDesktop && { flex: 2 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Ventes Récentes</Text>
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('sales-reports')}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-reports')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>

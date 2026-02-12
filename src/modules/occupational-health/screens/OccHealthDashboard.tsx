@@ -160,7 +160,11 @@ function SectionHeader({
 }
 
 // ─── Main Component ──────────────────────────────────────────
-export function OccHealthDashboardContent() {
+interface OccHealthDashboardProps {
+  onNavigate?: (screenId: string) => void;
+}
+
+export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProps = {}) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
@@ -169,7 +173,7 @@ export function OccHealthDashboardContent() {
           <Text style={styles.headerTitle}>Medecine du Travail</Text>
           <Text style={styles.headerSubtitle}>Sante & Securite au Travail - ISO 45001 - ILO C155/C161</Text>
         </View>
-        <TouchableOpacity style={[styles.addBtn, { backgroundColor: ACCENT }]} activeOpacity={0.7}>
+        <TouchableOpacity style={[styles.addBtn, { backgroundColor: ACCENT }]} activeOpacity={0.7} onPress={() => onNavigate?.('oh-exams')}>
           <Ionicons name="add-circle" size={20} color="#FFF" />
           <Text style={styles.addBtnText}>Nouvelle Visite</Text>
         </TouchableOpacity>
@@ -183,6 +187,7 @@ export function OccHealthDashboardContent() {
         accentColor="#6366F1"
         ctaLabel="Ajouter Entreprise"
         ctaIcon="add-circle-outline"
+        onCtaPress={() => onNavigate?.('oh-patients')}
       />
       <View style={styles.sectorsGrid}>
         {activeSectors.map((s, i) => {
@@ -215,6 +220,7 @@ export function OccHealthDashboardContent() {
         accentColor={ACCENT}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
+        onCtaPress={() => onNavigate?.('oh-reports')}
       />
       <View style={styles.metricsGrid}>
         {metrics.map((m, i) => (
@@ -281,6 +287,7 @@ export function OccHealthDashboardContent() {
         accentColor={ACCENT}
         ctaLabel="Planifier Visite"
         ctaIcon="add-circle-outline"
+        onCtaPress={() => onNavigate?.('oh-exams')}
       />
       <View style={styles.card}>
         <View style={styles.tableHeader}>
@@ -316,7 +323,7 @@ export function OccHealthDashboardContent() {
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Incidents Recents</Text>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('oh-incidents')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={ACCENT} />
             </TouchableOpacity>
