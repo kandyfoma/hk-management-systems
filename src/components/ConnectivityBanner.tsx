@@ -110,12 +110,17 @@ export function ConnectivityBanner() {
   const { isOnline, quality, latencyMs, refresh } = useConnectivity();
   const [showReconnected, setShowReconnected] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showGoodConnectionBriefly, setShowGoodConnectionBriefly] = useState(false);
   const wasOfflineRef = useRef(false);
+  const wasPooorQualityRef = useRef(false);
+  const goodConnectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastQualityRef = useRef<string>(quality);
 
   const slideAnim = useRef(new Animated.Value(-80)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  const showBanner = !isOnline || quality === 'poor' || quality === 'fair';
+  const shouldShowForConnectionIssues = !isOnline || quality === 'poor' || quality === 'fair';
+  const showBanner = shouldShowForConnectionIssues || showGoodConnectionBriefly;
 
   // Animate banner in/out
   useEffect(() => {
@@ -132,21 +137,89 @@ export function ConnectivityBanner() {
     }
   }, [showBanner]);
 
-  // Detect reconnection
+  // Handle connection quality changes and brief good connection display
+  useEffect(() => {
+    // Clear any existing timer first
+    if (goodConnectionTimerRef.current) {
+      clearTimeout(goodConnectionTimerRef.current);
+      goodConnectionTimerRef.current = null;
+    }
+
+    const previousQuality = lastQualityRef.current;
+    lastQualityRef.current = quality;
+
+    // Track offline state
+    if (!isOnline) {
+      wasOfflineRef.current = true;
+      wasPooorQualityRef.current = false;
+      setShowGoodConnectionBriefly(false);
+      return;
+    }
+    
+    // Track poor/fair quality state
+    if (quality === 'poor' || quality === 'fair') {
+      wasPooorQualityRef.current = true;
+      setShowGoodConnectionBriefly(false);
+      return;
+    }
+    
+    // Handle good/excellent connection
+    if (quality === 'good' || quality === 'excellent') {
+      // Check if we're improving from a worse state
+      const improvingFromOffline = wasOfflineRef.current;
+      const improvingFromPoorQuality = wasPooorQualityRef.current;
+      const improvingFromFairToPerfect = previousQuality === 'fair' || previousQuality === 'poor';
+      
+      const shouldShowBriefly = improvingFromOffline || improvingFromPoorQuality || improvingFromFairToPerfect;
+      
+      if (shouldShowBriefly) {
+        setShowGoodConnectionBriefly(true);
+        
+        // Create a fresh timer to hide after 3 seconds
+        goodConnectionTimerRef.current = setTimeout(() => {
+          setShowGoodConnectionBriefly(false);
+          wasOfflineRef.current = false;
+          wasPooorQualityRef.current = false;
+          goodConnectionTimerRef.current = null;
+        }, 3000);
+      } else {
+        // Already in good state, ensure banner is hidden
+        setShowGoodConnectionBriefly(false);
+        wasOfflineRef.current = false;
+        wasPooorQualityRef.current = false;
+      }
+    }
+  }, [isOnline, quality]);
+
+  // Detect reconnection for toast
   useEffect(() => {
     if (!isOnline) {
       wasOfflineRef.current = true;
-    }
-    if (isOnline && wasOfflineRef.current) {
-      wasOfflineRef.current = false;
+    } else if (wasOfflineRef.current && isOnline) {
       setShowReconnected(true);
+      // Don't reset wasOfflineRef here, let the quality effect handle it
     }
   }, [isOnline]);
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (goodConnectionTimerRef.current) {
+        clearTimeout(goodConnectionTimerRef.current);
+        goodConnectionTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refresh();
-    setRefreshing(false);
+    try {
+      await refresh();
+    } catch (error) {
+      console.log('Refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const cfg = qualityConfig[quality];

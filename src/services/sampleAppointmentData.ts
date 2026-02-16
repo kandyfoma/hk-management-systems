@@ -1,0 +1,161 @@
+/**
+ * Sample appointment and patient data for testing the appointment scheduler
+ */
+
+export const samplePatients = [
+  {
+    id: 'P1001',
+    patientNumber: 'PAT-001',
+    firstName: 'Marie',
+    lastName: 'Kabamba',
+    dateOfBirth: '1985-03-15',
+    gender: 'female' as const,
+    phone: '+243 81 234 5678',
+    email: 'marie.kabamba@email.com',
+    address: 'Avenue Lumumba 234, Kinshasa',
+    emergencyContactName: 'Jean Kabamba',
+    emergencyContactPhone: '+243 85 567 8901',
+    emergencyContactRelation: 'spouse',
+    registrationDate: '2023-06-01',
+    lastVisit: '2025-02-10',
+    status: 'active' as const,
+    allergies: ['Pénicilline'],
+    chronicConditions: ['Hypertension'],
+    currentMedications: ['Amlodipine 5mg'],
+    bloodType: 'O+' as const,
+    weight: 65,
+    height: 160,
+    createdAt: '2023-06-01',
+    updatedAt: '2025-02-10'
+  },
+  {
+    id: 'P1002',
+    patientNumber: 'PAT-002',
+    firstName: 'Jean',
+    lastName: 'Mukendi',
+    dateOfBirth: '1978-07-22',
+    gender: 'male' as const,
+    phone: '+243 99 876 5432',
+    email: 'jean.mukendi@email.com',
+    address: 'Avenue Kasavubu 45, Lubumbashi',
+    emergencyContactName: 'Marie Mukendi',
+    emergencyContactPhone: '+243 82 345 6789',
+    emergencyContactRelation: 'spouse',
+    registrationDate: '2024-01-15',
+    lastVisit: '2025-02-12',
+    status: 'active' as const,
+    allergies: [],
+    chronicConditions: ['Diabète Type 2'],
+    currentMedications: ['Metformine 500mg'],
+    bloodType: 'A+' as const,
+    weight: 78,
+    height: 175,
+    createdAt: '2024-01-15',
+    updatedAt: '2025-02-12'
+  },
+  {
+    id: 'P1003',
+    patientNumber: 'PAT-003',
+    firstName: 'Grace',
+    lastName: 'Mwanza',
+    dateOfBirth: '1992-11-08',
+    gender: 'female' as const,
+    phone: '+243 97 555 1234',
+    email: 'grace.mwanza@email.com',
+    address: 'Boulevard du 30 Juin 123, Kinshasa',
+    emergencyContactName: 'Paul Mwanza',
+    emergencyContactPhone: '+243 81 999 8877',
+    emergencyContactRelation: 'brother',
+    registrationDate: '2024-03-20',
+    lastVisit: '2025-02-15',
+    status: 'active' as const,
+    allergies: ['Latex'],
+    chronicConditions: [],
+    currentMedications: [],
+    bloodType: 'B-' as const,
+    weight: 58,
+    height: 165,
+    createdAt: '2024-03-20',
+    updatedAt: '2025-02-15'
+  },
+  {
+    id: 'P1004',
+    patientNumber: 'PAT-004',
+    firstName: 'Sophie',
+    lastName: 'Mwamba',
+    dateOfBirth: '1987-05-12',
+    gender: 'female' as const,
+    phone: '+243 84 333 2222',
+    email: 'sophie.mwamba@email.com',
+    address: 'Avenue de la Paix 67, Goma',
+    emergencyContactName: 'Michel Mwamba',
+    emergencyContactPhone: '+243 97 444 5555',
+    emergencyContactRelation: 'husband',
+    registrationDate: '2023-11-10',
+    lastVisit: '2025-02-16',
+    status: 'active' as const,
+    allergies: [],
+    chronicConditions: ['Asthme'],
+    currentMedications: ['Salbutamol'],
+    bloodType: 'AB+' as const,
+    weight: 62,
+    height: 158,
+    createdAt: '2023-11-10',
+    updatedAt: '2025-02-16'
+  }
+];
+
+export const sampleAppointments = [
+  {
+    id: 'A001',
+    patientId: 'P1001',
+    doctorId: 'D001',
+    appointmentDate: new Date().toISOString().split('T')[0], // Today
+    appointmentTime: '09:00',
+    duration: 30,
+    type: 'consultation',
+    status: 'confirmed' as const,
+    notes: 'Consultation de contrôle hypertension',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'A002',
+    patientId: 'P1002',
+    doctorId: 'D001',
+    appointmentDate: new Date().toISOString().split('T')[0], // Today
+    appointmentTime: '10:00',
+    duration: 45,
+    type: 'suivi',
+    status: 'scheduled' as const,
+    notes: 'Suivi diabète - contrôle glycémie',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'A003',
+    patientId: 'P1003',
+    doctorId: 'D002',
+    appointmentDate: new Date().toISOString().split('T')[0], // Today
+    appointmentTime: '14:30',
+    duration: 30,
+    type: 'urgence',
+    status: 'scheduled' as const,
+    notes: 'Consultation urgente - douleurs abdominales',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'A004',
+    patientId: 'P1004',
+    doctorId: 'D003',
+    appointmentDate: new Date().toISOString().split('T')[0], // Today
+    appointmentTime: '11:00',
+    duration: 45,
+    type: 'consultation',
+    status: 'completed' as const,
+    notes: 'Échographie abdominale - suivi grossesse',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
