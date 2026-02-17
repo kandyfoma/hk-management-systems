@@ -7,7 +7,7 @@ class LicenseCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = License
         fields = [
-            'license_number', 'type', 'holder_user', 'holder_organization',
+            'license_number', 'type', 'organization',
             'issuing_authority', 'issued_date', 'expiry_date', 'renewal_date',
             'title', 'description', 'scope_of_practice', 'conditions',
             'renewal_required', 'renewal_period_months', 'ceu_required',
@@ -15,11 +15,9 @@ class LicenseCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        # Ensure either user or organization is specified, not both
-        if attrs.get('holder_user') and attrs.get('holder_organization'):
-            raise serializers.ValidationError("License cannot be held by both user and organization")
-        if not attrs.get('holder_user') and not attrs.get('holder_organization'):
-            raise serializers.ValidationError("License must be held by either a user or organization")
+        # Ensure organization is specified
+        if not attrs.get('organization'):
+            raise serializers.ValidationError("License must be assigned to an organization")
         return attrs
 
 
@@ -31,7 +29,7 @@ class LicenseUpdateSerializer(serializers.ModelSerializer):
             'scope_of_practice', 'conditions', 'renewal_required',
             'renewal_period_months', 'ceu_required', 'ceu_hours_required', 'metadata'
         ]
-        read_only_fields = ['license_number', 'type', 'holder_user', 'holder_organization']
+        read_only_fields = ['license_number', 'type', 'organization']
 
 
 class LicenseSerializer(serializers.ModelSerializer):
@@ -50,7 +48,7 @@ class LicenseSerializer(serializers.ModelSerializer):
         model = License
         fields = [
             'id', 'license_number', 'type', 'type_display', 'status', 'status_display',
-            'holder_user', 'holder_organization', 'holder_name', 'holder_type',
+            'organization', 'holder_name', 'holder_type',
             'issuing_authority', 'issued_date', 'expiry_date', 'renewal_date',
             'title', 'description', 'scope_of_practice', 'conditions',
             'renewal_required', 'renewal_period_months', 'ceu_required',
@@ -61,18 +59,12 @@ class LicenseSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_holder_name(self, obj):
-        if obj.holder_user:
-            return obj.holder_user.full_name
-        elif obj.holder_organization:
-            return obj.holder_organization.name
+        if obj.organization:
+            return obj.organization.name
         return None
 
     def get_holder_type(self, obj):
-        if obj.holder_user:
-            return 'user'
-        elif obj.holder_organization:
-            return 'organization'
-        return None
+        return 'organization'
 
     def get_documents_count(self, obj):
         return obj.documents.count()
@@ -93,23 +85,17 @@ class LicenseListSerializer(serializers.ModelSerializer):
         model = License
         fields = [
             'id', 'license_number', 'type', 'type_display', 'status', 'status_display',
-            'holder_name', 'holder_type', 'title', 'issued_date', 'expiry_date',
+            'organization', 'holder_name', 'holder_type', 'title', 'issued_date', 'expiry_date',
             'days_until_expiry'
         ]
 
     def get_holder_name(self, obj):
-        if obj.holder_user:
-            return obj.holder_user.full_name
-        elif obj.holder_organization:
-            return obj.holder_organization.name
+        if obj.organization:
+            return obj.organization.name
         return None
 
     def get_holder_type(self, obj):
-        if obj.holder_user:
-            return 'user'
-        elif obj.holder_organization:
-            return 'organization'
-        return None
+        return 'organization'
 
 
 class LicenseDocumentSerializer(serializers.ModelSerializer):

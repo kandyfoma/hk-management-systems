@@ -1,0 +1,238 @@
+/* ============================================
+   HK Management Systems - Custom Admin Styles
+   ============================================ */
+
+/* Smooth transitions everywhere */
+* {
+    transition: background-color 0.2s ease, color 0.15s ease, border-color 0.2s ease;
+}
+
+/* Better card styling */
+.card, .card-body {
+    border-radius: 8px !important;
+}
+
+/* Dashboard module cards */
+#content-main .module {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+}
+
+/* Nicer table rows */
+#result_list table tbody tr:hover td {
+    background-color: rgba(52, 152, 219, 0.06) !important;
+}
+
+/* Badge-style improvements */
+.badge {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+/* Better fieldset headers */
+fieldset .card-header,
+.tab-pane fieldset legend,
+fieldset > h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Dropdown select improvements */
+select,
+.form-control,
+.form-select {
+    border-radius: 6px !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 6px 12px !important;
+    min-height: 38px;
+}
+
+select:focus,
+.form-control:focus,
+.form-select:focus {
+    border-color: #3498db !important;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15) !important;
+}
+
+/* FK dropdown styling */
+.related-widget-wrapper select {
+    min-width: 300px;
+    max-width: 100%;
+}
+
+.related-widget-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Autocomplete widget styling */
+.select2-container--default .select2-selection--single {
+    border-radius: 6px !important;
+    border: 1px solid #dee2e6 !important;
+    height: 38px !important;
+    padding: 4px 8px !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 28px !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px !important;
+}
+
+.select2-dropdown {
+    border-radius: 6px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    border: 1px solid #dee2e6 !important;
+}
+
+.select2-results__option--highlighted {
+    background-color: #3498db !important;
+}
+
+/* Nicer submit buttons */
+.submit-row input[type="submit"],
+.submit-row button,
+input[type="submit"],
+.btn-primary {
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em;
+    padding: 8px 20px !important;
+}
+
+/* Action bar */
+.changelist-form-container .actions {
+    border-radius: 6px;
+    padding: 10px 15px;
+}
+
+/* Date hierarchy breadcrumbs */
+.xfull .breadcrumb {
+    border-radius: 6px;
+}
+
+/* Better inline styling */
+.inline-group .tabular td,
+.inline-group .tabular th {
+    padding: 8px 12px !important;
+}
+
+.inline-group h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 10px 15px;
+    border-radius: 6px 6px 0 0;
+}
+
+/* Nav sidebar improvements */
+.nav-sidebar .nav-link {
+    border-radius: 6px;
+    margin-bottom: 2px;
+    padding: 8px 12px !important;
+}
+
+.nav-sidebar .nav-link:hover {
+    background-color: rgba(255,255,255,0.08) !important;
+}
+
+.nav-sidebar .nav-link.active {
+    font-weight: 600;
+}
+
+/* Login page improvements */
+#login-form {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+#login-form input[type="text"],
+#login-form input[type="password"] {
+    border-radius: 6px !important;
+    padding: 10px 15px !important;
+}
+
+/* Dashboard welcome */
+.jazzmin-login-container {
+    border-radius: 12px;
+}
+
+/* Wizard/Tab improvements */
+.nav-tabs .nav-link {
+    border-radius: 6px 6px 0 0 !important;
+    font-weight: 500;
+    padding: 10px 18px !important;
+}
+
+.nav-tabs .nav-link.active {
+    font-weight: 700;
+    border-bottom: 3px solid #3498db !important;
+}
+
+.tab-content {
+    padding: 20px 15px;
+}
+
+/* Collapse headers */
+fieldset.collapse .card-header,
+.collapse-toggle {
+    cursor: pointer;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    .related-widget-wrapper select {
+        min-width: 200px;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 8px 12px !important;
+        font-size: 0.85rem;
+    }
+}
+
+/* Status colors used in list displays */
+.text-success { color: #27ae60 !important; }
+.text-danger { color: #e74c3c !important; }
+.text-warning { color: #f39c12 !important; }
+.text-info { color: #3498db !important; }
+
+/* Better pagination */
+.pagination .page-link {
+    border-radius: 4px !important;
+    margin: 0 2px;
+}
+
+/* Changelist filter sidebar */
+#changelist-filter {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#changelist-filter h2 {
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+#changelist-filter li {
+    padding: 4px 0;
+}
+
+/* Result count info */
+.paginator {
+    font-weight: 500;
+}
+
+/* Object tools (Add button etc) */
+.object-tools li a {
+    border-radius: 6px !important;
+    font-weight: 600;
+}

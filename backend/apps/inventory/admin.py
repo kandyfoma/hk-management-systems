@@ -10,6 +10,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ['category', 'is_active', 'requires_prescription', 'dosage_form']
     search_fields = ['name', 'sku', 'barcode', 'generic_name']
     readonly_fields = ['created_at', 'updated_at']
+    autocomplete_fields = ['primary_supplier']
     fieldsets = (
         ('Informations de base', {
             'fields': ('name', 'generic_name', 'sku', 'barcode', 'description', 'image')
@@ -42,6 +43,7 @@ class InventoryItemAdmin(admin.ModelAdmin):
     list_filter = ['stock_status', 'last_counted']
     search_fields = ['product__name', 'product__sku', 'location']
     readonly_fields = ['quantity_available', 'total_value', 'last_movement', 'created_at', 'updated_at']
+    autocomplete_fields = ['product']
 
 
 @admin.register(InventoryBatch)
@@ -59,6 +61,7 @@ class StockMovementAdmin(admin.ModelAdmin):
     search_fields = ['inventory_item__product__name', 'reference_number', 'reason']
     readonly_fields = ['total_cost', 'balance_before', 'balance_after', 'created_at']
     date_hierarchy = 'movement_date'
+    autocomplete_fields = ['inventory_item', 'performed_by']
 
 
 @admin.register(InventoryAlert)
@@ -67,6 +70,7 @@ class InventoryAlertAdmin(admin.ModelAdmin):
     list_filter = ['alert_type', 'severity', 'is_active']
     search_fields = ['product__name', 'message', 'title']
     readonly_fields = ['acknowledged_at', 'acknowledged_by', 'resolved_at', 'resolved_by', 'created_at']
+    autocomplete_fields = ['product']
     actions = ['mark_acknowledged', 'mark_active']
     
     def mark_acknowledged(self, request, queryset):

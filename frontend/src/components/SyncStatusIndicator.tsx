@@ -15,12 +15,12 @@ interface Props {
 }
 
 export function SyncStatusIndicator({ onPress, compact = false }: Props) {
-  const [syncStatus, setSyncStatus] = useState(HybridDataService.getSyncStatus());
+  const [syncStatus, setSyncStatus] = useState(HybridDataService.getInstance().getSyncStatus());
   const [lastUpdate, setLastUpdate] = useState(new Date());
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setSyncStatus(HybridDataService.getSyncStatus());
+      setSyncStatus(HybridDataService.getInstance().getSyncStatus());
       setLastUpdate(new Date());
     }, 2000); // Update every 2 seconds
 

@@ -34,7 +34,8 @@
       "shortName": "HK Systems",
       "description": "Système de gestion hospitalière et pharmaceutique pour la RD Congo",
       "themeColor": "#122056",
-      "backgroundColor": "#FAFAFD"
+      "backgroundColor": "#FAFAFD",
+      "bundler": "webpack"
     }
   }
 }

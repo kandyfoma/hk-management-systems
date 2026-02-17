@@ -178,3 +178,59 @@ def organization_stats_view(request, organization_id):
         
     except Organization.DoesNotExist:
         return Response({'error': 'Organization not found'}, status=404)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def current_organization_licenses(request):
+    """Get licenses for the current user's organization"""
+    try:
+        user = request.user
+        if not user.organization:
+            return Response({'error': 'User not associated with an organization'}, status=400)
+        
+        organization = user.organization
+        licenses = organization.licenses.all().order_by('-created_at')
+        
+        # Transform licenses to match frontend License model
+        license_data = []
+        for license_obj in licenses:
+            # Map backend license type to frontend ModuleType
+            module_type = license_obj.type
+            if module_type == 'COMBINED':
+                module_type = 'COMBINED'
+            elif module_type == 'OCCUPATIONAL_HEALTH':
+                module_type = 'OCCUPATIONAL_HEALTH'
+            elif module_type == 'PHARMACY':
+                module_type = 'PHARMACY'
+            elif module_type == 'HOSPITAL':
+                module_type = 'HOSPITAL'
+            else:
+                module_type = 'TRIAL'
+            
+            license_data.append({
+                'id': str(license_obj.id),
+                'licenseKey': license_obj.license_number,
+                'organizationId': str(organization.id),
+                'moduleType': module_type,
+                'licenseTier': 'PROFESSIONAL',  # Default tier for now
+                'isActive': license_obj.status == 'active',
+                'issuedDate': license_obj.issued_date.isoformat(),
+                'expiryDate': license_obj.expiry_date.isoformat() if license_obj.expiry_date else None,
+                'maxUsers': None,  # Unlimited for now
+                'maxFacilities': None,  # Unlimited for now
+                'features': [
+                    'patient_management', 'appointment_scheduling', 'basic_inventory',
+                    'prescription_management', 'basic_reporting', 'medical_records',
+                ],  # Default features based on license type
+                'billingCycle': 'ANNUAL',
+                'autoRenew': license_obj.renewal_required,
+                'createdAt': license_obj.created_at.isoformat(),
+                'updatedAt': license_obj.updated_at.isoformat() if license_obj.updated_at else None,
+                'metadata': license_obj.metadata or {}
+            })
+        
+        return Response(license_data)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)

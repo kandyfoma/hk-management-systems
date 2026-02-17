@@ -30,6 +30,7 @@ class VitalSignsAdmin(admin.ModelAdmin):
         'id', 'body_mass_index', 'bmi_category', 'blood_pressure_reading',
         'is_abnormal', 'created_at', 'updated_at', 'measured_at'
     ]
+    autocomplete_fields = ['patient', 'encounter', 'measured_by', 'verified_by', 'created_by', 'updated_by']
     fieldsets = (
         ('Information Patient', {
             'fields': ('patient', 'encounter', 'measurement_location', 'measurement_method')
@@ -108,6 +109,7 @@ class HospitalEncounterAdmin(admin.ModelAdmin):
     readonly_fields = [
         'id', 'encounter_number', 'created_at', 'updated_at'
     ]
+    autocomplete_fields = ['patient', 'organization', 'attending_physician', 'created_by', 'updated_by']
     fieldsets = (
         ('Information Consultation', {
             'fields': ('encounter_number', 'patient', 'organization', 'encounter_type', 'status')
@@ -189,6 +191,7 @@ class HospitalDepartmentAdmin(admin.ModelAdmin):
     list_filter = ['organization', 'is_active', 'department_head']
     search_fields = ['name', 'code', 'description', 'location']
     readonly_fields = ['id', 'created_at', 'updated_at']
+    autocomplete_fields = ['organization', 'department_head']
     fieldsets = (
         ('Information Générale', {
             'fields': ('organization', 'name', 'code', 'description', 'department_head')
@@ -228,6 +231,7 @@ class HospitalBedAdmin(admin.ModelAdmin):
         'current_patient__first_name', 'current_patient__last_name'
     ]
     readonly_fields = ['id', 'created_at', 'updated_at']
+    autocomplete_fields = ['department', 'current_patient', 'current_encounter']
     fieldsets = (
         ('Identification', {
             'fields': ('department', 'bed_number', 'room_number', 'bed_type')
@@ -288,10 +292,4 @@ class HospitalBedAdmin(admin.ModelAdmin):
     features_display.short_description = 'Équipements'
 
 
-# ═══════════════════════════════════════════════════════════════
-#  ADMIN CUSTOMIZATIONS
-# ═══════════════════════════════════════════════════════════════
-
-admin.site.site_title = "Gestion Hospitalière - Administration"
-admin.site.site_header = "Administration - Module Hospitalier"
-admin.site.index_title = "Gestion des Services Hospitaliers"
+# Admin site customizations are handled by Jazzmin in settings.py

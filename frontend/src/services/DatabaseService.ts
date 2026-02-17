@@ -4248,5 +4248,3 @@ export class DatabaseService {
 }
 
 export default DatabaseService;
-
-export default DatabaseService;

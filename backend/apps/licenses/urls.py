@@ -4,6 +4,9 @@ from . import views
 app_name = 'licenses'
 
 urlpatterns = [
+    # License Validation (for app/device activation)
+    path('validate/', views.validate_license, name='validate_license'),
+    
     # Licenses
     path('', views.LicenseListCreateAPIView.as_view(), name='license_list_create'),
     path('<uuid:pk>/', views.LicenseDetailAPIView.as_view(), name='license_detail'),

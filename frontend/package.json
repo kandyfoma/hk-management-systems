@@ -1,12 +1,18 @@
 {
   "name": "hk-management-react-native",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "clear": "expo start --clear",
+    "web-clear": "expo start --web --clear",
+    "reset": "rm -rf node_modules && npm install && expo start --clear"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -20,9 +26,12 @@
     "expo": "~54.0.33",
     "expo-barcode-scanner": "^13.0.1",
     "expo-crypto": "^15.0.8",
+    "expo-document-picker": "~12.0.2",
+    "expo-file-system": "~18.0.6",
     "expo-localization": "^17.0.8",
     "expo-random": "^14.0.1",
     "expo-secure-store": "^15.0.8",
+    "expo-sharing": "~13.0.2",
     "expo-sqlite": "^16.0.10",
     "expo-status-bar": "~3.0.9",
     "react": "^19.2.0",
@@ -39,7 +48,9 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@expo/webpack-config": "^0.17.2",
     "@types/react": "^19.2.14",
+    "babel-preset-expo": "^11.0.16",
     "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   },

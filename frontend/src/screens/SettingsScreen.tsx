@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TextInput, Text, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TextInput, Text, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import { Switch } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useToast } from '../components/GlobalUI';
 import { RootState } from '../store/store';
 import { colors, borderRadius, shadows, spacing } from '../theme/theme';
@@ -21,6 +22,8 @@ import {
   setLastBackupTime,
   resetSettings,
 } from '../store/slices/settingsSlice';
+import { logout as logoutAction, updateUser } from '../store/slices/authSlice';
+import ApiAuthService from '../services/ApiAuthService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -73,7 +76,7 @@ const secStyles = StyleSheet.create({
 export function SettingsScreen() {
   const dispatch = useDispatch();
   const settings = useSelector((state: RootState) => state.settings);
-  const { user, license } = useSelector((state: RootState) => state.auth);
+  const { user, organization, licenses } = useSelector((state: RootState) => state.auth);
   const { showToast } = useToast();
 
   // Local inputs for system info (keeps UI responsive while typing)
@@ -82,12 +85,110 @@ export function SettingsScreen() {
   const [contactPhone, setContactPhone] = useState(settings.system.contactPhone);
   const [contactEmail, setContactEmail] = useState(settings.system.contactEmail);
 
+  // Profile editing states
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({
+    firstName: user?.firstName || user?.first_name || '',
+    lastName: user?.lastName || user?.last_name || '',
+    phone: user?.phone || '',
+    email: user?.email || '',
+  });
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
   useEffect(() => {
     setOrgName(settings.system.organizationName);
     setHospitalAddress(settings.system.hospitalAddress);
     setContactPhone(settings.system.contactPhone);
     setContactEmail(settings.system.contactEmail);
   }, [settings.system]);
+
+  useEffect(() => {
+    // Update profile data when user changes
+    if (user) {
+      setProfileData({
+        firstName: user.firstName || user.first_name || '',
+        lastName: user.lastName || user.last_name || '',
+        phone: user.phone || '',
+        email: user.email || '',
+      });
+    }
+  }, [user]);
+
+  const handleUpdateProfile = async () => {
+    if (!profileData.firstName.trim() || !profileData.lastName.trim()) {
+      showToast('Nom et prénom sont requis', 'error');
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    try {
+      const result = await ApiAuthService.getInstance().updateProfile({
+        first_name: profileData.firstName.trim(),
+        last_name: profileData.lastName.trim(),
+        phone: profileData.phone.trim(),
+        email: profileData.email.trim(),
+      });
+
+      if (result.success && result.user) {
+        dispatch(updateUser(result.user));
+        showToast('Profil mis à jour avec succès', 'success');
+        setIsEditingProfile(false);
+      } else {
+        showToast(result.error || 'Erreur lors de la mise à jour', 'error');
+      }
+    } catch (error) {
+      console.error('Profile update error:', error);
+      showToast('Erreur lors de la mise à jour du profil', 'error');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Déconnexion',
+      'Êtes-vous sûr de vouloir vous déconnecter ? Cela effacera toutes les données locales y compris l\'activation de licence.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { 
+          text: 'Déconnexion', 
+          style: 'destructive',
+          onPress: performLogout 
+        }
+      ]
+    );
+  };
+
+  const performLogout = async () => {
+    try {
+      showToast('Déconnexion en cours...', 'info');
+      
+      // Clear all stored data
+      await AsyncStorage.multiRemove([
+        'auth_session',
+        'current_user', 
+        'current_organization',
+        'device_activation_info'
+      ]);
+      
+      // Clear auth token
+      await ApiAuthService.getInstance().logout();
+      
+      // Reset Redux state
+      dispatch(logoutAction());
+      dispatch(resetSettings());
+      
+      showToast('Déconnexion réussie', 'success');
+      
+      // Force reload to restart the app
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        setTimeout(() => window.location.reload(), 500);
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      showToast('Erreur lors de la déconnexion', 'error');
+    }
+  };
 
   const handleCurrencyChange = () => {
     Alert.alert(
@@ -217,34 +318,176 @@ export function SettingsScreen() {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {/* User & License Information */}
-        <View style={styles.infoCard}>
+        {/* User Profile Section */}
+        <View style={styles.profileCard}>
           <View style={styles.cardHeader}>
-            <View style={[styles.iconBubble, { backgroundColor: colors.info + '14' }]}>
-              <Ionicons name="person-circle" size={24} color={colors.info} />
+            <View style={[styles.iconBubble, { backgroundColor: colors.primary + '14' }]}>
+              <Ionicons name="person-circle" size={24} color={colors.primary} />
             </View>
             <View style={styles.cardHeaderText}>
-              <Text style={styles.cardTitle}>Informations Système</Text>
-              <Text style={styles.cardSubtitle}>Utilisateur et licence active</Text>
+              <Text style={styles.cardTitle}>Profil Utilisateur</Text>
+              <Text style={styles.cardSubtitle}>Gérer vos informations personnelles</Text>
+            </View>
+            <TouchableOpacity 
+              onPress={() => setIsEditingProfile(!isEditingProfile)}
+              style={styles.editButton}
+            >
+              <Ionicons 
+                name={isEditingProfile ? "close" : "create"} 
+                size={20} 
+                color={colors.primary} 
+              />
+            </TouchableOpacity>
+          </View>
+          
+          {!isEditingProfile ? (
+            <View style={styles.infoRows}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Nom complet:</Text>
+                <Text style={styles.infoValue}>
+                  {(user?.firstName || user?.first_name || '') + ' ' + (user?.lastName || user?.last_name || '')}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Téléphone:</Text>
+                <Text style={styles.infoValue}>{user?.phone || 'Non défini'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Email:</Text>
+                <Text style={styles.infoValue}>{user?.email || 'Non défini'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Rôle:</Text>
+                <Text style={styles.infoValue}>{user?.primary_role || user?.role || 'Non défini'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Organisation:</Text>
+                <Text style={styles.infoValue}>{organization?.name || 'Non définie'}</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.editForm}>
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>Prénom *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={profileData.firstName}
+                  onChangeText={(text) => setProfileData({ ...profileData, firstName: text })}
+                  placeholder="Entrez votre prénom"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>Nom de famille *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={profileData.lastName}
+                  onChangeText={(text) => setProfileData({ ...profileData, lastName: text })}
+                  placeholder="Entrez votre nom"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>Téléphone</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={profileData.phone}
+                  onChangeText={(text) => setProfileData({ ...profileData, phone: text })}
+                  placeholder="+243 XXX XXX XXX"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>Email</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={profileData.email}
+                  onChangeText={(text) => setProfileData({ ...profileData, email: text })}
+                  placeholder="votre.email@exemple.com"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+              
+              <View style={styles.buttonRow}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.cancelButton]}
+                  onPress={() => {
+                    setIsEditingProfile(false);
+                    // Reset form to original values
+                    setProfileData({
+                      firstName: user?.firstName || user?.first_name || '',
+                      lastName: user?.lastName || user?.last_name || '',
+                      phone: user?.phone || '',
+                      email: user?.email || '',
+                    });
+                  }}
+                >
+                  <Text style={[styles.buttonText, { color: colors.textSecondary }]}>Annuler</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.saveButton, isUpdatingProfile && styles.disabledButton]}
+                  onPress={handleUpdateProfile}
+                  disabled={isUpdatingProfile}
+                >
+                  <Text style={[styles.buttonText, { color: colors.surface }]}>
+                    {isUpdatingProfile ? 'Sauvegarde...' : 'Sauvegarder'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* License Information */}
+        <View style={styles.infoCard}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconBubble, { backgroundColor: colors.success + '14' }]}>
+              <Ionicons name="key" size={24} color={colors.success} />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>Informations de Licence</Text>
+              <Text style={styles.cardSubtitle}>Statut et modules actifs</Text>
             </View>
           </View>
           <View style={styles.infoRows}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Utilisateur:</Text>
-              <Text style={styles.infoValue}>{user?.firstName} {user?.lastName}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Rôle:</Text>
-              <Text style={styles.infoValue}>{user?.role?.toUpperCase() || 'Non défini'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Licence:</Text>
-              <Text style={styles.infoValue}>{license?.type || 'Non Activée'}</Text>
-            </View>
-            {license?.expiryDate && (
+            {licenses && licenses.length > 0 ? (
+              licenses.map((license, index) => (
+                <View key={license.id || index} style={styles.licenseItem}>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Type:</Text>
+                    <Text style={styles.infoValue}>{license.moduleType || 'Non défini'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Statut:</Text>
+                    <Text style={[
+                      styles.infoValue, 
+                      { color: license.isActive ? colors.success : colors.error }
+                    ]}>
+                      {license.isActive ? 'Actif' : 'Inactif'}
+                    </Text>
+                  </View>
+                  {license.expiryDate && (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Expire:</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(license.expiryDate).toLocaleDateString('fr-FR')}
+                      </Text>
+                    </View>
+                  )}
+                  {index < licenses.length - 1 && <View style={styles.licenseDivider} />}
+                </View>
+              ))
+            ) : (
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Expire:</Text>
-                <Text style={styles.infoValue}>{new Date(license.expiryDate).toLocaleDateString('fr-FR')}</Text>
+                <Text style={styles.infoLabel}>Statut:</Text>
+                <Text style={[styles.infoValue, { color: colors.error }]}>Aucune licence active</Text>
               </View>
             )}
           </View>
@@ -718,6 +961,11 @@ export function SettingsScreen() {
             <Text style={styles.primaryButtonText}>À Propos</Text>
           </TouchableOpacity>
           
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out" size={20} color={colors.surface} />
+            <Text style={styles.logoutButtonText}>Déconnexion</Text>
+          </TouchableOpacity>
+          
           <TouchableOpacity style={styles.dangerButton} onPress={handleReset}>
             <Ionicons name="refresh" size={20} color={colors.surface} />
             <Text style={styles.dangerButtonText}>Réinitialiser</Text>
@@ -949,6 +1197,96 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   dangerButtonText: {
+    color: colors.surface,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Profile Card Styles
+  profileCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    ...shadows.sm,
+  },
+  editButton: {
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary + '14',
+  },
+  editForm: {
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  inputRow: {
+    gap: spacing.xs,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  textInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    fontSize: 16,
+    color: colors.text,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  actionButton: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  saveButton: {
+    backgroundColor: colors.primary,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // License Display
+  licenseItem: {
+    paddingVertical: spacing.sm,
+  },
+  licenseDivider: {
+    height: 1,
+    backgroundColor: colors.outline,
+    marginVertical: spacing.md,
+  },
+
+  // Logout Button
+  logoutButton: {
+    backgroundColor: colors.warning,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    ...shadows.sm,
+  },
+  logoutButtonText: {
     color: colors.surface,
     fontSize: 16,
     fontWeight: '600',

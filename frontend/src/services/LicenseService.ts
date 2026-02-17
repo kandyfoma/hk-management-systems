@@ -1,6 +1,14 @@
 import DatabaseService from './DatabaseService';
+import ApiService, { ApiResponse } from './ApiService';
 import { License, LicenseCreate, LicenseUpdate, LicenseUtils, ModuleType, LicenseTier, PHARMACY_FEATURES, HOSPITAL_FEATURES, OCC_HEALTH_FEATURES } from '../models/License';
 import { Organization } from '../models/Organization';
+
+interface LicenseValidationResponse {
+  isValid: boolean;
+  license?: any;
+  organization?: any;
+  errors: string[];
+}
 
 export class LicenseService {
   private static instance: LicenseService;
@@ -18,7 +26,7 @@ export class LicenseService {
   }
 
   /**
-   * Validate a license key and return license information
+   * Validate a license key against the backend
    */
   async validateLicenseKey(licenseKey: string): Promise<{
     isValid: boolean;
@@ -29,31 +37,47 @@ export class LicenseService {
     const errors: string[] = [];
     
     try {
-      const license = await this.db.getLicenseByKey(licenseKey);
-      
-      if (!license) {
-        errors.push('License key not found');
+      // Call backend API to validate license
+      const response: ApiResponse<LicenseValidationResponse> = await ApiService.getInstance().post(
+        '/licenses/validate/',
+        { license_key: licenseKey }
+      );
+
+      if (!response.success) {
+        errors.push(response.error?.message || 'License validation failed');
         return { isValid: false, errors };
       }
 
-      // Check if license is active
-      if (!license.isActive) {
-        errors.push('License is inactive');
+      const validationResult = response.data;
+      
+      console.log('🔍 Backend validation result:', JSON.stringify(validationResult, null, 2));
+      
+      if (!validationResult.isValid) {
+        errors.push(...(validationResult.errors || ['Invalid license key']));
+        return { isValid: false, errors };
       }
 
-      // Check if license is expired
-      if (LicenseUtils.isExpired(license)) {
+      // Validate license status and expiry
+      const license = validationResult.license;
+      const organization = validationResult.organization;
+
+      if (!license) {
+        errors.push('License data not found');
+      }
+
+      if (!organization) {
+        errors.push('Organization data not found');
+      }
+
+      if (license && license.status === 'expired') {
         errors.push('License has expired');
       }
 
-      // Get organization
-      const organization = await this.db.getOrganization(license.organizationId);
-      if (!organization) {
-        errors.push('Associated organization not found');
+      if (license && license.status !== 'active') {
+        errors.push(`License is ${license.status}`);
       }
 
-      // Check if organization is active
-      if (organization && !organization.isActive) {
+      if (organization && !organization.is_active) {
         errors.push('Organization is inactive');
       }
 
@@ -62,12 +86,12 @@ export class LicenseService {
       return {
         isValid,
         license: isValid ? license : undefined,
-        organization: isValid ? (organization || undefined) : undefined,
+        organization: isValid ? organization : undefined,
         errors
       };
     } catch (error) {
       console.error('Error validating license key:', error);
-      errors.push('System error during license validation');
+      errors.push(error instanceof Error ? error.message : 'System error during license validation');
       return { isValid: false, errors };
     }
   }

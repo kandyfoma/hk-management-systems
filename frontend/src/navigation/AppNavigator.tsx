@@ -26,6 +26,8 @@ import { ReportsScreen } from '../modules/occupational-health/screens/ReportsScr
 import { ComplianceScreen } from '../modules/occupational-health/screens/ComplianceScreen';
 import { AnalyticsScreen } from '../modules/occupational-health/screens/AnalyticsScreen';
 import { PlaceholderScreen } from '../modules/shared/PlaceholderScreen';
+import { StaffManagementScreen } from '../screens/StaffManagementScreen';
+import { OrganizationTestScreen } from '../screens/OrganizationTestScreen';
 import { POSScreen } from '../modules/pharmacy/screens/POSScreen';
 import { InventoryScreen } from '../modules/pharmacy/screens/InventoryScreen';
 import { SuppliersScreen } from '../modules/pharmacy/screens/SuppliersScreen';
@@ -53,6 +55,7 @@ import { SidebarLayout, SidebarSection, SidebarMenuItem } from '../components/Si
 import { colors, borderRadius } from '../theme/theme';
 import { Patient } from '../models/Patient';
 import { selectActiveModules, selectAllFeatures, logout as logoutAction } from '../store/slices/authSlice';
+import { RootState } from '../store/store';
 import { ModuleType } from '../models/License';
 
 const { width } = Dimensions.get('window');
@@ -122,6 +125,8 @@ const createDynamicSections = (
       title: 'Général',
       items: [
         { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
+        { id: 'staff-management', label: 'Gestion Personnel', icon: 'people-outline', iconActive: 'people' },
+        { id: 'organization-test', label: 'Test Organisation', icon: 'bug-outline', iconActive: 'bug' },
       ],
     }
   ];
@@ -309,6 +314,7 @@ function DesktopApp() {
   const [activeScreen, setActiveScreen] = useState(getInitialScreen);
   const activeModules = useSelector(selectActiveModules);
   const allFeatures = useSelector(selectAllFeatures);
+  const { organization } = useSelector((state: RootState) => state.auth);
 
   // Patient sub-navigation state
   const [patientView, setPatientView] = useState<'list' | 'detail' | 'register' | 'edit'>('list');
@@ -396,6 +402,8 @@ function DesktopApp() {
   const renderContent = () => {
     // Main screens
     if (activeScreen === 'dashboard') return <DashboardScreen onNavigate={handleScreenChange} />;
+    if (activeScreen === 'staff-management') return <StaffManagementScreen />;
+    if (activeScreen === 'organization-test') return <OrganizationTestScreen />;
     if (activeScreen === 'connectivity') return <ConnectivityScreen />;
     if (activeScreen === 'settings') return <SettingsScreen />;
 
@@ -539,6 +547,7 @@ function DesktopApp() {
       accentColor={getAccentColor()}
       title="HK Management"
       subtitle="Système de Gestion de Santé"
+      organizationName={organization?.name}
       headerIcon="medkit"
     >
       {renderContent()}

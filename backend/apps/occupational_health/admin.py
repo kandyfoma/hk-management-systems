@@ -1,7 +1,7 @@
 """
-Occupational Health Admin - Django Admin Configuration
+Médecine du Travail Admin - Django Admin Configuration
 
-Rich Django admin interface for multi-sector occupational health
+Rich Django admin interface for multi-sector occupational medicine
 management system with sector-specific customizations.
 """
 from django.contrib import admin
@@ -40,6 +40,7 @@ class EnterpriseAdmin(admin.ModelAdmin):
     list_filter = ['sector', 'is_active', 'created_at']
     search_fields = ['name', 'rccm', 'nif', 'contact_person']
     readonly_fields = ['created_at', 'updated_at', 'risk_level', 'exam_frequency_months']
+    autocomplete_fields = ['created_by']
     
     fieldsets = (
         ('Informations Entreprise', {
@@ -140,7 +141,7 @@ class WorkSiteAdmin(admin.ModelAdmin):
 
 @admin.register(Worker)
 class WorkerAdmin(admin.ModelAdmin):
-    """Worker admin with occupational health profile"""
+    """Worker admin with Médecine du Travail profile"""
     
     list_display = [
         'full_name', 'employee_id', 'enterprise', 'job_category_display',
@@ -152,6 +153,7 @@ class WorkerAdmin(admin.ModelAdmin):
     ]
     search_fields = ['first_name', 'last_name', 'employee_id', 'job_title']
     readonly_fields = ['age', 'sector_risk_level', 'created_at', 'updated_at']
+    autocomplete_fields = ['enterprise', 'work_site', 'created_by']
     
     fieldsets = (
         ('Informations Personnelles', {
@@ -591,9 +593,4 @@ class SiteHealthMetricsAdmin(admin.ModelAdmin):
         return format_html('<span style="color: {};">{}%</span>', color, fitness_rate)
     fitness_rate_display.short_description = "Taux Aptitude"
 
-# ==================== ADMIN CUSTOMIZATIONS ====================
-
-# Customize admin site
-admin.site.site_header = "HK Management Systems - Santé au Travail"
-admin.site.site_title = "Santé Travail Admin"
-admin.site.index_title = "Administration Médecine du Travail"
+# Admin site customizations are handled by Jazzmin in settings.py

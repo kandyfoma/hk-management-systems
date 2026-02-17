@@ -1,8 +1,8 @@
 """
-Occupational Health Serializers - DRF API
+Médecine du Travail Serializers - DRF API
 
 Comprehensive Django REST Framework serializers for multi-sector
-occupational health management system.
+occupational medicine management system.
 """
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
@@ -256,7 +256,7 @@ class MedicalExaminationDetailSerializer(serializers.ModelSerializer):
 # ==================== DISEASE AND INCIDENT SERIALIZERS ====================
 
 class OccupationalDiseaseTypeSerializer(serializers.ModelSerializer):
-    """Occupational disease type serializer"""
+    """Médecine du Travail disease type serializer"""
     
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     
@@ -265,7 +265,7 @@ class OccupationalDiseaseTypeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class OccupationalDiseaseSerializer(serializers.ModelSerializer):
-    """Occupational disease case serializer"""
+    """Médecine du Travail disease case serializer"""
     
     worker_name = serializers.CharField(source='worker.full_name', read_only=True)
     worker_enterprise = serializers.CharField(source='worker.enterprise.name', read_only=True)

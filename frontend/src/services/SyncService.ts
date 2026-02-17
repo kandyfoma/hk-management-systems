@@ -261,10 +261,11 @@ export class SyncService {
 
   private async syncItemToCloud(item: SyncItem): Promise<void> {
     const endpoint = this.getApiEndpoint(item.tableName);
+    const api = ApiService.getInstance();
     
     switch (item.action) {
       case 'CREATE':
-        const createResponse = await ApiService.post(endpoint, item.data);
+        const createResponse = await api.post(endpoint, item.data);
         if (createResponse.success && createResponse.data) {
           // Update local record with cloud ID
           await this.updateLocalRecordWithCloudId(item.tableName, item.localId, createResponse.data.id);
@@ -278,7 +279,7 @@ export class SyncService {
         if (!item.cloudId) {
           throw new Error('Cannot update without cloud ID');
         }
-        const updateResponse = await ApiService.patch(`${endpoint}${item.cloudId}/`, item.data);
+        const updateResponse = await api.patch(`${endpoint}${item.cloudId}/`, item.data);
         if (!updateResponse.success) {
           throw new Error(updateResponse.error?.message || 'Update failed');
         }
@@ -288,7 +289,7 @@ export class SyncService {
         if (!item.cloudId) {
           throw new Error('Cannot delete without cloud ID');
         }
-        const deleteResponse = await ApiService.delete(`${endpoint}${item.cloudId}/`);
+        const deleteResponse = await api.delete(`${endpoint}${item.cloudId}/`);
         if (!deleteResponse.success) {
           throw new Error(deleteResponse.error?.message || 'Delete failed');
         }
@@ -314,7 +315,8 @@ export class SyncService {
 
   private async pullTableChanges(tableName: string, since: Date): Promise<void> {
     const endpoint = this.getApiEndpoint(tableName);
-    const response = await ApiService.get(endpoint, {
+    const api = ApiService.getInstance();
+    const response = await api.get(endpoint, {
       updated_at__gte: since.toISOString(),
     });
 
@@ -457,7 +459,7 @@ export class SyncService {
     return { ...this.syncStatus };
   }
 
-  async forcSync(): Promise<void> {
+  async forceSync(): Promise<void> {
     await this.performSync();
   }
 
@@ -491,4 +493,4 @@ export class SyncService {
   }
 }
 
-export default SyncService.getInstance();
+export default SyncService;

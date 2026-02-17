@@ -66,7 +66,7 @@ export class HybridDataService {
       const syncStatus = this.sync.getSyncStatus();
       if (syncStatus.isOnline && !options?.offlineData) {
         // Trigger background sync but don't wait for it
-        this.sync.forcSync().catch(console.error);
+        this.sync.forceSync().catch(console.error);
       }
 
       return {
@@ -128,7 +128,7 @@ export class HybridDataService {
     }
   }
 
-  async updatePatient(id: string, patientData: PatientUpdate): Promise<DataServiceResult<Patient>> {
+  async updatePatient(id: string, patientData: PatientUpdate): Promise<DataServiceResult<Patient | null>> {
     try {
       // Update locally first
       const patient = await this.db.updatePatient(id, patientData);
@@ -142,7 +142,7 @@ export class HybridDataService {
       
       return {
         success: true,
-        data: patient,
+        data: patient || undefined,
         isOffline: !syncStatus.isOnline,
         syncPending: true,
       };
@@ -197,7 +197,7 @@ export class HybridDataService {
       const syncStatus = this.sync.getSyncStatus();
       
       if (syncStatus.isOnline && !options?.offlineData) {
-        this.sync.forcSync().catch(console.error);
+        this.sync.forceSync().catch(console.error);
       }
 
       return {
@@ -237,7 +237,7 @@ export class HybridDataService {
     }
   }
 
-  async updateInventoryItem(id: string, itemData: InventoryItemUpdate): Promise<DataServiceResult<InventoryItem>> {
+  async updateInventoryItem(id: string, itemData: InventoryItemUpdate): Promise<DataServiceResult<InventoryItem | null>> {
     try {
       const item = await this.db.updateInventoryItem(id, itemData);
       
@@ -249,7 +249,7 @@ export class HybridDataService {
       
       return {
         success: true,
-        data: item,
+        data: item || undefined,
         isOffline: !syncStatus.isOnline,
         syncPending: true,
       };
@@ -272,7 +272,7 @@ export class HybridDataService {
       const syncStatus = this.sync.getSyncStatus();
       
       if (syncStatus.isOnline && !options?.offlineData) {
-        this.sync.forcSync().catch(console.error);
+        this.sync.forceSync().catch(console.error);
       }
 
       return {
@@ -322,7 +322,7 @@ export class HybridDataService {
       const syncStatus = this.sync.getSyncStatus();
       
       if (syncStatus.isOnline && !options?.offlineData) {
-        this.sync.forcSync().catch(console.error);
+        this.sync.forceSync().catch(console.error);
       }
 
       return {
@@ -374,7 +374,7 @@ export class HybridDataService {
       const syncStatus = this.sync.getSyncStatus();
       
       if (syncStatus.isOnline && !options?.offlineData) {
-        this.sync.forcSync().catch(console.error);
+        this.sync.forceSync().catch(console.error);
       }
 
       return {
@@ -492,7 +492,7 @@ export class HybridDataService {
     }
 
     try {
-      await this.sync.forcSync();
+      await this.sync.forceSync();
       return {
         success: true,
         data: true,
@@ -507,8 +507,8 @@ export class HybridDataService {
   }
 
   async validateCloudConnection(): Promise<boolean> {
-    return await ApiService.checkConnection();
+    return await ApiService.getInstance().checkConnection();
   }
 }
 
-export default HybridDataService.getInstance();
+export default HybridDataService;

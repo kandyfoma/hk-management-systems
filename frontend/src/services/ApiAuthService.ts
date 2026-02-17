@@ -69,14 +69,14 @@ export class ApiAuthService {
 
   async login(credentials: LoginCredentials): Promise<AuthResult> {
     try {
-      const response: ApiResponse<LoginResponse> = await ApiService.post('/auth/login/', {
+      const response: ApiResponse<LoginResponse> = await ApiService.getInstance().post('/auth/login/', {
         phone: credentials.phone,
         password: credentials.password,
       });
 
       if (response.success && response.data) {
         // Store auth token
-        await ApiService.setAuthToken(response.data.token);
+        await ApiService.getInstance().setAuthToken(response.data.token);
         
         // Store session data
         const sessionData = {
@@ -112,7 +112,7 @@ export class ApiAuthService {
 
   async register(registrationData: RegistrationData): Promise<AuthResult> {
     try {
-      const response: ApiResponse = await ApiService.post('/auth/register/', {
+      const response: ApiResponse = await ApiService.getInstance().post('/auth/register/', {
         first_name: registrationData.firstName,
         last_name: registrationData.lastName,
         phone: registrationData.phone,
@@ -145,7 +145,7 @@ export class ApiAuthService {
   async logout(): Promise<void> {
     try {
       // Call backend logout endpoint
-      await ApiService.post('/auth/logout/');
+      await ApiService.getInstance().post('/auth/logout/');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -156,7 +156,7 @@ export class ApiAuthService {
 
   async changePassword(currentPassword: string, newPassword: string): Promise<AuthResult> {
     try {
-      const response: ApiResponse = await ApiService.post('/auth/change-password/', {
+      const response: ApiResponse = await ApiService.getInstance().post('/auth/change-password/', {
         current_password: currentPassword,
         new_password: newPassword,
       });
@@ -180,7 +180,7 @@ export class ApiAuthService {
 
   async isAuthenticated(): Promise<boolean> {
     try {
-      const token = await ApiService.getAuthToken();
+      const token = await ApiService.getInstance().getAuthToken();
       if (!token) return false;
 
       // Verify token with backend
@@ -281,12 +281,38 @@ export class ApiAuthService {
     }
   }
 
+  async getOrganizationLicenses(): Promise<any[]> {
+    try {
+      const response: ApiResponse<any[]> = await ApiService.getInstance().get('/organizations/current/licenses/');
+      if (response.success && response.data) {
+        return response.data;
+      }
+      return [];
+    } catch (error) {
+      console.error('Get organization licenses error:', error);
+      return [];
+    }
+  }
+
+  async getUserModuleAccess(): Promise<any[]> {
+    try {
+      const response: ApiResponse<any[]> = await ApiService.getInstance().get('/auth/module-access/');
+      if (response.success && response.data) {
+        return response.data;
+      }
+      return [];
+    } catch (error) {
+      console.error('Get user module access error:', error);
+      return [];
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // CONNECTION STATUS
   // ═══════════════════════════════════════════════════════════════
 
   async checkBackendConnection(): Promise<boolean> {
-    return await ApiService.checkConnection();
+    return await ApiService.getInstance().checkConnection();
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -305,4 +331,4 @@ export class ApiAuthService {
   }
 }
 
-export default ApiAuthService.getInstance();
+export default ApiAuthService;

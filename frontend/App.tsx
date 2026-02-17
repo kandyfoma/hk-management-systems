@@ -85,7 +85,7 @@ function AppContent() {
       }
 
       // Check backend connection
-      const isConnected = await ApiAuthService.checkBackendConnection();
+      const isConnected = await ApiAuthService.getInstance().checkBackendConnection();
       if (!isConnected) {
         console.log('⚠️ Backend not reachable, using offline mode');
         setAppState('unauthenticated');
@@ -95,27 +95,35 @@ function AppContent() {
       console.log('🌐 Backend connected');
       
       // Check authentication with backend
-      const isAuthenticated = await ApiAuthService.isAuthenticated();
+      const isAuthenticated = await ApiAuthService.getInstance().isAuthenticated();
       console.log('👤 Authentication check:', isAuthenticated);
       
       if (isAuthenticated) {
-        const user = await ApiAuthService.getCurrentUser();
-        const organization = await ApiAuthService.getCurrentOrganization();
+        const user = await ApiAuthService.getInstance().getCurrentUser();
+        const organization = await ApiAuthService.getInstance().getCurrentOrganization();
         
         if (user && organization) {
-          // Populate Redux store with user data
+          // Load organization licenses and user module access
+          console.log('📄 Loading organization licenses...');
+          const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
+          const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
+          
+          console.log('📋 Loaded licenses:', licenses);
+          console.log('🔐 Loaded module access:', userModuleAccess);
+          
+          // Populate Redux store with complete user data
           dispatch(loginSuccess({
             user,
             organization,
-            licenses: [], // We'll load licenses from a separate API call
-            userModuleAccess: [],
+            licenses,
+            userModuleAccess,
           }));
-          console.log('📦 Redux store populated with user data');
+          console.log('📦 Redux store populated with complete user data');
           setIsLicenseValid(true);
           setAppState('authenticated');
         } else {
           // Clear invalid session
-          await ApiAuthService.logout();
+          await ApiAuthService.getInstance().logout();
           setAppState('unauthenticated');
         }
       } else {
@@ -130,12 +138,20 @@ function AppContent() {
   const handleAuthSuccess = async (authResult?: any) => {
     console.log('✅ Auth success triggered', authResult);
     if (authResult?.success && authResult.user) {
-      // Populate Redux store with login data
+      // Load organization licenses and user module access after successful login
+      console.log('📄 Loading organization licenses after login...');
+      const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
+      const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
+      
+      console.log('📋 Loaded licenses after login:', licenses);
+      console.log('🔐 Loaded module access after login:', userModuleAccess);
+      
+      // Populate Redux store with complete login data
       dispatch(loginSuccess({
         user: authResult.user,
         organization: authResult.organization,
-        licenses: [], // Licenses will be loaded separately if needed
-        userModuleAccess: [],
+        licenses,
+        userModuleAccess,
       }));
       console.log('📦 Redux store populated after login');
       setIsLicenseValid(true);

@@ -18,8 +18,7 @@ from .serializers import (
 class LicenseFilter(filters.FilterSet):
     type = filters.ChoiceFilter(choices=LicenseType.choices)
     status = filters.ChoiceFilter(choices=LicenseStatus.choices)
-    holder_user = filters.UUIDFilter()
-    holder_organization = filters.UUIDFilter()
+    organization = filters.UUIDFilter()
     issuing_authority = filters.CharFilter(lookup_expr='icontains')
     expiry_date_from = filters.DateFilter(field_name='expiry_date', lookup_expr='gte')
     expiry_date_to = filters.DateFilter(field_name='expiry_date', lookup_expr='lte')
@@ -29,7 +28,7 @@ class LicenseFilter(filters.FilterSet):
 
     class Meta:
         model = License
-        fields = ['type', 'status', 'holder_user', 'holder_organization', 'issuing_authority']
+        fields = ['type', 'status', 'organization', 'issuing_authority']
 
     def filter_expired(self, queryset, name, value):
         today = timezone.now().date()
@@ -48,19 +47,17 @@ class LicenseFilter(filters.FilterSet):
         return queryset.filter(
             Q(license_number__icontains=value) |
             Q(title__icontains=value) |
-            Q(holder_user__first_name__icontains=value) |
-            Q(holder_user__last_name__icontains=value) |
-            Q(holder_organization__name__icontains=value)
+            Q(organization__name__icontains=value)
         )
 
 
 class LicenseListCreateAPIView(generics.ListCreateAPIView):
     queryset = License.objects.select_related(
-        'holder_user', 'holder_organization', 'created_by'
+        'organization', 'created_by'
     ).prefetch_related('documents', 'renewals')
     filter_backends = [DjangoFilterBackend]
     filterset_class = LicenseFilter
-    search_fields = ['license_number', 'title', 'holder_user__first_name', 'holder_organization__name']
+    search_fields = ['license_number', 'title', 'organization__name']
     ordering_fields = ['license_number', 'type', 'status', 'expiry_date', 'created_at']
     ordering = ['-created_at']
 
@@ -75,7 +72,7 @@ class LicenseListCreateAPIView(generics.ListCreateAPIView):
 
 class LicenseDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = License.objects.select_related(
-        'holder_user', 'holder_organization', 'created_by'
+        'organization', 'created_by'
     ).prefetch_related('documents', 'renewals')
     serializer_class = LicenseSerializer
 
@@ -166,19 +163,15 @@ def expiring_licenses_view(request):
         status=LicenseStatus.ACTIVE,
         expiry_date__lte=warning_date,
         expiry_date__gte=today
-    ).select_related('holder_user', 'holder_organization').order_by('expiry_date')
+    ).select_related('organization').order_by('expiry_date')
 
     data = []
     for license_obj in licenses:
         holder_name = None
-        holder_type = None
+        holder_type = 'organization'
         
-        if license_obj.holder_user:
-            holder_name = license_obj.holder_user.full_name
-            holder_type = 'user'
-        elif license_obj.holder_organization:
-            holder_name = license_obj.holder_organization.name
-            holder_type = 'organization'
+        if license_obj.organization:
+            holder_name = license_obj.organization.name
 
         data.append({
             'license_id': license_obj.id,
@@ -204,7 +197,7 @@ def expired_licenses_view(request):
     
     licenses = License.objects.filter(
         expiry_date__lt=today
-    ).select_related('holder_user', 'holder_organization').order_by('-expiry_date')
+    ).select_related('organization').order_by('-expiry_date')
 
     serializer = LicenseListSerializer(licenses, many=True)
     return Response({
@@ -291,6 +284,79 @@ def reactivate_license_view(request, license_id):
         return Response({'error': 'License not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])  # License validation doesn't require authentication
+def validate_license(request):
+    """
+    Validate a license key for app/device activation
+    POST /licenses/validate/
+    
+    Request body:
+    {
+        "license_key": "LICENSE-KEY-STRING"
+    }
+    
+    Response:
+    {
+        "isValid": true/false,
+        "license": {license data},
+        "organization": {organization data},
+        "errors": [error messages]
+    }
+    """
+    license_key = request.data.get('license_key', '').strip()
+    
+    if not license_key:
+        return Response({
+            'isValid': False,
+            'errors': ['License key is required']
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    errors = []
+    
+    try:
+        # Find license by license number
+        license_obj = License.objects.get(license_number=license_key)
+    except License.DoesNotExist:
+        return Response({
+            'isValid': False,
+            'errors': ['License key not found']
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check if license is active
+    if license_obj.status != LicenseStatus.ACTIVE:
+        errors.append(f'License is {license_obj.get_status_display()}')
+    
+    # Check if license is expired
+    if license_obj.is_expired:
+        errors.append('License has expired')
+    
+    # Get organization
+    organization = license_obj.organization
+    if not organization:
+        errors.append('Organization not found')
+    elif not organization.is_active:
+        errors.append('Organization is inactive')
+    
+    if errors:
+        return Response({
+            'isValid': False,
+            'errors': errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # License is valid
+    license_serializer = LicenseSerializer(license_obj)
+    from apps.organizations.serializers import OrganizationSerializer
+    org_serializer = OrganizationSerializer(organization)
+    
+    return Response({
+        'isValid': True,
+        'license': license_serializer.data,
+        'organization': org_serializer.data,
+        'errors': []
+    }, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 def license_stats_view(request):
     """Get license statistics"""
@@ -309,8 +375,7 @@ def license_stats_view(request):
         'suspended': License.objects.filter(status=LicenseStatus.SUSPENDED).count(),
         'by_type': {},
         'by_holder_type': {
-            'users': License.objects.filter(holder_user__isnull=False).count(),
-            'organizations': License.objects.filter(holder_organization__isnull=False).count()
+            'organizations': License.objects.filter(organization__isnull=False).count()
         }
     }
     

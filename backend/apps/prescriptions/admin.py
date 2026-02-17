@@ -31,6 +31,7 @@ class PrescriptionAdmin(admin.ModelAdmin):
     readonly_fields = ['prescription_number', 'created_by', 'created_at', 'updated_at']
     inlines = [PrescriptionItemInline, PrescriptionNoteInline, PrescriptionImageInline]
     date_hierarchy = 'date'
+    autocomplete_fields = ['patient', 'doctor', 'created_by']
     
     fieldsets = (
         ('Informations de base', {

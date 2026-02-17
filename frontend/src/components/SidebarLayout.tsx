@@ -29,6 +29,7 @@ function MobileSidebarModal({
   accentColor,
   title,
   subtitle,
+  organizationName,
   headerIcon,
 }: {
   visible: boolean;
@@ -39,6 +40,7 @@ function MobileSidebarModal({
   accentColor: string;
   title?: string;
   subtitle?: string;
+  organizationName?: string;
   headerIcon?: keyof typeof Ionicons.glyphMap;
 }) {
   return (
@@ -60,6 +62,9 @@ function MobileSidebarModal({
             <View style={mobileSidebarStyles.headerText}>
               {title && <Text style={mobileSidebarStyles.headerTitle}>{title}</Text>}
               {subtitle && <Text style={mobileSidebarStyles.headerSubtitle}>{subtitle}</Text>}
+              {organizationName && (
+                <Text style={mobileSidebarStyles.organizationName}>{organizationName}</Text>
+              )}
             </View>
           </View>
           <TouchableOpacity
@@ -178,6 +183,14 @@ const mobileSidebarStyles = StyleSheet.create({
     color: colors.sidebarText,
     marginTop: 2,
   },
+  organizationName: {
+    fontSize: 10,
+    color: colors.accent,
+    fontWeight: '600',
+    marginTop: 4,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
   closeButton: {
     padding: spacing.sm,
     borderRadius: borderRadius.sm,
@@ -243,12 +256,14 @@ const mobileSidebarStyles = StyleSheet.create({
 function MobileHeader({
   title,
   subtitle,
+  organizationName,
   headerIcon,
   accentColor,
   onMenuPress,
 }: {
   title?: string;
   subtitle?: string;
+  organizationName?: string;
   headerIcon?: keyof typeof Ionicons.glyphMap;
   accentColor: string;
   onMenuPress: () => void;
@@ -273,6 +288,9 @@ function MobileHeader({
           <View>
             {title && <Text style={mobileHeaderStyles.title}>{title}</Text>}
             {subtitle && <Text style={mobileHeaderStyles.subtitle}>{subtitle}</Text>}
+            {organizationName && (
+              <Text style={mobileHeaderStyles.organizationName}>{organizationName}</Text>
+            )}
           </View>
         </View>
       </View>
@@ -322,6 +340,14 @@ const mobileHeaderStyles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 1,
   },
+  organizationName: {
+    fontSize: 10,
+    color: colors.accent,
+    fontWeight: '600',
+    marginTop: 2,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
 });
 
 // ─── Mobile Sidebar Modal ───────────────────────────────────
@@ -346,6 +372,7 @@ interface SidebarLayoutProps {
   accentColor?: string;
   title?: string;
   subtitle?: string;
+  organizationName?: string;
   headerIcon?: keyof typeof Ionicons.glyphMap;
 }
 
@@ -358,6 +385,7 @@ export function SidebarLayout({
   accentColor = colors.primary,
   title,
   subtitle,
+  organizationName,
   headerIcon,
 }: SidebarLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -441,6 +469,7 @@ export function SidebarLayout({
         <MobileHeader
           title={title}
           subtitle={subtitle}
+          organizationName={organizationName}
           headerIcon={headerIcon}
           accentColor={accentColor}
           onMenuPress={() => setMobileMenuVisible(true)}
@@ -470,6 +499,7 @@ export function SidebarLayout({
           accentColor={accentColor}
           title={title}
           subtitle={subtitle}
+          organizationName={organizationName}
           headerIcon={headerIcon}
         />
       </View>
@@ -492,6 +522,9 @@ export function SidebarLayout({
             <View style={styles.sidebarHeaderText}>
               <Text style={styles.sidebarTitle}>{title}</Text>
               {subtitle && <Text style={styles.sidebarSubtitle}>{subtitle}</Text>}
+              {organizationName && (
+                <Text style={styles.sidebarOrganization}>{organizationName}</Text>
+              )}
             </View>
           )}
         </View>
@@ -673,6 +706,14 @@ const styles = StyleSheet.create({
   sidebarSubtitle: {
     fontSize: 11,
     color: colors.sidebarText,
+  },
+  sidebarOrganization: {
+    fontSize: 10,
+    color: colors.accent,
+    fontWeight: '600',
+    marginTop: 4,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
   },
   sidebarScroll: {
     flex: 1,

@@ -1,7 +1,7 @@
 """
-Occupational Health URLs - API Routing
+Médecine du Travail URLs - API Routing
 
-Comprehensive URL routing for multi-sector occupational health
+Comprehensive URL routing for multi-sector occupational medicine
 management system API endpoints.
 """
 from django.urls import path, include

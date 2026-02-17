@@ -12,7 +12,7 @@ class OccupationalHealthConfig(AppConfig):
     
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.occupational_health'
-    verbose_name = 'Santé au Travail (Médecine du Travail)'
+    verbose_name = 'Médecine du Travail'
     
     def ready(self):
         """Initialize app when Django starts"""

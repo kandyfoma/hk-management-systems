@@ -71,6 +71,7 @@ class SupplierContactAdmin(admin.ModelAdmin):
     list_display = ['supplier', 'name', 'title', 'email', 'phone', 'is_primary']
     list_filter = ['is_primary', 'department']
     search_fields = ['name', 'title', 'email', 'supplier__name']
+    autocomplete_fields = ['supplier']
     
     fieldsets = (
         ('Contact', {

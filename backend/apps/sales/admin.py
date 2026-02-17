@@ -23,6 +23,7 @@ class SaleAdmin(admin.ModelAdmin):
     readonly_fields = ['sale_number', 'receipt_number', 'subtotal', 'tax_amount', 'discount_amount', 'total_amount', 'item_count']
     inlines = [SaleItemInline, SalePaymentInline]
     date_hierarchy = 'created_at'
+    autocomplete_fields = ['customer', 'cashier', 'prescription', 'voided_by']
     
     fieldsets = (
         ('Informations de vente', {

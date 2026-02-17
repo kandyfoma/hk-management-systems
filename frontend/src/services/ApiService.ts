@@ -245,14 +245,23 @@ class ApiService {
 
   async checkConnection(): Promise<boolean> {
     try {
-      const response = await this.axiosInstance.get('/auth/profile/', { 
-        timeout: 5000 
-      });
+      // Use license validation endpoint as health check (doesn't require auth)
+      const response = await this.axiosInstance.post('/licenses/validate/', 
+        { license_key: 'HEALTH_CHECK' }, 
+        { timeout: 5000 }
+      );
+      // Even if license is invalid, a successful response means backend is reachable
       return response.status === 200;
     } catch (error) {
+      // Check if it's a network error vs API error
+      if (error?.response?.status) {
+        // Got a response from server (even if error), so connection is working
+        return true; 
+      }
+      // Network/timeout error - backend unreachable
       return false;
     }
   }
 }
 
-export default ApiService.getInstance();
+export default ApiService;

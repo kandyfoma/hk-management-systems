@@ -329,7 +329,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
           </Text>
         </View>
         <View style={styles.headerRight}>
-          <SyncStatusIndicator compact={true} onPress={() => info('Statut de synchronisation: ' + (HybridDataService.getSyncStatus().isOnline ? 'En ligne' : 'Hors ligne'))} />
+          <SyncStatusIndicator compact={true} onPress={() => info('Statut de synchronisation: ' + (HybridDataService.getInstance().getSyncStatus().isOnline ? 'En ligne' : 'Hors ligne'))} />
           <View style={styles.dateChip}>
             <Ionicons name="calendar-outline" size={16} color={colors.primary} />
             <Text style={styles.dateText}>

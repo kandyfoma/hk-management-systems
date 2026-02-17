@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Animated,
   KeyboardAvoidingView,
+  SafeAreaView,
 } from 'react-native';
 import { Button, Text, TextInput, Surface, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +20,7 @@ import LicenseService from '../services/LicenseService';
 import { useToast } from '../components/GlobalUI';
 import { colors, spacing, borderRadius, shadows } from '../theme/theme';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const isDesktop = SCREEN_W >= 1024;
 const isTablet = SCREEN_W >= 768;
 const MAX_CARD_W = 680;
@@ -173,7 +174,11 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
       const licenseService = LicenseService.getInstance();
       const result = await licenseService.validateLicenseKey(licenseKey.trim());
       
-      console.log('License validation result:', result);
+      console.log('📋 License validation result:', result);
+      console.log('📋 isValid:', result.isValid);
+      console.log('📋 License data:', result.license);
+      console.log('📋 Organization data:', result.organization);
+      console.log('📋 Errors:', result.errors);
       
       if (result.isValid && result.license && result.organization) {
         // Store device activation info for persistence
@@ -194,13 +199,13 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
         
         // Navigate to login/registration with the validated license after a short delay
         setTimeout(() => {
-          console.log('Navigating to Login screen');
+          console.log('✅ Navigating to Login screen with validated license');
           navigation.navigate('Login', { 
             licenseKey: licenseKey.trim(),
             organization: result.organization,
             license: result.license
           });
-        }, 1500);
+        }, 800); // Reduced from 1500ms to 800ms for faster flow
       } else {
         const errorMessage = result.errors.length > 0 
           ? result.errors.join(', ') 
@@ -223,20 +228,11 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
 
   const licenseTypes = [
     {
-      type: 'TRIAL',
-      title: 'Essai',
-      desc: '30 jours gratuit',
-      icon: 'time-outline' as keyof typeof Ionicons.glyphMap,
-      color: colors.warning,
-      key: 'TRIAL-HK2024XY-Z9M3',
-    },
-    {
       type: 'PHARMACY',
       title: 'Pharmacie',
       desc: 'Gestion pharmaceutique',
       icon: 'medical-outline' as keyof typeof Ionicons.glyphMap,
       color: colors.success,
-      key: 'PHARMACY-PH2024XY-M9N3',
     },
     {
       type: 'HOSPITAL',
@@ -244,15 +240,13 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
       desc: 'Gestion hospitalière',
       icon: 'business-outline' as keyof typeof Ionicons.glyphMap,
       color: colors.info,
-      key: 'HOSPITAL-HP2024XY-B6C4',
     },
     {
-      type: 'OCCUPATIONAL_HEALTH',
-      title: 'Santé au Travail',
+      type: 'MEDECIN_DU_TRAVAIL',
+      title: 'Médecine du Travail',
       desc: 'Santé & sécurité professionnelle',
       icon: 'shield-checkmark-outline' as keyof typeof Ionicons.glyphMap,
       color: colors.secondary,
-      key: 'OCCHEALTH-OH2024XY-P8Q3',
     },
     {
       type: 'COMBINED',
@@ -260,16 +254,10 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
       desc: 'Accès complet',
       icon: 'layers-outline' as keyof typeof Ionicons.glyphMap,
       color: colors.primary,
-      key: 'COMBINED-CB2024XY-K7L2',
     },
   ];
 
-  const handleSelectType = (lt: (typeof licenseTypes)[0]) => {
-    setSelectedType(lt.type);
-    setLicenseKey(lt.key);
-    setStatusMessage(`Clé ${lt.title} remplie. Cliquez Activer pour continuer.`);
-    setStatusType('success');
-  };
+  const handleSelectType = undefined; // Type selection handled by manual input, test data removed
 
   // Show loading screen while checking activation
   if (isCheckingActivation) {
@@ -282,74 +270,78 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
   }
 
   return (
-    <View style={ls.root}>
-      {/* ── Background Accent Shapes ── */}
-      <View style={ls.bgCircle1} />
-      <View style={ls.bgCircle2} />
-      <View style={ls.bgCircle3} />
-
+    <SafeAreaView style={newLS.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={newLS.keyboardContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <ScrollView
-          contentContainerStyle={ls.scrollContent}
+          style={newLS.scrollView}
+          contentContainerStyle={newLS.scrollContentContainer}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={true}
+          scrollEnabled={true}
+          nestedScrollEnabled={true}
         >
+          {/* Background decorations */}
+          <View style={newLS.backgroundDecorations}>
+            <View style={newLS.bgCircle1} />
+            <View style={newLS.bgCircle2} />
+          </View>
+
           <Animated.View
-            style={[ls.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+            style={[newLS.contentContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            {/* ── Logo & Branding ── */}
-            <View style={ls.logoSection}>
-              <View style={ls.logoCircle}>
-                <Ionicons name="medical" size={36} color="#FFF" />
+            {/* Header Section */}
+            <View style={newLS.headerSection}>
+              <View style={newLS.logoContainer}>
+                <View style={newLS.logoCircle}>
+                  <Ionicons name="medical" size={isDesktop ? 40 : 36} color="#FFF" />
+                </View>
+                <Text style={newLS.brandName}>HK Santé</Text>
+                <Text style={newLS.brandSubtitle}>Système de Gestion de Santé</Text>
               </View>
-              <Text style={ls.brandName}>HK Santé</Text>
-              <Text style={ls.brandTag}>Système de Gestion de Santé</Text>
+
+              {/* Progress Steps */}
+              <View style={newLS.progressContainer}>
+                <View style={newLS.stepContainer}>
+                  <View style={[newLS.stepDot, newLS.stepDotActive]}>
+                    <Text style={newLS.stepNumActive}>1</Text>
+                  </View>
+                  <Text style={newLS.stepLabelActive}>Licence</Text>
+                </View>
+                <View style={newLS.stepLine} />
+                <View style={newLS.stepContainer}>
+                  <View style={[newLS.stepDot, newLS.stepDotInactive]}>
+                    <Text style={newLS.stepNumInactive}>2</Text>
+                  </View>
+                  <Text style={newLS.stepLabelInactive}>Connexion</Text>
+                </View>
+                <View style={newLS.stepLine} />
+                <View style={newLS.stepContainer}>
+                  <View style={[newLS.stepDot, newLS.stepDotInactive]}>
+                    <Text style={newLS.stepNumInactive}>3</Text>
+                  </View>
+                  <Text style={newLS.stepLabelInactive}>Tableau de Bord</Text>
+                </View>
+              </View>
             </View>
 
-            {/* ── Step Indicator ── */}
-            <View style={ls.steps}>
-              <View style={ls.stepActive}>
-                <View style={ls.stepDotActive}>
-                  <Text style={ls.stepNum}>1</Text>
-                </View>
-                <Text style={ls.stepLabelActive}>Licence</Text>
-              </View>
-              <View style={ls.stepLine} />
-              <View style={ls.stepInactive}>
-                <View style={ls.stepDotInactive}>
-                  <Text style={ls.stepNumInactive}>2</Text>
-                </View>
-                <Text style={ls.stepLabelInactive}>Connexion</Text>
-              </View>
-              <View style={ls.stepLine} />
-              <View style={ls.stepInactive}>
-                <View style={ls.stepDotInactive}>
-                  <Text style={ls.stepNumInactive}>3</Text>
-                </View>
-                <Text style={ls.stepLabelInactive}>Tableau de Bord</Text>
-              </View>
-            </View>
-
-            {/* ── Main Card ── */}
-            <View style={ls.card}>
-              <Text style={ls.cardTitle}>Activez votre licence</Text>
-              <Text style={ls.cardDesc}>
-                Sélectionnez un type de licence ou saisissez votre clé manuellement
+            {/* Main Content Card */}
+            <View style={newLS.mainCard}>
+              <Text style={newLS.cardTitle}>Activez votre licence</Text>
+              <Text style={newLS.cardDescription}>
+                Saisissez votre clé de licence pour accéder au système
               </Text>
 
-              {/* Status Banner */}
+              {/* Status Message */}
               {statusMessage ? (
                 <View
                   style={[
-                    ls.statusBanner,
-                    {
-                      backgroundColor:
-                        statusType === 'success' ? colors.success + '12' : colors.error + '12',
-                      borderColor:
-                        statusType === 'success' ? colors.success + '30' : colors.error + '30',
-                    },
+                    newLS.statusBanner,
+                    statusType === 'success' ? newLS.statusSuccess : newLS.statusError,
                   ]}
                 >
                   <Ionicons
@@ -359,8 +351,8 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
                   />
                   <Text
                     style={[
-                      ls.statusText,
-                      { color: statusType === 'success' ? colors.successDark : colors.errorDark },
+                      newLS.statusText,
+                      { color: statusType === 'success' ? colors.success : colors.error },
                     ]}
                   >
                     {statusMessage}
@@ -368,119 +360,427 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
                 </View>
               ) : null}
 
-              {/* ── License Type Picker ── */}
-              <Text style={ls.sectionLabel}>TYPE DE LICENCE</Text>
-              <View style={ls.typeGrid}>
-                {licenseTypes.map((lt) => {
-                  const active = selectedType === lt.type;
-                  return (
-                    <TouchableOpacity
-                      key={lt.type}
-                      style={[
-                        ls.typeCard,
-                        active && { borderColor: lt.color, backgroundColor: lt.color + '08' },
-                      ]}
-                      activeOpacity={0.7}
-                      onPress={() => handleSelectType(lt)}
-                    >
-                      <View
-                        style={[
-                          ls.typeIcon,
-                          { backgroundColor: active ? lt.color + '18' : colors.surfaceVariant },
-                        ]}
-                      >
-                        <Ionicons
-                          name={lt.icon}
-                          size={22}
-                          color={active ? lt.color : colors.textTertiary}
-                        />
+              {/* License Types Grid */}
+              <View style={newLS.sectionContainer}>
+                <Text style={newLS.sectionTitle}>TYPES DE LICENCE DISPONIBLES</Text>
+                <View style={newLS.licensesGrid}>
+                  {licenseTypes.map((license) => (
+                    <View key={license.type} style={newLS.licenseTypeCard}>
+                      <View style={[newLS.licenseIcon, { backgroundColor: license.color + '18' }]}>
+                        <Ionicons name={license.icon} size={20} color={license.color} />
                       </View>
-                      <Text style={[ls.typeTitle, active && { color: lt.color }]}>{lt.title}</Text>
-                      <Text style={ls.typeDesc}>{lt.desc}</Text>
-                      {active && (
-                        <View style={[ls.typeCheck, { backgroundColor: lt.color }]}>
-                          <Ionicons name="checkmark" size={12} color="#FFF" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* ── License Key Input ── */}
-              <Text style={ls.sectionLabel}>CLÉ DE LICENCE</Text>
-              <View style={ls.inputWrapper}>
-                <View style={ls.inputIconLeft}>
-                  <Ionicons name="key-outline" size={20} color={colors.textTertiary} />
+                      <Text style={newLS.licenseTitle}>{license.title}</Text>
+                      <Text style={newLS.licenseDesc}>{license.desc}</Text>
+                    </View>
+                  ))}
                 </View>
-                <TextInput
-                  value={licenseKey}
-                  onChangeText={(t) => {
-                    setLicenseKey(t);
-                    setSelectedType(null);
-                  }}
-                  mode="flat"
-                  style={ls.input}
-                  placeholder="TRIAL-XXXXXXXX-XXXX"
-                  placeholderTextColor={colors.textDisabled}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  underlineColor="transparent"
-                  activeUnderlineColor="transparent"
-                  contentStyle={ls.inputContent}
-                />
               </View>
 
-              {/* ── Activate Button ── */}
+              {/* License Key Input */}
+              <View style={newLS.sectionContainer}>
+                <Text style={newLS.sectionTitle}>CLÉ DE LICENCE</Text>
+                <View style={newLS.inputContainer}>
+                  <View style={newLS.inputWrapper}>
+                    <Ionicons 
+                      name="key-outline" 
+                      size={20} 
+                      color={colors.textSecondary} 
+                      style={newLS.inputIcon}
+                    />
+                    <TextInput
+                      value={licenseKey}
+                      onChangeText={setLicenseKey}
+                      placeholder="Saisissez votre clé de licence..."
+                      placeholderTextColor={colors.textDisabled}
+                      style={newLS.textInput}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      mode="flat"
+                      underlineColor="transparent"
+                      activeUnderlineColor="transparent"
+                      contentStyle={newLS.textInputContent}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Activate Button */}
               <TouchableOpacity
                 style={[
-                  ls.activateBtn,
-                  (!licenseKey.trim() || isLoading) && ls.activateBtnDisabled,
+                  newLS.activateButton,
+                  (!licenseKey.trim() || isLoading) && newLS.activateButtonDisabled,
                 ]}
-                activeOpacity={0.8}
                 onPress={handleLicenseActivation}
-                disabled={isLoading || !licenseKey.trim()}
+                disabled={!licenseKey.trim() || isLoading}
+                activeOpacity={0.8}
               >
                 {isLoading ? (
-                  <Text style={ls.activateBtnText}>Activation en cours...</Text>
+                  <Text style={newLS.activateButtonText}>Validation en cours...</Text>
                 ) : (
                   <>
-                    <Ionicons name="shield-checkmark" size={20} color="#FFF" />
-                    <Text style={ls.activateBtnText}>Activer la Licence</Text>
+                    <Ionicons name="shield-checkmark" size={20} color="#FFF" style={newLS.buttonIcon} />
+                    <Text style={newLS.activateButtonText}>Activer la Licence</Text>
                   </>
                 )}
               </TouchableOpacity>
+
+              {/* Features Bar */}
+              <View style={newLS.featuresContainer}>
+                {[
+                  { icon: 'lock-closed-outline', label: 'Sécurisé' },
+                  { icon: 'cloud-offline-outline', label: 'Hors ligne' },
+                  { icon: 'people-outline', label: 'Multi-utilisateurs' },
+                  { icon: 'shield-checkmark-outline', label: 'Validé' },
+                ].map((feature, index) => (
+                  <View key={index} style={newLS.featureItem}>
+                    <Ionicons
+                      name={feature.icon as keyof typeof Ionicons.glyphMap}
+                      size={14}
+                      color={colors.primary}
+                    />
+                    <Text style={newLS.featureLabel}>{feature.label}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
 
-            {/* ── Features Strip ── */}
-            <View style={ls.featuresStrip}>
-              {[
-                { icon: 'lock-closed-outline', label: 'Chiffré' },
-                { icon: 'cloud-offline-outline', label: 'Hors Ligne' },
-                { icon: 'shield-checkmark-outline', label: 'Sécurisé' },
-                { icon: 'people-outline', label: 'Multi-utilisateurs' },
-              ].map((f, i) => (
-                <View key={i} style={ls.featureChip}>
-                  <Ionicons
-                    name={f.icon as keyof typeof Ionicons.glyphMap}
-                    size={16}
-                    color={colors.primary}
-                  />
-                  <Text style={ls.featureLabel}>{f.label}</Text>
-                </View>
-              ))}
+            {/* Footer */}
+            <View style={newLS.footer}>
+              <Text style={newLS.footerText}>
+                © 2025 HK Management Systems · République Démocratique du Congo
+              </Text>
             </View>
-
-            {/* ── Footer ── */}
-            <Text style={ls.footerText}>
-              © 2025 HK Management Systems · Conçu pour la RD Congo
-            </Text>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
+
+// New License Screen Styles - Completely redesigned for proper scrolling
+const newLS = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    minHeight: SCREEN_H * 0.9, // Ensure content can scroll
+    paddingBottom: 40,
+  },
+  backgroundDecorations: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  bgCircle1: {
+    position: 'absolute',
+    top: -100,
+    right: -60,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: colors.primary + '08',
+  },
+  bgCircle2: {
+    position: 'absolute',
+    bottom: -80,
+    left: -80,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: colors.secondary + '06',
+  },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: isDesktop ? 24 : 16,
+    paddingVertical: isDesktop ? 32 : 20,
+    zIndex: 1,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: MAX_CARD_W,
+    alignSelf: 'center',
+  },
+  
+  // Header Section
+  headerSection: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoCircle: {
+    width: isDesktop ? 64 : 56,
+    height: isDesktop ? 64 : 56,
+    borderRadius: isDesktop ? 32 : 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    ...shadows.lg,
+  },
+  brandName: {
+    fontSize: isDesktop ? 28 : 24,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  brandSubtitle: {
+    fontSize: isDesktop ? 16 : 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  
+  // Progress Steps
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 300,
+  },
+  stepContainer: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  stepDotActive: {
+    backgroundColor: colors.primary,
+  },
+  stepDotInactive: {
+    backgroundColor: colors.surfaceVariant,
+  },
+  stepNumActive: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  stepNumInactive: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  stepLabelActive: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  stepLabelInactive: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  stepLine: {
+    height: 2,
+    backgroundColor: colors.outline,
+    flex: 0.5,
+    marginHorizontal: 8,
+    marginTop: -20,
+  },
+  
+  // Main Card
+  mainCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: isDesktop ? 32 : 24,
+    marginBottom: 24,
+    ...shadows.lg,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  cardTitle: {
+    fontSize: isDesktop ? 24 : 20,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  cardDescription: {
+    fontSize: isDesktop ? 16 : 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  
+  // Status Banner
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+  },
+  statusSuccess: {
+    backgroundColor: colors.success + '12',
+    borderColor: colors.success + '30',
+  },
+  statusError: {
+    backgroundColor: colors.error + '12',
+    borderColor: colors.error + '30',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+  },
+  
+  // Sections
+  sectionContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  
+  // License Types Grid
+  licensesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -6,
+  },
+  licenseTypeCard: {
+    width: '50%',
+    paddingHorizontal: 6,
+    marginBottom: 12,
+  },
+  licenseIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  licenseTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  licenseDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  
+  // Input Section
+  inputContainer: {
+    width: '100%',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    minHeight: 56,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    height: 56,
+  },
+  textInputContent: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+  },
+  
+  // Button
+  activateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginTop: 8,
+    ...shadows.md,
+  },
+  activateButtonDisabled: {
+    backgroundColor: colors.textDisabled,
+    opacity: 0.6,
+  },
+  activateButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  
+  // Features
+  featuresContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.outline,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '48%',
+    marginBottom: 8,
+  },
+  featureLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginLeft: 6,
+  },
+  
+  // Footer
+  footer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 20,
+  },
+  footerText: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+});
 
 const ls = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
@@ -666,16 +966,17 @@ const ls = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════
 
 function LoginScreen({ onSuccess, navigation, route }: any) {
-  const [phone, setPhone] = useState('admin');
-  const [password, setPassword] = useState('admin123');
-  const [isLoading, setIsLoading] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error' | ''>('');
-  const licenseKey = route?.params?.licenseKey;
-  const { success: showSuccessToast, error: showErrorToast, info: showInfoToast } = useToast();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const { success: showSuccessToast, error: showErrorToast, info: showInfoToast } = useToast();
+
+  const { licenseKey, organization, license } = route.params || {};
 
   useEffect(() => {
     Animated.parallel([
@@ -686,36 +987,47 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
 
   const handleLogin = async () => {
     if (!phone.trim() || !password.trim()) {
-      const message = "Veuillez saisir le numéro de téléphone et le mot de passe.";
+      const message = 'Veuillez saisir votre téléphone et mot de passe.';
       setStatusMessage(message);
       setStatusType('error');
       showErrorToast(message);
       return;
     }
+
     setIsLoading(true);
     setStatusMessage('');
-    // Removed the "Connexion en cours..." toast to avoid multiple toasts
-    
+    showInfoToast('Connexion en cours...');
+
     try {
-      const result = await ApiAuthService.login({
+      console.log('Starting login process...');
+      
+      const result = await ApiAuthService.getInstance().login({
         phone: phone.trim(),
         password: password.trim(),
       });
+
+      console.log('Login result:', result);
+
       if (result.success && result.user) {
         const successMessage = `Bienvenue, ${result.user.first_name || result.user.firstName} !`;
         setStatusMessage(successMessage);
         setStatusType('success');
         showSuccessToast(successMessage);
-        setTimeout(() => onSuccess(result), 1000);
+        
+        console.log('✅ Login successful, calling onSuccess');
+        setTimeout(() => {
+          onSuccess(result);
+        }, 800);
       } else {
-        const errorMessage = result.error || 'Connexion échouée';
+        const errorMessage = result.error || 'Email ou mot de passe incorrect';
+        console.log('❌ Login failed:', errorMessage);
         setStatusMessage(errorMessage);
         setStatusType('error');
         showErrorToast(errorMessage);
       }
     } catch (error) {
       console.error('Login error:', error);
-      const errorMessage = 'Connexion échouée. Veuillez réessayer.';
+      const errorMessage = error instanceof Error ? error.message : 'Echec de la connexion. Veuillez réessayer.';
       setStatusMessage(errorMessage);
       setStatusType('error');
       showErrorToast(errorMessage);
@@ -725,77 +1037,92 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
   };
 
   return (
-    <View style={logS.root}>
-      <View style={ls.bgCircle1} />
-      <View style={ls.bgCircle2} />
-
+    <SafeAreaView style={newLogS.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={newLogS.keyboardContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <ScrollView
-          contentContainerStyle={logS.scrollContent}
+          style={newLogS.scrollView}
+          contentContainerStyle={newLogS.scrollContentContainer}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={true}
+          scrollEnabled={true}
+          nestedScrollEnabled={true}
         >
+          {/* Background decorations */}
+          <View style={newLogS.backgroundDecorations}>
+            <View style={newLogS.bgCircle1} />
+            <View style={newLogS.bgCircle2} />
+          </View>
+
           <Animated.View
-            style={[logS.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+            style={[newLogS.contentContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            {/* ── Logo ── */}
-            <View style={ls.logoSection}>
-              <View style={ls.logoCircle}>
-                <Ionicons name="medical" size={36} color="#FFF" />
+            {/* Header Section */}
+            <View style={newLogS.headerSection}>
+              <View style={newLogS.logoContainer}>
+                <View style={newLogS.logoCircle}>
+                  <Ionicons name="medical" size={isDesktop ? 40 : 36} color="#FFF" />
+                </View>
+                <Text style={newLogS.brandName}>HK Santé</Text>
+                <Text style={newLogS.brandSubtitle}>Connectez-vous à votre espace</Text>
               </View>
-              <Text style={ls.brandName}>HK Santé</Text>
-              <Text style={ls.brandTag}>Connectez-vous à votre espace</Text>
+
+              {/* Progress Steps */}
+              <View style={newLogS.progressContainer}>
+                <View style={newLogS.stepContainer}>
+                  <View style={[newLogS.stepDot, newLogS.stepDotCompleted]}>
+                    <Ionicons name="checkmark" size={16} color="#FFF" />
+                  </View>
+                  <Text style={newLogS.stepLabelCompleted}>Licence</Text>
+                </View>
+                <View style={newLogS.stepLineCompleted} />
+                <View style={newLogS.stepContainer}>
+                  <View style={[newLogS.stepDot, newLogS.stepDotActive]}>
+                    <Text style={newLogS.stepNumActive}>2</Text>
+                  </View>
+                  <Text style={newLogS.stepLabelActive}>Connexion</Text>
+                </View>
+                <View style={newLogS.stepLine} />
+                <View style={newLogS.stepContainer}>
+                  <View style={[newLogS.stepDot, newLogS.stepDotInactive]}>
+                    <Text style={newLogS.stepNumInactive}>3</Text>
+                  </View>
+                  <Text style={newLogS.stepLabelInactive}>Tableau de Bord</Text>
+                </View>
+              </View>
             </View>
 
-            {/* ── Step Indicator ── */}
-            <View style={ls.steps}>
-              <View style={ls.stepInactive}>
-                <View style={[ls.stepDotActive, { backgroundColor: colors.success }]}>
-                  <Ionicons name="checkmark" size={16} color="#FFF" />
+            {/* Organization Info Card */}
+            {organization && (
+              <View style={newLogS.orgCard}>
+                <View style={newLogS.orgHeader}>
+                  <Ionicons name="business" size={20} color={colors.primary} />
+                  <Text style={newLogS.orgName}>{organization.name || 'Organisation'}</Text>
                 </View>
-                <Text style={[ls.stepLabelActive, { color: colors.success }]}>Licence</Text>
-              </View>
-              <View style={[ls.stepLine, { backgroundColor: colors.success }]} />
-              <View style={ls.stepActive}>
-                <View style={ls.stepDotActive}>
-                  <Text style={ls.stepNum}>2</Text>
-                </View>
-                <Text style={ls.stepLabelActive}>Connexion</Text>
-              </View>
-              <View style={ls.stepLine} />
-              <View style={ls.stepInactive}>
-                <View style={ls.stepDotInactive}>
-                  <Text style={ls.stepNumInactive}>3</Text>
-                </View>
-                <Text style={ls.stepLabelInactive}>Tableau de Bord</Text>
-              </View>
-            </View>
-
-            {/* ── Login Card ── */}
-            <View style={logS.card}>
-              <View style={ls.cardHeader}>
-                <View>
-                  <Text style={ls.cardTitle}>Connexion</Text>
-                  <Text style={ls.cardDesc}>
-                    Identifiez-vous pour accéder au système
-                  </Text>
-                </View>
+                <Text style={newLogS.licenseInfo}>
+                  Licence: {licenseKey || 'N/A'}
+                </Text>
                 <SyncStatusIndicator compact={true} />
               </View>
+            )}
 
-              {/* Status Banner */}
+            {/* Main Login Card */}
+            <View style={newLogS.mainCard}>
+              <Text style={newLogS.cardTitle}>Connexion</Text>
+              <Text style={newLogS.cardDescription}>
+                Identifiez-vous pour accéder au système
+              </Text>
+
+              {/* Status Message */}
               {statusMessage ? (
                 <View
                   style={[
-                    ls.statusBanner,
-                    {
-                      backgroundColor:
-                        statusType === 'success' ? colors.success + '12' : colors.error + '12',
-                      borderColor:
-                        statusType === 'success' ? colors.success + '30' : colors.error + '30',
-                    },
+                    newLogS.statusBanner,
+                    statusType === 'success' ? newLogS.statusSuccess : newLogS.statusError,
                   ]}
                 >
                   <Ionicons
@@ -805,130 +1132,507 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
                   />
                   <Text
                     style={[
-                      ls.statusText,
-                      { color: statusType === 'success' ? colors.successDark : colors.errorDark },
+                      newLogS.statusText,
+                      { color: statusType === 'success' ? colors.success : colors.error },
                     ]}
                   >
                     {statusMessage}
                   </Text>
-                  {statusType === 'error' && statusMessage.includes('licence') && (
-                    <TouchableOpacity
-                      style={logS.errorBackBtn}
-                      onPress={() => navigation.goBack()}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={logS.errorBackText}>Retour</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               ) : null}
 
-              {/* Phone */}
-              <Text style={ls.sectionLabel}>NUMÉRO DE TÉLÉPHONE</Text>
-              <View style={ls.inputWrapper}>
-                <View style={ls.inputIconLeft}>
-                  <Ionicons name="call-outline" size={20} color={colors.textTertiary} />
+              {/* Phone Input */}
+              <View style={newLogS.sectionContainer}>
+                <Text style={newLogS.sectionTitle}>NUMÉRO DE TÉLÉPHONE</Text>
+                <View style={newLogS.inputContainer}>
+                  <View style={newLogS.inputWrapper}>
+                    <Ionicons 
+                      name="call-outline" 
+                      size={20} 
+                      color={colors.textSecondary} 
+                      style={newLogS.inputIcon}
+                    />
+                    <TextInput
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="admin ou +243123456789"
+                      placeholderTextColor={colors.textDisabled}
+                      style={newLogS.textInput}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="default"
+                      mode="flat"
+                      underlineColor="transparent"
+                      activeUnderlineColor="transparent"
+                      contentStyle={newLogS.textInputContent}
+                    />
+                  </View>
                 </View>
-                <TextInput
-                  value={phone}
-                  onChangeText={setPhone}
-                  mode="flat"
-                  style={[ls.input, { fontFamily: 'System' }]}
-                  placeholder="admin ou +1234567890"
-                  placeholderTextColor={colors.textDisabled}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="default"
-                  underlineColor="transparent"
-                  activeUnderlineColor="transparent"
-                />
               </View>
 
-              {/* Password */}
-              <Text style={ls.sectionLabel}>MOT DE PASSE</Text>
-              <View style={ls.inputWrapper}>
-                <View style={ls.inputIconLeft}>
-                  <Ionicons name="lock-closed-outline" size={20} color={colors.textTertiary} />
+              {/* Password Input */}
+              <View style={newLogS.sectionContainer}>
+                <Text style={newLogS.sectionTitle}>MOT DE PASSE</Text>
+                <View style={newLogS.inputContainer}>
+                  <View style={newLogS.inputWrapper}>
+                    <Ionicons 
+                      name="lock-closed-outline" 
+                      size={20} 
+                      color={colors.textSecondary} 
+                      style={newLogS.inputIcon}
+                    />
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="••••••••"
+                      placeholderTextColor={colors.textDisabled}
+                      style={newLogS.textInput}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      mode="flat"
+                      underlineColor="transparent"
+                      activeUnderlineColor="transparent"
+                      contentStyle={newLogS.textInputContent}
+                    />
+                    <TouchableOpacity
+                      style={newLogS.eyeButton}
+                      onPress={() => setShowPassword(!showPassword)}
+                    >
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  mode="flat"
-                  style={[ls.input, { fontFamily: 'System' }]}
-                  placeholder="••••••••"
-                  placeholderTextColor={colors.textDisabled}
-                  secureTextEntry={!showPassword}
-                  underlineColor="transparent"
-                  activeUnderlineColor="transparent"
-                />
-                <TouchableOpacity
-                  style={logS.eyeBtn}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={colors.textTertiary}
-                  />
-                </TouchableOpacity>
               </View>
 
               {/* Login Button */}
               <TouchableOpacity
                 style={[
-                  ls.activateBtn,
-                  (!phone.trim() || !password.trim() || isLoading) && ls.activateBtnDisabled,
+                  newLogS.loginButton,
+                  (!phone.trim() || !password.trim() || isLoading) && newLogS.loginButtonDisabled,
                 ]}
-                activeOpacity={0.8}
                 onPress={handleLogin}
-                disabled={isLoading || !phone.trim() || !password.trim()}
+                disabled={!phone.trim() || !password.trim() || isLoading}
+                activeOpacity={0.8}
               >
                 {isLoading ? (
-                  <Text style={ls.activateBtnText}>Connexion en cours...</Text>
+                  <Text style={newLogS.loginButtonText}>Connexion en cours...</Text>
                 ) : (
                   <>
-                    <Ionicons name="log-in-outline" size={20} color="#FFF" />
-                    <Text style={ls.activateBtnText}>Se Connecter</Text>
+                    <Ionicons name="log-in-outline" size={20} color="#FFF" style={newLogS.buttonIcon} />
+                    <Text style={newLogS.loginButtonText}>Se Connecter</Text>
                   </>
                 )}
               </TouchableOpacity>
 
               {/* Demo Info */}
-              <View style={logS.demoBox}>
-                <Ionicons name="information-circle-outline" size={18} color={colors.info} />
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={logS.demoTitle}>Compte Démo</Text>
-                  <Text style={logS.demoCredentials}>admin / admin123</Text>
+              <View style={newLogS.demoContainer}>
+                <View style={newLogS.demoHeader}>
+                  <Ionicons name="information-circle-outline" size={16} color={colors.info} />
+                  <Text style={newLogS.demoTitle}>Compte de Démonstration</Text>
                 </View>
+                <Text style={newLogS.demoCredentials}>
+                  Téléphone: +243123456789{'\n'}Mot de passe: adminadmin
+                </Text>
               </View>
             </View>
 
-            {/* ── Back link ── */}
+            {/* Back Button */}
             <TouchableOpacity
-              style={logS.backLink}
+              style={newLogS.backButton}
               onPress={() => navigation.goBack()}
               activeOpacity={0.7}
             >
               <Ionicons name="arrow-back" size={16} color={colors.textSecondary} />
-              <Text style={logS.backText}>Changer de licence</Text>
+              <Text style={newLogS.backText}>Changer de licence</Text>
             </TouchableOpacity>
 
-            <Text style={ls.footerText}>
-              © 2025 HK Management Systems · Conçu pour la RD Congo
-            </Text>
+            {/* Footer */}
+            <View style={newLogS.footer}>
+              <Text style={newLogS.footerText}>
+                © 2025 HK Management Systems · République Démocratique du Congo
+              </Text>
+            </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
+// New Login Screen Styles - Matching the license screen design
+const newLogS = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    minHeight: SCREEN_H * 0.9,
+    paddingBottom: 40,
+  },
+  backgroundDecorations: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  bgCircle1: {
+    position: 'absolute',
+    top: -100,
+    right: -60,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: colors.primary + '08',
+  },
+  bgCircle2: {
+    position: 'absolute',
+    bottom: -80,
+    left: -80,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: colors.secondary + '06',
+  },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: isDesktop ? 24 : 16,
+    paddingVertical: isDesktop ? 32 : 20,
+    zIndex: 1,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: MAX_CARD_W,
+    alignSelf: 'center',
+  },
+  
+  // Header Section
+  headerSection: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoCircle: {
+    width: isDesktop ? 64 : 56,
+    height: isDesktop ? 64 : 56,
+    borderRadius: isDesktop ? 32 : 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    ...shadows.lg,
+  },
+  brandName: {
+    fontSize: isDesktop ? 28 : 24,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  brandSubtitle: {
+    fontSize: isDesktop ? 16 : 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  
+  // Progress Steps
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 300,
+  },
+  stepContainer: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  stepDotActive: {
+    backgroundColor: colors.primary,
+  },
+  stepDotCompleted: {
+    backgroundColor: colors.success,
+  },
+  stepDotInactive: {
+    backgroundColor: colors.surfaceVariant,
+  },
+  stepNumActive: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  stepNumInactive: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  stepLabelActive: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  stepLabelCompleted: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.success,
+    textAlign: 'center',
+  },
+  stepLabelInactive: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  stepLine: {
+    height: 2,
+    backgroundColor: colors.outline,
+    flex: 0.5,
+    marginHorizontal: 8,
+    marginTop: -20,
+  },
+  stepLineCompleted: {
+    height: 2,
+    backgroundColor: colors.success,
+    flex: 0.5,
+    marginHorizontal: 8,
+    marginTop: -20,
+  },
+  
+  // Organization Card
+  orgCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    ...shadows.sm,
+  },
+  orgHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orgName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    marginLeft: 8,
+    flex: 1,
+  },
+  licenseInfo: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  
+  // Main Card
+  mainCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: isDesktop ? 32 : 24,
+    marginBottom: 24,
+    ...shadows.lg,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  cardTitle: {
+    fontSize: isDesktop ? 24 : 20,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  cardDescription: {
+    fontSize: isDesktop ? 16 : 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  
+  // Status Banner
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+  },
+  statusSuccess: {
+    backgroundColor: colors.success + '12',
+    borderColor: colors.success + '30',
+  },
+  statusError: {
+    backgroundColor: colors.error + '12',
+    borderColor: colors.error + '30',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+  },
+  
+  // Sections
+  sectionContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  
+  // Input Section
+  inputContainer: {
+    width: '100%',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    minHeight: 56,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    height: 56,
+  },
+  textInputContent: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+  },
+  eyeButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  
+  // Login Button
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginTop: 8,
+    ...shadows.md,
+  },
+  loginButtonDisabled: {
+    backgroundColor: colors.textDisabled,
+    opacity: 0.6,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  
+  // Demo Container
+  demoContainer: {
+    backgroundColor: colors.info + '08',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: colors.info + '18',
+  },
+  demoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  demoTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.info,
+    marginLeft: 8,
+  },
+  demoCredentials: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === 'web' ? 'monospace' : 'System',
+    lineHeight: 18,
+  },
+  
+  // Back Button
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  backText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  
+  // Footer
+  footer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 20,
+  },
+  footerText: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+});
+
+// Old styles (kept for compatibility)
 const logS = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   scrollContent: {
     flexGrow: 1, alignItems: 'center', justifyContent: 'flex-start',
     paddingVertical: isDesktop ? 24 : 12, paddingHorizontal: isDesktop ? 24 : 16,
-    minHeight: '100%',
   },
   content: { width: '100%', maxWidth: MAX_CARD_W, alignItems: 'center' },
   card: {

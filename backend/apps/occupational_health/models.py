@@ -1,7 +1,7 @@
 """
-Occupational Health Models - Multi-Sector System (Médecine du Travail)
+Médecine du Travail Models - Multi-Sector System
 
-Comprehensive occupational health management system supporting 16 industry sectors 
+Comprehensive occupational medicine management system supporting 16 industry sectors 
 with sector-specific risk profiles, examination requirements, and regulatory compliance.
 
 Standards: ISO 45001:2018, ILO C155/C161/C187, ILO R194, WHO Healthy Workplaces
@@ -257,7 +257,7 @@ class WorkSite(models.Model):
         return f"{self.enterprise.name} - {self.name}"
 
 class Worker(models.Model):
-    """Worker with comprehensive occupational health profile"""
+    """Worker with comprehensive Médecine du Travail profile"""
     
     # Personal Information
     employee_id = models.CharField(_("ID Employé"), max_length=50, unique=True)
@@ -288,7 +288,7 @@ class Worker(models.Model):
     emergency_contact_name = models.CharField(_("Contact Urgence Nom"), max_length=100)
     emergency_contact_phone = models.CharField(_("Contact Urgence Tél"), max_length=15)
     
-    # Occupational Health Information
+    # Médecine du Travail Information
     exposure_risks = models.JSONField(_("Risques Exposition"), default=list, help_text=_("Liste des risques d'exposition"))
     ppe_required = models.JSONField(_("PPE Requis"), default=list, help_text=_("Liste des PPE requis"))
     ppe_provided = models.JSONField(_("PPE Fourni"), default=list, help_text=_("Liste des PPE fournis"))

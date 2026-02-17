@@ -1,19 +1,16 @@
 from django.db import models
 from django.core.validators import RegexValidator
+from django.utils import timezone
 import uuid
 
 
 class LicenseType(models.TextChoices):
-    PROFESSIONAL_MEDICAL = 'professional_medical', 'Licence Médicale Professionnelle'
-    PROFESSIONAL_PHARMACY = 'professional_pharmacy', 'Licence Pharmacie Professionnelle'
-    PROFESSIONAL_NURSING = 'professional_nursing', 'Licence Infirmier Professionnelle'
-    PROFESSIONAL_LAB_TECH = 'professional_lab_tech', 'Licence Technicien Laboratoire'
-    ORGANIZATION_HOSPITAL = 'organization_hospital', 'Licence Exploitation Hôpital'
-    ORGANIZATION_PHARMACY = 'organization_pharmacy', 'Licence Exploitation Pharmacie'
-    ORGANIZATION_CLINIC = 'organization_clinic', 'Licence Exploitation Clinique'
-    SOFTWARE = 'software', 'Licence Logiciel'
-    EQUIPMENT_MEDICAL = 'equipment_medical', 'Licence Équipement Médical'
-    CONTROLLED_SUBSTANCES = 'controlled_substances', 'Licence Substances Contrôlées'
+    PHARMACY = 'PHARMACY', 'Pharmacie'
+    HOSPITAL = 'HOSPITAL', 'Hôpital'
+    OCCUPATIONAL_HEALTH = 'OCCUPATIONAL_HEALTH', 'Santé au Travail'
+    PHARMACY_HOSPITAL = 'PHARMACY_HOSPITAL', 'Pharmacie + Hôpital'
+    HOSPITAL_OCCUPATIONAL_HEALTH = 'HOSPITAL_OCCUPATIONAL_HEALTH', 'Hôpital + Santé au Travail'
+    COMBINED = 'COMBINED', 'Combinée (Tous Modules)'
 
 
 class LicenseStatus(models.TextChoices):
@@ -25,12 +22,49 @@ class LicenseStatus(models.TextChoices):
     RENEWAL_REQUIRED = 'renewal_required', 'Renouvellement Requis'
 
 
+def generate_license_number(license_type):
+    """Generate a unique license number based on type and current year"""
+    from datetime import datetime
+    
+    # License type prefixes
+    type_prefixes = {
+        'PHARMACY': 'PH',
+        'HOSPITAL': 'HP',
+        'OCCUPATIONAL_HEALTH': 'OH',
+        'PHARMACY_HOSPITAL': 'PH-HP',
+        'HOSPITAL_OCCUPATIONAL_HEALTH': 'HP-OH',
+        'COMBINED': 'ALL',
+    }
+    
+    year = datetime.now().year
+    prefix = type_prefixes.get(license_type, 'LIC')
+    
+    # Find the next sequential number
+    from .models import License
+    existing_licenses = License.objects.filter(
+        license_number__startswith=f"{prefix}-{year}-"
+    ).order_by('license_number')
+    
+    if existing_licenses.exists():
+        last_license = existing_licenses.last()
+        try:
+            last_number = int(last_license.license_number.split('-')[-1])
+            next_number = last_number + 1
+        except (IndexError, ValueError):
+            next_number = 1
+    else:
+        next_number = 1
+    
+    return f"{prefix}-{year}-{next_number:04d}"
+
+
 class License(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     license_number = models.CharField(
         max_length=100,
         unique=True,
-        help_text='Unique license number'
+        blank=True,
+        help_text='Auto-generated unique license number'
     )
     type = models.CharField(
         max_length=50,
@@ -40,24 +74,14 @@ class License(models.Model):
     status = models.CharField(
         max_length=50,
         choices=LicenseStatus.choices,
-        default=LicenseStatus.ACTIVE,
+        default=LicenseStatus.PENDING,
         help_text='Current license status'
     )
     
-    # License holder (either user or organization)
-    holder_user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='licenses',
-        help_text='User holding this license (for professional licenses)'
-    )
-    holder_organization = models.ForeignKey(
+    # License holder (organization only)
+    organization = models.ForeignKey(
         'organizations.Organization',
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name='licenses',
         help_text='Organization holding this license'
     )
@@ -65,9 +89,13 @@ class License(models.Model):
     # License details
     issuing_authority = models.CharField(
         max_length=200,
+        default='Ministère de la Santé Publique - RD Congo',
         help_text='Authority that issued the license'
     )
-    issued_date = models.DateField(help_text='Date license was issued')
+    issued_date = models.DateField(
+        default=timezone.now,
+        help_text='Date license was issued'
+    )
     expiry_date = models.DateField(help_text='Date license expires')
     renewal_date = models.DateField(
         null=True,
@@ -76,7 +104,11 @@ class License(models.Model):
     )
     
     # License content
-    title = models.CharField(max_length=200, help_text='License title/name')
+    title = models.CharField(
+        max_length=200, 
+        blank=True,
+        help_text='License title/name (auto-generated if empty)'
+    )
     description = models.TextField(blank=True, help_text='License description')
     scope_of_practice = models.TextField(
         blank=True,
@@ -93,8 +125,7 @@ class License(models.Model):
         help_text='Whether license requires periodic renewal'
     )
     renewal_period_months = models.PositiveIntegerField(
-        null=True,
-        blank=True,
+        default=12,
         help_text='Renewal period in months'
     )
     ceu_required = models.BooleanField(
@@ -128,45 +159,81 @@ class License(models.Model):
             models.Index(fields=['license_number']),
             models.Index(fields=['type', 'status']),
             models.Index(fields=['expiry_date']),
+            models.Index(fields=['organization']),
         ]
 
+    def save(self, *args, **kwargs):
+        # Auto-generate license number if not provided
+        if not self.license_number:
+            self.license_number = generate_license_number(self.type)
+        
+        # Auto-generate title if not provided
+        if not self.title:
+            self.title = f"Licence {self.get_type_display()} - {self.organization.name}"
+        
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        holder = self.holder_user or self.holder_organization
-        return f"{self.license_number} - {self.get_type_display()} ({holder})"
+        return f"{self.license_number} - {self.get_type_display()} ({self.organization.name})"
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        # Ensure either user or organization is specified, not both
-        if self.holder_user and self.holder_organization:
-            raise ValidationError("License cannot be held by both user and organization")
-        if not self.holder_user and not self.holder_organization:
-            raise ValidationError("License must be held by either a user or organization")
+        from datetime import timedelta
+        
+        # Ensure expiry date is in the future for new licenses
+        if not self.pk and self.expiry_date and self.expiry_date <= timezone.now().date():
+            raise ValidationError("Expiry date must be in the future")
+        
+        # Set default expiry date if not provided (1 year from issued date)
+        if not self.expiry_date:
+            self.expiry_date = self.issued_date + timedelta(days=365)
 
     @property
     def holder(self):
-        """Return the license holder (user or organization)"""
-        return self.holder_user or self.holder_organization
+        """Return the license holder (organization)"""
+        return self.organization
 
     @property
     def is_expired(self):
         """Check if license is expired"""
-        from django.utils import timezone
         return self.expiry_date < timezone.now().date()
 
     @property
     def is_expiring_soon(self, days=30):
         """Check if license is expiring within specified days"""
-        from django.utils import timezone
         from datetime import timedelta
         warning_date = timezone.now().date() + timedelta(days=days)
-        return self.expiry_date <= warning_date
+        return self.expiry_date <= warning_date and not self.is_expired
 
     @property
     def days_until_expiry(self):
         """Number of days until license expires"""
-        from django.utils import timezone
         delta = self.expiry_date - timezone.now().date()
         return delta.days
+    
+    @property
+    def license_modules(self):
+        """Return list of modules covered by this license"""
+        modules = []
+        if self.type in ['PHARMACY', 'PHARMACY_HOSPITAL', 'COMBINED']:
+            modules.append('Pharmacie')
+        if self.type in ['HOSPITAL', 'PHARMACY_HOSPITAL', 'HOSPITAL_OCCUPATIONAL_HEALTH', 'COMBINED']:
+            modules.append('Hôpital')
+        if self.type in ['OCCUPATIONAL_HEALTH', 'HOSPITAL_OCCUPATIONAL_HEALTH', 'COMBINED']:
+            modules.append('Santé au Travail')
+        return modules
+
+    def get_license_fee(self):
+        """Calculate license fee based on type"""
+        base_fees = {
+            'PHARMACY': 500.00,
+            'HOSPITAL': 1000.00,
+            'OCCUPATIONAL_HEALTH': 750.00,
+            'PHARMACY_HOSPITAL': 1200.00,
+            'HOSPITAL_OCCUPATIONAL_HEALTH': 1500.00,
+            'COMBINED': 2000.00,
+        }
+        return base_fees.get(self.type, 500.00)
 
 
 class LicenseDocument(models.Model):

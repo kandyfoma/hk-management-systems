@@ -27,6 +27,7 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     'rest_framework',
+    'rest_framework.authtoken',  # For token authentication
     'corsheaders',
     'django_filters',
     'phonenumber_field',
@@ -43,7 +44,7 @@ LOCAL_APPS = [
     'apps.suppliers',
     'apps.audit',  # Audit logging system
     'apps.hospital',  # Hospital management system
-    'apps.occupational_health',  # Occupational health management system
+    'apps.occupational_health',  # Médecine du Travail
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -135,6 +136,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
@@ -207,114 +209,150 @@ LOGGING = {
     },
 }
 
-# Jazzmin Admin Interface Configuration
+# Jazzmin Admin Interface Configuration - Professional & Beautiful
 JAZZMIN_SETTINGS = {
-    "site_title": "HK Management System",
-    "site_header": "HK Management",
-    "site_brand": "HK Management",
+    # ============= Site Identity =============
+    "show_ui_builder": False,
+    "site_title": "HK Management Admin",
+    "site_header": "HK Healthcare System",
+    "site_brand": "HK Santé",
     "site_logo": None,
-    "login_logo": None,
-    "login_logo_dark": None,
     "site_logo_classes": "img-circle",
     "site_icon": None,
-    "welcome_sign": "Welcome to HK Management System",
-    "copyright": "HK Management System",
-    "search_model": ["auth.User", "accounts.User"],
+    "welcome_sign": "Welcome to HK Healthcare Management System",
+    "copyright": "© 2025 HK Management Systems - RD Congo",
+    
+    # ============= Search & User Avatar =============
+    "search_model": "accounts.User",
     "user_avatar": None,
 
-    # Top Menu
+    # ============= Top Menu Links =============
     "topmenu_links": [
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
-        {"name": "Support", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
-        {"app": "patients"},
+        {"name": "Licenses", "url": "admin:licenses_license_changelist", "permissions": ["licenses.view_license"]},
+        {"name": "Users", "url": "admin:accounts_user_changelist", "permissions": ["accounts.view_user"]},
+        {"name": "Organizations", "url": "admin:organizations_organization_changelist", "permissions": ["organizations.view_organization"]},
     ],
 
-    # User Menu on the right side of the header
+    # ============= User Menu =============
     "usermenu_links": [
-        {"name": "Support", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
-        {"model": "auth.user"}
+        {"name": "My Profile", "url": "/admin/accounts/user/", "new_window": False},
+        {"model": "accounts.user"},
     ],
 
-    # Side Menu
+    # ============= Side Menu =============
     "show_sidebar": True,
     "navigation_expanded": True,
+    "hide_models": ["auth.permission", "contenttypes.contenttype", "sessions.session"],
     "hide_apps": [],
-    "hide_models": [],
+    
+    # Menu ordering - most important first
     "order_with_respect_to": [
-        "auth", 
-        "accounts", 
-        "organizations", 
-        "patients",
-        "hospital",
-        "occupational_health",
-        "inventory", 
-        "suppliers",
-        "sales",
-        "prescriptions",
         "licenses",
-        "audit"
+        "licenses.license",
+        "licenses.licensedocument",
+        "licenses.licenserenewal",
+        
+        "accounts",
+        "accounts.user",
+        "accounts.userpermission",
+        
+        "organizations",
+        "organizations.organization",
+        
+        "patients",
+        "patients.patient",
+        
+        "hospital",
+        "hospital.hospitalencounter",
+        "hospital.hospitaldepartment",
+        "hospital.vitalsigns",
+        "hospital.hospitalbed",
+        "hospital.diagnosis",
+        "hospital.treatment",
+        
+        "occupational_health",
+        "occupational_health.enterprise",
+        "occupational_health.worksite",
+        "occupational_health.worker",
+        "occupational_health.medicalexamination",
+        "occupational_health.workplaceincident",
+        "occupational_health.ppeitem",
+        
+        "inventory",
+        "inventory.product",
+        "inventory.inventoryitem",
+        "inventory.inventorybatch",
+        "inventory.inventoryalert",
+        "inventory.stockmovement",
+        
+        "suppliers",
+        "suppliers.supplier",
+        
+        "sales",
+        "sales.sale",
+        "sales.saleitem",
+        
+        "prescriptions",
+        "prescriptions.prescription",
+        "prescriptions.prescriptionitem",
+        
+        "audit",
+        "audit.auditlog",
+        
+        "auth",
+        "auth.user",
+        "auth.group",
     ],
 
-    # Icons
-    "icons": {
-        "auth": "fas fa-users-cog",
-        "auth.user": "fas fa-user",
-        "auth.Group": "fas fa-users",
-        "accounts": "fas fa-user-shield",
-        "accounts.User": "fas fa-user-md",
-        "accounts.UserPermission": "fas fa-user-lock",
-        "organizations": "fas fa-building",
-        "organizations.Organization": "fas fa-building",
-        "patients": "fas fa-user-injured",
-        "patients.Patient": "fas fa-user-injured",
-        "hospital": "fas fa-hospital",
-        "hospital.HospitalEncounter": "fas fa-procedures",
-        "hospital.VitalSigns": "fas fa-heartbeat",
-        "hospital.HospitalDepartment": "fas fa-clinic-medical",
-        "hospital.HospitalBed": "fas fa-bed",
-        "occupational_health": "fas fa-hard-hat",
-        "occupational_health.Enterprise": "fas fa-industry",
-        "occupational_health.WorkSite": "fas fa-map-marker-alt",
-        "occupational_health.Worker": "fas fa-user-hard-hat",
-        "occupational_health.MedicalExamination": "fas fa-stethoscope",
-        "occupational_health.VitalSigns": "fas fa-heartbeat",
-        "occupational_health.WorkplaceIncident": "fas fa-exclamation-triangle",
-        "occupational_health.PPEItem": "fas fa-helmet-safety",
-        "inventory": "fas fa-boxes",
-        "inventory.Product": "fas fa-pills",
-        "inventory.InventoryItem": "fas fa-box",
-        "inventory.InventoryBatch": "fas fa-layer-group",
-        "inventory.StockMovement": "fas fa-truck-moving",
-        "suppliers": "fas fa-truck",
-        "suppliers.Supplier": "fas fa-shipping-fast",
-        "suppliers.SupplierContact": "fas fa-address-book",
-        "sales": "fas fa-shopping-cart",
-        "sales.Sale": "fas fa-cash-register",
-        "sales.SaleItem": "fas fa-shopping-basket",
-        "sales.Cart": "fas fa-shopping-cart",
-        "prescriptions": "fas fa-prescription",
-        "prescriptions.Prescription": "fas fa-prescription-bottle",
-        "prescriptions.PrescriptionItem": "fas fa-pills",
-        "licenses": "fas fa-certificate",
-        "licenses.License": "fas fa-id-card",
-        "licenses.LicenseDocument": "fas fa-file-contract",
-        "audit": "fas fa-clipboard-list",
-        "audit.AuditLog": "fas fa-history",
-        "audit.PharmacyAuditLog": "fas fa-file-medical",
-    },
-    
-    # UI Tweaks
-    "custom_links": {
-        "patients": [{
-            "name": "Add Patient", 
-            "url": "admin:patients_patient_add", 
-            "icon": "fas fa-user-plus",
-            "permissions": ["patients.add_patient"]
-        }]
-    },
+    # ============= UI Settings =============
     "use_google_fonts_cdn": True,
-    "show_ui_builder": False,
+    "changeform_format": "collapsible",
+    "changeform_format_overrides": {
+        "accounts.user": "horizontal_tabs",
+        "licenses.license": "horizontal_tabs",
+        "organizations.organization": "horizontal_tabs",
+    },
 
-    "changeform_format": "horizontal_tabs",
-    "changeform_format_overrides": {"auth.user": "collapsible", "auth.group": "vertical_tabs"},
+    # ============= Dashboard =============
+    "show_dashboard": True,
+    "dashboard_form_widgets": {},
+    
+    # ============= Related Modal =============
+    "related_modal_active": True,
+}
+
+# ============= Jazzmin UI Tweaks - Brand Colors from Frontend =============
+# Colors: Primary #003366, Secondary #c51618, Info #3182CE
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": False,
+    "accent": "accent-primary",
+    "navbar": "navbar-dark",
+    "no_navbar_border": False,
+    "navbar_fixed": True,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-light-primary",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": True,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": True,
+    "theme": "minty",
+    "dark_mode_theme": None,
+    "button_classes": {
+        "primary": "btn-outline-primary",
+        "secondary": "btn-outline-secondary",
+        "info": "btn-outline-info",
+        "warning": "btn-outline-warning",
+        "danger": "btn-outline-danger",
+        "success": "btn-outline-success",
+    },
+    "actions_sticky_top": True,
 }

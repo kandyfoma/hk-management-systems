@@ -150,7 +150,7 @@ class DataService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // OCCUPATIONAL HEALTH API
+  // MÉDECINE DU TRAVAIL API
   // ═══════════════════════════════════════════════════════════════
 
   async getOccupationalHealthRecords(params?: any): Promise<ApiResponse> {

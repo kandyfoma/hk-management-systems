@@ -1,8 +1,8 @@
 """
-Occupational Health Views - DRF API Views
+Médecine du Travail Views - DRF API Views
 
 Comprehensive Django REST Framework API views for multi-sector
-occupational health management system with sector-specific functionality.
+occupational medicine management system with sector-specific functionality.
 """
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import api_view, action
@@ -177,7 +177,7 @@ class WorkSiteViewSet(viewsets.ModelViewSet):
         return WorkSite.objects.select_related('enterprise').prefetch_related('workers')
 
 class WorkerViewSet(viewsets.ModelViewSet):
-    """Worker management API with occupational health profile"""
+    """Worker management API with Médecine du Travail profile"""
     
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

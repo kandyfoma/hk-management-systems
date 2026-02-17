@@ -10,10 +10,13 @@ urlpatterns = [
     path('profile/', views.profile_view, name='profile'),
     path('profile/update/', views.update_profile_view, name='update_profile'),
     path('change-password/', views.change_password_view, name='change_password'),
+    path('module-access/', views.user_module_access_view, name='user_module_access'),
     
     # Users
     path('users/', views.UserListCreateAPIView.as_view(), name='user_list_create'),
     path('users/<uuid:pk>/', views.UserDetailAPIView.as_view(), name='user_detail'),
+    path('users/bulk-import/', views.bulk_import_users_view, name='bulk_import_users'),
+    path('organization/users/', views.organization_users_view, name='organization_users'),
     
     # User Permissions
     path('permissions/', views.UserPermissionListCreateAPIView.as_view(), name='permission_list_create'),
