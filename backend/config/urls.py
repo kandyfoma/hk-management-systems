@@ -13,6 +13,9 @@ urlpatterns = [
     path('api/v1/inventory/', include('apps.inventory.urls')),
     path('api/v1/sales/', include('apps.sales.urls')),
     path('api/v1/prescriptions/', include('apps.prescriptions.urls')),
+    
+    # Audit logging APIs
+    path('api/v1/audit/', include('apps.audit.urls')),
 ]
 
 # Serve media files in development

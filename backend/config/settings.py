@@ -40,6 +40,7 @@ LOCAL_APPS = [
     'apps.sales',
     'apps.prescriptions',
     'apps.suppliers',
+    'apps.audit',  # Audit logging system
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -52,6 +53,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.audit.utils.AuditMiddleware',  # Audit logging middleware
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

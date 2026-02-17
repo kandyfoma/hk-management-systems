@@ -13,6 +13,7 @@ from .serializers import (
     ProductSerializer, InventoryItemSerializer, InventoryBatchSerializer,
     StockMovementSerializer, InventoryAlertSerializer
 )
+from apps.audit.decorators import audit_inventory_change, audit_critical_action
 
 
 class ProductListCreateAPIView(generics.ListCreateAPIView):
@@ -80,6 +81,7 @@ class InventoryAlertDetailAPIView(generics.RetrieveUpdateAPIView):
 
 
 @api_view(['GET'])
+@audit_inventory_change(description="Consultation produits expirant")
 def expiring_products_view(request):
     days = request.GET.get('days', 30)
     try:

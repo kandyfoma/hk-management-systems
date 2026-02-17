@@ -13,6 +13,10 @@ from .serializers import (
     PrescriptionUpdateSerializer, PrescriptionItemSerializer, PrescriptionNoteSerializer,
     PrescriptionImageSerializer, DispensingSerializer
 )
+from apps.audit.decorators import (
+    audit_dispense, audit_prescription_action, audit_critical_action
+)
+from apps.audit.models import AuditActionType
 
 
 class PrescriptionListCreateAPIView(generics.ListCreateAPIView):
@@ -86,6 +90,7 @@ class PrescriptionImageListCreateAPIView(generics.ListCreateAPIView):
 
 
 @api_view(['POST'])
+@audit_dispense(description="Dispensation d'ordonnance")
 def dispense_prescription_view(request, prescription_id):
     """Process prescription dispensing"""
     serializer = DispensingSerializer(data=request.data)
@@ -152,6 +157,7 @@ def prescription_stats_view(request):
 
 
 @api_view(['POST'])
+@audit_prescription_action(AuditActionType.PRESCRIPTION_REJECT, "Annulation d'ordonnance")
 def cancel_prescription_view(request, prescription_id):
     """Cancel a prescription"""
     try:
@@ -164,6 +170,7 @@ def cancel_prescription_view(request, prescription_id):
 
 
 @api_view(['POST'])
+@audit_prescription_action(AuditActionType.PRESCRIPTION_VALIDATE, "Validation d'ordonnance")
 def complete_prescription_view(request, prescription_id):
     """Mark prescription as complete"""
     try:
