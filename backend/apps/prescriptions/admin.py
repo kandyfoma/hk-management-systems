@@ -8,7 +8,7 @@ from .models import (
 class PrescriptionItemInline(admin.TabularInline):
     model = PrescriptionItem
     extra = 0
-    readonly_fields = ['quantity_dispensed', 'dispensed_by', 'dispensed_at']
+    readonly_fields = ['quantity_dispensed', 'dispensed_by', 'dispensed_date']
 
 
 class PrescriptionNoteInline(admin.StackedInline):
@@ -25,25 +25,22 @@ class PrescriptionImageInline(admin.TabularInline):
 
 @admin.register(Prescription)
 class PrescriptionAdmin(admin.ModelAdmin):
-    list_display = ['prescription_number', 'patient', 'doctor', 'status', 'prescription_date', 'valid_until']
-    list_filter = ['status', 'urgency', 'prescription_date', 'valid_until']
+    list_display = ['prescription_number', 'patient', 'doctor', 'status', 'date', 'valid_until']
+    list_filter = ['status', 'date', 'valid_until']
     search_fields = ['prescription_number', 'patient__first_name', 'patient__last_name', 'doctor__first_name', 'doctor__last_name']
-    readonly_fields = ['prescription_number', 'is_complete', 'created_by', 'created_at', 'updated_at']
+    readonly_fields = ['prescription_number', 'created_by', 'created_at', 'updated_at']
     inlines = [PrescriptionItemInline, PrescriptionNoteInline, PrescriptionImageInline]
-    date_hierarchy = 'prescription_date'
+    date_hierarchy = 'date'
     
     fieldsets = (
         ('Informations de base', {
-            'fields': ('prescription_number', 'patient', 'doctor', 'status', 'urgency')
+            'fields': ('prescription_number', 'patient', 'doctor', 'status')
         }),
         ('Dates', {
-            'fields': ('prescription_date', 'valid_until')
+            'fields': ('date', 'valid_until')
         }),
         ('Détails médicaux', {
-            'fields': ('diagnosis', 'instructions', 'dispenser_notes')
-        }),
-        ('Statut', {
-            'fields': ('is_complete',)
+            'fields': ('diagnosis', 'instructions')
         }),
         ('Métadonnées', {
             'fields': ('created_by', 'created_at', 'updated_at'),
@@ -54,7 +51,7 @@ class PrescriptionAdmin(admin.ModelAdmin):
     actions = ['mark_as_dispensed', 'mark_as_cancelled']
     
     def mark_as_dispensed(self, request, queryset):
-        queryset.update(status='FULLY_DISPENSED', is_complete=True)
+        queryset.update(status='FULLY_DISPENSED')
     mark_as_dispensed.short_description = "Marquer comme entièrement dispensé"
     
     def mark_as_cancelled(self, request, queryset):
@@ -64,10 +61,10 @@ class PrescriptionAdmin(admin.ModelAdmin):
 
 @admin.register(PrescriptionItem)
 class PrescriptionItemAdmin(admin.ModelAdmin):
-    list_display = ['prescription', 'medication_name', 'quantity_prescribed', 'quantity_dispensed', 'status']
-    list_filter = ['status', 'dispensed_at']
+    list_display = ['prescription', 'medication_name', 'quantity', 'quantity_dispensed', 'status']
+    list_filter = ['status', 'dispensed_date']
     search_fields = ['medication_name', 'prescription__prescription_number', 'product__name']
-    readonly_fields = ['dispensed_by', 'dispensed_at']
+    readonly_fields = ['dispensed_by', 'dispensed_date']
     
     fieldsets = (
         ('Prescription', {
@@ -77,19 +74,19 @@ class PrescriptionItemAdmin(admin.ModelAdmin):
             'fields': ('dosage', 'frequency', 'duration', 'unit', 'instructions')
         }),
         ('Quantités', {
-            'fields': ('quantity_prescribed', 'quantity_dispensed', 'status')
+            'fields': ('quantity', 'quantity_dispensed', 'status')
         }),
         ('Dispensation', {
-            'fields': ('dispensed_by', 'dispensed_at', 'notes')
+            'fields': ('dispensed_by', 'dispensed_date', 'pharmacist_notes')
         })
     )
 
 
 @admin.register(PrescriptionNote)
 class PrescriptionNoteAdmin(admin.ModelAdmin):
-    list_display = ['prescription', 'note_type', 'is_internal', 'created_by', 'created_at']
-    list_filter = ['note_type', 'is_internal', 'created_at']
-    search_fields = ['prescription__prescription_number', 'content']
+    list_display = ['prescription', 'note_type', 'priority', 'created_by', 'created_at']
+    list_filter = ['note_type', 'priority', 'created_at']
+    search_fields = ['prescription__prescription_number', 'content', 'title']
     readonly_fields = ['created_by', 'created_at']
 
 

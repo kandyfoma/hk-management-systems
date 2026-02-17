@@ -65,6 +65,7 @@ class WorkSiteSerializer(serializers.ModelSerializer):
     
     enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
     enterprise_sector = serializers.CharField(source='enterprise.sector', read_only=True)
+    worker_count = serializers.IntegerField(source='workers.count', read_only=True)
     
     class Meta:
         model = WorkSite
@@ -80,6 +81,7 @@ class WorkerListSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     age = serializers.ReadOnlyField()
     enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    work_site_name = serializers.CharField(source='work_site.name', read_only=True, allow_null=True)
     sector_risk_level = serializers.ReadOnlyField()
     job_category_display = serializers.CharField(source='get_job_category_display', read_only=True)
     employment_status_display = serializers.CharField(source='get_employment_status_display', read_only=True)
@@ -89,10 +91,11 @@ class WorkerListSerializer(serializers.ModelSerializer):
         model = Worker
         fields = [
             'id', 'employee_id', 'first_name', 'last_name', 'full_name', 'age',
-            'gender', 'enterprise', 'enterprise_name', 'job_category', 
-            'job_category_display', 'job_title', 'hire_date', 'employment_status',
-            'employment_status_display', 'phone', 'current_fitness_status',
-            'fitness_status_display', 'sector_risk_level', 'next_exam_due'
+            'gender', 'enterprise', 'enterprise_name', 'work_site', 'work_site_name',
+            'job_category', 'job_category_display', 'job_title', 'hire_date', 
+            'employment_status', 'employment_status_display', 'phone', 
+            'current_fitness_status', 'fitness_status_display', 'sector_risk_level', 
+            'next_exam_due'
         ]
 
 class WorkerDetailSerializer(serializers.ModelSerializer):
@@ -231,7 +234,8 @@ class MedicalExaminationDetailSerializer(serializers.ModelSerializer):
     """Detail view serializer for medical examinations with all related data"""
     
     worker_name = serializers.CharField(source='worker.full_name', read_only=True)
-    worker_details = WorkerDetailSerializer(source='worker', read_only=True)
+    worker_employee_id = serializers.CharField(source='worker.employee_id', read_only=True)
+    enterprise_name = serializers.CharField(source='worker.enterprise.name', read_only=True)
     examining_doctor_name = serializers.CharField(source='examining_doctor.get_full_name', read_only=True)
     exam_type_display = serializers.CharField(source='get_exam_type_display', read_only=True)
     
@@ -450,6 +454,81 @@ class WorkerRiskProfileSerializer(serializers.Serializer):
     # Risk scoring
     overall_risk_score = serializers.IntegerField()  # 1-25 scale
     risk_level = serializers.CharField()  # low, medium, high, critical
+    
+    # Recommendations
+    immediate_actions = serializers.ListField()
+    preventive_measures = serializers.ListField()
+
+# ==================== NESTED WRITE SERIALIZERS ====================
+
+class MedicalExaminationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating medical examinations with nested data"""
+    
+    class Meta:
+        model = MedicalExamination
+        fields = [
+            'worker', 'exam_type', 'exam_date', 'exam_location', 'examining_doctor',
+            'reason_for_exam', 'work_fitness_assessment', 'recommendations',
+            'follow_up_required', 'follow_up_date', 'next_periodic_exam'
+        ]
+    
+    def create(self, validated_data):
+        # Generate exam number
+        validated_data['examination_completed'] = False
+        return super().create(validated_data)
+
+class WorkerCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating workers with validation"""
+    
+    class Meta:
+        model = Worker
+        fields = [
+            'employee_id', 'first_name', 'last_name', 'date_of_birth', 'gender',
+            'enterprise', 'work_site', 'job_category', 'job_title', 'hire_date',
+            'phone', 'email', 'address', 'emergency_contact_name', 'emergency_contact_phone',
+            'exposure_risks', 'ppe_required', 'allergies', 'chronic_conditions', 'medications'
+        ]
+    
+    def validate_employee_id(self, value):
+        """Ensure employee ID is unique"""
+        if Worker.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError("Employee ID must be unique")
+        return value
+    
+    def create(self, validated_data):
+        # Set initial fitness status
+        validated_data['current_fitness_status'] = 'pending_evaluation'
+        # Calculate next exam due date based on sector requirements
+        enterprise = validated_data['enterprise']
+        hire_date = validated_data['hire_date']
+        
+        # Initial exam should be within 30 days
+        from datetime import timedelta
+        validated_data['next_exam_due'] = hire_date + timedelta(days=30)
+        
+        return super().create(validated_data)
+
+class EnterpriseCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating enterprises with validation"""
+    
+    class Meta:
+        model = Enterprise
+        fields = [
+            'name', 'sector', 'rccm', 'nif', 'address', 'contact_person',
+            'phone', 'email', 'contract_start_date', 'contract_end_date'
+        ]
+    
+    def validate_rccm(self, value):
+        """Ensure RCCM is unique"""
+        if Enterprise.objects.filter(rccm=value).exists():
+            raise serializers.ValidationError("RCCM must be unique")
+        return value
+    
+    def validate_nif(self, value):
+        """Ensure NIF is unique"""
+        if Enterprise.objects.filter(nif=value).exists():
+            raise serializers.ValidationError("NIF must be unique")
+        return value
     
     # Recommendations
     immediate_actions = serializers.ListField()

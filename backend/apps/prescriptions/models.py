@@ -89,7 +89,14 @@ class Prescription(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
     # References
-    encounter_id = models.CharField(max_length=100, blank=True, help_text='Référence consultation')
+    encounter = models.ForeignKey(
+        'hospital.HospitalEncounter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='prescriptions',
+        help_text='Consultation associée'
+    )
     patient = models.ForeignKey(
         'patients.Patient',
         on_delete=models.CASCADE,

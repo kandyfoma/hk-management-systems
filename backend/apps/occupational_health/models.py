@@ -270,7 +270,7 @@ class Worker(models.Model):
     
     # Employment Information
     enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='workers')
-    work_site = models.ForeignKey(WorkSite, on_delete=models.SET_NULL, null=True, blank=True)
+    work_site = models.ForeignKey(WorkSite, on_delete=models.SET_NULL, null=True, blank=True, related_name='workers')
     job_category = models.CharField(_("Catégorie Emploi"), max_length=50, choices=JOB_CATEGORIES)
     job_title = models.CharField(_("Titre Emploi"), max_length=100)
     hire_date = models.DateField(_("Date Embauche"))

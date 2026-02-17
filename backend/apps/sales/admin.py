@@ -56,8 +56,8 @@ class SaleAdmin(admin.ModelAdmin):
 @admin.register(SaleItem)
 class SaleItemAdmin(admin.ModelAdmin):
     list_display = ['sale', 'product', 'quantity', 'unit_price', 'line_total']
-    list_filter = ['sale__created_at', 'tax_rate']
-    search_fields = ['product__name', 'product_code', 'sale__sale_number']
+    list_filter = ['sale__created_at']
+    search_fields = ['product__name', 'product_sku', 'sale__sale_number']
     readonly_fields = ['line_total']
 
 
@@ -85,5 +85,5 @@ class CartAdmin(admin.ModelAdmin):
 @admin.register(CartItem)
 class CartItemAdmin(admin.ModelAdmin):
     list_display = ['cart', 'product', 'quantity', 'unit_price', 'discount_amount']
-    list_filter = ['added_at']
+    list_filter = ['created_at']
     search_fields = ['product__name', 'cart__cart_name']

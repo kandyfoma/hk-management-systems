@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/v1/sales/', include('apps.sales.urls')),
     path('api/v1/prescriptions/', include('apps.prescriptions.urls')),
     path('api/v1/hospital/', include('apps.hospital.urls')),
+    path('api/v1/occupational-health/', include('apps.occupational_health.urls')),
     
     # Audit logging APIs
     path('api/v1/audit/', include('apps.audit.urls')),

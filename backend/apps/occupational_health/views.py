@@ -35,10 +35,10 @@ from .models import (
 
 from .serializers import (
     # Core serializers
-    EnterpriseListSerializer, EnterpriseDetailSerializer,
-    WorkSiteSerializer, WorkerListSerializer, WorkerDetailSerializer,
+    EnterpriseListSerializer, EnterpriseDetailSerializer, EnterpriseCreateSerializer,
+    WorkSiteSerializer, WorkerListSerializer, WorkerDetailSerializer, WorkerCreateSerializer,
     # Medical examination serializers
-    MedicalExaminationListSerializer, MedicalExaminationDetailSerializer,
+    MedicalExaminationListSerializer, MedicalExaminationDetailSerializer, MedicalExaminationCreateSerializer,
     VitalSignsSerializer, PhysicalExaminationSerializer,
     AudiometryResultSerializer, SpirometryResultSerializer, VisionTestResultSerializer,
     MentalHealthScreeningSerializer, ErgonomicAssessmentSerializer,
@@ -67,7 +67,9 @@ class EnterpriseViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def get_serializer_class(self):
-        if self.action in ['list']:
+        if self.action == 'create':
+            return EnterpriseCreateSerializer
+        elif self.action in ['list']:
             return EnterpriseListSerializer
         return EnterpriseDetailSerializer
     
@@ -172,7 +174,7 @@ class WorkSiteViewSet(viewsets.ModelViewSet):
     ordering = ['enterprise__name', 'name']
     
     def get_queryset(self):
-        return WorkSite.objects.select_related('enterprise')
+        return WorkSite.objects.select_related('enterprise').prefetch_related('workers')
 
 class WorkerViewSet(viewsets.ModelViewSet):
     """Worker management API with occupational health profile"""
@@ -188,10 +190,16 @@ class WorkerViewSet(viewsets.ModelViewSet):
     ordering = ['last_name', 'first_name']
     
     def get_queryset(self):
-        return Worker.objects.select_related('enterprise', 'work_site', 'created_by')
+        return Worker.objects.select_related(
+            'enterprise', 'work_site', 'created_by'
+        ).prefetch_related(
+            'medical_examinations', 'incidents_involved', 'occupational_diseases'
+        )
     
     def get_serializer_class(self):
-        if self.action in ['list']:
+        if self.action == 'create':
+            return WorkerCreateSerializer
+        elif self.action in ['list']:
             return WorkerListSerializer
         return WorkerDetailSerializer
     
@@ -345,10 +353,18 @@ class MedicalExaminationViewSet(viewsets.ModelViewSet):
     ordering = ['-exam_date']
     
     def get_queryset(self):
-        return MedicalExamination.objects.select_related('worker', 'worker__enterprise', 'examining_doctor')
+        return MedicalExamination.objects.select_related(
+            'worker', 'worker__enterprise', 'worker__work_site', 'examining_doctor'
+        ).prefetch_related(
+            'vital_signs', 'physical_exam', 'audiometry', 'spirometry', 
+            'vision_test', 'mental_health_screening', 'ergonomic_assessment',
+            'fitness_certificate'
+        )
     
     def get_serializer_class(self):
-        if self.action in ['list']:
+        if self.action == 'create':
+            return MedicalExaminationCreateSerializer
+        elif self.action in ['list']:
             return MedicalExaminationListSerializer
         return MedicalExaminationDetailSerializer
     

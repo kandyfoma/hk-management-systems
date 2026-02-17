@@ -1,5 +1,5 @@
-from rest_framework import generics, status
-from rest_framework.decorators import api_view
+from rest_framework import generics, status, permissions
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Sum
@@ -171,3 +171,39 @@ def inventory_stats_view(request):
         'active_alerts': InventoryAlert.objects.filter(is_active=True).count(),
     }
     return Response(stats)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def product_category_choices_view(request):
+    """Get product category choices"""
+    from .models import ProductCategory
+    choices = [
+        {'value': choice[0], 'label': choice[1]}
+        for choice in ProductCategory.choices
+    ]
+    return Response(choices)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def dosage_form_choices_view(request):
+    """Get dosage form choices"""
+    from .models import DosageForm
+    choices = [
+        {'value': choice[0], 'label': choice[1]}
+        for choice in DosageForm.choices
+    ]
+    return Response(choices)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def unit_of_measure_choices_view(request):
+    """Get unit of measure choices"""
+    from .models import UnitOfMeasure
+    choices = [
+        {'value': choice[0], 'label': choice[1]}
+        for choice in UnitOfMeasure.choices
+    ]
+    return Response(choices)

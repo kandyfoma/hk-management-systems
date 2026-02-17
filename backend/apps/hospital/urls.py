@@ -28,6 +28,14 @@ urlpatterns = [
     path('encounters/', views.HospitalEncounterListCreateAPIView.as_view(), name='encounters_list_create'),
     path('encounters/<uuid:pk>/', views.HospitalEncounterDetailAPIView.as_view(), name='encounters_detail'),
     
+    # Related data endpoints
+    path('encounters/<uuid:encounter_id>/prescriptions/', 
+         views.encounter_prescriptions_view, 
+         name='encounter_prescriptions'),
+    path('patients/<uuid:patient_id>/medical-summary/', 
+         views.patient_medical_summary_view, 
+         name='patient_medical_summary'),
+    
     # Statistics
     path('encounters/stats/', views.encounter_stats_view, name='encounter_stats'),
     

@@ -24,7 +24,7 @@ urlpatterns = [
     path('reports/daily/', views.daily_sales_report_view, name='daily_sales_report'),
     path('reports/stats/', views.sales_stats_view, name='sales_stats'),
     
-    # Void/Refund
-    path('<uuid:sale_id>/void/', views.void_sale_view, name='void_sale'),
-    path('<uuid:sale_id>/refund/', views.refund_sale_view, name='refund_sale'),
+    # Void/Refund (Temporarily commented out - functions not implemented yet)
+    # path('<uuid:sale_id>/void/', views.void_sale_view, name='void_sale'),
+    # path('<uuid:sale_id>/refund/', views.refund_sale_view, name='refund_sale'),
 ]

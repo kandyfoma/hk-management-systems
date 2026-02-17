@@ -12,11 +12,11 @@ from .models import (
 )
 from .serializers import (
     HospitalEncounterSerializer, HospitalEncounterCreateSerializer, HospitalEncounterListSerializer,
-    VitalSignsSerializer, VitalSignsCreateSerializer, VitalSignsListSerializer,
+    HospitalEncounterDetailSerializer, VitalSignsSerializer, VitalSignsCreateSerializer, VitalSignsListSerializer,
     HospitalDepartmentSerializer, HospitalBedSerializer, HospitalBedListSerializer,
     EncounterTypeChoicesSerializer, EncounterStatusChoicesSerializer, BedStatusChoicesSerializer
 )
-from apps.audit.decorators import audit_hospital_action
+from apps.audit.decorators import audit_critical_action
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -27,7 +27,7 @@ class VitalSignsListCreateAPIView(generics.ListCreateAPIView):
     """List and create vital signs"""
     queryset = VitalSigns.objects.select_related(
         'patient', 'encounter', 'measured_by', 'verified_by', 'created_by', 'updated_by'
-    )
+    ).prefetch_related('encounter__nursing_staff')
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['patient', 'encounter', 'measured_by', 'is_abnormal']
     search_fields = ['patient__first_name', 'patient__last_name', 'patient__patient_number']
@@ -39,7 +39,7 @@ class VitalSignsListCreateAPIView(generics.ListCreateAPIView):
             return VitalSignsCreateSerializer
         return VitalSignsListSerializer
 
-    @audit_hospital_action(description="Création de signes vitaux")
+    @audit_critical_action(description="Création de signes vitaux")
     def perform_create(self, serializer):
         serializer.save(
             organization=self.request.user.organization,
@@ -55,11 +55,11 @@ class VitalSignsDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     )
     serializer_class = VitalSignsSerializer
 
-    @audit_hospital_action(description="Modification de signes vitaux")
+    @audit_critical_action(description="Modification de signes vitaux")
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
 
-    @audit_hospital_action(description="Suppression de signes vitaux")
+    @audit_critical_action(description="Suppression de signes vitaux")
     def perform_destroy(self, instance):
         super().perform_destroy(instance)
 
@@ -124,7 +124,7 @@ class HospitalEncounterListCreateAPIView(generics.ListCreateAPIView):
             return HospitalEncounterCreateSerializer
         return HospitalEncounterListSerializer
 
-    @audit_hospital_action(description="Création de consultation hospitalière")
+    @audit_critical_action(description="Création de consultation hospitalière")
     def perform_create(self, serializer):
         serializer.save(
             organization=self.request.user.organization,
@@ -136,14 +136,14 @@ class HospitalEncounterDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete hospital encounter"""
     queryset = HospitalEncounter.objects.select_related(
         'patient', 'organization', 'attending_physician', 'created_by', 'updated_by'
-    ).prefetch_related('nursing_staff', 'vital_signs')
-    serializer_class = HospitalEncounterSerializer
+    ).prefetch_related('nursing_staff', 'vital_signs', 'prescriptions')
+    serializer_class = HospitalEncounterDetailSerializer
 
-    @audit_hospital_action(description="Modification de consultation hospitalière")
+    @audit_critical_action(description="Modification de consultation hospitalière")
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
 
-    @audit_hospital_action(description="Suppression de consultation hospitalière")
+    @audit_critical_action(description="Suppression de consultation hospitalière")
     def perform_destroy(self, instance):
         super().perform_destroy(instance)
 
@@ -173,6 +173,41 @@ def encounter_stats_view(request):
     return Response(stats)
 
 
+@api_view(['GET'])
+def encounter_prescriptions_view(request, encounter_id):
+    """Get all prescriptions for a specific encounter"""
+    try:
+        # Import here to avoid circular import
+        from apps.prescriptions.serializers import PrescriptionListSerializer
+        from apps.prescriptions.models import Prescription
+        
+        encounter = HospitalEncounter.objects.get(id=encounter_id)
+        prescriptions = encounter.prescriptions.select_related(
+            'patient', 'doctor', 'organization'
+        ).prefetch_related('items').order_by('-created_at')
+        
+        serializer = PrescriptionListSerializer(prescriptions, many=True)
+        return Response({
+            'encounter': {
+                'id': str(encounter.id),
+                'encounter_number': encounter.encounter_number,
+                'patient_name': encounter.patient.full_name
+            },
+            'prescriptions': serializer.data,
+            'count': prescriptions.count()
+        })
+    except HospitalEncounter.DoesNotExist:
+        return Response(
+            {'error': 'Encounter not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
 # ═══════════════════════════════════════════════════════════════
 #  HOSPITAL DEPARTMENT API VIEWS
 # ═══════════════════════════════════════════════════════════════
@@ -189,7 +224,7 @@ class HospitalDepartmentListCreateAPIView(generics.ListCreateAPIView):
     ordering_fields = ['name', 'code', 'created_at']
     ordering = ['name']
 
-    @audit_hospital_action(description="Création de service hospitalier")
+    @audit_critical_action(description="Création de service hospitalier")
     def perform_create(self, serializer):
         serializer.save(organization=self.request.user.organization)
 
@@ -201,11 +236,11 @@ class HospitalDepartmentDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     ).prefetch_related('beds')
     serializer_class = HospitalDepartmentSerializer
 
-    @audit_hospital_action(description="Modification de service hospitalier")
+    @audit_critical_action(description="Modification de service hospitalier")
     def perform_update(self, serializer):
         serializer.save()
 
-    @audit_hospital_action(description="Suppression de service hospitalier")
+    @audit_critical_action(description="Suppression de service hospitalier")
     def perform_destroy(self, instance):
         # Soft delete - mark as inactive instead
         instance.is_active = False
@@ -232,7 +267,7 @@ class HospitalBedListCreateAPIView(generics.ListCreateAPIView):
             return HospitalBedListSerializer
         return HospitalBedSerializer
 
-    @audit_hospital_action(description="Création de lit hospitalier")
+    @audit_critical_action(description="Création de lit hospitalier")
     def perform_create(self, serializer):
         serializer.save()
 
@@ -244,11 +279,11 @@ class HospitalBedDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     )
     serializer_class = HospitalBedSerializer
 
-    @audit_hospital_action(description="Modification de lit hospitalier")
+    @audit_critical_action(description="Modification de lit hospitalier")
     def perform_update(self, serializer):
         serializer.save()
 
-    @audit_hospital_action(description="Suppression de lit hospitalier")
+    @audit_critical_action(description="Suppression de lit hospitalier")
     def perform_destroy(self, instance):
         # Soft delete - mark as inactive instead
         instance.is_active = False
@@ -256,7 +291,7 @@ class HospitalBedDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['POST'])
-@audit_hospital_action(description="Assignation de lit à un patient")
+@audit_critical_action(description="Assignation de lit à un patient")
 def assign_bed_view(request, bed_id):
     """Assign a bed to a patient and encounter"""
     try:
@@ -299,7 +334,7 @@ def assign_bed_view(request, bed_id):
 
 
 @api_view(['POST'])
-@audit_hospital_action(description="Libération de lit hospitalier")
+@audit_critical_action(description="Libération de lit hospitalier")
 def release_bed_view(request, bed_id):
     """Release a bed from current patient"""
     try:
@@ -449,3 +484,67 @@ def hospital_dashboard_view(request):
         'abnormal_vitals_today': abnormal_count,
         'departments_count': HospitalDepartment.objects.filter(is_active=True).count()
     })
+
+
+@api_view(['GET'])
+def patient_medical_summary_view(request, patient_id):
+    """Get comprehensive medical summary for a patient"""
+    try:
+        from apps.patients.models import Patient
+        from apps.prescriptions.models import Prescription, PrescriptionStatus
+        from apps.prescriptions.serializers import PrescriptionListSerializer
+        
+        patient = Patient.objects.get(id=patient_id)
+        
+        # Get recent encounters
+        recent_encounters = HospitalEncounter.objects.filter(
+            patient=patient
+        ).select_related('attending_physician').order_by('-created_at')[:5]
+        
+        # Get recent prescriptions
+        recent_prescriptions = Prescription.objects.filter(
+            patient=patient
+        ).select_related('doctor', 'encounter').order_by('-created_at')[:5]
+        
+        # Get recent vital signs
+        recent_vitals = VitalSigns.objects.filter(
+            patient=patient
+        ).select_related('measured_by', 'encounter').order_by('-measured_at')[:5]
+        
+        encounter_serializer = HospitalEncounterListSerializer(recent_encounters, many=True)
+        prescription_serializer = PrescriptionListSerializer(recent_prescriptions, many=True)
+        vitals_serializer = VitalSignsListSerializer(recent_vitals, many=True)
+        
+        return Response({
+            'patient': {
+                'id': str(patient.id),
+                'full_name': patient.full_name,
+                'patient_number': patient.patient_number,
+                'age': patient.age,
+                'gender': patient.get_gender_display(),
+                'blood_type': patient.blood_type,
+                'allergies': patient.allergies,
+                'chronic_conditions': patient.chronic_conditions
+            },
+            'recent_encounters': encounter_serializer.data,
+            'recent_prescriptions': prescription_serializer.data,
+            'recent_vital_signs': vitals_serializer.data,
+            'statistics': {
+                'total_encounters': HospitalEncounter.objects.filter(patient=patient).count(),
+                'total_prescriptions': Prescription.objects.filter(patient=patient).count(),
+                'active_prescriptions': Prescription.objects.filter(
+                    patient=patient, 
+                    status=PrescriptionStatus.PENDING
+                ).count()
+            }
+        })
+    except Patient.DoesNotExist:
+        return Response(
+            {'error': 'Patient not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )

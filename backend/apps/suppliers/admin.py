@@ -1,42 +1,45 @@
 from django.contrib import admin
-from .models import Supplier, SupplierContact, PaymentTerms
+from .models import Supplier, SupplierContact
 
 
 class SupplierContactInline(admin.TabularInline):
     model = SupplierContact
     extra = 0
-    fields = ['contact_type', 'first_name', 'last_name', 'email', 'phone', 'position', 'is_primary']
+    fields = ['name', 'title', 'department', 'email', 'phone', 'is_primary']
 
 
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
-    list_display = ['name', 'supplier_code', 'supplier_type', 'status', 'rating', 'is_active']
-    list_filter = ['supplier_type', 'status', 'rating', 'is_active', 'country']
-    search_fields = ['name', 'supplier_code', 'tax_id', 'email']
-    readonly_fields = ['supplier_code', 'rating', 'created_at', 'updated_at']
+    list_display = ['name', 'code', 'rating', 'is_active']
+    list_filter = ['rating', 'is_active', 'country']
+    search_fields = ['name', 'code', 'tax_id', 'email']
+    readonly_fields = ['code', 'rating', 'created_at', 'updated_at']
     inlines = [SupplierContactInline]
     
     fieldsets = (
         ('Informations de base', {
-            'fields': ('name', 'supplier_code', 'supplier_type', 'status', 'rating')
+            'fields': ('name', 'code', 'rating')
         }),
         ('Contact', {
-            'fields': ('email', 'phone', 'website')
+            'fields': ('contact_person', 'email', 'phone', 'alt_phone', 'website')
         }),
         ('Adresse', {
-            'fields': ('address_line_1', 'address_line_2', 'city', 'state_province', 'postal_code', 'country')
+            'fields': ('address', 'city', 'country')
         }),
         ('Informations légales', {
-            'fields': ('tax_id', 'registration_number', 'license_number')
+            'fields': ('tax_id', 'license_number')
         }),
         ('Conditions commerciales', {
-            'fields': ('credit_limit', 'currency', 'minimum_order_amount')
+            'fields': ('credit_limit', 'current_balance', 'currency', 'payment_terms')
         }),
-        ('Délais', {
-            'fields': ('lead_time_days', 'delivery_terms')
+        ('Informations bancaires', {
+            'fields': ('bank_name', 'bank_account_number')
+        }),
+        ('Délais et performance', {
+            'fields': ('lead_time_days',)
         }),
         ('Statut', {
-            'fields': ('is_active', 'is_preferred')
+            'fields': ('is_active',)
         }),
         ('Notes', {
             'fields': ('notes',)
@@ -58,52 +61,28 @@ class SupplierAdmin(admin.ModelAdmin):
     mark_inactive.short_description = "Marquer comme inactif"
     
     def mark_preferred(self, request, queryset):
-        queryset.update(is_preferred=True)
-    mark_preferred.short_description = "Marquer comme préféré"
+        # This action is not available since is_preferred field doesn't exist
+        pass
+    mark_preferred.short_description = "Action non disponible"
 
 
 @admin.register(SupplierContact)
 class SupplierContactAdmin(admin.ModelAdmin):
-    list_display = ['supplier', 'first_name', 'last_name', 'contact_type', 'email', 'phone', 'is_primary']
-    list_filter = ['contact_type', 'is_primary']
-    search_fields = ['first_name', 'last_name', 'email', 'supplier__name']
+    list_display = ['supplier', 'name', 'title', 'email', 'phone', 'is_primary']
+    list_filter = ['is_primary', 'department']
+    search_fields = ['name', 'title', 'email', 'supplier__name']
     
     fieldsets = (
         ('Contact', {
-            'fields': ('supplier', 'contact_type', 'first_name', 'last_name', 'position')
+            'fields': ('supplier', 'name', 'title', 'department')
         }),
         ('Informations de contact', {
-            'fields': ('email', 'phone', 'mobile')
+            'fields': ('email', 'phone')
         }),
         ('Statut', {
-            'fields': ('is_primary', 'is_active')
+            'fields': ('is_primary',)
         }),
         ('Notes', {
             'fields': ('notes',)
-        })
-    )
-
-
-@admin.register(PaymentTerms)
-class PaymentTermsAdmin(admin.ModelAdmin):
-    list_display = ['supplier', 'payment_method', 'payment_days', 'discount_percentage', 'discount_days']
-    list_filter = ['payment_method', 'is_active']
-    search_fields = ['supplier__name', 'description']
-    
-    fieldsets = (
-        ('Fournisseur', {
-            'fields': ('supplier',)
-        }),
-        ('Conditions de paiement', {
-            'fields': ('payment_method', 'payment_days', 'description')
-        }),
-        ('Remise', {
-            'fields': ('discount_percentage', 'discount_days')
-        }),
-        ('Pénalités', {
-            'fields': ('late_fee_percentage', 'grace_period_days')
-        }),
-        ('Statut', {
-            'fields': ('is_active',)
         })
     )

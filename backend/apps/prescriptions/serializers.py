@@ -64,8 +64,8 @@ class PrescriptionImageSerializer(serializers.ModelSerializer):
 class PrescriptionListSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField()
     doctor_name = serializers.CharField(source='doctor.full_name', read_only=True)
+    encounter_number = serializers.CharField(source='encounter.encounter_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     items_count = serializers.SerializerMethodField()
     dispensed_items_count = serializers.SerializerMethodField()
     
@@ -73,8 +73,8 @@ class PrescriptionListSerializer(serializers.ModelSerializer):
         model = Prescription
         fields = [
             'id', 'prescription_number', 'patient', 'patient_name', 'doctor',
-            'doctor_name', 'status', 'status_display', 'urgency', 'urgency_display',
-            'prescription_date', 'valid_until', 'items_count', 'dispensed_items_count',
+            'doctor_name', 'encounter', 'encounter_number', 'status', 'status_display',
+            'date', 'valid_until', 'items_count', 'dispensed_items_count',
             'is_complete', 'created_at'
         ]
     
@@ -93,8 +93,8 @@ class PrescriptionDetailSerializer(serializers.ModelSerializer):
     patient_details = serializers.SerializerMethodField()
     doctor_name = serializers.CharField(source='doctor.full_name', read_only=True)
     organization_name = serializers.CharField(source='organization.name', read_only=True)
+    encounter_details = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
     items = PrescriptionItemSerializer(many=True, read_only=True)
     notes = PrescriptionNoteSerializer(many=True, read_only=True)
@@ -103,11 +103,11 @@ class PrescriptionDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Prescription
         fields = [
-            'id', 'organization', 'organization_name', 'prescription_number',
-            'patient', 'patient_name', 'patient_details', 'doctor', 'doctor_name',
-            'status', 'status_display', 'urgency', 'urgency_display',
-            'prescription_date', 'valid_until', 'diagnosis', 'instructions',
-            'dispenser_notes', 'is_complete', 'created_by', 'created_by_name',
+            'id', 'organization', 'organization_name', 'encounter', 'encounter_details',
+            'prescription_number', 'patient', 'patient_name', 'patient_details', 
+            'doctor', 'doctor_name', 'status', 'status_display',
+            'date', 'valid_until', 'diagnosis', 'instructions',
+            'is_complete', 'created_by', 'created_by_name',
             'created_at', 'updated_at', 'items', 'notes', 'images'
         ]
     
@@ -118,12 +118,24 @@ class PrescriptionDetailSerializer(serializers.ModelSerializer):
         if not obj.patient:
             return None
         return {
-            'id': obj.patient.id,
+            'id': str(obj.patient.id),
             'first_name': obj.patient.first_name,
             'last_name': obj.patient.last_name,
             'date_of_birth': obj.patient.date_of_birth,
-            'phone_number': obj.patient.phone_number,
+            'phone': obj.patient.phone,
             'gender': obj.patient.gender
+        }
+    
+    def get_encounter_details(self, obj):
+        if not obj.encounter:
+            return None
+        return {
+            'id': str(obj.encounter.id),
+            'encounter_number': obj.encounter.encounter_number,
+            'encounter_type': obj.encounter.get_encounter_type_display(),
+            'status': obj.encounter.get_status_display(),
+            'chief_complaint': obj.encounter.chief_complaint,
+            'attending_physician': obj.encounter.attending_physician.full_name if obj.encounter.attending_physician else None
         }
 
 

@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.db import transaction
 from .models import (
     Product, InventoryItem, InventoryBatch, StockMovement, InventoryAlert,
-    ProductCategory, DosageForm, UnitOfMeasure, StockStatus
+    ProductCategory, DosageForm, UnitOfMeasure
 )
 
 

@@ -16,6 +16,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lamb
 
 # Application definition
 DJANGO_APPS = [
+    'jazzmin',  # Modern admin interface
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,6 +43,7 @@ LOCAL_APPS = [
     'apps.suppliers',
     'apps.audit',  # Audit logging system
     'apps.hospital',  # Hospital management system
+    'apps.occupational_health',  # Occupational health management system
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -90,6 +92,14 @@ DATABASES = {
         'PORT': config('DB_PORT', default='5432'),
     }
 }
+
+# SQLite configuration (commented out for production)
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -189,4 +199,116 @@ LOGGING = {
             'propagate': True,
         },
     },
+}
+
+# Jazzmin Admin Interface Configuration
+JAZZMIN_SETTINGS = {
+    "site_title": "HK Management System",
+    "site_header": "HK Management",
+    "site_brand": "HK Management",
+    "site_logo": None,
+    "login_logo": None,
+    "login_logo_dark": None,
+    "site_logo_classes": "img-circle",
+    "site_icon": None,
+    "welcome_sign": "Welcome to HK Management System",
+    "copyright": "HK Management System",
+    "search_model": ["auth.User", "accounts.User"],
+    "user_avatar": None,
+
+    # Top Menu
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"name": "Support", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
+        {"app": "patients"},
+    ],
+
+    # User Menu on the right side of the header
+    "usermenu_links": [
+        {"name": "Support", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
+        {"model": "auth.user"}
+    ],
+
+    # Side Menu
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "hide_models": [],
+    "order_with_respect_to": [
+        "auth", 
+        "accounts", 
+        "organizations", 
+        "patients",
+        "hospital",
+        "occupational_health",
+        "inventory", 
+        "suppliers",
+        "sales",
+        "prescriptions",
+        "licenses",
+        "audit"
+    ],
+
+    # Icons
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "accounts": "fas fa-user-shield",
+        "accounts.User": "fas fa-user-md",
+        "accounts.UserPermission": "fas fa-user-lock",
+        "organizations": "fas fa-building",
+        "organizations.Organization": "fas fa-building",
+        "patients": "fas fa-user-injured",
+        "patients.Patient": "fas fa-user-injured",
+        "hospital": "fas fa-hospital",
+        "hospital.HospitalEncounter": "fas fa-procedures",
+        "hospital.VitalSigns": "fas fa-heartbeat",
+        "hospital.HospitalDepartment": "fas fa-clinic-medical",
+        "hospital.HospitalBed": "fas fa-bed",
+        "occupational_health": "fas fa-hard-hat",
+        "occupational_health.Enterprise": "fas fa-industry",
+        "occupational_health.WorkSite": "fas fa-map-marker-alt",
+        "occupational_health.Worker": "fas fa-user-hard-hat",
+        "occupational_health.MedicalExamination": "fas fa-stethoscope",
+        "occupational_health.VitalSigns": "fas fa-heartbeat",
+        "occupational_health.WorkplaceIncident": "fas fa-exclamation-triangle",
+        "occupational_health.PPEItem": "fas fa-helmet-safety",
+        "inventory": "fas fa-boxes",
+        "inventory.Product": "fas fa-pills",
+        "inventory.InventoryItem": "fas fa-box",
+        "inventory.InventoryBatch": "fas fa-layer-group",
+        "inventory.StockMovement": "fas fa-truck-moving",
+        "suppliers": "fas fa-truck",
+        "suppliers.Supplier": "fas fa-shipping-fast",
+        "suppliers.SupplierContact": "fas fa-address-book",
+        "sales": "fas fa-shopping-cart",
+        "sales.Sale": "fas fa-cash-register",
+        "sales.SaleItem": "fas fa-shopping-basket",
+        "sales.Cart": "fas fa-shopping-cart",
+        "prescriptions": "fas fa-prescription",
+        "prescriptions.Prescription": "fas fa-prescription-bottle",
+        "prescriptions.PrescriptionItem": "fas fa-pills",
+        "licenses": "fas fa-certificate",
+        "licenses.License": "fas fa-id-card",
+        "licenses.LicenseDocument": "fas fa-file-contract",
+        "audit": "fas fa-clipboard-list",
+        "audit.AuditLog": "fas fa-history",
+        "audit.PharmacyAuditLog": "fas fa-file-medical",
+    },
+    
+    # UI Tweaks
+    "custom_links": {
+        "patients": [{
+            "name": "Add Patient", 
+            "url": "admin:patients_patient_add", 
+            "icon": "fas fa-user-plus",
+            "permissions": ["patients.add_patient"]
+        }]
+    },
+    "use_google_fonts_cdn": True,
+    "show_ui_builder": False,
+
+    "changeform_format": "horizontal_tabs",
+    "changeform_format_overrides": {"auth.user": "collapsible", "auth.group": "vertical_tabs"},
 }

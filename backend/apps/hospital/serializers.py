@@ -97,6 +97,18 @@ class HospitalEncounterSerializer(serializers.ModelSerializer):
     
     # Related data counts
     vital_signs_count = serializers.SerializerMethodField()
+    prescriptions_count = serializers.SerializerMethodField()
+    nursing_staff_names = serializers.SerializerMethodField()
+    
+    def get_vital_signs_count(self, obj):
+        return obj.vital_signs_set.count() if hasattr(obj, 'vital_signs_set') else 0
+    
+    def get_prescriptions_count(self, obj):
+        # Assuming relationship to prescriptions app exists
+        return getattr(obj, 'prescriptions_count', 0)
+    
+    def get_nursing_staff_names(self, obj):
+        return [staff.get_full_name() for staff in obj.nursing_staff.all()]
     
     class Meta:
         model = HospitalEncounter
@@ -107,7 +119,7 @@ class HospitalEncounterSerializer(serializers.ModelSerializer):
             'attending_physician', 'attending_physician_name',
             'department', 'room_number', 'bed_number',
             'referred_by', 'referred_to', 'admission_date', 'discharge_date',
-            'estimated_cost', 'final_cost', 'vital_signs_count',
+            'estimated_cost', 'final_cost', 'vital_signs_count', 'prescriptions_count',
             'created_by', 'created_by_name', 'updated_by', 'updated_by_name',
             'created_at', 'updated_at'
         ]
@@ -119,6 +131,10 @@ class HospitalEncounterSerializer(serializers.ModelSerializer):
     def get_vital_signs_count(self, obj):
         """Get count of vital signs for this encounter"""
         return obj.vital_signs.count()
+    
+    def get_prescriptions_count(self, obj):
+        """Get count of prescriptions for this encounter"""
+        return obj.prescriptions.count()
 
 
 class HospitalEncounterCreateSerializer(serializers.ModelSerializer):
@@ -135,11 +151,110 @@ class HospitalEncounterCreateSerializer(serializers.ModelSerializer):
         ]
 
 
+class HospitalEncounterDetailSerializer(serializers.ModelSerializer):
+    """Detailed hospital encounter serializer with nested relations"""
+    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    patient_number = serializers.CharField(source='patient.patient_number', read_only=True)
+    patient_details = serializers.SerializerMethodField()
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    attending_physician_name = serializers.CharField(source='attending_physician.full_name', read_only=True)
+    nursing_staff_details = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
+    updated_by_name = serializers.CharField(source='updated_by.full_name', read_only=True)
+    
+    # Related data
+    latest_vital_signs = serializers.SerializerMethodField()
+    recent_prescriptions = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = HospitalEncounter
+        fields = [
+            'id', 'encounter_number', 'patient', 'patient_name', 'patient_number',
+            'patient_details', 'organization', 'organization_name', 'encounter_type', 'status',
+            'chief_complaint', 'history_of_present_illness',
+            'attending_physician', 'attending_physician_name', 'nursing_staff_details',
+            'department', 'room_number', 'bed_number',
+            'referred_by', 'referred_to', 'admission_date', 'discharge_date',
+            'estimated_cost', 'final_cost', 'latest_vital_signs', 'recent_prescriptions',
+            'created_by', 'created_by_name', 'updated_by', 'updated_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'encounter_number', 'created_by', 'updated_by',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_patient_details(self, obj):
+        """Get essential patient information"""
+        patient = obj.patient
+        return {
+            'id': str(patient.id),
+            'full_name': patient.full_name,
+            'age': patient.age,
+            'gender': patient.get_gender_display() if patient.gender else None,
+            'blood_type': patient.blood_type,
+            'allergies': patient.allergies,
+            'chronic_conditions': patient.chronic_conditions
+        } if patient else None
+    
+    def get_nursing_staff_details(self, obj):
+        """Get nursing staff information"""
+        return [
+            {
+                'id': str(staff.id),
+                'full_name': staff.full_name,
+                'user_type': staff.get_user_type_display()
+            }
+            for staff in obj.nursing_staff.all()
+        ]
+    
+    def get_latest_vital_signs(self, obj):
+        """Get most recent vital signs for this encounter"""
+        latest = obj.vital_signs.order_by('-measured_at').first()
+        if latest:
+            return {
+                'id': str(latest.id),
+                'temperature': latest.temperature,
+                'blood_pressure_reading': latest.blood_pressure_reading,
+                'heart_rate': latest.heart_rate,
+                'respiratory_rate': latest.respiratory_rate,
+                'oxygen_saturation': latest.oxygen_saturation,
+                'measured_at': latest.measured_at,
+                'is_abnormal': latest.is_abnormal
+            }
+        return None
+    
+    def get_recent_prescriptions(self, obj):
+        """Get recent prescriptions for this encounter"""
+        prescriptions = obj.prescriptions.order_by('-created_at')[:3]
+        return [
+            {
+                'id': str(prescription.id),
+                'prescription_number': prescription.prescription_number,
+                'status': prescription.status,
+                'status_display': prescription.get_status_display(),
+                'total_items': prescription.total_items,
+                'items_dispensed': prescription.items_dispensed,
+                'created_at': prescription.created_at
+            }
+            for prescription in prescriptions
+        ]
+
+
 class HospitalEncounterListSerializer(serializers.ModelSerializer):
     """Simplified serializer for listing encounters"""
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
     patient_number = serializers.CharField(source='patient.patient_number', read_only=True)
     attending_physician_name = serializers.CharField(source='attending_physician.full_name', read_only=True)
+    
+    class Meta:
+        model = HospitalEncounter
+        fields = [
+            'id', 'encounter_number', 'patient', 'patient_name', 'patient_number',
+            'encounter_type', 'status', 'chief_complaint',
+            'attending_physician_name', 'department',
+            'admission_date', 'created_at'
+        ]
     
     class Meta:
         model = HospitalEncounter

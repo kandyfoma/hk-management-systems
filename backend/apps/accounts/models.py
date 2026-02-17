@@ -136,7 +136,7 @@ class User(AbstractUser):
 
 class UserPermission(models.Model):
     """Many-to-many through model for user permissions"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_permissions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_permissions')
     permission = models.CharField(max_length=50, choices=Permission.choices)
     granted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='granted_permissions')
     granted_at = models.DateTimeField(auto_now_add=True)
