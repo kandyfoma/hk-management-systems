@@ -27,7 +27,6 @@ const ACCENT = colors.info;
 type ConsultationStep =
   | 'patient_identification'
   | 'visit_reason'
-  | 'vital_signs'
   | 'physical_exam'
   | 'diagnosis'
   | 'treatment_plan'
@@ -37,7 +36,6 @@ type ConsultationStep =
 const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'patient_identification', label: 'Identification', icon: 'person' },
   { key: 'visit_reason', label: 'Motif de Consultation', icon: 'clipboard' },
-  { key: 'vital_signs', label: 'Signes Vitaux', icon: 'pulse' },
   { key: 'physical_exam', label: 'Examen Physique', icon: 'body' },
   { key: 'diagnosis', label: 'Diagnostic', icon: 'analytics' },
   { key: 'treatment_plan', label: 'Plan de Traitement', icon: 'medkit' },
@@ -46,19 +44,6 @@ const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons
 ];
 
 // ─── Types ───────────────────────────────────────────────────
-interface VitalSigns {
-  temperature?: number;
-  bloodPressureSystolic?: number;
-  bloodPressureDiastolic?: number;
-  heartRate?: number;
-  respiratoryRate?: number;
-  oxygenSaturation?: number;
-  weight?: number;
-  height?: number;
-  painLevel?: number;
-  bloodGlucose?: number;
-}
-
 interface PhysicalExamination {
   generalAppearance: 'normal' | 'abnormal' | 'not_examined';
   generalAppearanceNotes?: string;
@@ -246,9 +231,6 @@ export function HospitalConsultationScreen({
   const [referredBy, setReferredBy] = useState('');
   const [departmentId, setDepartmentId] = useState('');
 
-  // ─── Vital signs ──
-  const [vitals, setVitals] = useState<VitalSigns>({});
-
   // ─── Physical exam ──
   const [physicalExam, setPhysicalExam] = useState<PhysicalExamination>({
     generalAppearance: 'normal',
@@ -298,10 +280,6 @@ export function HospitalConsultationScreen({
     );
   }, [searchQuery]);
 
-  // ─── BMI calculation ──
-  const bmi = calculateBMI(vitals.weight, vitals.height);
-  const bmiCategory = getBMICategory(bmi);
-
   // ─── Navigation ──
   const goNext = () => {
     if (currentStepIdx < STEPS.length - 1) {
@@ -321,8 +299,6 @@ export function HospitalConsultationScreen({
         return !!selectedPatient;
       case 'visit_reason':
         return !!chiefComplaint.trim();
-      case 'vital_signs':
-        return true; // Optional
       case 'physical_exam':
         return true; // Optional
       case 'diagnosis':
@@ -415,8 +391,6 @@ export function HospitalConsultationScreen({
         return renderPatientIdentification();
       case 'visit_reason':
         return renderVisitReason();
-      case 'vital_signs':
-        return renderVitalSigns();
       case 'physical_exam':
         return renderPhysicalExam();
       case 'diagnosis':
@@ -624,205 +598,7 @@ export function HospitalConsultationScreen({
     </View>
   );
 
-  // ─── Step 3: Vital Signs ───────────────────────────────────
-  const renderVitalSigns = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Signes Vitaux</Text>
-      <Text style={styles.stepSubtitle}>
-        Enregistrez les constantes du patient
-      </Text>
-
-      <View style={styles.vitalsGrid}>
-        {/* Temperature */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="thermometer" size={20} color={colors.error} />
-            <Text style={styles.vitalLabel}>Température</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={styles.vitalInput}
-              placeholder="36.5"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="decimal-pad"
-              value={vitals.temperature?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, temperature: parseFloat(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>°C</Text>
-          </View>
-        </View>
-
-        {/* Blood Pressure */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="pulse" size={20} color={colors.error} />
-            <Text style={styles.vitalLabel}>Tension Artérielle</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={[styles.vitalInput, { flex: 1 }]}
-              placeholder="120"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={vitals.bloodPressureSystolic?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, bloodPressureSystolic: parseInt(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>/</Text>
-            <TextInput
-              style={[styles.vitalInput, { flex: 1 }]}
-              placeholder="80"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={vitals.bloodPressureDiastolic?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, bloodPressureDiastolic: parseInt(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>mmHg</Text>
-          </View>
-        </View>
-
-        {/* Heart Rate */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="heart" size={20} color={colors.error} />
-            <Text style={styles.vitalLabel}>Fréquence Cardiaque</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={styles.vitalInput}
-              placeholder="72"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={vitals.heartRate?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, heartRate: parseInt(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>bpm</Text>
-          </View>
-        </View>
-
-        {/* Respiratory Rate */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="fitness" size={20} color={colors.info} />
-            <Text style={styles.vitalLabel}>Fréq. Respiratoire</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={styles.vitalInput}
-              placeholder="16"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={vitals.respiratoryRate?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, respiratoryRate: parseInt(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>/min</Text>
-          </View>
-        </View>
-
-        {/* SpO2 */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="water" size={20} color={colors.info} />
-            <Text style={styles.vitalLabel}>Saturation O₂</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={styles.vitalInput}
-              placeholder="98"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={vitals.oxygenSaturation?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, oxygenSaturation: parseInt(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>%</Text>
-          </View>
-        </View>
-
-        {/* Weight */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="scale" size={20} color={colors.primary} />
-            <Text style={styles.vitalLabel}>Poids</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={styles.vitalInput}
-              placeholder="70"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="decimal-pad"
-              value={vitals.weight?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, weight: parseFloat(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>kg</Text>
-          </View>
-        </View>
-
-        {/* Height */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="resize" size={20} color={colors.primary} />
-            <Text style={styles.vitalLabel}>Taille</Text>
-          </View>
-          <View style={styles.vitalInputRow}>
-            <TextInput
-              style={styles.vitalInput}
-              placeholder="170"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={vitals.height?.toString() || ''}
-              onChangeText={v => setVitals({ ...vitals, height: parseInt(v) || undefined })}
-            />
-            <Text style={styles.vitalUnit}>cm</Text>
-          </View>
-        </View>
-
-        {/* Pain Level */}
-        <View style={styles.vitalCard}>
-          <View style={styles.vitalHeader}>
-            <Ionicons name="flash" size={20} color={colors.warning} />
-            <Text style={styles.vitalLabel}>Niveau Douleur</Text>
-          </View>
-          <View style={styles.painScale}>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(level => (
-              <TouchableOpacity
-                key={level}
-                style={[
-                  styles.painButton,
-                  vitals.painLevel === level && {
-                    backgroundColor: level <= 3 ? colors.success : level <= 6 ? colors.warning : colors.error,
-                  },
-                ]}
-                onPress={() => setVitals({ ...vitals, painLevel: level })}
-              >
-                <Text
-                  style={[
-                    styles.painButtonText,
-                    vitals.painLevel === level && { color: '#FFF' },
-                  ]}
-                >
-                  {level}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      {/* BMI Display */}
-      {bmi && (
-        <View style={styles.bmiCard}>
-          <Text style={styles.bmiLabel}>IMC Calculé</Text>
-          <Text style={styles.bmiValue}>{bmi}</Text>
-          <View style={[styles.bmiBadge, { backgroundColor: bmiCategory.color + '20' }]}>
-            <Text style={[styles.bmiBadgeText, { color: bmiCategory.color }]}>
-              {bmiCategory.label}
-            </Text>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-
-  // ─── Step 4: Physical Exam ─────────────────────────────────
+  // ─── Step 3: Physical Exam ─────────────────────────────────
   const renderPhysicalExam = () => {
     const systems = [
       { key: 'generalAppearance', label: 'Apparence Générale', icon: 'body' },
@@ -1834,99 +1610,6 @@ const styles = StyleSheet.create({
   },
   chipTextSelected: {
     color: '#FFF',
-    fontWeight: '600',
-  },
-
-  // Vitals
-  vitalsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  vitalCard: {
-    width: isDesktop ? 'calc(25% - 9px)' : '48%',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.outline,
-  },
-  vitalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  vitalLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  vitalInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  vitalInput: {
-    flex: 2,
-    backgroundColor: colors.surfaceVariant,
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  vitalUnit: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    width: 40,
-  },
-  painScale: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 8,
-  },
-  painButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceVariant,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  painButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  bmiCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 14,
-    marginTop: 16,
-  },
-  bmiLabel: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  bmiValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  bmiBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: borderRadius.full,
-  },
-  bmiBadgeText: {
-    fontSize: 11,
     fontWeight: '600',
   },
 
