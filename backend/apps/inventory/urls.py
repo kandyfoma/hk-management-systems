@@ -18,6 +18,7 @@ urlpatterns = [
     
     # Stock Movements
     path('movements/', views.StockMovementListAPIView.as_view(), name='stock_movement_list'),
+    path('movements/<uuid:pk>/', views.StockMovementDetailAPIView.as_view(), name='stock_movement_detail'),
     
     # Alerts
     path('alerts/', views.InventoryAlertListAPIView.as_view(), name='inventory_alert_list'),

@@ -17,7 +17,7 @@ from apps.audit.decorators import audit_inventory_change, audit_critical_action
 
 
 class ProductListCreateAPIView(generics.ListCreateAPIView):
-    queryset = Product.objects.select_related('organization', 'primary_supplier')
+    queryset = Product.objects.select_related('organization', 'primary_supplier', 'created_by', 'updated_by')
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['category', 'is_active', 'requires_prescription']
@@ -25,12 +25,21 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
     ordering = ['name']
 
     def perform_create(self, serializer):
-        serializer.save(organization=self.request.user.organization)
+        serializer.save(
+            organization=self.request.user.organization,
+            created_by=self.request.user
+        )
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
 
 
 class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Product.objects.select_related('organization', 'primary_supplier')
+    queryset = Product.objects.select_related('organization', 'primary_supplier', 'created_by', 'updated_by')
     serializer_class = ProductSerializer
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
 
 
 class InventoryItemListAPIView(generics.ListAPIView):
@@ -47,37 +56,78 @@ class InventoryItemDetailAPIView(generics.RetrieveUpdateAPIView):
 
 
 class InventoryBatchListAPIView(generics.ListCreateAPIView):
-    queryset = InventoryBatch.objects.select_related('inventory_item__product')
+    queryset = InventoryBatch.objects.select_related('inventory_item__product', 'created_by', 'updated_by')
     serializer_class = InventoryBatchSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['status']
     ordering = ['expiry_date']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class InventoryBatchDetailAPIView(generics.RetrieveUpdateAPIView):
-    queryset = InventoryBatch.objects.select_related('inventory_item__product')
+    queryset = InventoryBatch.objects.select_related('inventory_item__product', 'created_by', 'updated_by')
     serializer_class = InventoryBatchSerializer
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
 
 
-class StockMovementListAPIView(generics.ListAPIView):
-    queryset = StockMovement.objects.select_related('inventory_item__product', 'performed_by')
+class StockMovementListAPIView(generics.ListCreateAPIView):
+    queryset = StockMovement.objects.select_related(
+        'inventory_batch__inventory_item__product',
+        'related_sale',
+        'created_by',
+        'updated_by'
+    )
     serializer_class = StockMovementSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['movement_type', 'direction']
-    ordering = ['-movement_date']
+    filterset_fields = ['movement_type', 'inventory_batch__inventory_item']
+    ordering = ['-date_created']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
-class InventoryAlertListAPIView(generics.ListAPIView):
-    queryset = InventoryAlert.objects.select_related('product')
+class StockMovementDetailAPIView(generics.RetrieveUpdateAPIView):
+    queryset = StockMovement.objects.select_related(
+        'inventory_batch__inventory_item__product',
+        'related_sale',
+        'created_by',
+        'updated_by'
+    )
+    serializer_class = StockMovementSerializer
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+
+class InventoryAlertListAPIView(generics.ListCreateAPIView):
+    queryset = InventoryAlert.objects.select_related(
+        'inventory_item__product',
+        'created_by',
+        'updated_by'
+    )
     serializer_class = InventoryAlertSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['alert_type', 'severity', 'is_active']
-    ordering = ['-created_at']
+    filterset_fields = ['alert_type', 'is_resolved']
+    ordering = ['-date_created']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class InventoryAlertDetailAPIView(generics.RetrieveUpdateAPIView):
-    queryset = InventoryAlert.objects.select_related('product')
+    queryset = InventoryAlert.objects.select_related(
+        'inventory_item__product',
+        'created_by',
+        'updated_by'
+    )
     serializer_class = InventoryAlertSerializer
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
 
 
 @api_view(['GET'])

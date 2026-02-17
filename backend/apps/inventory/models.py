@@ -195,6 +195,24 @@ class Product(models.Model):
     is_discontinued = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
     
+    # User tracking
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_products',
+        verbose_name='Créé par'
+    )
+    updated_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_products',
+        verbose_name='Modifié par'
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -354,6 +372,24 @@ class InventoryBatch(models.Model):
     quality_checked = models.BooleanField(default=False)
     quality_notes = models.TextField(blank=True)
     
+    # User tracking
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_batches',
+        verbose_name='Créé par'
+    )
+    updated_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_batches',
+        verbose_name='Modifié par'
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -445,6 +481,14 @@ class StockMovement(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='stock_movements'
+    )
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_stock_movements',
+        verbose_name='Créé par'
     )
     reason = models.CharField(max_length=200, blank=True, help_text='Raison du mouvement')
     notes = models.TextField(blank=True)
@@ -538,6 +582,16 @@ class InventoryAlert(models.Model):
     )
     resolved_at = models.DateTimeField(null=True, blank=True)
     
+    # User tracking
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_alerts',
+        verbose_name='Créé par'
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -591,6 +645,14 @@ class StockCount(models.Model):
         'accounts.User',
         on_delete=models.SET_NULL,
         null=True
+    )
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_stock_counts',
+        verbose_name='Créé par'
     )
     
     notes = models.TextField(blank=True)

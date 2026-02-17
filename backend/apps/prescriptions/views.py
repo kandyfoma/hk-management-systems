@@ -47,6 +47,9 @@ class PrescriptionDetailAPIView(generics.RetrieveUpdateAPIView):
         if self.request.method in ['PUT', 'PATCH']:
             return PrescriptionUpdateSerializer
         return PrescriptionDetailSerializer
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
 
 
 class PrescriptionItemListCreateAPIView(generics.ListCreateAPIView):
