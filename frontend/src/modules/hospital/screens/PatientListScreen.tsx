@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../../theme/theme';
-import DatabaseService from '../../../services/DatabaseService';
+import HybridDataService from '../../../services/HybridDataService';
 import { Patient, PatientUtils } from '../../../models/Patient';
 import { Encounter, EncounterUtils } from '../../../models/Encounter';
 import { getTextColor, getIconBackgroundColor, getSecondaryTextColor } from '../../../utils/colorContrast';
@@ -49,21 +49,46 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
 
   const loadData = useCallback(async () => {
     try {
-      const db = DatabaseService.getInstance();
-      const allPatients = await db.getAllPatients();
-      const allEncounters = await db.getEncountersByOrganization(
-        (await db.getCurrentOrganization())?.id || ''
-      );
+      const hybridData = HybridDataService.getInstance();
+      
+      // Get all patients using hybrid service (offline-first)
+      const patientsResult = await hybridData.getAllPatients();
+      
+      if (patientsResult.success && patientsResult.data) {
+        // TODO: Load encounters from hybrid service when available
+        const allEncounters: Encounter[] = []; // Temporary until encounters are migrated
+        
+        // Merge encounters onto patients
+        const enriched: PatientWithEncounters[] = patientsResult.data.map(p => {
+          const patientEncounters = allEncounters.filter(e => e.patientId === p.id);
+          const activeEnc = patientEncounters.find(e => EncounterUtils.isActive(e));
+          return { ...p, encounters: patientEncounters, activeEncounter: activeEnc };
+        });
 
-      // Merge encounters onto patients
-      const enriched: PatientWithEncounters[] = allPatients.map(p => {
-        const patientEncounters = allEncounters.filter(e => e.patientId === p.id);
-        const activeEnc = patientEncounters.find(e => EncounterUtils.isActive(e));
-        return { ...p, encounters: patientEncounters, activeEncounter: activeEnc };
-      });
-
-      setPatients(enriched);
-      setStats(await db.getPatientStats());
+        setPatients(enriched);
+        
+        // Get patient stats from hybrid service
+        const orgData = await hybridData.getOrganization();
+        const statsResult = await hybridData.getDashboardStats();
+        if (statsResult && orgData) {
+          const patients = patientsResult.data;
+          const stats = {
+            total: patients.length,
+            active: patients.filter(p => p.isActive).length,
+            newThisMonth: patients.filter(p => {
+              const created = new Date(p.createdAt);
+              const now = new Date();
+              return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+            }).length,
+            byGender: {
+              male: patients.filter(p => p.gender === 'male').length,
+              female: patients.filter(p => p.gender === 'female').length,
+              other: patients.filter(p => p.gender === 'other').length,
+            }
+          };
+          setStats(stats);
+        }
+      }
     } catch (err) {
       console.error('Patient list load error', err);
     } finally {

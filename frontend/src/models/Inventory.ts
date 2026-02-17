@@ -46,6 +46,10 @@ export interface Supplier {
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+  
+  // Cloud Sync Fields
+  cloudId?: string; // ID from Django backend
+  synced?: boolean; // Whether this record has been synced to cloud
 }
 
 export type PaymentTerms =
@@ -273,6 +277,10 @@ export interface InventoryItem {
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
+  
+  // Cloud Sync Fields
+  cloudId?: string; // ID from Django backend
+  synced?: boolean; // Whether this record has been synced to cloud
 }
 
 export type InventoryStatus =

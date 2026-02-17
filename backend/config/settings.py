@@ -104,6 +104,12 @@ DATABASES = {
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
 
+# Custom Authentication Backend
+AUTHENTICATION_BACKENDS = [
+    'apps.accounts.backends.PhoneNumberAuthBackend',  # Custom phone-based auth
+    'django.contrib.auth.backends.ModelBackend',       # Default backend as fallback
+]
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

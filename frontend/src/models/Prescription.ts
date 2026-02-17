@@ -38,6 +38,10 @@ export interface Prescription {
   lastAccessedBy?: string;        // User ID who last accessed
   lastAccessedAt?: string;        // When prescription was last accessed
   accessCount?: number;           // Number of times accessed
+  
+  // Cloud Sync Fields
+  cloudId?: string;               // ID from Django backend
+  synced?: boolean;               // Whether this record has been synced to cloud
 }
 
 export type PrescriptionStatus = 

@@ -3902,6 +3902,351 @@ export class DatabaseService {
 
     return JSON.stringify(auditLogs, null, 2);
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CLOUD SYNC SUPPORT METHODS
+  // ═══════════════════════════════════════════════════════════════
+
+  // ─── Patient Cloud Sync Methods ─────────────────────────────────────────
+
+  async getPatientByCloudId(cloudId: string): Promise<Patient | null> {
+    return this.tables.patients.find(p => p.cloudId === cloudId) || null;
+  }
+
+  async updatePatientCloudId(localId: string, cloudId: string): Promise<void> {
+    const patient = this.tables.patients.find(p => p.id === localId);
+    if (patient) {
+      patient.cloudId = cloudId;
+      patient.synced = true;
+      await this.persistData();
+    }
+  }
+
+  async insertOrUpdatePatientFromCloud(cloudData: any): Promise<Patient> {
+    const existingPatient = this.tables.patients.find(p => p.cloudId === cloudData.id);
+    
+    if (existingPatient) {
+      // Update existing patient
+      Object.assign(existingPatient, {
+        ...cloudData,
+        id: existingPatient.id, // Keep local ID
+        cloudId: cloudData.id,
+        synced: true,
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+      });
+      await this.persistData();
+      return existingPatient;
+    } else {
+      // Create new patient from cloud data
+      const patient: Patient = {
+        id: this.generateId(),
+        cloudId: cloudData.id,
+        patientNumber: cloudData.patient_number || this.generatePatientNumber(),
+        firstName: cloudData.first_name,
+        lastName: cloudData.last_name,
+        dateOfBirth: new Date(cloudData.date_of_birth),
+        gender: cloudData.gender,
+        phone: cloudData.phone,
+        email: cloudData.email,
+        address: cloudData.address,
+        emergencyContact: cloudData.emergency_contact,
+        emergencyPhone: cloudData.emergency_phone,
+        nationalId: cloudData.national_id,
+        bloodType: cloudData.blood_type,
+        allergies: cloudData.allergies,
+        medicalHistory: cloudData.medical_history,
+        medications: cloudData.medications,
+        tags: cloudData.tags || [],
+        notes: cloudData.notes,
+        isActive: cloudData.is_active !== false,
+        lastVisit: cloudData.last_visit ? new Date(cloudData.last_visit) : undefined,
+        createdAt: new Date(cloudData.created_at || Date.now()),
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+        organizationId: cloudData.organization || '',
+        synced: true,
+      };
+      
+      this.tables.patients.push(patient);
+      await this.persistData();
+      return patient;
+    }
+  }
+
+  // ─── Inventory Cloud Sync Methods ───────────────────────────────────────
+
+  async getInventoryItemByCloudId(cloudId: string): Promise<InventoryItem | null> {
+    return this.tables.inventory_items.find(item => item.cloudId === cloudId) || null;
+  }
+
+  async updateInventoryItemCloudId(localId: string, cloudId: string): Promise<void> {
+    const item = this.tables.inventory_items.find(item => item.id === localId);
+    if (item) {
+      item.cloudId = cloudId;
+      item.synced = true;
+      await this.persistData();
+    }
+  }
+
+  async insertOrUpdateInventoryItemFromCloud(cloudData: any): Promise<InventoryItem> {
+    const existingItem = this.tables.inventory_items.find(item => item.cloudId === cloudData.id);
+    
+    if (existingItem) {
+      // Update existing item
+      Object.assign(existingItem, {
+        ...cloudData,
+        id: existingItem.id, // Keep local ID
+        cloudId: cloudData.id,
+        synced: true,
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+      });
+      await this.persistData();
+      return existingItem;
+    } else {
+      // Create new item from cloud data
+      const item: InventoryItem = {
+        id: this.generateId(),
+        cloudId: cloudData.id,
+        productId: cloudData.product_id || this.generateId(),
+        supplierId: cloudData.supplier_id,
+        sku: cloudData.sku,
+        productName: cloudData.product_name || cloudData.name,
+        genericName: cloudData.generic_name,
+        dosage: cloudData.dosage,
+        form: cloudData.form,
+        unitOfMeasure: cloudData.unit_of_measure,
+        category: cloudData.category,
+        subcategory: cloudData.subcategory,
+        brand: cloudData.brand,
+        manufacturer: cloudData.manufacturer,
+        description: cloudData.description,
+        batchNumber: cloudData.batch_number,
+        expirationDate: cloudData.expiration_date ? new Date(cloudData.expiration_date) : undefined,
+        quantity: cloudData.quantity || 0,
+        unitCost: cloudData.unit_cost || 0,
+        sellingPrice: cloudData.selling_price || 0,
+        minimumStock: cloudData.minimum_stock || 0,
+        maximumStock: cloudData.maximum_stock || 0,
+        location: cloudData.location,
+        barcode: cloudData.barcode,
+        requiresPrescription: cloudData.requires_prescription || false,
+        isControlledSubstance: cloudData.is_controlled_substance || false,
+        storageConditions: cloudData.storage_conditions,
+        tags: cloudData.tags || [],
+        notes: cloudData.notes,
+        isActive: cloudData.is_active !== false,
+        createdAt: new Date(cloudData.created_at || Date.now()),
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+        organizationId: cloudData.organization || '',
+        synced: true,
+      };
+      
+      this.tables.inventory_items.push(item);
+      await this.persistData();
+      return item;
+    }
+  }
+
+  // ─── Prescription Cloud Sync Methods ───────────────────────────────────
+
+  async getPrescriptionByCloudId(cloudId: string): Promise<Prescription | null> {
+    return this.tables.prescriptions.find(p => p.cloudId === cloudId) || null;
+  }
+
+  async updatePrescriptionCloudId(localId: string, cloudId: string): Promise<void> {
+    const prescription = this.tables.prescriptions.find(p => p.id === localId);
+    if (prescription) {
+      prescription.cloudId = cloudId;
+      prescription.synced = true;
+      await this.persistData();
+    }
+  }
+
+  async insertOrUpdatePrescriptionFromCloud(cloudData: any): Promise<Prescription> {
+    const existingPrescription = this.tables.prescriptions.find(p => p.cloudId === cloudData.id);
+    
+    if (existingPrescription) {
+      // Update existing prescription
+      Object.assign(existingPrescription, {
+        ...cloudData,
+        id: existingPrescription.id, // Keep local ID
+        cloudId: cloudData.id,
+        synced: true,
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+      });
+      await this.persistData();
+      return existingPrescription;
+    } else {
+      // Create new prescription from cloud data
+      const prescription: Prescription = {
+        id: this.generateId(),
+        cloudId: cloudData.id,
+        prescriptionNumber: cloudData.prescription_number || this.generateId(),
+        patientId: cloudData.patient_id || '',
+        doctorId: cloudData.doctor_id || '',
+        doctorName: cloudData.doctor_name || 'Dr. Unknown',
+        facilityName: cloudData.facility_name,
+        diagnosis: cloudData.diagnosis,
+        prescriptionDate: new Date(cloudData.prescription_date || Date.now()),
+        status: cloudData.status || 'PENDING',
+        items: cloudData.items || [],
+        totalAmount: cloudData.total_amount || 0,
+        notes: cloudData.notes,
+        tags: cloudData.tags || [],
+        isInsurance: cloudData.is_insurance || false,
+        insuranceDetails: cloudData.insurance_details,
+        createdAt: new Date(cloudData.created_at || Date.now()),
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+        organizationId: cloudData.organization || '',
+        synced: true,
+      };
+      
+      this.tables.prescriptions.push(prescription);
+      await this.persistData();
+      return prescription;
+    }
+  }
+
+  // ─── Sale Cloud Sync Methods ─────────────────────────────────────────
+
+  async getSaleByCloudId(cloudId: string): Promise<Sale | null> {
+    const salesArray = Array.from(this.sales.values());
+    return salesArray.find(s => s.cloudId === cloudId) || null;
+  }
+
+  async updateSaleCloudId(localId: string, cloudId: string): Promise<void> {
+    const sale = this.sales.get(localId);
+    if (sale) {
+      sale.cloudId = cloudId;
+      sale.synced = true;
+      await this.persistData();
+    }
+  }
+
+  async insertOrUpdateSaleFromCloud(cloudData: any): Promise<Sale> {
+    const salesArray = Array.from(this.sales.values());
+    const existingSale = salesArray.find(s => s.cloudId === cloudData.id);
+    
+    if (existingSale) {
+      // Update existing sale
+      Object.assign(existingSale, {
+        ...cloudData,
+        id: existingSale.id, // Keep local ID
+        cloudId: cloudData.id,
+        synced: true,
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+      });
+      this.sales.set(existingSale.id, existingSale);
+      await this.persistData();
+      return existingSale;
+    } else {
+      // Create new sale from cloud data
+      const sale: Sale = {
+        id: this.generateId(),
+        cloudId: cloudData.id,
+        receiptNumber: cloudData.receipt_number || this.generateReceiptNumber(),
+        customerId: cloudData.customer_id,
+        patientId: cloudData.patient_id,
+        prescriptionId: cloudData.prescription_id,
+        saleDate: new Date(cloudData.sale_date || Date.now()),
+        items: cloudData.items || [],
+        paymentMethod: cloudData.payment_method || 'CASH',
+        totalAmount: cloudData.total_amount || 0,
+        subtotal: cloudData.subtotal || 0,
+        taxAmount: cloudData.tax_amount || 0,
+        discountAmount: cloudData.discount_amount || 0,
+        amountPaid: cloudData.amount_paid || 0,
+        changeGiven: cloudData.change_given || 0,
+        status: cloudData.status || 'COMPLETED',
+        paymentDetails: cloudData.payment_details,
+        notes: cloudData.notes,
+        tags: cloudData.tags || [],
+        cashierId: cloudData.cashier_id || '',
+        cashierName: cloudData.cashier_name || 'Unknown',
+        createdAt: new Date(cloudData.created_at || Date.now()),
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+        organizationId: cloudData.organization || '',
+        synced: true,
+      };
+      
+      this.sales.set(sale.id, sale);
+      this.tables.sales.push(sale);
+      await this.persistData();
+      return sale;
+    }
+  }
+
+  // ─── Supplier Cloud Sync Methods ─────────────────────────────────────
+
+  async getSupplierByCloudId(cloudId: string): Promise<Supplier | null> {
+    return this.tables.suppliers.find(s => s.cloudId === cloudId) || null;
+  }
+
+  async updateSupplierCloudId(localId: string, cloudId: string): Promise<void> {
+    const supplier = this.tables.suppliers.find(s => s.id === localId);
+    if (supplier) {
+      supplier.cloudId = cloudId;
+      supplier.synced = true;
+      await this.persistData();
+    }
+  }
+
+  async insertOrUpdateSupplierFromCloud(cloudData: any): Promise<Supplier> {
+    const existingSupplier = this.tables.suppliers.find(s => s.cloudId === cloudData.id);
+    
+    if (existingSupplier) {
+      // Update existing supplier
+      Object.assign(existingSupplier, {
+        ...cloudData,
+        id: existingSupplier.id, // Keep local ID
+        cloudId: cloudData.id,
+        synced: true,
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+      });
+      await this.persistData();
+      return existingSupplier;
+    } else {
+      // Create new supplier from cloud data
+      const supplier: Supplier = {
+        id: this.generateId(),
+        cloudId: cloudData.id,
+        name: cloudData.name,
+        contactPerson: cloudData.contact_person,
+        phone: cloudData.phone,
+        email: cloudData.email,
+        address: cloudData.address,
+        taxId: cloudData.tax_id,
+        licenseNumber: cloudData.license_number,
+        paymentTerms: cloudData.payment_terms,
+        creditLimit: cloudData.credit_limit || 0,
+        category: cloudData.category,
+        notes: cloudData.notes,
+        tags: cloudData.tags || [],
+        isActive: cloudData.is_active !== false,
+        createdAt: new Date(cloudData.created_at || Date.now()),
+        updatedAt: new Date(cloudData.updated_at || Date.now()),
+        organizationId: cloudData.organization || '',
+        synced: true,
+      };
+      
+      this.tables.suppliers.push(supplier);
+      await this.persistData();
+      return supplier;
+    }
+  }
+
+  // ─── Helper Methods for Cloud Sync ─────────────────────────────────────
+
+  private generateReceiptNumber(): string {
+    const timestamp = Date.now().toString();
+    return `R${timestamp.slice(-8)}`;
+  }
+
+  private generatePatientNumber(): string {
+    const timestamp = Date.now().toString();
+    return `P${timestamp.slice(-8)}`;
+  }
 }
+
+export default DatabaseService;
 
 export default DatabaseService;

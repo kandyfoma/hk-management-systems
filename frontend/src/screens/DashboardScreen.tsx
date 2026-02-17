@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../components/GlobalUI';
+import SyncStatusIndicator from '../components/SyncStatusIndicator';
+import HybridDataService from '../services/HybridDataService';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme/theme';
 import { getTextColor, getIconBackgroundColor, getSecondaryTextColor, getTertiaryTextColor, getBadgeBackgroundColor } from '../utils/colorContrast';
 
@@ -272,12 +274,42 @@ interface DashboardScreenProps {
 
 export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const { info } = useToast();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      const hybridData = HybridDataService.getInstance();
+      const stats = await hybridData.getDashboardStats();
+      const syncStatus = hybridData.getSyncStatus();
+      
+      // Create dashboard metrics from real data or fallback to sample data
+      const metrics = stats ? {
+        patients: stats.totalPatients || 48,
+        sales: stats.totalSales || 1247500,
+        prescriptions: stats.totalPrescriptions || 156,
+        criticalStock: stats.criticalStock || 12,
+        isOffline: !syncStatus.isOnline,
+        pendingSync: syncStatus.pendingItems,
+      } : null;
+      
+      setDashboardStats(metrics);
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const greeting = () => {
     const hour = currentTime.getHours();
@@ -297,6 +329,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
           </Text>
         </View>
         <View style={styles.headerRight}>
+          <SyncStatusIndicator compact={true} onPress={() => info('Statut de synchronisation: ' + (HybridDataService.getSyncStatus().isOnline ? 'En ligne' : 'Hors ligne'))} />
           <View style={styles.dateChip}>
             <Ionicons name="calendar-outline" size={16} color={colors.primary} />
             <Text style={styles.dateText}>

@@ -107,7 +107,8 @@ class AuditLog(models.Model):
         blank=True,
         verbose_name="Type d'objet"
     )
-    object_id = models.PositiveIntegerField(
+    object_id = models.CharField(
+        max_length=255,
         null=True, 
         blank=True,
         verbose_name="ID objet"

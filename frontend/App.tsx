@@ -9,8 +9,7 @@ import { store } from './src/store/store';
 import { loginSuccess } from './src/store/slices/authSlice';
 import { AuthNavigator } from './src/navigation/AuthNavigator';
 import { AppNavigator } from './src/navigation/AppNavigator';
-import DatabaseService from './src/services/DatabaseService';
-import AuthService from './src/services/AuthService';
+import ApiAuthService from './src/services/ApiAuthService';
 import { theme, colors } from './src/theme/theme';
 import { GlobalUIProvider } from './src/components/GlobalUI';
 
@@ -85,29 +84,40 @@ function AppContent() {
         document.title = 'HK Management Systems';
       }
 
-      // Initialize services with persistent storage
-      const db = DatabaseService.getInstance();
-      await db.initializeDatabase(); // This will load existing data or seed data
+      // Check backend connection
+      const isConnected = await ApiAuthService.checkBackendConnection();
+      if (!isConnected) {
+        console.log('⚠️ Backend not reachable, using offline mode');
+        setAppState('unauthenticated');
+        return;
+      }
+
+      console.log('🌐 Backend connected');
       
-      const authService = AuthService.getInstance();
+      // Check authentication with backend
+      const isAuthenticated = await ApiAuthService.isAuthenticated();
+      console.log('👤 Authentication check:', isAuthenticated);
       
-      console.log('💾 Database initialized with persistent storage');
-      
-      // Check authentication
-      const authResult = await authService.restoreSession();
-      console.log('👤 Session restored:', authResult?.success);
-      
-      if (authResult?.success && authResult.user && authResult.organization && authResult.licenses) {
-        // Populate Redux store with restored session data
-        dispatch(loginSuccess({
-          user: authResult.user,
-          organization: authResult.organization,
-          licenses: authResult.licenses,
-          userModuleAccess: authResult.userModuleAccess || [],
-        }));
-        console.log('📦 Redux store populated with', authResult.licenses.length, 'licenses');
-        setIsLicenseValid(true);
-        setAppState('authenticated');
+      if (isAuthenticated) {
+        const user = await ApiAuthService.getCurrentUser();
+        const organization = await ApiAuthService.getCurrentOrganization();
+        
+        if (user && organization) {
+          // Populate Redux store with user data
+          dispatch(loginSuccess({
+            user,
+            organization,
+            licenses: [], // We'll load licenses from a separate API call
+            userModuleAccess: [],
+          }));
+          console.log('📦 Redux store populated with user data');
+          setIsLicenseValid(true);
+          setAppState('authenticated');
+        } else {
+          // Clear invalid session
+          await ApiAuthService.logout();
+          setAppState('unauthenticated');
+        }
       } else {
         setAppState('unauthenticated');
       }
@@ -119,19 +129,19 @@ function AppContent() {
 
   const handleAuthSuccess = async (authResult?: any) => {
     console.log('✅ Auth success triggered', authResult);
-    if (authResult?.success && authResult.user && authResult.organization && authResult.licenses) {
+    if (authResult?.success && authResult.user) {
       // Populate Redux store with login data
       dispatch(loginSuccess({
         user: authResult.user,
         organization: authResult.organization,
-        licenses: authResult.licenses,
-        userModuleAccess: authResult.userModuleAccess || [],
+        licenses: [], // Licenses will be loaded separately if needed
+        userModuleAccess: [],
       }));
-      console.log('📦 Redux store populated after login with', authResult.licenses.length, 'licenses');
+      console.log('📦 Redux store populated after login');
       setIsLicenseValid(true);
       setAppState('authenticated');
     } else {
-      // Fallback - just assume license is valid if auth was successful
+      // Fallback - just assume auth was successful
       setIsLicenseValid(true);
       setAppState('authenticated');
     }

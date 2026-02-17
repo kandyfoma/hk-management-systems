@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
-import DatabaseService from '../../../services/DatabaseService';
+import HybridDataService from '../../../services/HybridDataService';
 import {
   Product, ProductCreate, ProductUpdate, ProductCategory, DosageForm, UnitOfMeasure, StorageCondition,
   InventoryItem, InventoryBatch, StockMovement, InventoryAlert,

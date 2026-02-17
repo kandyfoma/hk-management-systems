@@ -48,6 +48,10 @@ export interface Patient {
   
   // Metadata & Audit
   createdAt: string; // ISO string
+  
+  // Cloud Sync Fields
+  cloudId?: string; // ID from Django backend
+  synced?: boolean; // Whether this record has been synced to cloud
   updatedAt?: string; // ISO string
   createdBy?: string; // User ID who created this patient
   updatedBy?: string; // User ID who last updated this patient

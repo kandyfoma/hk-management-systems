@@ -13,7 +13,8 @@ import {
 import { Button, Text, TextInput, Surface, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import AuthService from '../services/AuthService';
+import ApiAuthService from '../services/ApiAuthService';
+import SyncStatusIndicator from '../components/SyncStatusIndicator';
 import LicenseService from '../services/LicenseService';
 import { useToast } from '../components/GlobalUI';
 import { colors, spacing, borderRadius, shadows } from '../theme/theme';
@@ -551,6 +552,12 @@ const ls = StyleSheet.create({
   },
   cardTitle: { fontSize: isDesktop ? 20 : 20, fontWeight: '700', color: colors.text, marginBottom: 6 },
   cardDesc: { fontSize: isDesktop ? 14 : 14, color: colors.textSecondary, lineHeight: 20, marginBottom: isDesktop ? 16 : 20 },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: isDesktop ? 16 : 20,
+  },
 
   // Status
   statusBanner: {
@@ -690,14 +697,12 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
     // Removed the "Connexion en cours..." toast to avoid multiple toasts
     
     try {
-      const authService = AuthService.getInstance();
-      const result = await authService.login({
+      const result = await ApiAuthService.login({
         phone: phone.trim(),
         password: password.trim(),
-        licenseKey: licenseKey
       });
       if (result.success && result.user) {
-        const successMessage = `Bienvenue, ${result.user.firstName} !`;
+        const successMessage = `Bienvenue, ${result.user.first_name || result.user.firstName} !`;
         setStatusMessage(successMessage);
         setStatusType('success');
         showSuccessToast(successMessage);
@@ -770,10 +775,15 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
 
             {/* ── Login Card ── */}
             <View style={logS.card}>
-              <Text style={ls.cardTitle}>Connexion</Text>
-              <Text style={ls.cardDesc}>
-                Identifiez-vous pour accéder au système
-              </Text>
+              <View style={ls.cardHeader}>
+                <View>
+                  <Text style={ls.cardTitle}>Connexion</Text>
+                  <Text style={ls.cardDesc}>
+                    Identifiez-vous pour accéder au système
+                  </Text>
+                </View>
+                <SyncStatusIndicator compact={true} />
+              </View>
 
               {/* Status Banner */}
               {statusMessage ? (

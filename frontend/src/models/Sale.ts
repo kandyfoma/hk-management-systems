@@ -77,6 +77,10 @@ export interface Sale {
   terminalId?: string;           // POS terminal identifier
   receiptPrinted: boolean;       // Whether receipt was printed
   printCount: number;            // How many times receipt was printed
+  
+  // Cloud Sync Fields
+  cloudId?: string;              // ID from Django backend
+  synced?: boolean;              // Whether this record has been synced to cloud
 }
 
 export type SaleType =
@@ -221,6 +225,10 @@ export interface CartTotals {
 export interface SaleCreate extends Omit<Sale, 'id' | 'createdAt'> {
   id?: string;
   createdAt?: string;
+}
+
+export interface SaleUpdate extends Partial<Omit<Sale, 'id' | 'organizationId' | 'createdAt'>> {
+  updatedAt?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════
