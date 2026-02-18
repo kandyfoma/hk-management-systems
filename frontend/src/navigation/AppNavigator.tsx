@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, View, StyleSheet, Dimensions, Text, TouchableOpacity } from 'react-native';
+import { Platform, View, StyleSheet, Dimensions, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -17,6 +17,7 @@ import { OccHealthConsultationScreen } from '../modules/occupational-health/scre
 import { PreviousVisitsScreen } from '../modules/occupational-health/screens/PreviousVisitsScreen';
 import { CertificatesScreen } from '../modules/occupational-health/screens/CertificatesScreen';
 import { OHPatientsScreen } from '../modules/occupational-health/screens/OHPatientsScreen';
+import { OHPatientIntakeScreen } from '../modules/occupational-health/screens/OHPatientIntakeScreen';
 import { IncidentsScreen } from '../modules/occupational-health/screens/IncidentsScreen';
 import { DiseasesScreen } from '../modules/occupational-health/screens/DiseasesScreen';
 import { SurveillanceScreen } from '../modules/occupational-health/screens/SurveillanceScreen';
@@ -58,8 +59,7 @@ import { selectActiveModules, selectAllFeatures, logout as logoutAction } from '
 import { RootState } from '../store/store';
 import { ModuleType } from '../models/License';
 
-const { width } = Dimensions.get('window');
-const isDesktop = width >= 1024;
+
 
 // ═══════════════════════════════════════════════════════════════
 // No License Fallback Screen — with logout/reset button
@@ -218,50 +218,44 @@ const createDynamicSections = (
 
   // Add Occupational Health section if user has occ health access
   if (activeModules.includes('OCCUPATIONAL_HEALTH') || activeModules.includes('TRIAL')) {
-    const occHealthItems: SidebarMenuItem[] = [
-      { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' }
-    ];
-
-    if (hasFeature('worker_management')) {
-      occHealthItems.push({ id: 'oh-patients', label: 'Patients', icon: 'people-outline', iconActive: 'people' });
-    }
-
-    if (hasFeature('medical_examinations')) {
-      occHealthItems.push({ id: 'oh-exams', label: 'Visites Médicales', icon: 'medkit-outline', iconActive: 'medkit', badge: 8 });
-      occHealthItems.push({ id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' });
-    }
-
-    if (hasFeature('fitness_certificates')) {
-      occHealthItems.push({ id: 'oh-certificates', label: 'Certificats', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' });
-    }
-
-    if (hasFeature('incident_management') || hasFeature('basic_incident_reporting')) {
-      occHealthItems.push({ id: 'oh-incidents', label: 'Incidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 });
-    }
-
-    if (hasFeature('occupational_disease_tracking')) {
-      occHealthItems.push({ id: 'oh-diseases', label: 'Maladies Pro.', icon: 'heart-outline', iconActive: 'heart' });
-    }
-
-    if (hasFeature('surveillance_programs')) {
-      occHealthItems.push({ id: 'oh-surveillance', label: 'Surveillance', icon: 'eye-outline', iconActive: 'eye' });
-    }
-
-    if (hasFeature('risk_assessment')) {
-      occHealthItems.push({ id: 'oh-risk', label: 'Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' });
-    }
-
-    if (hasFeature('ppe_management')) {
-      occHealthItems.push({ id: 'oh-ppe', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' });
-    }
-
-    if (hasFeature('advanced_reporting') || hasFeature('basic_reporting')) {
-      occHealthItems.push({ id: 'oh-reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' });
-    }
-
+    // Principal
     sections.push({
       title: 'Méd. du Travail',
-      items: occHealthItems
+      items: [
+        { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' },
+        { id: 'oh-patients', label: 'Gestion Patients', icon: 'people-outline', iconActive: 'people' },
+        { id: 'oh-intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
+      ],
+    });
+
+    // Médecine du Travail
+    const medItems: SidebarMenuItem[] = [
+      { id: 'oh-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit' },
+      { id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
+      { id: 'oh-certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
+      { id: 'oh-surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
+      { id: 'oh-diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
+    ];
+    sections.push({ title: 'Médecine du Travail', items: medItems });
+
+    // Sécurité au Travail
+    sections.push({
+      title: 'Sécurité au Travail',
+      items: [
+        { id: 'oh-incidents', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
+        { id: 'oh-risk', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
+        { id: 'oh-ppe', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
+      ],
+    });
+
+    // Rapports & Conformité
+    sections.push({
+      title: 'Rapports & Conformité',
+      items: [
+        { id: 'oh-reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
+        { id: 'oh-compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
+        { id: 'oh-analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
+      ],
     });
   }
 
@@ -519,12 +513,20 @@ function DesktopApp() {
       />
     );
     if (activeScreen === 'oh-patients') return <OHPatientsScreen />;
+    if (activeScreen === 'oh-intake') return (
+      <OHPatientIntakeScreen
+        onConsultationQueued={() => {}}
+        onNavigateToConsultation={() => handleScreenChange('oh-exams')}
+      />
+    );
     if (activeScreen === 'oh-incidents') return <IncidentsScreen />;
     if (activeScreen === 'oh-diseases') return <DiseasesScreen />;
     if (activeScreen === 'oh-surveillance') return <SurveillanceScreen />;
     if (activeScreen === 'oh-risk') return <RiskAssessmentScreen />;
     if (activeScreen === 'oh-ppe') return <PPEManagementScreen />;
     if (activeScreen === 'oh-reports') return <ReportsScreen />;
+    if (activeScreen === 'oh-compliance') return <ComplianceScreen />;
+    if (activeScreen === 'oh-analytics') return <AnalyticsScreen />;
     if (occHealthScreens[activeScreen]) {
       const s = occHealthScreens[activeScreen];
       return <PlaceholderScreen title={s.title} subtitle={s.subtitle} icon={s.icon} accentColor="#D97706" features={s.features} />;
@@ -675,6 +677,8 @@ function MobileApp() {
 // Export — picks Desktop or Mobile layout
 // ═══════════════════════════════════════════════════════════════
 export function AppNavigator() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
   return isDesktop ? <DesktopApp /> : <MobileApp />;
 }
 

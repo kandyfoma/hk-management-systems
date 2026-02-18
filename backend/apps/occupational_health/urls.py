@@ -12,6 +12,13 @@ from . import views
 # Create router for ViewSets
 router = DefaultRouter()
 
+# ==================== PROTOCOL HIERARCHY ENDPOINTS ====================
+router.register(r'protocols/exam-catalog', views.MedicalExamCatalogViewSet, basename='exam-catalog')
+router.register(r'protocols/sectors', views.OccSectorViewSet, basename='occ-sector')
+router.register(r'protocols/departments', views.OccDepartmentViewSet, basename='occ-department')
+router.register(r'protocols/positions', views.OccPositionViewSet, basename='occ-position')
+router.register(r'protocols/visit-protocols', views.ExamVisitProtocolViewSet, basename='exam-visit-protocol')
+
 # Core API endpoints
 router.register(r'enterprises', views.EnterpriseViewSet, basename='enterprise')
 router.register(r'work-sites', views.WorkSiteViewSet, basename='worksite')  

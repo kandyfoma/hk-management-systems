@@ -14,6 +14,286 @@ from decimal import Decimal
 
 User = get_user_model()
 
+# ==================== PROTOCOL / SECTOR HIERARCHY MODELS ====================
+# These models store the Sector → Department → Position → Protocol tree in the DB,
+# making it fully editable by the doctor / admin without touching code.
+
+EXAM_CATEGORY_CHOICES = [
+    ('clinique',        'Clinique'),
+    ('biologique',      'Biologique'),
+    ('imagerie',        'Imagerie'),
+    ('fonctionnel',     'Fonctionnel'),
+    ('cardiologique',   'Cardiologique'),
+    ('ophtalmologie',   'Ophtalmologie'),
+    ('neurologique',    'Neurologique'),
+    ('toxicologie',     'Toxicologie'),
+    ('psychotechnique', 'Psychotechnique'),
+    ('psychosocial',    'Psychosocial'),
+    ('aptitude',        'Aptitude'),
+]
+
+VISIT_TYPE_CHOICES = [
+    ('pre_employment',  "Visite d'Embauche"),
+    ('periodic',        'Visite Périodique'),
+    ('return_to_work',  'Visite de Reprise'),
+    ('post_incident',   'Visite Post-Accident'),
+    ('fitness_for_duty','Aptitude Spécifique'),
+    ('exit_medical',    'Visite de Sortie'),
+    ('special_request', 'Demande Spéciale'),
+    ('pregnancy_related','Suivi Grossesse'),
+    ('night_work',      'Aptitude Travail de Nuit'),
+]
+
+
+class MedicalExamCatalog(models.Model):
+    """
+    Central catalog of all medical exam types that can appear in protocols.
+    Examples: RADIO_THORAX, AUDIOGRAMME, PLOMBEMIE, ECG_REPOS, ...
+
+    The doctor can add new exams here and reference them from any protocol.
+    """
+    code = models.CharField(
+        _("Code Examen"), max_length=60, unique=True,
+        help_text=_("Identifiant unique en MAJUSCULES_UNDERSCORE, ex: RADIO_THORAX")
+    )
+    label = models.CharField(_("Libellé"), max_length=200)
+    category = models.CharField(
+        _("Catégorie"), max_length=30, choices=EXAM_CATEGORY_CHOICES, default='clinique'
+    )
+    description = models.TextField(_("Description"), blank=True)
+    requires_specialist = models.BooleanField(
+        _("Spécialiste Requis"), default=False,
+        help_text=_("Cocher si cet examen nécessite une référence vers un spécialiste")
+    )
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Catalogue — Examen Médical")
+        verbose_name_plural = _("Catalogue — Examens Médicaux")
+        ordering = ['category', 'label']
+
+    def __str__(self):
+        return f"[{self.category}] {self.label} ({self.code})"
+
+
+class OccSector(models.Model):
+    """
+    Top-level sector (e.g. Minier, Télécommunications, Banque).
+    Maps to an industry sector key for UI profile lookups (color, icon, risk level).
+    """
+    code = models.CharField(
+        _("Code Secteur"), max_length=20, unique=True,
+        help_text=_("Court code MAJUSCULE, ex: MIN, TEL, BAN")
+    )
+    name = models.CharField(_("Nom"), max_length=100)
+    industry_sector_key = models.CharField(
+        _("Clé Secteur Industrie"), max_length=50, blank=True,
+        help_text=_("Correspond au type IndustrySector du frontend (mining, telecom_it, banking_finance…)")
+    )
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sectors_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Secteur")
+        verbose_name_plural = _("Secteurs")
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class OccDepartment(models.Model):
+    """
+    Department / work area within a sector.
+    E.g. under Minier: "Mine Souterraine", "Conduite Engins Lourds".
+    """
+    sector = models.ForeignKey(
+        OccSector, on_delete=models.CASCADE, related_name='departments',
+        verbose_name=_("Secteur")
+    )
+    code = models.CharField(
+        _("Code Département"), max_length=30, unique=True,
+        help_text=_("Ex: MIN_UNDER, MIN_ENGINS, TEL_PYLONE")
+    )
+    name = models.CharField(_("Nom"), max_length=150)
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Département")
+        verbose_name_plural = _("Départements")
+        ordering = ['sector__name', 'name']
+
+    def __str__(self):
+        return f"{self.sector.name} → {self.name} ({self.code})"
+
+
+class OccPosition(models.Model):
+    """
+    Job position within a department.
+    E.g. under "Mine Souterraine": "Foreur / Dynamiteur", "Mineur Souterrain".
+    The doctor can add/edit/delete positions.
+    """
+    department = models.ForeignKey(
+        OccDepartment, on_delete=models.CASCADE, related_name='positions',
+        verbose_name=_("Département")
+    )
+    code = models.CharField(
+        _("Code Poste"), max_length=40, unique=True,
+        help_text=_("Ex: FOREUR, CHAUFFEUR_MINE, TECH_HAUTEUR")
+    )
+    name = models.CharField(_("Intitulé du Poste"), max_length=200)
+    typical_exposures = models.JSONField(
+        _("Expositions Typiques"), default=list, blank=True,
+        help_text=_("Liste de codes ExposureRisk, ex: [\"silica_dust\", \"noise\"]")
+    )
+    recommended_ppe = models.JSONField(
+        _("EPI Recommandés"), default=list, blank=True,
+        help_text=_("Liste de codes PPEType, ex: [\"hard_hat\", \"ear_plugs\"]")
+    )
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='positions_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Poste")
+        verbose_name_plural = _("Postes")
+        ordering = ['department__sector__name', 'department__name', 'name']
+
+    def __str__(self):
+        return f"{self.department.sector.name} → {self.department.name} → {self.name}"
+
+    @property
+    def breadcrumb(self):
+        return f"{self.department.sector.name} → {self.department.name} → {self.name}"
+
+
+class ExamVisitProtocol(models.Model):
+    """
+    Protocol binding a Position + visit type to a set of required/recommended exams.
+
+    For each position the doctor can define:
+      - Which visit types are applicable (embauche, périodique, reprise…)
+      - Which exams are REQUIRED (must be done before fitness decision)
+      - Which exams are RECOMMENDED (suggested but not blocking)
+      - The certificate validity period in months
+      - Regulatory references
+
+    The doctor can create, edit, copy and delete protocols from the Django admin
+    or from a dedicated frontend screen (ProtocolManagerScreen).
+    """
+    position = models.ForeignKey(
+        OccPosition, on_delete=models.CASCADE, related_name='protocols',
+        verbose_name=_("Poste")
+    )
+    visit_type = models.CharField(
+        _("Type de Visite"), max_length=30, choices=VISIT_TYPE_CHOICES
+    )
+    visit_type_label_override = models.CharField(
+        _("Libellé Personnalisé"), max_length=100, blank=True,
+        help_text=_("Laisser vide pour utiliser le libellé par défaut du type de visite")
+    )
+
+    # Required and recommended exams (M2M through junction table for ordering)
+    required_exams = models.ManyToManyField(
+        MedicalExamCatalog,
+        through='ProtocolRequiredExam',
+        related_name='required_in_protocols',
+        verbose_name=_("Examens Obligatoires"),
+        blank=True,
+    )
+    recommended_exams = models.ManyToManyField(
+        MedicalExamCatalog,
+        related_name='recommended_in_protocols',
+        verbose_name=_("Examens Recommandés"),
+        blank=True,
+    )
+
+    validity_months = models.PositiveSmallIntegerField(
+        _("Validité (mois)"), default=12,
+        help_text=_("Durée de validité du certificat en mois (0 = examen unique non périodique)")
+    )
+    regulatory_note = models.TextField(
+        _("Référence Réglementaire"), blank=True,
+        help_text=_("Ex: Code Minier RDC · ILO C176 · Décret N°18/025")
+    )
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='protocols_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Protocole d'Examen")
+        verbose_name_plural = _("Protocoles d'Examens")
+        unique_together = [('position', 'visit_type')]
+        ordering = ['position__name', 'visit_type']
+
+    def __str__(self):
+        return f"{self.position.name} — {self.get_visit_type_display()}"
+
+    @property
+    def visit_type_display(self):
+        return self.visit_type_label_override or self.get_visit_type_display()
+
+    def get_required_exam_codes(self):
+        """Returns ordered list of required exam codes."""
+        return list(
+            self.protocolrequiredexam_set
+                .select_related('exam')
+                .order_by('order')
+                .values_list('exam__code', flat=True)
+        )
+
+    def get_recommended_exam_codes(self):
+        """Returns list of recommended exam codes."""
+        return list(self.recommended_exams.values_list('code', flat=True))
+
+
+class ProtocolRequiredExam(models.Model):
+    """
+    Junction table between ExamVisitProtocol and MedicalExamCatalog for required exams.
+    Stores the display order of exams within a protocol.
+    """
+    protocol = models.ForeignKey(ExamVisitProtocol, on_delete=models.CASCADE)
+    exam = models.ForeignKey(
+        MedicalExamCatalog, on_delete=models.CASCADE, verbose_name=_("Examen")
+    )
+    order = models.PositiveSmallIntegerField(_("Ordre"), default=0)
+    is_blocking = models.BooleanField(
+        _("Bloquant"), default=True,
+        help_text=_("Si coché, la décision d'aptitude ne peut être prise sans ce résultat")
+    )
+
+    class Meta:
+        verbose_name = _("Examen Requis du Protocole")
+        verbose_name_plural = _("Examens Requis des Protocoles")
+        unique_together = [('protocol', 'exam')]
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.protocol} → {self.exam.code} (#{self.order})"
+
+
 # ==================== SECTOR DEFINITIONS ====================
 
 INDUSTRY_SECTORS = [
@@ -280,6 +560,22 @@ class Worker(models.Model):
         ('suspended', _('Suspendu')),
         ('terminated', _('Terminé'))
     ], default='active')
+
+    # ── Protocol references (linked to the Sector/Department/Position hierarchy) ──
+    occ_sector = models.ForeignKey(
+        'OccSector', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='workers', verbose_name=_("Secteur (Protocoles)"),
+        help_text=_("Secteur structuré pour l'auto-sélection des protocoles d'examen")
+    )
+    occ_department = models.ForeignKey(
+        'OccDepartment', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='workers', verbose_name=_("Département (Protocoles)")
+    )
+    occ_position = models.ForeignKey(
+        'OccPosition', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='workers', verbose_name=_("Poste (Protocoles)"),
+        help_text=_("Lie ce travailleur aux protocoles d'examens de ce poste")
+    )
     
     # Contact Information  
     phone = models.CharField(_("Téléphone"), max_length=15)

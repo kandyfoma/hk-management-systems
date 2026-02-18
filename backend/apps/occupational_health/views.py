@@ -16,6 +16,9 @@ from datetime import datetime, timedelta
 from django.shortcuts import get_object_or_404
 
 from .models import (
+    # Protocol hierarchy models
+    MedicalExamCatalog, OccSector, OccDepartment, OccPosition,
+    ExamVisitProtocol, ProtocolRequiredExam,
     # Core models
     Enterprise, WorkSite, Worker,
     # Medical examination models  
@@ -34,6 +37,13 @@ from .models import (
 )
 
 from .serializers import (
+    # Protocol hierarchy serializers
+    MedicalExamCatalogSerializer,
+    OccSectorSerializer, OccSectorNestedSerializer,
+    OccDepartmentSerializer,
+    OccPositionSerializer,
+    ExamVisitProtocolSerializer, ExamVisitProtocolListSerializer,
+    ProtocolRequiredExamSerializer,
     # Core serializers
     EnterpriseListSerializer, EnterpriseDetailSerializer, EnterpriseCreateSerializer,
     WorkSiteSerializer, WorkerListSerializer, WorkerDetailSerializer, WorkerCreateSerializer,
@@ -52,6 +62,301 @@ from .serializers import (
     # Utility serializers
     ChoicesSerializer, DashboardStatsSerializer, WorkerRiskProfileSerializer
 )
+
+# ==================== PROTOCOL HIERARCHY VIEWSETS ====================
+
+class MedicalExamCatalogViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for the medical exam catalog.
+    The doctor can add new exam types (e.g. a new toxicology test) that
+    immediately become available for selection in any protocol.
+
+    GET    /api/exam-catalog/           → list all exams (filterable by category)
+    POST   /api/exam-catalog/           → create new exam type
+    GET    /api/exam-catalog/{id}/      → exam detail
+    PUT    /api/exam-catalog/{id}/      → update
+    PATCH  /api/exam-catalog/{id}/      → partial update
+    DELETE /api/exam-catalog/{id}/      → deactivate (soft delete recommended)
+    GET    /api/exam-catalog/by_code/?code=RADIO_THORAX → lookup by code
+    """
+    queryset = MedicalExamCatalog.objects.all().order_by('category', 'label')
+    serializer_class = MedicalExamCatalogSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category', 'requires_specialist', 'is_active']
+    search_fields = ['code', 'label', 'description']
+    ordering_fields = ['category', 'label', 'code', 'created_at']
+
+    @action(detail=False, methods=['get'], url_path='by_code')
+    def by_code(self, request):
+        """Fetch a single exam by its code string."""
+        code = request.query_params.get('code', '').strip().upper()
+        if not code:
+            return Response({'error': 'code parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+        exam = get_object_or_404(MedicalExamCatalog, code=code)
+        return Response(MedicalExamCatalogSerializer(exam).data)
+
+    @action(detail=False, methods=['post'], url_path='bulk_lookup')
+    def bulk_lookup(self, request):
+        """Fetch multiple exams by a list of codes — used by frontend to resolve protocol exams."""
+        codes = request.data.get('codes', [])
+        if not isinstance(codes, list):
+            return Response({'error': 'codes must be a list'}, status=status.HTTP_400_BAD_REQUEST)
+        exams = MedicalExamCatalog.objects.filter(code__in=codes, is_active=True)
+        return Response(MedicalExamCatalogSerializer(exams, many=True).data)
+
+
+class OccSectorViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for occupational health sectors.
+
+    Extra actions:
+    GET  /api/occ-sectors/{id}/departments/  → list departments of this sector
+    GET  /api/occ-sectors/tree/              → full nested sector → dept → position → protocol tree
+    """
+    queryset = OccSector.objects.prefetch_related('departments').all()
+    serializer_class = OccSectorSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['code', 'name', 'industry_sector_key']
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='tree')
+    def tree(self, request):
+        """
+        Returns the full Sector → Department → Position → Protocol tree.
+        Used by the frontend to sync its local copy of the protocol data.
+        Only active sectors/departments/positions are included by default.
+        include_inactive=true to include inactive ones.
+        """
+        include_inactive = request.query_params.get('include_inactive', 'false').lower() == 'true'
+        qs = OccSector.objects.prefetch_related(
+            'departments__positions__protocols__protocolrequiredexam_set__exam',
+            'departments__positions__protocols__recommended_exams',
+        )
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+        return Response(OccSectorNestedSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=['get'], url_path='departments')
+    def departments(self, request, pk=None):
+        sector = self.get_object()
+        depts = sector.departments.filter(is_active=True)
+        return Response(OccDepartmentSerializer(depts, many=True).data)
+
+
+class OccDepartmentViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for departments.
+
+    Filter by sector: GET /api/occ-departments/?sector=<sector_id>
+    Extra action:
+    GET /api/occ-departments/{id}/positions/ → list positions of this department
+    """
+    queryset = OccDepartment.objects.select_related('sector').all()
+    serializer_class = OccDepartmentSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['sector', 'is_active']
+    search_fields = ['code', 'name', 'sector__name']
+
+    @action(detail=True, methods=['get'], url_path='positions')
+    def positions(self, request, pk=None):
+        dept = self.get_object()
+        positions = dept.positions.filter(is_active=True)
+        return Response(OccPositionSerializer(positions, many=True).data)
+
+
+class OccPositionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for positions (job roles).
+    The doctor can add a new position type and immediately assign protocols to it.
+
+    Filter by department: GET /api/occ-positions/?department=<id>
+    Filter by sector:     GET /api/occ-positions/?department__sector=<id>
+    Extra actions:
+    GET /api/occ-positions/{id}/protocols/  → list protocols for this position
+    GET /api/occ-positions/{id}/protocol_for_visit/?visit_type=pre_employment
+    """
+    queryset = OccPosition.objects.select_related('department__sector').all()
+    serializer_class = OccPositionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['department', 'department__sector', 'is_active']
+    search_fields = ['code', 'name', 'department__name', 'department__sector__name']
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['get'], url_path='protocols')
+    def protocols(self, request, pk=None):
+        position = self.get_object()
+        protocols = position.protocols.filter(is_active=True).prefetch_related(
+            'protocolrequiredexam_set__exam', 'recommended_exams'
+        )
+        return Response(ExamVisitProtocolSerializer(protocols, many=True).data)
+
+    @action(detail=True, methods=['get'], url_path='protocol_for_visit')
+    def protocol_for_visit(self, request, pk=None):
+        """
+        Returns the protocol for this position + a specific visit type.
+        GET /api/occ-positions/42/protocol_for_visit/?visit_type=pre_employment
+        """
+        visit_type = request.query_params.get('visit_type', '').strip()
+        if not visit_type:
+            return Response({'error': 'visit_type parameter required'}, status=status.HTTP_400_BAD_REQUEST)
+        position = self.get_object()
+        protocol = position.protocols.filter(visit_type=visit_type, is_active=True).prefetch_related(
+            'protocolrequiredexam_set__exam', 'recommended_exams'
+        ).first()
+        if not protocol:
+            return Response(
+                {'detail': f'No active protocol found for position {position.code} and visit_type {visit_type}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(ExamVisitProtocolSerializer(protocol).data)
+
+
+class ExamVisitProtocolViewSet(viewsets.ModelViewSet):
+    """
+    Full CRUD for exam visit protocols.
+    The doctor uses this to:
+      - Define which exams are required for a position + visit type
+      - Add/remove required or recommended exams
+      - Set the certificate validity period
+      - Add regulatory notes
+      - Copy a protocol to another position (duplicate action)
+
+    Endpoints:
+    GET    /api/exam-protocols/                  → list all protocols
+    POST   /api/exam-protocols/                  → create new protocol
+    GET    /api/exam-protocols/{id}/             → full detail with exam lists
+    PUT    /api/exam-protocols/{id}/             → replace
+    PATCH  /api/exam-protocols/{id}/             → partial update
+    DELETE /api/exam-protocols/{id}/             → delete
+    POST   /api/exam-protocols/{id}/add_required_exam/    → add one required exam
+    DELETE /api/exam-protocols/{id}/remove_required_exam/ → remove one required exam
+    POST   /api/exam-protocols/{id}/duplicate/           → copy to another position
+    GET    /api/exam-protocols/for_position/?position_code=FOREUR&visit_type=pre_employment
+    """
+    queryset = ExamVisitProtocol.objects.select_related(
+        'position__department__sector'
+    ).prefetch_related(
+        'protocolrequiredexam_set__exam', 'recommended_exams'
+    ).all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['position', 'visit_type', 'is_active']
+    search_fields = ['position__name', 'position__code', 'position__department__name']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ExamVisitProtocolListSerializer
+        return ExamVisitProtocolSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='for_position')
+    def for_position(self, request):
+        """
+        Lookup by position code + visit type — mirrors OccHealthProtocolService.getProtocolForVisit()
+        GET /api/exam-protocols/for_position/?position_code=FOREUR&visit_type=pre_employment
+        """
+        position_code = request.query_params.get('position_code', '').strip().upper()
+        visit_type = request.query_params.get('visit_type', '').strip()
+        if not position_code or not visit_type:
+            return Response(
+                {'error': 'Both position_code and visit_type are required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        protocol = ExamVisitProtocol.objects.filter(
+            position__code=position_code, visit_type=visit_type, is_active=True
+        ).prefetch_related('protocolrequiredexam_set__exam', 'recommended_exams').first()
+        if not protocol:
+            return Response(
+                {'detail': f'No protocol for position={position_code} and visit_type={visit_type}'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(ExamVisitProtocolSerializer(protocol).data)
+
+    @action(detail=True, methods=['post'], url_path='add_required_exam')
+    def add_required_exam(self, request, pk=None):
+        """
+        Add a required exam to a protocol.
+        Body: { "exam_id": 5, "order": 3, "is_blocking": true }
+        """
+        protocol = self.get_object()
+        exam_id = request.data.get('exam_id')
+        order = request.data.get('order', 0)
+        is_blocking = request.data.get('is_blocking', True)
+        if not exam_id:
+            return Response({'error': 'exam_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        exam = get_object_or_404(MedicalExamCatalog, id=exam_id)
+        entry, created = ProtocolRequiredExam.objects.get_or_create(
+            protocol=protocol, exam=exam,
+            defaults={'order': order, 'is_blocking': is_blocking}
+        )
+        if not created:
+            entry.order = order
+            entry.is_blocking = is_blocking
+            entry.save()
+        return Response(
+            ExamVisitProtocolSerializer(protocol).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['delete'], url_path='remove_required_exam')
+    def remove_required_exam(self, request, pk=None):
+        """
+        Remove a required exam from a protocol.
+        Body: { "exam_id": 5 }
+        """
+        protocol = self.get_object()
+        exam_id = request.data.get('exam_id')
+        if not exam_id:
+            return Response({'error': 'exam_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        deleted, _ = ProtocolRequiredExam.objects.filter(protocol=protocol, exam_id=exam_id).delete()
+        if deleted == 0:
+            return Response({'error': 'Exam not found in this protocol'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ExamVisitProtocolSerializer(protocol).data)
+
+    @action(detail=True, methods=['post'], url_path='duplicate')
+    def duplicate(self, request, pk=None):
+        """
+        Duplicate a protocol to a different position and/or visit type.
+        Body: { "target_position_id": 12, "visit_type": "periodic" }
+        """
+        source = self.get_object()
+        target_position_id = request.data.get('target_position_id', source.position_id)
+        new_visit_type = request.data.get('visit_type', source.visit_type)
+
+        if ExamVisitProtocol.objects.filter(position_id=target_position_id, visit_type=new_visit_type).exists():
+            return Response(
+                {'error': 'A protocol already exists for this position + visit_type combination'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        new_protocol = ExamVisitProtocol.objects.create(
+            position_id=target_position_id,
+            visit_type=new_visit_type,
+            validity_months=source.validity_months,
+            regulatory_note=source.regulatory_note,
+            created_by=request.user,
+        )
+        # Copy required exams
+        for req in source.protocolrequiredexam_set.all():
+            ProtocolRequiredExam.objects.create(
+                protocol=new_protocol, exam=req.exam,
+                order=req.order, is_blocking=req.is_blocking
+            )
+        # Copy recommended exams
+        new_protocol.recommended_exams.set(source.recommended_exams.all())
+
+        return Response(ExamVisitProtocolSerializer(new_protocol).data, status=status.HTTP_201_CREATED)
+
 
 # ==================== CORE API VIEWS ====================
 

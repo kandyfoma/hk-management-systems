@@ -25,7 +25,203 @@ from .models import (
     SECTOR_RISK_LEVELS
 )
 
+from .models import (
+    # Protocol hierarchy models
+    MedicalExamCatalog, OccSector, OccDepartment, OccPosition,
+    ExamVisitProtocol, ProtocolRequiredExam,
+    # Core models
+    Enterprise, WorkSite, Worker,
+    # Medical examination models
+    MedicalExamination, VitalSigns, PhysicalExamination,
+    AudiometryResult, SpirometryResult, VisionTestResult,
+    MentalHealthScreening, ErgonomicAssessment,
+    FitnessCertificate,
+    # Disease and incident models
+    OccupationalDiseaseType, OccupationalDisease,
+    WorkplaceIncident,
+    # PPE and risk models
+    PPEItem, HazardIdentification,
+    SiteHealthMetrics,
+    # Choice constants
+    INDUSTRY_SECTORS, JOB_CATEGORIES, EXPOSURE_RISKS, PPE_TYPES,
+    SECTOR_RISK_LEVELS
+)
+
 User = get_user_model()
+
+# ==================== PROTOCOL HIERARCHY SERIALIZERS ====================
+
+class MedicalExamCatalogSerializer(serializers.ModelSerializer):
+    """Medical exam catalog entry — full CRUD for doctor."""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+
+    class Meta:
+        model = MedicalExamCatalog
+        fields = [
+            'id', 'code', 'label', 'category', 'category_display',
+            'description', 'requires_specialist', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class OccSectorSerializer(serializers.ModelSerializer):
+    """Sector — list / detail / create / update."""
+    department_count = serializers.IntegerField(source='departments.count', read_only=True)
+
+    class Meta:
+        model = OccSector
+        fields = [
+            'id', 'code', 'name', 'industry_sector_key',
+            'is_active', 'department_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class OccDepartmentSerializer(serializers.ModelSerializer):
+    """Department — full CRUD."""
+    sector_name = serializers.CharField(source='sector.name', read_only=True)
+    sector_code = serializers.CharField(source='sector.code', read_only=True)
+    position_count = serializers.IntegerField(source='positions.count', read_only=True)
+
+    class Meta:
+        model = OccDepartment
+        fields = [
+            'id', 'sector', 'sector_code', 'sector_name', 'code', 'name',
+            'is_active', 'position_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'sector_name', 'sector_code', 'created_at', 'updated_at']
+
+
+class OccPositionSerializer(serializers.ModelSerializer):
+    """Position with its department/sector context."""
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    department_code = serializers.CharField(source='department.code', read_only=True)
+    sector_name = serializers.CharField(source='department.sector.name', read_only=True)
+    sector_code = serializers.CharField(source='department.sector.code', read_only=True)
+    breadcrumb = serializers.ReadOnlyField()
+    protocol_count = serializers.IntegerField(source='protocols.count', read_only=True)
+
+    class Meta:
+        model = OccPosition
+        fields = [
+            'id', 'department', 'department_code', 'department_name',
+            'sector_code', 'sector_name',
+            'code', 'name', 'typical_exposures', 'recommended_ppe',
+            'is_active', 'breadcrumb', 'protocol_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'department_code', 'department_name',
+            'sector_code', 'sector_name', 'breadcrumb', 'created_at', 'updated_at',
+        ]
+
+
+class ProtocolRequiredExamSerializer(serializers.ModelSerializer):
+    """Through-model for ordered required exams in a protocol."""
+    exam_code = serializers.CharField(source='exam.code', read_only=True)
+    exam_label = serializers.CharField(source='exam.label', read_only=True)
+    exam_category = serializers.CharField(source='exam.category', read_only=True)
+
+    class Meta:
+        model = ProtocolRequiredExam
+        fields = ['id', 'exam', 'exam_code', 'exam_label', 'exam_category', 'order', 'is_blocking']
+
+
+class ExamVisitProtocolSerializer(serializers.ModelSerializer):
+    """
+    Full protocol serializer — used for detail/create/update.
+    Exposes both required and recommended exams with catalog details.
+    """
+    position_name = serializers.CharField(source='position.name', read_only=True)
+    position_code = serializers.CharField(source='position.code', read_only=True)
+    department_name = serializers.CharField(source='position.department.name', read_only=True)
+    sector_name = serializers.CharField(source='position.department.sector.name', read_only=True)
+    visit_type_display = serializers.ReadOnlyField()
+
+    # Ordered required exams (via through model)
+    required_exam_entries = ProtocolRequiredExamSerializer(
+        source='protocolrequiredexam_set', many=True, read_only=True
+    )
+    # Flat list of codes for quick frontend lookup
+    required_exam_codes = serializers.SerializerMethodField()
+    recommended_exam_details = MedicalExamCatalogSerializer(
+        source='recommended_exams', many=True, read_only=True
+    )
+    recommended_exam_codes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExamVisitProtocol
+        fields = [
+            'id',
+            'position', 'position_code', 'position_name',
+            'department_name', 'sector_name',
+            'visit_type', 'visit_type_display', 'visit_type_label_override',
+            'required_exam_entries', 'required_exam_codes',
+            'recommended_exams', 'recommended_exam_details', 'recommended_exam_codes',
+            'validity_months', 'regulatory_note', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'position_code', 'position_name', 'department_name', 'sector_name',
+            'visit_type_display', 'required_exam_entries', 'required_exam_codes',
+            'recommended_exam_details', 'recommended_exam_codes',
+            'created_at', 'updated_at',
+        ]
+
+    def get_required_exam_codes(self, obj):
+        return obj.get_required_exam_codes()
+
+    def get_recommended_exam_codes(self, obj):
+        return obj.get_recommended_exam_codes()
+
+
+class ExamVisitProtocolListSerializer(serializers.ModelSerializer):
+    """Compact serializer for lists."""
+    position_name = serializers.CharField(source='position.name', read_only=True)
+    position_code = serializers.CharField(source='position.code', read_only=True)
+    sector_name = serializers.CharField(source='position.department.sector.name', read_only=True)
+    visit_type_display = serializers.ReadOnlyField()
+    required_exam_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExamVisitProtocol
+        fields = [
+            'id', 'position', 'position_code', 'position_name', 'sector_name',
+            'visit_type', 'visit_type_display', 'validity_months',
+            'required_exam_count', 'is_active',
+        ]
+
+    def get_required_exam_count(self, obj):
+        return obj.protocolrequiredexam_set.count()
+
+
+# ── Nested Sector tree (for the "load all" endpoint used by the frontend) ──
+
+class OccPositionNestedSerializer(serializers.ModelSerializer):
+    protocols = ExamVisitProtocolListSerializer(many=True, read_only=True)
+    protocol_count = serializers.IntegerField(source='protocols.count', read_only=True)
+
+    class Meta:
+        model = OccPosition
+        fields = ['id', 'code', 'name', 'typical_exposures', 'recommended_ppe', 'is_active', 'protocol_count', 'protocols']
+
+
+class OccDepartmentNestedSerializer(serializers.ModelSerializer):
+    positions = OccPositionNestedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OccDepartment
+        fields = ['id', 'code', 'name', 'is_active', 'positions']
+
+
+class OccSectorNestedSerializer(serializers.ModelSerializer):
+    departments = OccDepartmentNestedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OccSector
+        fields = ['id', 'code', 'name', 'industry_sector_key', 'is_active', 'departments']
+
 
 # ==================== CORE SERIALIZERS ====================
 

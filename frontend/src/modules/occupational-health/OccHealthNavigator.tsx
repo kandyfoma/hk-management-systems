@@ -269,7 +269,7 @@ export function OccHealthNavigator() {
 
   const renderContent = () => {
     if (activeScreen === 'dashboard') {
-      return <OccHealthDashboardContent />;
+      return <OccHealthDashboardContent onNavigate={setActiveScreen} />;
     }
 
     if (activeScreen === 'intake') {

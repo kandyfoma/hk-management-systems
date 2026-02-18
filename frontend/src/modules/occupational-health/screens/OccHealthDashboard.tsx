@@ -179,6 +179,33 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         </TouchableOpacity>
       </View>
 
+      {/* ══════ QUICK ACTIONS ══════ */}
+      <View style={styles.quickActionsGrid}>
+        <TouchableOpacity 
+          style={[styles.quickActionCard, { borderLeftColor: '#3B82F6' }]} 
+          activeOpacity={0.7}
+          onPress={() => onNavigate?.('patients')}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(59,130,246,0.12)' }]}>
+            <Ionicons name="people-outline" size={24} color="#3B82F6" />
+          </View>
+          <Text style={styles.quickActionTitle}>Gestion Patients</Text>
+          <Text style={styles.quickActionDesc}>Enregistrer et gérer les patients</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.quickActionCard, { borderLeftColor: ACCENT }]} 
+          activeOpacity={0.7}
+          onPress={() => onNavigate?.('intake')}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: `${ACCENT}14` }]}>
+            <Ionicons name="person-add-outline" size={24} color={ACCENT} />
+          </View>
+          <Text style={styles.quickActionTitle}>Accueil Patient</Text>
+          <Text style={styles.quickActionDesc}>Accueil et signes vitaux</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* ══════ SECTION: Sectors Overview ══════ */}
       <SectionHeader
         title="Secteurs Actifs"
@@ -433,6 +460,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 10, borderRadius: borderRadius.lg, ...shadows.sm,
   },
   addBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  quickActionsGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 14, 
+    marginBottom: 24 
+  },
+  quickActionCard: {
+    flex: 1,
+    minWidth: isDesktop ? 220 : 140,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    borderColor: colors.outline,
+    ...shadows.sm,
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  quickActionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  quickActionDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
   sectorsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   sectorCard: {
     minWidth: isDesktop ? 200 : 160, flex: 1,

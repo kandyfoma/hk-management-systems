@@ -10,12 +10,10 @@ import {
   Animated,
   Modal,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing, typography } from '../theme/theme';
-
-const { width } = Dimensions.get('window');
-const isDesktop = width >= 1024;
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_COLLAPSED = 68;
 
@@ -387,6 +385,8 @@ export function SidebarLayout({
   organizationName,
   headerIcon,
 }: SidebarLayoutProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH;
@@ -668,6 +668,8 @@ const styles = StyleSheet.create({
 
   // ── Sidebar ─────────────────────────────────────────
   sidebar: {
+    flex: 1,
+    flexDirection: 'column',
     backgroundColor: colors.sidebar,
     borderRightWidth: 1,
     borderRightColor: colors.sidebarHover,

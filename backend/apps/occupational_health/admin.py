@@ -12,6 +12,9 @@ from django.db.models import Count
 from django.utils import timezone
 
 from .models import (
+    # Protocol hierarchy models
+    MedicalExamCatalog, OccSector, OccDepartment, OccPosition,
+    ExamVisitProtocol, ProtocolRequiredExam,
     # Core models
     Enterprise, WorkSite, Worker,
     # Medical examination models
@@ -26,6 +29,112 @@ from .models import (
     PPEItem, HazardIdentification,
     SiteHealthMetrics,
 )
+
+# ==================== PROTOCOL HIERARCHY ADMINS ====================
+
+class ProtocolRequiredExamInline(admin.TabularInline):
+    model = ProtocolRequiredExam
+    extra = 1
+    fields = ('exam', 'order', 'is_blocking')
+    autocomplete_fields = ['exam']
+    ordering = ('order',)
+
+
+@admin.register(MedicalExamCatalog)
+class MedicalExamCatalogAdmin(admin.ModelAdmin):
+    list_display = ('code', 'label', 'category', 'requires_specialist', 'is_active', 'created_at')
+    list_filter = ('category', 'requires_specialist', 'is_active')
+    search_fields = ('code', 'label', 'description')
+    ordering = ('category', 'label')
+    list_editable = ('is_active',)
+    readonly_fields = ('created_at',)
+    fieldsets = (
+        ('Identification', {'fields': ('code', 'label', 'category')}),
+        ('Details', {'fields': ('description', 'requires_specialist', 'is_active')}),
+        ('Metadata', {'fields': ('created_at',), 'classes': ('collapse',)}),
+    )
+
+
+@admin.register(OccSector)
+class OccSectorAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'industry_sector_key', 'department_count', 'is_active', 'created_by')
+    list_filter = ('industry_sector_key', 'is_active')
+    search_fields = ('code', 'name')
+    readonly_fields = ('created_at', 'department_count')
+
+    def department_count(self, obj):
+        return obj.departments.count()
+    department_count.short_description = 'Departments'
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(OccDepartment)
+class OccDepartmentAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'sector', 'position_count', 'is_active')
+    list_filter = ('sector', 'is_active')
+    search_fields = ('code', 'name', 'sector__name')
+    raw_id_fields = ('sector',)
+
+    def position_count(self, obj):
+        return obj.positions.count()
+    position_count.short_description = 'Positions'
+
+
+@admin.register(OccPosition)
+class OccPositionAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'department', 'sector_name', 'protocol_count', 'is_active')
+    list_filter = ('department__sector', 'department', 'is_active')
+    search_fields = ('code', 'name', 'department__name', 'department__sector__name')
+    raw_id_fields = ('department',)
+    readonly_fields = ('created_at', 'protocol_count')
+
+    def sector_name(self, obj):
+        return obj.department.sector.name if obj.department else '-'
+    sector_name.short_description = 'Sector'
+
+    def protocol_count(self, obj):
+        return obj.protocols.count()
+    protocol_count.short_description = 'Protocols'
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(ExamVisitProtocol)
+class ExamVisitProtocolAdmin(admin.ModelAdmin):
+    list_display = (
+        'position', 'visit_type', 'required_exam_count',
+        'validity_months', 'is_active', 'created_by'
+    )
+    list_filter = ('visit_type', 'is_active', 'position__department__sector')
+    search_fields = (
+        'position__code', 'position__name',
+        'position__department__name', 'position__department__sector__name'
+    )
+    raw_id_fields = ('position',)
+    filter_horizontal = ('recommended_exams',)
+    inlines = [ProtocolRequiredExamInline]
+    readonly_fields = ('created_at', 'created_by_display')
+
+    def required_exam_count(self, obj):
+        return obj.protocolrequiredexam_set.count()
+    required_exam_count.short_description = 'Required Exams'
+
+    def created_by_display(self, obj):
+        return str(obj.created_by) if obj.created_by else '-'
+    created_by_display.short_description = 'Created by'
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
 
 # ==================== CORE MODEL ADMINS ====================
 
