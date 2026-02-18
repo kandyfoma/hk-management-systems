@@ -11,26 +11,30 @@ class ProductSerializer(serializers.ModelSerializer):
     primary_supplier_name = serializers.CharField(source='primary_supplier.name', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     dosage_form_display = serializers.CharField(source='get_dosage_form_display', read_only=True)
-    unit_display = serializers.CharField(source='get_unit_display', read_only=True)
-    current_stock = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    unit_of_measure_display = serializers.CharField(source='get_unit_of_measure_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     updated_by_name = serializers.CharField(source='updated_by.get_full_name', read_only=True)
     
     class Meta:
         model = Product
         fields = [
-            'id', 'organization', 'organization_name', 'name', 'generic_name', 'sku', 
-            'barcode', 'description', 'category', 'category_display', 'dosage_form', 
-            'dosage_form_display', 'strength', 'unit', 'unit_display', 'manufacturer', 
-            'requires_prescription', 'is_controlled_substance', 'controlled_class', 
-            'primary_supplier', 'primary_supplier_name', 'cost_price', 'selling_price', 
-            'profit_margin', 'minimum_stock_level', 'maximum_stock_level', 
-            'reorder_quantity', 'storage_conditions', 'image', 'is_active', 
-            'created_at', 'updated_at', 'current_stock', 'created_by', 'created_by_name',
+            'id', 'organization', 'organization_name', 'name', 'generic_name', 'brand_name',
+            'sku', 'barcode', 'internal_code', 'category', 'category_display',
+            'sub_category', 'therapeutic_class', 'dosage_form', 'dosage_form_display',
+            'strength', 'unit_of_measure', 'unit_of_measure_display', 'pack_size', 'pack_type',
+            'manufacturer', 'manufacturer_country', 'requires_prescription',
+            'controlled_substance', 'scheduled_drug', 'primary_supplier', 'primary_supplier_name',
+            'cost_price', 'selling_price', 'markup_percentage', 'currency',
+            'reorder_level', 'reorder_quantity', 'min_stock_level', 'max_stock_level',
+            'storage_condition', 'track_expiry', 'track_batches', 'is_serialized',
+            'allow_negative_stock', 'indication', 'contraindications', 'side_effects',
+            'drug_interactions', 'dosage_instructions', 'registration_number', 'approval_date',
+            'is_active', 'is_discontinued', 'notes',
+            'created_at', 'updated_at', 'created_by', 'created_by_name',
             'updated_by', 'updated_by_name'
         ]
-        read_only_fields = ['id', 'organization', 'created_at', 'updated_at', 'profit_margin', 
-                           'created_by', 'updated_by']
+        read_only_fields = ['id', 'organization', 'created_at', 'updated_at',
+                            'created_by', 'updated_by']
 
 
 class InventoryItemSerializer(serializers.ModelSerializer):
@@ -42,16 +46,16 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InventoryItem
         fields = [
-            'id', 'organization', 'product', 'product_name', 'product_sku', 
-            'product_details', 'current_quantity', 'reserved_quantity', 
-            'available_quantity', 'minimum_quantity', 'maximum_quantity', 
-            'reorder_point', 'stock_status', 'stock_status_display', 'unit_cost', 
-            'total_value', 'last_restock', 'last_movement', 'location', 
-            'is_active', 'created_at', 'updated_at'
+            'id', 'organization', 'product', 'product_name', 'product_sku',
+            'product_details', 'facility_id', 'location',
+            'quantity_on_hand', 'quantity_reserved', 'quantity_available', 'quantity_on_order',
+            'stock_status', 'stock_status_display', 'average_cost', 'total_value',
+            'last_counted', 'last_movement', 'last_received', 'last_sold',
+            'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'organization', 'available_quantity', 'stock_status', 
-            'total_value', 'last_restock', 'last_movement', 'created_at', 'updated_at'
+            'id', 'organization', 'quantity_available', 'stock_status',
+            'total_value', 'last_movement', 'created_at', 'updated_at'
         ]
 
 
@@ -67,15 +71,16 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = InventoryBatch
         fields = [
-            'id', 'inventory_item', 'product_name', 'product_sku', 'batch_number', 
-            'lot_number', 'manufacture_date', 'expiry_date', 'supplier', 
-            'initial_quantity', 'current_quantity', 'unit_cost', 'status', 
-            'status_display', 'is_expired', 'days_to_expiry', 'notes', 
+            'id', 'inventory_item', 'product_name', 'product_sku', 'batch_number',
+            'serial_number', 'manufacture_date', 'expiry_date', 'received_date', 'supplier',
+            'initial_quantity', 'current_quantity', 'reserved_quantity', 'unit_cost', 'status',
+            'status_display', 'is_expired', 'days_to_expiry', 'purchase_order_id',
+            'quality_checked', 'quality_notes',
             'created_at', 'updated_at', 'created_by', 'created_by_name',
             'updated_by', 'updated_by_name'
         ]
         read_only_fields = ['id', 'is_expired', 'days_to_expiry', 'created_at', 'updated_at',
-                           'created_by', 'updated_by']
+                            'created_by', 'updated_by']
 
 
 class StockMovementSerializer(serializers.ModelSerializer):
@@ -89,13 +94,15 @@ class StockMovementSerializer(serializers.ModelSerializer):
     class Meta:
         model = StockMovement
         fields = [
-            'id', 'inventory_item', 'product_name', 'product_sku', 'batch', 
+            'id', 'inventory_item', 'product_name', 'product_sku', 'batch',
             'movement_type', 'movement_type_display', 'direction', 'direction_display',
-            'quantity', 'unit_cost', 'total_value', 'reference_number', 
-            'movement_date', 'performed_by', 'performed_by_name', 'created_by',
+            'quantity', 'unit_cost', 'total_cost', 'reference_number',
+            'sale_id', 'purchase_order_id', 'transfer_id',
+            'movement_date', 'balance_before', 'balance_after',
+            'performed_by', 'performed_by_name', 'created_by',
             'created_by_name', 'reason', 'notes', 'created_at'
         ]
-        read_only_fields = ['id', 'total_value', 'created_at', 'created_by']
+        read_only_fields = ['id', 'total_cost', 'created_at', 'created_by']
 
 
 class InventoryAlertSerializer(serializers.ModelSerializer):
@@ -110,10 +117,11 @@ class InventoryAlertSerializer(serializers.ModelSerializer):
     class Meta:
         model = InventoryAlert
         fields = [
-            'id', 'product', 'product_name', 'product_sku', 'alert_type', 
-            'alert_type_display', 'severity', 'severity_display', 'message', 
-            'is_active', 'acknowledged', 'acknowledged_by', 'acknowledged_by_name',
-            'acknowledged_at', 'resolved_by', 'resolved_by_name', 'resolved_at',
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'id', 'product', 'product_name', 'product_sku', 'inventory_item', 'batch',
+            'alert_type', 'alert_type_display', 'severity', 'severity_display',
+            'title', 'message', 'is_active',
+            'acknowledged_by', 'acknowledged_by_name', 'acknowledged_at',
+            'resolved_by', 'resolved_by_name', 'resolved_at',
+            'created_by', 'created_by_name', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+        read_only_fields = ['id', 'created_at', 'created_by']

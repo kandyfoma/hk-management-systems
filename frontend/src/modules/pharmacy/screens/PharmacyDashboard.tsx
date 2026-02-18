@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import { useToast } from '../../../components/GlobalUI';
+import DataService from '../../../services/DataService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -30,28 +34,122 @@ interface TopDrug {
   stock: number;
 }
 
-// ─── Sample Data ─────────────────────────────────────────────
-const metrics: MetricCard[] = [
-  { title: 'Ventes du Jour', value: '847.500 FC', change: '+12.5%', changeType: 'up', icon: 'cart', color: colors.primary },
-  { title: 'Ordonnances', value: '34', change: '+8.3%', changeType: 'up', icon: 'document-text', color: colors.info },
-  { title: 'Produits en Stock', value: '1.284', change: '-2.1%', changeType: 'down', icon: 'cube', color: colors.secondary },
-  { title: 'Alertes Stock', value: '7', change: '+3', changeType: 'down', icon: 'alert-circle', color: colors.error },
-];
+interface RecentSale {
+  id: string;
+  sale_number: string;
+  customer_name: string;
+  total_amount: number;
+  item_count: number;
+  created_at: string;
+  payment_status: string;
+}
 
-const topDrugs: TopDrug[] = [
-  { name: 'Paracétamol 500mg', sold: 245, revenue: '122.500 FC', stock: 580 },
-  { name: 'Amoxicilline 250mg', sold: 189, revenue: '283.500 FC', stock: 320 },
-  { name: 'Ibuprofène 400mg', sold: 156, revenue: '156.000 FC', stock: 410 },
-  { name: 'Métronidazole 500mg', sold: 132, revenue: '198.000 FC', stock: 95 },
-  { name: 'Ciprofloxacine 500mg', sold: 98, revenue: '245.000 FC', stock: 150 },
-];
+// ─── Dashboard Hook for Data Management ──────────────────────
+function usePharmacyDashboardData() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [metrics, setMetrics] = useState<MetricCard[]>([]);
+  const [topProducts, setTopProducts] = useState<TopDrug[]>([]);
+  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
 
-const recentSales = [
-  { id: 'V-0041', client: 'Jean Mukendi', items: 3, total: '45.000 FC', time: '14:32' },
-  { id: 'V-0040', client: 'Marie Kabamba', items: 1, total: '12.500 FC', time: '14:15' },
-  { id: 'V-0039', client: 'Pierre Kasongo', items: 5, total: '87.000 FC', time: '13:48' },
-  { id: 'V-0038', client: 'Sophie Mwamba', items: 2, total: '34.000 FC', time: '13:20' },
-];
+  const loadDashboardData = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      // Load all dashboard data in parallel
+      const [metricsResponse, topProductsResponse, recentSalesResponse] = await Promise.all([
+        DataService.getPharmacyDashboardMetrics(),
+        DataService.getPharmacyTopProducts({ days: 30, limit: 5 }),
+        DataService.getPharmacyRecentSales({ limit: 10 })
+      ]);
+
+      // Process metrics
+      if (metricsResponse.success && metricsResponse.data) {
+        const data = metricsResponse.data;
+        const newMetrics: MetricCard[] = [
+          {
+            title: 'Ventes du Jour',
+            value: `${(data.daily_sales.value / 1000).toFixed(1)}k FC`,
+            change: `${data.daily_sales.change > 0 ? '+' : ''}${data.daily_sales.change}%`,
+            changeType: data.daily_sales.change >= 0 ? 'up' : 'down',
+            icon: 'cart',
+            color: colors.primary
+          },
+          {
+            title: 'Ordonnances',
+            value: data.prescriptions.value.toString(),
+            change: `${data.prescriptions.change > 0 ? '+' : ''}${data.prescriptions.change}%`,
+            changeType: data.prescriptions.change >= 0 ? 'up' : 'down',
+            icon: 'document-text',
+            color: colors.info
+          },
+          {
+            title: 'Produits en Stock',
+            value: data.products_in_stock.toString(),
+            change: 'Actuel',
+            changeType: 'up',
+            icon: 'cube',
+            color: colors.secondary
+          },
+          {
+            title: 'Alertes Stock',
+            value: data.active_alerts.toString(),
+            change: data.active_alerts > 0 ? 'À traiter' : 'RAS',
+            changeType: data.active_alerts > 0 ? 'down' : 'up',
+            icon: 'alert-circle',
+            color: data.active_alerts > 0 ? colors.error : colors.success
+          }
+        ];
+        setMetrics(newMetrics);
+      }
+
+      // Process top products
+      if (topProductsResponse.success && topProductsResponse.data) {
+        const products: TopDrug[] = topProductsResponse.data.map((item: any) => ({
+          name: item.name,
+          sold: item.sold,
+          revenue: `${(item.revenue / 1000).toFixed(1)}k FC`,
+          stock: item.stock
+        }));
+        setTopProducts(products);
+      }
+
+      // Process recent sales
+      if (recentSalesResponse.success && recentSalesResponse.data) {
+        setRecentSales(recentSalesResponse.data);
+      }
+
+    } catch (error) {
+      console.error('Dashboard data loading error:', error);
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const handleRefresh = () => {
+    loadDashboardData(true);
+  };
+
+  return {
+    loading,
+    refreshing,
+    metrics,
+    topProducts,
+    recentSales,
+    handleRefresh
+  };
+}
 
 // ─── Section Header Component ────────────────────────────────
 function SectionHeader({
@@ -126,8 +224,37 @@ interface PharmacyDashboardProps {
 }
 
 export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps = {}) {
+  const {
+    loading,
+    refreshing,
+    metrics,
+    topProducts: topDrugs,
+    recentSales,
+    handleRefresh
+  } = usePharmacyDashboardData();
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Chargement du tableau de bord...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -244,6 +371,21 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
 
 // ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: spacing.xl,
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: isDesktop ? 28 : 16, paddingBottom: 40 },
 

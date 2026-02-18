@@ -35,9 +35,16 @@ class SaleListCreateAPIView(generics.ListCreateAPIView):
         )
 
 
-class SaleDetailAPIView(generics.RetrieveAPIView):
+class SaleDetailAPIView(generics.RetrieveUpdateAPIView):
     queryset = Sale.objects.select_related('customer', 'cashier', 'organization').prefetch_related('items', 'payments')
     serializer_class = SaleDetailSerializer
+
+    def perform_update(self, serializer):
+        # Track who voided if status is being set to VOIDED
+        if serializer.validated_data.get('status') == 'VOIDED':
+            serializer.save(voided_by=self.request.user, voided_at=timezone.now())
+        else:
+            serializer.save()
 
 
 class SaleItemListAPIView(generics.ListAPIView):

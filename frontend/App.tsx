@@ -3,9 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider } from 'react-native-paper';
-import { Provider as ReduxProvider, useDispatch } from 'react-redux';
+import { Provider as ReduxProvider, useDispatch, useSelector } from 'react-redux';
 
-import { store } from './src/store/store';
+import { store, RootState } from './src/store/store';
 import { loginSuccess } from './src/store/slices/authSlice';
 import { AuthNavigator } from './src/navigation/AuthNavigator';
 import { AppNavigator } from './src/navigation/AppNavigator';
@@ -20,6 +20,20 @@ function AppContent() {
   const [appState, setAppState] = useState<AppState>('loading');
   const [isLicenseValid, setIsLicenseValid] = useState(false);
   const dispatch = useDispatch();
+  
+  // Subscribe to Redux auth state to handle logout
+  const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+  const user = useSelector((state: RootState) => state.auth.user);
+  const organization = useSelector((state: RootState) => state.auth.organization);
+  
+  // Handle logout detection
+  useEffect(() => {
+    if (!isAuthenticated && appState === 'authenticated') {
+      console.log('🔐 Logout detected, redirecting to login');
+      setAppState('unauthenticated');
+      setIsLicenseValid(false);
+    }
+  }, [isAuthenticated, appState]);
 
   useEffect(() => {
     initializeApp();
@@ -84,7 +98,58 @@ function AppContent() {
         document.title = 'HK Management Systems';
       }
 
-      // Check backend connection
+      // First, check for existing session data locally
+      const existingSession = await ApiAuthService.getInstance().getCurrentUser();
+      if (existingSession) {
+        console.log('📱 Found existing session, attempting to restore...');
+        
+        // Try to load complete session data
+        const user = await ApiAuthService.getInstance().getCurrentUser();
+        const organization = await ApiAuthService.getInstance().getCurrentOrganization();
+        
+        if (user && organization) {
+          console.log('✅ Restoring user session for:', user.first_name);
+          
+          // Load organization licenses and user module access
+          console.log('📄 Loading organization licenses...');
+          try {
+            const [licenses, userModuleAccess] = await Promise.all([
+              ApiAuthService.getInstance().getOrganizationLicenses(),
+              ApiAuthService.getInstance().getUserModuleAccess()
+            ]);
+            
+            console.log('📋 Loaded licenses:', licenses);
+            console.log('🔐 Loaded module access:', userModuleAccess);
+            
+            // Populate Redux store with complete user data
+            dispatch(loginSuccess({
+              user,
+              organization,
+              licenses,
+              userModuleAccess,
+            }));
+            console.log('📦 Redux store populated with restored session data');
+            setIsLicenseValid(true);
+            setAppState('authenticated');
+            return; // Exit early on successful session restore
+          } catch (licenseError) {
+            console.log('⚠️ Could not load licenses/module access, but user session is valid');
+            // Still proceed with authentication even if license loading fails
+            dispatch(loginSuccess({
+              user,
+              organization,
+              licenses: [],
+              userModuleAccess: [],
+            }));
+            setIsLicenseValid(true);
+            setAppState('authenticated');
+            return;
+          }
+        }
+      }
+
+      // If no existing session or session restore failed, check backend connection
+      console.log('🔍 No existing session found, checking backend connection...');
       const isConnected = await ApiAuthService.getInstance().checkBackendConnection();
       if (!isConnected) {
         console.log('⚠️ Backend not reachable, using offline mode');
@@ -94,31 +159,26 @@ function AppContent() {
 
       console.log('🌐 Backend connected');
       
-      // Check authentication with backend
+      // Check authentication with backend (this now does background verification)
       const isAuthenticated = await ApiAuthService.getInstance().isAuthenticated();
       console.log('👤 Authentication check:', isAuthenticated);
       
       if (isAuthenticated) {
+        // This should only happen if session was restored above, but keeping for safety
         const user = await ApiAuthService.getInstance().getCurrentUser();
         const organization = await ApiAuthService.getInstance().getCurrentOrganization();
         
         if (user && organization) {
-          // Load organization licenses and user module access
-          console.log('📄 Loading organization licenses...');
+          console.log('🔄 Loading fresh user data from backend...');
           const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
           const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
           
-          console.log('📋 Loaded licenses:', licenses);
-          console.log('🔐 Loaded module access:', userModuleAccess);
-          
-          // Populate Redux store with complete user data
           dispatch(loginSuccess({
             user,
             organization,
             licenses,
             userModuleAccess,
           }));
-          console.log('📦 Redux store populated with complete user data');
           setIsLicenseValid(true);
           setAppState('authenticated');
         } else {
@@ -131,6 +191,24 @@ function AppContent() {
       }
     } catch (error) {
       console.error('💥 Failed to initialize app:', error);
+      // Don't immediately logout on initialization errors
+      // Check if we have any session data and keep user logged in locally
+      const user = await ApiAuthService.getInstance().getCurrentUser();
+      if (user) {
+        console.log('⚠️ Initialization error but user session exists, keeping logged in');
+        const organization = await ApiAuthService.getInstance().getCurrentOrganization();
+        if (organization) {
+          dispatch(loginSuccess({
+            user,
+            organization,
+            licenses: [],
+            userModuleAccess: [],
+          }));
+          setIsLicenseValid(true);
+          setAppState('authenticated');
+          return;
+        }
+      }
       setAppState('unauthenticated');
     }
   };

@@ -1,7 +1,6 @@
 /**
- * ConnectivityBanner — persistent, animated strip at the top of the screen
- * that appears when the device goes offline and shows quality badges
- * when the connection is poor. Auto-hides when fully connected.
+ * ConnectivityBanner — slides in when offline, shows a brief "reconnected"
+ * confirmation when connection is restored, then disappears.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -10,16 +9,13 @@ import {
   Text,
   StyleSheet,
   Animated,
-  TouchableOpacity,
   Platform,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useConnectivity } from '../context/ConnectivityContext';
 import { colors, borderRadius, shadows, spacing } from '../theme/theme';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const isMobile = SCREEN_W < 768;
+
 
 // ═══════════════════════════════════════════════════════════════
 // QUALITY CONFIG
@@ -59,68 +55,51 @@ const qualityConfig = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// RECONNECTED TOAST (shows briefly when coming back online)
-// ═══════════════════════════════════════════════════════════════
-
-function ReconnectedToast({ visible, onHide }: { visible: boolean; onHide: () => void }) {
-  const slideAnim = useRef(new Animated.Value(-60)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 50, useNativeDriver: true }),
-        Animated.timing(opacityAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      ]).start();
-
-      const timer = setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(slideAnim, { toValue: -60, duration: 300, useNativeDriver: true }),
-          Animated.timing(opacityAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-        ]).start(() => onHide());
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [visible]);
-
-  if (!visible) return null;
-
-  return (
-    <Animated.View
-      style={[
-        s.reconnectedToast,
-        { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
-      ]}
-    >
-      <View style={s.reconnectedInner}>
-        <View style={s.reconnectedDot} />
-        <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-        <Text style={s.reconnectedText}>Connexion rétablie</Text>
-      </View>
-    </Animated.View>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
 // MAIN BANNER
 // ═══════════════════════════════════════════════════════════════
 
 export function ConnectivityBanner() {
-  const { isOnline, quality, latencyMs, refresh } = useConnectivity();
-  const [showReconnected, setShowReconnected] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showGoodConnectionBriefly, setShowGoodConnectionBriefly] = useState(false);
+  const { isOnline } = useConnectivity();
+
+  // Track whether we were offline so we can show the brief "reconnected" state
   const wasOfflineRef = useRef(false);
-  const wasPooorQualityRef = useRef(false);
-  const goodConnectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastQualityRef = useRef<string>(quality);
+  const [showReconnected, setShowReconnected] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const slideAnim = useRef(new Animated.Value(-80)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  const shouldShowForConnectionIssues = !isOnline || quality === 'poor' || quality === 'fair';
-  const showBanner = shouldShowForConnectionIssues || showGoodConnectionBriefly;
+  // Derived: what to display
+  const showOffline = !isOnline;
+  const showBanner = showOffline || showReconnected;
+
+  // React to online/offline changes
+  useEffect(() => {
+    if (!isOnline) {
+      // Went offline — mark it and clear any reconnected timer
+      wasOfflineRef.current = true;
+      setShowReconnected(false);
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    } else if (wasOfflineRef.current) {
+      // Just came back online after being offline
+      wasOfflineRef.current = false;
+      setShowReconnected(true);
+      // Auto-hide the reconnected banner after 3 s
+      hideTimerRef.current = setTimeout(() => {
+        setShowReconnected(false);
+        hideTimerRef.current = null;
+      }, 3000);
+    }
+
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, [isOnline]);
 
   // Animate banner in/out
   useEffect(() => {
@@ -137,162 +116,35 @@ export function ConnectivityBanner() {
     }
   }, [showBanner]);
 
-  // Handle connection quality changes and brief good connection display
-  useEffect(() => {
-    // Clear any existing timer first
-    if (goodConnectionTimerRef.current) {
-      clearTimeout(goodConnectionTimerRef.current);
-      goodConnectionTimerRef.current = null;
-    }
+  if (!showBanner) return null;
 
-    const previousQuality = lastQualityRef.current;
-    lastQualityRef.current = quality;
-
-    // Track offline state
-    if (!isOnline) {
-      wasOfflineRef.current = true;
-      wasPooorQualityRef.current = false;
-      setShowGoodConnectionBriefly(false);
-      return;
-    }
-    
-    // Track poor/fair quality state
-    if (quality === 'poor' || quality === 'fair') {
-      wasPooorQualityRef.current = true;
-      setShowGoodConnectionBriefly(false);
-      return;
-    }
-    
-    // Handle good/excellent connection
-    if (quality === 'good' || quality === 'excellent') {
-      // Check if we're improving from a worse state
-      const improvingFromOffline = wasOfflineRef.current;
-      const improvingFromPoorQuality = wasPooorQualityRef.current;
-      const improvingFromFairToPerfect = previousQuality === 'fair' || previousQuality === 'poor';
-      
-      const shouldShowBriefly = improvingFromOffline || improvingFromPoorQuality || improvingFromFairToPerfect;
-      
-      if (shouldShowBriefly) {
-        setShowGoodConnectionBriefly(true);
-        
-        // Create a fresh timer to hide after 3 seconds
-        goodConnectionTimerRef.current = setTimeout(() => {
-          setShowGoodConnectionBriefly(false);
-          wasOfflineRef.current = false;
-          wasPooorQualityRef.current = false;
-          goodConnectionTimerRef.current = null;
-        }, 3000);
-      } else {
-        // Already in good state, ensure banner is hidden
-        setShowGoodConnectionBriefly(false);
-        wasOfflineRef.current = false;
-        wasPooorQualityRef.current = false;
-      }
-    }
-  }, [isOnline, quality]);
-
-  // Detect reconnection for toast
-  useEffect(() => {
-    if (!isOnline) {
-      wasOfflineRef.current = true;
-    } else if (wasOfflineRef.current && isOnline) {
-      setShowReconnected(true);
-      // Don't reset wasOfflineRef here, let the quality effect handle it
-    }
-  }, [isOnline]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (goodConnectionTimerRef.current) {
-        clearTimeout(goodConnectionTimerRef.current);
-        goodConnectionTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await refresh();
-    } catch (error) {
-      console.log('Refresh error:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const cfg = qualityConfig[quality];
+  const cfg = showReconnected ? qualityConfig.good : qualityConfig.offline;
 
   return (
-    <>
-      <ReconnectedToast
-        visible={showReconnected}
-        onHide={() => setShowReconnected(false)}
-      />
-
-      <Animated.View
-        style={[
-          s.banner,
-          {
-            backgroundColor: cfg.bg,
-            transform: [{ translateY: slideAnim }],
-            opacity: opacityAnim,
-          },
-        ]}
-        pointerEvents={showBanner ? 'auto' : 'none'}
-      >
-        <View style={s.bannerContent}>
-          {/* Status indicator */}
-          <View style={s.bannerLeft}>
-            <View style={s.pulseContainer}>
-              <View style={[s.pulseDot, { backgroundColor: cfg.text }]} />
-              {!isOnline && <View style={[s.pulseRing, { borderColor: cfg.text }]} />}
-            </View>
-            <Ionicons name={cfg.icon} size={18} color={cfg.text} />
-            <Text style={[s.bannerLabel, { color: cfg.text }]}>
-              {cfg.label}
-            </Text>
-            {latencyMs !== null && isOnline && (
-              <View style={[s.latencyBadge, { backgroundColor: cfg.text + '20' }]}>
-                <Text style={[s.latencyText, { color: cfg.text }]}>
-                  {latencyMs} ms
-                </Text>
-              </View>
-            )}
+    <Animated.View
+      style={[
+        s.banner,
+        {
+          backgroundColor: cfg.bg,
+          transform: [{ translateY: slideAnim }],
+          opacity: opacityAnim,
+        },
+      ]}
+      pointerEvents="none"
+    >
+      <View style={s.bannerContent}>
+        <View style={s.bannerLeft}>
+          <View style={s.pulseContainer}>
+            <View style={[s.pulseDot, { backgroundColor: cfg.text }]} />
+            {!isOnline && <View style={[s.pulseRing, { borderColor: cfg.text }]} />}
           </View>
-
-          {/* Actions */}
-          <TouchableOpacity
-            style={[s.retryBtn, { borderColor: cfg.text + '40' }]}
-            onPress={handleRefresh}
-            activeOpacity={0.7}
-            disabled={refreshing}
-          >
-            <Ionicons
-              name={refreshing ? 'sync' : 'refresh-outline'}
-              size={14}
-              color={cfg.text}
-            />
-            <Text style={[s.retryText, { color: cfg.text }]}>
-              {refreshing ? 'Vérification…' : 'Réessayer'}
-            </Text>
-          </TouchableOpacity>
+          <Ionicons name={cfg.icon} size={18} color={cfg.text} />
+          <Text style={[s.bannerLabel, { color: cfg.text }]}>
+            {showReconnected ? 'Connexion rétablie' : 'Hors ligne — Aucune connexion'}
+          </Text>
         </View>
-
-        {/* Progress bar for poor quality */}
-        {isOnline && quality === 'poor' && (
-          <View style={s.progressTrack}>
-            <Animated.View style={[s.progressFill, { width: '35%' }]} />
-          </View>
-        )}
-        {isOnline && quality === 'fair' && (
-          <View style={s.progressTrack}>
-            <Animated.View style={[s.progressFill, { width: '60%' }]} />
-          </View>
-        )}
-      </Animated.View>
-    </>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -355,7 +207,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: isMobile ? 12 : 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     minHeight: 44,
   },

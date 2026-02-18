@@ -149,6 +149,7 @@ export interface Product {
   // ─── Meta ─────────────────────────────────────────────────
   tags?: string[];
   notes?: string;
+  expirationDate?: string;         // General product expiration/shelf life date
   createdAt: string;
   updatedAt?: string;
   metadata?: Record<string, any>;

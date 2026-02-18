@@ -35,7 +35,7 @@
       "description": "Système de gestion hospitalière et pharmaceutique pour la RD Congo",
       "themeColor": "#122056",
       "backgroundColor": "#FAFAFD",
-      "bundler": "webpack"
+      "bundler": "metro"
     }
   }
 }

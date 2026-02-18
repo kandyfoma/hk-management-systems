@@ -163,16 +163,19 @@ export function SettingsScreen() {
     try {
       showToast('Déconnexion en cours...', 'info');
       
-      // Clear all stored data
+      // Clear auth token first
+      await ApiAuthService.getInstance().logout();
+      
+      // Clear all stored data including sync data
       await AsyncStorage.multiRemove([
         'auth_session',
         'current_user', 
         'current_organization',
-        'device_activation_info'
+        'auth_token',
+        'device_activation_info',
+        'sync_queue',
+        'last_sync_timestamp'
       ]);
-      
-      // Clear auth token
-      await ApiAuthService.getInstance().logout();
       
       // Reset Redux state
       dispatch(logoutAction());
@@ -180,13 +183,30 @@ export function SettingsScreen() {
       
       showToast('Déconnexion réussie', 'success');
       
-      // Force reload to restart the app
+      // Force reload to restart the app and return to login
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        setTimeout(() => window.location.reload(), 500);
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      } else {
+        // For mobile platforms, we rely on the app state management
+        // The App.tsx should detect the cleared Redux state and redirect to login
+        console.log('Logout completed, app should redirect to login');
       }
     } catch (error) {
       console.error('Logout error:', error);
       showToast('Erreur lors de la déconnexion', 'error');
+      
+      // Even if there's an error, try to clear local data and redirect
+      try {
+        await AsyncStorage.clear();
+        dispatch(logoutAction());
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.location.reload();
+        }
+      } catch (clearError) {
+        console.error('Failed to clear storage on logout error:', clearError);
+      }
     }
   };
 

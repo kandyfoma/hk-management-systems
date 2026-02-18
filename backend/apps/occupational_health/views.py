@@ -249,6 +249,156 @@ class WorkerViewSet(viewsets.ModelViewSet):
         serializer = WorkplaceIncidentListSerializer(incidents, many=True)
         return Response(serializer.data)
     
+    @action(detail=False, methods=['post'], url_path='bulk-import')
+    def bulk_import(self, request):
+        """
+        Bulk import workers from parsed Excel/CSV data.
+        Expects JSON array of worker objects.
+        Creates new workers or updates existing ones (by employee_id).
+        """
+        data = request.data
+        if not isinstance(data, list):
+            return Response(
+                {'error': 'Expected a list of worker objects.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        created = []
+        updated = []
+        errors = []
+        
+        for i, row in enumerate(data):
+            try:
+                employee_id = row.get('employee_id', '').strip()
+                if not employee_id:
+                    errors.append({'row': i + 1, 'error': 'employee_id is required'})
+                    continue
+                
+                first_name = row.get('first_name', '').strip()
+                last_name = row.get('last_name', '').strip()
+                if not first_name or not last_name:
+                    errors.append({'row': i + 1, 'error': 'first_name and last_name are required'})
+                    continue
+                
+                # Resolve enterprise by name or ID
+                enterprise = None
+                enterprise_name = row.get('company', '') or row.get('enterprise', '')
+                enterprise_id = row.get('enterprise_id')
+                if enterprise_id:
+                    try:
+                        enterprise = Enterprise.objects.get(id=enterprise_id)
+                    except Enterprise.DoesNotExist:
+                        pass
+                if not enterprise and enterprise_name:
+                    enterprise, _ = Enterprise.objects.get_or_create(
+                        name=enterprise_name.strip(),
+                        defaults={
+                            'sector': row.get('sector', 'other'),
+                            'address': row.get('address', ''),
+                            'contact_person': f"{first_name} {last_name}",
+                            'contact_phone': row.get('phone', ''),
+                            'created_by': request.user,
+                        }
+                    )
+                if not enterprise:
+                    # Try to get the first enterprise or create a default
+                    enterprise = Enterprise.objects.first()
+                    if not enterprise:
+                        errors.append({'row': i + 1, 'error': 'No enterprise found. Provide company name.'})
+                        continue
+                
+                # Parse date fields safely
+                from datetime import date as date_type
+                def parse_date(val, default=None):
+                    if not val:
+                        return default
+                    try:
+                        if isinstance(val, str):
+                            for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y'):
+                                try:
+                                    return datetime.strptime(val.strip(), fmt).date()
+                                except ValueError:
+                                    continue
+                        return default
+                    except Exception:
+                        return default
+                
+                dob = parse_date(row.get('date_of_birth'), date_type(1990, 1, 1))
+                hire_date = parse_date(row.get('hire_date'), timezone.now().date())
+                
+                # Determine sector risk level
+                sector = row.get('sector', 'other')
+                risk_level = SECTOR_RISK_LEVELS.get(sector, 'moderate')
+                
+                worker_data = {
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'date_of_birth': dob,
+                    'gender': row.get('gender', 'male'),
+                    'enterprise': enterprise,
+                    'job_category': row.get('job_category', 'other_job'),
+                    'job_title': row.get('job_title', 'Non spécifié'),
+                    'hire_date': hire_date,
+                    'phone': row.get('phone', ''),
+                    'email': row.get('email', ''),
+                    'address': row.get('address', ''),
+                    'emergency_contact_name': row.get('emergency_contact_name', ''),
+                    'emergency_contact_phone': row.get('emergency_contact_phone', ''),
+                    'exposure_risks': row.get('exposure_risks', []),
+                    'ppe_required': row.get('ppe_required', []),
+                    'allergies': row.get('allergies', ''),
+                    'chronic_conditions': row.get('chronic_conditions', ''),
+                    'medications': row.get('medications', ''),
+                    'current_fitness_status': row.get('fitness_status', 'pending_evaluation'),
+                    'next_exam_due': parse_date(row.get('next_exam_due'), hire_date + timedelta(days=30)),
+                    'created_by': request.user,
+                }
+                
+                # Resolve work_site if provided
+                site_name = row.get('site', '')
+                if site_name:
+                    work_site, _ = WorkSite.objects.get_or_create(
+                        name=site_name.strip(),
+                        enterprise=enterprise,
+                        defaults={
+                            'address': row.get('address', ''),
+                            'created_by': request.user,
+                        }
+                    )
+                    worker_data['work_site'] = work_site
+                
+                # Check if worker exists (update) or create new
+                existing = Worker.objects.filter(employee_id=employee_id).first()
+                if existing:
+                    for key, value in worker_data.items():
+                        if key != 'created_by':
+                            setattr(existing, key, value)
+                    existing.save()
+                    updated.append({
+                        'employee_id': employee_id,
+                        'name': f"{first_name} {last_name}",
+                    })
+                else:
+                    worker = Worker.objects.create(employee_id=employee_id, **worker_data)
+                    created.append({
+                        'id': worker.id,
+                        'employee_id': employee_id,
+                        'name': f"{first_name} {last_name}",
+                    })
+                    
+            except Exception as e:
+                errors.append({'row': i + 1, 'error': str(e)})
+        
+        return Response({
+            'total': len(data),
+            'created': len(created),
+            'updated': len(updated),
+            'errors': len(errors),
+            'created_workers': created,
+            'updated_workers': updated,
+            'error_details': errors[:20],  # Limit error details
+        }, status=status.HTTP_200_OK)
+    
     def _check_ppe_compliance(self, worker):
         """Check if worker has all required PPE"""
         required_ppe = set(worker.ppe_required)

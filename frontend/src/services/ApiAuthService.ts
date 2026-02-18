@@ -3,6 +3,7 @@
  * Replaces the SQLite-based AuthService with REST API calls
  */
 
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService, { ApiResponse } from './ApiService';
 import { User } from '../models/User';
@@ -144,13 +145,17 @@ export class ApiAuthService {
 
   async logout(): Promise<void> {
     try {
+      console.log('🔐 ApiAuthService logout initiated');
       // Call backend logout endpoint
       await ApiService.getInstance().post('/auth/logout/');
+      console.log('✅ Backend logout successful');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Logout error (continuing with local cleanup):', error);
     } finally {
       // Clear local storage regardless of API call result
+      console.log('🧹 Clearing local session data');
       await this.clearSessionData();
+      console.log('✅ Local session data cleared');
     }
   }
 
@@ -180,16 +185,83 @@ export class ApiAuthService {
 
   async isAuthenticated(): Promise<boolean> {
     try {
-      const token = await ApiService.getInstance().getAuthToken();
-      if (!token) return false;
+      // First check if we have a stored session
+      const [token, sessionData] = await Promise.all([
+        ApiService.getInstance().getAuthToken(),
+        AsyncStorage.getItem(SESSION_KEY)
+      ]);
+      
+      if (!token || !sessionData) {
+        console.log('No token or session data found');
+        return false;
+      }
 
-      // Verify token with backend
-      const response: ApiResponse<User> = await ApiService.get('/auth/profile/');
-      return response.success;
+      const session = JSON.parse(sessionData);
+      if (!session.isAuthenticated) {
+        console.log('Session marked as not authenticated');
+        return false;
+      }
+
+      // If we have valid session data, assume user is authenticated
+      // Backend verification will happen in background to validate token
+      console.log('Valid session found, user is authenticated');
+      
+      // Verify token with backend in background (don't wait for result)
+      this.verifyTokenInBackground();
+      
+      return true;
     } catch (error) {
       console.error('Auth check error:', error);
       return false;
     }
+  }
+
+  // Background token verification - will logout user if token is invalid
+  private async verifyTokenInBackground(): Promise<void> {
+    try {
+      const response: ApiResponse<User> = await ApiService.getInstance().get('/auth/profile/');
+      if (!response.success) {
+        console.log('Token verification failed, logging out user');
+        await this.logout();
+        // Notify app to update UI state
+        this.notifyLogout();
+      } else {
+        console.log('Token verification successful');
+        // Optionally update user data if it changed
+        if (response.data) {
+          await AsyncStorage.setItem(USER_KEY, JSON.stringify(response.data));
+        }
+      }
+    } catch (error: any) {
+      console.error('Background token verification error:', error);
+      // Only logout if it's a 401 error (unauthorized)
+      if (error?.response?.status === 401) {
+        console.log('Token expired, logging out user');
+        await this.logout();
+        this.notifyLogout();
+      }
+      // For network errors or other issues, keep user logged in
+    }
+  }
+
+  // Method to notify the app that user should be logged out
+  private notifyLogout(): void {
+    // Log the logout event for debugging
+    console.log('🔐 User logged out due to token verification failure');
+    
+    // Force app reload on web to ensure clean state
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      console.log('🔄 Forcing app reload due to token failure');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
+    
+    // Note: For a more sophisticated approach, you could:
+    // 1. Inject the Redux store and dispatch logout action
+    // 2. Use an event emitter to notify components
+    // 3. Use a navigation service to redirect to login
+    // For now, we rely on the app's authentication checking
   }
 
   async getCurrentUser(): Promise<User | null> {
@@ -201,7 +273,7 @@ export class ApiAuthService {
       }
 
       // If not in storage, fetch from backend
-      const response: ApiResponse<User> = await ApiService.get('/auth/profile/');
+      const response: ApiResponse<User> = await ApiService.getInstance().get('/auth/profile/');
       if (response.success && response.data) {
         await AsyncStorage.setItem(USER_KEY, JSON.stringify(response.data));
         return response.data;
@@ -229,7 +301,7 @@ export class ApiAuthService {
 
   async updateProfile(profileData: Partial<User>): Promise<AuthResult> {
     try {
-      const response: ApiResponse<User> = await ApiService.patch('/auth/profile/update/', profileData);
+      const response: ApiResponse<User> = await ApiService.getInstance().patch('/auth/profile/update/', profileData);
       
       if (response.success && response.data) {
         // Update stored user data
@@ -260,7 +332,7 @@ export class ApiAuthService {
 
   private async clearSessionData(): Promise<void> {
     await Promise.all([
-      ApiService.removeAuthToken(),
+      ApiService.getInstance().removeAuthToken(),
       AsyncStorage.removeItem(SESSION_KEY),
       AsyncStorage.removeItem(USER_KEY),
       AsyncStorage.removeItem(ORG_KEY),
@@ -269,7 +341,7 @@ export class ApiAuthService {
 
   async refreshUserData(): Promise<User | null> {
     try {
-      const response: ApiResponse<User> = await ApiService.get('/auth/profile/');
+      const response: ApiResponse<User> = await ApiService.getInstance().get('/auth/profile/');
       if (response.success && response.data) {
         await AsyncStorage.setItem(USER_KEY, JSON.stringify(response.data));
         return response.data;

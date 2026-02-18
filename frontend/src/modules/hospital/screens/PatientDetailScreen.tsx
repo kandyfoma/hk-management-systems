@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/theme';
-import DatabaseService from '../../../services/DatabaseService';
+import HybridDataService from '../../../services/HybridDataService';
 import { Patient, PatientUtils, MedicalRecord, VitalSigns } from '../../../models/Patient';
 import { Encounter, EncounterUtils } from '../../../models/Encounter';
 
@@ -41,7 +41,7 @@ export function PatientDetailScreen({ patientId, onBack, onNewEncounter, onEditP
 
   const loadData = useCallback(async () => {
     try {
-      const db = DatabaseService.getInstance();
+      const db = HybridDataService.getInstance();
       const p = await db.getPatient(patientId);
       if (p) {
         setPatient(p);
@@ -71,7 +71,7 @@ export function PatientDetailScreen({ patientId, onBack, onNewEncounter, onEditP
     if (!patient) return null;
     setActionLoading(true);
     try {
-      const db = DatabaseService.getInstance();
+      const db = HybridDataService.getInstance();
       const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
       if (!license) throw new Error('License not found');
       const org = await db.getOrganization(license.organizationId);

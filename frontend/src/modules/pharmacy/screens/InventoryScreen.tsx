@@ -12,11 +12,17 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import HybridDataService from '../../../services/HybridDataService';
+import ApiService from '../../../services/ApiService';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as XLSX from 'xlsx';
 import {
   Product, ProductCreate, ProductUpdate, ProductCategory, DosageForm, UnitOfMeasure, StorageCondition,
   InventoryItem, InventoryBatch, StockMovement, InventoryAlert,
@@ -232,41 +238,222 @@ export function InventoryScreen() {
   const [adjustProduct, setAdjustProduct] = useState<EnrichedProduct | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<EnrichedProduct | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
 
-  // ─── Data loading ────────────────────────────────────────
+  // ─── Data loading — pulls from real backend API ─────────
   const loadData = useCallback(async () => {
     try {
-      const db = DatabaseService.getInstance();
-      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
-      if (!license) return;
-      const org = await db.getOrganization(license.organizationId);
-      if (!org) return;
-      const orgId = org.id;
+      const api = ApiService.getInstance();
+      
+      // Add cache-busting timestamp to ensure fresh data
+      const cacheBuster = { _t: Date.now() };
 
-      const [rawProducts, inventoryItems, summaryData, movements, alerts] = await Promise.all([
-        db.getProductsByOrganization(orgId),
-        db.getInventoryItemsByOrganization(orgId),
-        db.getInventorySummary(orgId),
-        db.getMovementsByOrganization(orgId, { limit: 100 }),
-        db.getActiveAlerts(orgId),
+      // Fetch products, inventory items, batches, movements and alerts in parallel
+      const [productsRes, itemsRes, batchesRes, movementsRes, alertsRes, statsRes] = await Promise.all([
+        api.get('/inventory/products/', { page_size: 500, ...cacheBuster }),
+        api.get('/inventory/items/', { page_size: 500, ...cacheBuster }),
+        api.get('/inventory/batches/', { page_size: 500, ...cacheBuster }),
+        api.get('/inventory/movements/', { page_size: 200, ...cacheBuster }),
+        api.get('/inventory/alerts/', { is_active: true, page_size: 200, ...cacheBuster }),
+        api.get('/inventory/reports/stats/', cacheBuster),
       ]);
 
-      const invMap = new Map<string, InventoryItem>();
-      inventoryItems.forEach(item => invMap.set(item.productId, item));
+      const rawProducts: any[] = productsRes?.data?.results ?? productsRes?.data ?? [];
+      const rawItems: any[] = itemsRes?.data?.results ?? itemsRes?.data ?? [];
+      const rawBatches: any[] = batchesRes?.data?.results ?? batchesRes?.data ?? [];
+      const rawMovements: any[] = movementsRes?.data?.results ?? movementsRes?.data ?? [];
+      const rawAlerts: any[] = alertsRes?.data?.results ?? alertsRes?.data ?? [];
+      const statsData: any = statsRes?.data ?? {};
 
-      const enriched: EnrichedProduct[] = await Promise.all(
-        rawProducts.map(async p => {
-          const inv = invMap.get(p.id);
-          const batches = inv ? await db.getBatchesByInventoryItem(inv.id) : [];
-          const mvts = inv ? await db.getStockMovements(inv.id, { limit: 20 }) : [];
-          return { ...p, inventoryItem: inv, batches, movements: mvts };
-        }),
-      );
+      // Map backend snake_case → frontend camelCase for Product
+      const mapProduct = (p: any): Product => ({
+        id: p.id,
+        organizationId: p.organization,
+        name: p.name,
+        genericName: p.generic_name ?? '',
+        brandName: p.brand_name ?? '',
+        sku: p.sku,
+        barcode: p.barcode ?? '',
+        description: p.notes ?? '',
+        category: p.category,
+        dosageForm: p.dosage_form,
+        strength: p.strength ?? '',
+        unitOfMeasure: p.unit_of_measure,
+        packSize: p.pack_size ?? 1,
+        manufacturer: p.manufacturer ?? '',
+        requiresPrescription: p.requires_prescription ?? false,
+        controlledSubstance: p.controlled_substance ?? false,
+        costPrice: parseFloat(p.cost_price ?? '0'),
+        sellingPrice: parseFloat(p.selling_price ?? '0'),
+        currency: p.currency ?? 'USD',
+        taxRate: 0,
+        reorderLevel: p.reorder_level ?? 10,
+        minStockLevel: p.min_stock_level ?? 5,
+        maxStockLevel: p.max_stock_level ?? 500,
+        reorderQuantity: p.reorder_quantity ?? 50,
+        storageConditions: p.storage_condition ?? 'ROOM_TEMPERATURE',
+        activeIngredients: [],
+        insuranceReimbursable: false,
+        safetyStockDays: 7,
+        isActive: p.is_active ?? true,
+        isDiscontinued: false,
+        expirationDate: p.expiration_date ?? undefined,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+      });
+
+      // Map backend → InventoryItem
+      const mapItem = (i: any): InventoryItem => ({
+        id: i.id,
+        organizationId: i.organization,
+        productId: i.product,
+        facilityId: i.location ?? 'pharmacy-main',
+        facilityType: 'PHARMACY',
+        quantityOnHand: parseFloat(i.quantity_on_hand ?? '0'),
+        quantityReserved: parseFloat(i.quantity_reserved ?? '0'),
+        quantityAvailable: parseFloat(i.quantity_available ?? '0'),
+        quantityOnOrder: parseFloat(i.quantity_on_order ?? '0'),
+        quantityDamaged: 0,
+        quantityExpired: 0,
+        averageCost: parseFloat(i.average_cost ?? '0'),
+        totalStockValue: parseFloat(i.total_value ?? '0'),
+        lastPurchasePrice: parseFloat(i.average_cost ?? '0'),
+        averageDailyUsage: 0,
+        daysOfStockRemaining: 0,
+        status: i.stock_status as any,
+        isActive: true,
+        createdAt: i.created_at,
+        updatedAt: i.updated_at,
+      });
+
+      // Map backend → InventoryBatch
+      const mapBatch = (b: any): InventoryBatch => ({
+        id: b.id,
+        inventoryItemId: b.inventory_item,
+        batchNumber: b.batch_number ?? '',
+        lotNumber: b.batch_number ?? '',
+        manufactureDate: b.manufacture_date ?? '',
+        expiryDate: b.expiry_date ?? '',
+        supplierId: b.supplier,
+        initialQuantity: parseFloat(b.initial_quantity ?? '0'),
+        currentQuantity: parseFloat(b.current_quantity ?? '0'),
+        unitCost: parseFloat(b.unit_cost ?? '0'),
+        status: b.status as any,
+        notes: b.quality_notes ?? '',
+        createdAt: b.created_at,
+        updatedAt: b.updated_at,
+      });
+
+      // Map backend → StockMovement
+      const mapMovement = (m: any): StockMovement => ({
+        id: m.id,
+        organizationId: '',
+        inventoryItemId: m.inventory_item,
+        productId: '',
+        movementType: m.movement_type as any,
+        direction: m.direction as any,
+        quantity: parseFloat(m.quantity ?? '0'),
+        unitCost: parseFloat(m.unit_cost ?? '0'),
+        totalCost: parseFloat(m.total_cost ?? '0'),
+        previousBalance: 0,
+        newBalance: 0,
+        performedBy: m.performed_by_name ?? '',
+        movementDate: m.movement_date ?? m.created_at,
+        reason: m.reason ?? '',
+        notes: m.notes ?? '',
+        createdAt: m.created_at,
+      });
+
+      // Map backend → InventoryAlert
+      const mapAlert = (a: any): InventoryAlert => ({
+        id: a.id,
+        organizationId: '',
+        productId: a.product,
+        inventoryItemId: '',
+        alertType: a.alert_type as any,
+        priority: a.severity as any,
+        message: a.message,
+        isActive: a.is_active ?? true,
+        isAcknowledged: !!a.acknowledged_at,
+        isResolved: !a.is_active,
+        thresholdValue: 0,
+        currentValue: 0,
+        createdAt: a.created_at,
+        updatedAt: a.updated_at,
+      });
+
+      const mappedProducts = rawProducts.map(mapProduct);
+      const mappedItems = rawItems.map(mapItem);
+      
+      // Recalculate inventory item statuses based on actual quantities and thresholds
+      mappedItems.forEach(item => {
+        const qty = item.quantityOnHand || 0;
+        const product = mappedProducts.find(p => p.id === item.productId);
+        if (product) {
+          if (qty <= 0) {
+            item.status = 'OUT_OF_STOCK';
+          } else if (qty <= product.minStockLevel) {
+            item.status = 'LOW_STOCK';
+          } else if (qty >= product.maxStockLevel) {
+            item.status = 'OVER_STOCK';
+          } else {
+            item.status = 'IN_STOCK';
+          }
+        }
+      });
+      
+      const mappedBatches = rawBatches.map(mapBatch);
+      const mappedMovements = rawMovements.map(mapMovement);
+      const mappedAlerts = rawAlerts.map(mapAlert);
+
+      // Build lookup maps
+      const invByProduct = new Map<string, InventoryItem>();
+      mappedItems.forEach(i => invByProduct.set(i.productId, i));
+
+      const batchesByItem = new Map<string, InventoryBatch[]>();
+      mappedBatches.forEach(b => {
+        const arr = batchesByItem.get(b.inventoryItemId) ?? [];
+        arr.push(b);
+        batchesByItem.set(b.inventoryItemId, arr);
+      });
+
+      const movementsByItem = new Map<string, StockMovement[]>();
+      mappedMovements.forEach(m => {
+        const arr = movementsByItem.get(m.inventoryItemId) ?? [];
+        arr.push(m);
+        movementsByItem.set(m.inventoryItemId, arr);
+      });
+
+      const enriched: EnrichedProduct[] = mappedProducts.map(p => {
+        const inv = invByProduct.get(p.id);
+        const batches = inv ? (batchesByItem.get(inv.id) ?? []) : [];
+        const movements = inv ? (movementsByItem.get(inv.id) ?? []) : [];
+        return { ...p, inventoryItem: inv, batches, movements };
+      });
+
+      // Build summary — use the corrected local calculations
+      const localLowStock = mappedItems.filter(i => i.status === 'LOW_STOCK').length;
+      const localOutOfStock = mappedItems.filter(i => i.status === 'OUT_OF_STOCK').length;
+      const localExpiring = mappedBatches.filter(b => { const d = daysUntilExpiry(b.expiryDate); return d > 0 && d <= 90; }).length;
+      const localAlerts = mappedAlerts.filter(a => a.isActive).length;
+      const localValue = mappedItems.reduce((s, i) => s + (i.totalStockValue || 0), 0);
+
+      const summaryData = {
+        totalProducts: statsData.total_products ?? mappedProducts.length,
+        totalStockValue: statsData.total_value ?? localValue,
+        lowStockCount: statsData.low_stock_count ?? localLowStock,
+        outOfStockCount: statsData.out_of_stock_count ?? localOutOfStock,
+        expiringBatchCount: statsData.expiring_soon_count ?? localExpiring,
+        activeAlerts: statsData.active_alerts ?? localAlerts,
+        pendingPurchaseOrders: statsData.pending_orders ?? 0,
+      };
 
       setProducts(abcClassify(enriched));
       setSummary(summaryData);
-      setAllMovements(movements);
-      setAllAlerts(alerts);
+      setAllMovements(mappedMovements);
+      setAllAlerts(mappedAlerts);
     } catch (err) {
       console.error('Inventory load error', err);
       toast.error('Erreur lors du chargement de l\'inventaire');
@@ -278,7 +465,18 @@ export function InventoryScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const onRefresh = useCallback(() => { setRefreshing(true); loadData(); }, [loadData]);
+  const onRefresh = useCallback(async () => { 
+    console.log('🔄 Manual refresh triggered');
+    setRefreshing(true); 
+    try {
+      await loadData();
+      console.log('✅ Refresh completed');
+    } catch (error) {
+      console.error('❌ Refresh failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadData]);
 
   // ─── Filtering & sorting ─────────────────────────────────
   const filteredProducts = useMemo(() => {
@@ -287,7 +485,18 @@ export function InventoryScreen() {
     if (catalogFilter === 'LOW_STOCK') {
       result = result.filter(p => p.inventoryItem?.status === 'LOW_STOCK' || p.inventoryItem?.status === 'OUT_OF_STOCK');
     } else if (catalogFilter === 'EXPIRING') {
-      result = result.filter(p => p.batches.some(b => { const d = daysUntilExpiry(b.expiryDate); return d > 0 && d <= 90; }));
+      result = result.filter(p => {
+        // Check both product-level and batch-level expiration
+        const productExpiring = p.expirationDate ? (() => {
+          const d = daysUntilExpiry(p.expirationDate);
+          return d > 0 && d <= 90;
+        })() : false;
+        const batchExpiring = p.batches.some(b => { 
+          const d = daysUntilExpiry(b.expiryDate); 
+          return d > 0 && d <= 90; 
+        });
+        return productExpiring || batchExpiring;
+      });
     } else if (catalogFilter !== 'ALL') {
       result = result.filter(p => p.category === catalogFilter);
     }
@@ -311,8 +520,15 @@ export function InventoryScreen() {
         case 'value': cmp = (a.inventoryItem?.totalStockValue || 0) - (b.inventoryItem?.totalStockValue || 0); break;
         case 'margin': cmp = InventoryUtils.calculateMargin(a.costPrice, a.sellingPrice) - InventoryUtils.calculateMargin(b.costPrice, b.sellingPrice); break;
         case 'expiry': {
-          const aMin = a.batches.length ? Math.min(...a.batches.map(bt => daysUntilExpiry(bt.expiryDate))) : 9999;
-          const bMin = b.batches.length ? Math.min(...b.batches.map(bt => daysUntilExpiry(bt.expiryDate))) : 9999;
+          // Priority: product expiration date, then earliest batch expiration
+          const aProductExpiry = a.expirationDate ? daysUntilExpiry(a.expirationDate) : 9999;
+          const aBatchExpiry = a.batches.length ? Math.min(...a.batches.map(bt => daysUntilExpiry(bt.expiryDate))) : 9999;
+          const aMin = Math.min(aProductExpiry, aBatchExpiry);
+          
+          const bProductExpiry = b.expirationDate ? daysUntilExpiry(b.expirationDate) : 9999;
+          const bBatchExpiry = b.batches.length ? Math.min(...b.batches.map(bt => daysUntilExpiry(bt.expiryDate))) : 9999;
+          const bMin = Math.min(bProductExpiry, bBatchExpiry);
+          
           cmp = aMin - bMin;
           break;
         }
@@ -338,17 +554,15 @@ export function InventoryScreen() {
   const handleDeleteProduct = useCallback(async () => {
     if (!deletingProduct) return;
     try {
-      const db = DatabaseService.getInstance();
-      // Check if product has active stock — warn user
+      const api = ApiService.getInstance();
       const inv = deletingProduct.inventoryItem;
       if (inv && inv.quantityOnHand > 0) {
         toast.warning(`Attention: ${inv.quantityOnHand} unités en stock seront perdues`);
       }
-      await db.deleteProduct(deletingProduct.id);
+      await api.delete(`/inventory/products/${deletingProduct.id}/`);
       toast.success(`${deletingProduct.name} supprimé`);
       setShowDeleteConfirm(false);
       setDeletingProduct(null);
-      // Collapse any expanded card to avoid stale reference
       setExpandedId(null);
       loadData();
     } catch {
@@ -358,12 +572,12 @@ export function InventoryScreen() {
 
   const handleAlertAction = useCallback(async (alert: InventoryAlert, action: 'acknowledge' | 'resolve') => {
     try {
-      const db = DatabaseService.getInstance();
+      const api = ApiService.getInstance();
       if (action === 'acknowledge') {
-        await db.acknowledgeAlert(alert.id, 'admin');
+        await api.patch(`/inventory/alerts/${alert.id}/`, { acknowledged: true });
         toast.info('Alerte acquittée');
       } else {
-        await db.resolveAlert(alert.id, 'admin', 'Résolu manuellement');
+        await api.patch(`/inventory/alerts/${alert.id}/`, { is_active: false });
         toast.success('Alerte résolue');
       }
       loadData();
@@ -371,6 +585,306 @@ export function InventoryScreen() {
       toast.error('Erreur lors de la mise à jour');
     }
   }, [loadData]);
+
+  // ─── Import: Template data (100 realistic medications for DRC/Africa pharmacy) ───
+  const TEMPLATE_MEDICATIONS = useMemo(() => [
+    { name: 'Paracétamol 500mg', generic_name: 'Paracétamol', sku: 'PARA-500', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Denk Pharma', cost_price: 500, selling_price: 1000, quantity: 200, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Amoxicilline 500mg', generic_name: 'Amoxicilline', sku: 'AMOX-500', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '500mg', manufacturer: 'Sandoz', cost_price: 800, selling_price: 1500, quantity: 150, reorder_level: 40, min_stock_level: 15, max_stock_level: 400, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Ibuprofène 400mg', generic_name: 'Ibuprofène', sku: 'IBU-400', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '400mg', manufacturer: 'Ratiopharm', cost_price: 600, selling_price: 1200, quantity: 180, reorder_level: 40, min_stock_level: 15, max_stock_level: 450, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Ciprofloxacine 500mg', generic_name: 'Ciprofloxacine', sku: 'CIPRO-500', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Bayer', cost_price: 1200, selling_price: 2500, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Métronidazole 500mg', generic_name: 'Métronidazole', sku: 'METRO-500', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Sanofi', cost_price: 700, selling_price: 1400, quantity: 120, reorder_level: 35, min_stock_level: 15, max_stock_level: 350, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Oméprazole 20mg', generic_name: 'Oméprazole', sku: 'OMEP-20', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '20mg', manufacturer: 'Medis', cost_price: 900, selling_price: 1800, quantity: 130, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Diclofénac 50mg', generic_name: 'Diclofénac', sku: 'DICLO-50', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '50mg', manufacturer: 'Novartis', cost_price: 500, selling_price: 1000, quantity: 200, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Artéméther-Luméfantrine', generic_name: 'Artéméther-Luméfantrine', sku: 'ALUM-20', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '20/120mg', manufacturer: 'Novartis', cost_price: 2000, selling_price: 4000, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antipaludéen - Coartem' },
+    { name: 'Quinine Sulfate 300mg', generic_name: 'Quinine', sku: 'QUIN-300', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '300mg', manufacturer: 'IDA Foundation', cost_price: 1500, selling_price: 3000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Paludisme sévère' },
+    { name: 'Cotrimoxazole 480mg', generic_name: 'Sulfaméthoxazole/Triméthoprime', sku: 'COTRI-480', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '400/80mg', manufacturer: 'Cipla', cost_price: 400, selling_price: 800, quantity: 250, reorder_level: 60, min_stock_level: 25, max_stock_level: 600, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Doxycycline 100mg', generic_name: 'Doxycycline', sku: 'DOXY-100', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '100mg', manufacturer: 'Pfizer', cost_price: 600, selling_price: 1200, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Azithromycine 500mg', generic_name: 'Azithromycine', sku: 'AZITH-500', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Pfizer', cost_price: 1500, selling_price: 3000, quantity: 70, reorder_level: 20, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Zithromax' },
+    { name: 'Érythromycine 500mg', generic_name: 'Érythromycine', sku: 'ERYTH-500', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Abbott', cost_price: 800, selling_price: 1600, quantity: 90, reorder_level: 25, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Ceftriaxone 1g', generic_name: 'Ceftriaxone', sku: 'CEFT-1G', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'VIAL', strength: '1g', manufacturer: 'Roche', cost_price: 3000, selling_price: 6000, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Injectable IM/IV' },
+    { name: 'Gentamicine 80mg/2ml', generic_name: 'Gentamicine', sku: 'GENT-80', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'AMPOULE', strength: '80mg/2ml', manufacturer: 'Medochemie', cost_price: 1000, selling_price: 2000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Cloxacilline 500mg', generic_name: 'Cloxacilline', sku: 'CLOX-500', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '500mg', manufacturer: 'Strides', cost_price: 900, selling_price: 1800, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Ampicilline 500mg', generic_name: 'Ampicilline', sku: 'AMPI-500', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '500mg', manufacturer: 'Cipla', cost_price: 700, selling_price: 1400, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Céfixime 200mg', generic_name: 'Céfixime', sku: 'CEFIX-200', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '200mg', manufacturer: 'Lupin', cost_price: 1200, selling_price: 2500, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Fluconazole 150mg', generic_name: 'Fluconazole', sku: 'FLUCO-150', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '150mg', manufacturer: 'Pfizer', cost_price: 1000, selling_price: 2000, quantity: 80, reorder_level: 20, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Diflucan' },
+    { name: 'Kétoconazole 200mg', generic_name: 'Kétoconazole', sku: 'KETO-200', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '200mg', manufacturer: 'Janssen', cost_price: 800, selling_price: 1600, quantity: 70, reorder_level: 20, min_stock_level: 10, max_stock_level: 180, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Mébendazole 100mg', generic_name: 'Mébendazole', sku: 'MEBEN-100', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '100mg', manufacturer: 'Janssen', cost_price: 300, selling_price: 600, quantity: 300, reorder_level: 80, min_stock_level: 30, max_stock_level: 800, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Vermox - Antiparasitaire' },
+    { name: 'Albendazole 400mg', generic_name: 'Albendazole', sku: 'ALBEN-400', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '400mg', manufacturer: 'GSK', cost_price: 400, selling_price: 800, quantity: 250, reorder_level: 60, min_stock_level: 25, max_stock_level: 600, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Zentel' },
+    { name: 'Métoclopramide 10mg', generic_name: 'Métoclopramide', sku: 'METOC-10', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '10mg', manufacturer: 'Sanofi', cost_price: 400, selling_price: 800, quantity: 150, reorder_level: 40, min_stock_level: 15, max_stock_level: 400, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Primperan - Antiémétique' },
+    { name: 'Loperamide 2mg', generic_name: 'Lopéramide', sku: 'LOPER-2', category: 'OTC', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '2mg', manufacturer: 'Janssen', cost_price: 500, selling_price: 1000, quantity: 180, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Imodium' },
+    { name: 'SRO (Sels de Réhydratation)', generic_name: 'SRO', sku: 'SRO-SACH', category: 'OTC', dosage_form: 'POWDER', unit_of_measure: 'BOX', strength: '20.5g/sachet', manufacturer: 'UNICEF', cost_price: 200, selling_price: 400, quantity: 500, reorder_level: 100, min_stock_level: 50, max_stock_level: 1000, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Zinc 20mg', generic_name: 'Sulfate de Zinc', sku: 'ZINC-20', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '20mg', manufacturer: 'Nutriset', cost_price: 300, selling_price: 600, quantity: 300, reorder_level: 80, min_stock_level: 30, max_stock_level: 800, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Complément diarrhée enfant' },
+    { name: 'Salbutamol Aérosol 100mcg', generic_name: 'Salbutamol', sku: 'SALB-100', category: 'MEDICATION', dosage_form: 'INHALER', unit_of_measure: 'UNIT', strength: '100mcg/dose', manufacturer: 'GSK', cost_price: 3000, selling_price: 6000, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Ventoline' },
+    { name: 'Prednisolone 5mg', generic_name: 'Prednisolone', sku: 'PRED-5', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Pfizer', cost_price: 600, selling_price: 1200, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Dexaméthasone 4mg', generic_name: 'Dexaméthasone', sku: 'DEXA-4', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '4mg', manufacturer: 'Medochemie', cost_price: 500, selling_price: 1000, quantity: 120, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Hydrocortisone 1% Crème', generic_name: 'Hydrocortisone', sku: 'HYDRO-1CR', category: 'MEDICATION', dosage_form: 'CREAM', unit_of_measure: 'UNIT', strength: '1%', manufacturer: 'Pfizer', cost_price: 1500, selling_price: 3000, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Clotrimazole Crème 1%', generic_name: 'Clotrimazole', sku: 'CLOTRI-CR', category: 'MEDICATION', dosage_form: 'CREAM', unit_of_measure: 'UNIT', strength: '1%', manufacturer: 'Bayer', cost_price: 1200, selling_price: 2500, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antifongique topique' },
+    { name: 'Miconazole Crème 2%', generic_name: 'Miconazole', sku: 'MICON-CR', category: 'MEDICATION', dosage_form: 'CREAM', unit_of_measure: 'UNIT', strength: '2%', manufacturer: 'Janssen', cost_price: 1300, selling_price: 2600, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Nystatine Suspension Orale', generic_name: 'Nystatine', sku: 'NYST-SUSP', category: 'MEDICATION', dosage_form: 'SUSPENSION', unit_of_measure: 'BOTTLE', strength: '100 000 UI/ml', manufacturer: 'Bristol-Myers', cost_price: 2000, selling_price: 4000, quantity: 40, reorder_level: 10, min_stock_level: 5, max_stock_level: 100, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Amlodipine 5mg', generic_name: 'Amlodipine', sku: 'AMLO-5', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Pfizer', cost_price: 800, selling_price: 1600, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Norvasc - Antihypertenseur' },
+    { name: 'Énalapril 10mg', generic_name: 'Énalapril', sku: 'ENAL-10', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '10mg', manufacturer: 'Merck', cost_price: 700, selling_price: 1400, quantity: 90, reorder_level: 25, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Losartan 50mg', generic_name: 'Losartan', sku: 'LOSAR-50', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '50mg', manufacturer: 'Merck', cost_price: 900, selling_price: 1800, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Hydrochlorothiazide 25mg', generic_name: 'Hydrochlorothiazide', sku: 'HCTZ-25', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '25mg', manufacturer: 'Novartis', cost_price: 400, selling_price: 800, quantity: 150, reorder_level: 40, min_stock_level: 15, max_stock_level: 400, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Diurétique' },
+    { name: 'Furosémide 40mg', generic_name: 'Furosémide', sku: 'FURO-40', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '40mg', manufacturer: 'Sanofi', cost_price: 400, selling_price: 800, quantity: 120, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Lasix' },
+    { name: 'Spironolactone 25mg', generic_name: 'Spironolactone', sku: 'SPIRO-25', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '25mg', manufacturer: 'Pfizer', cost_price: 700, selling_price: 1400, quantity: 70, reorder_level: 20, min_stock_level: 10, max_stock_level: 180, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Atenolol 50mg', generic_name: 'Aténolol', sku: 'ATEN-50', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '50mg', manufacturer: 'AstraZeneca', cost_price: 600, selling_price: 1200, quantity: 90, reorder_level: 25, min_stock_level: 10, max_stock_level: 250, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Nifédipine 20mg Retard', generic_name: 'Nifédipine', sku: 'NIFE-20', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '20mg', manufacturer: 'Bayer', cost_price: 800, selling_price: 1600, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Libération prolongée' },
+    { name: 'Metformine 500mg', generic_name: 'Metformine', sku: 'METF-500', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Merck', cost_price: 500, selling_price: 1000, quantity: 150, reorder_level: 40, min_stock_level: 15, max_stock_level: 400, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Glucophage - Diabète type 2' },
+    { name: 'Glibenclamide 5mg', generic_name: 'Glibenclamide', sku: 'GLIB-5', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Sanofi', cost_price: 400, selling_price: 800, quantity: 120, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Daonil' },
+    { name: 'Insuline NPH 100UI/ml', generic_name: 'Insuline Isophane', sku: 'INSU-NPH', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'VIAL', strength: '100UI/ml', manufacturer: 'Novo Nordisk', cost_price: 8000, selling_price: 15000, quantity: 20, reorder_level: 8, min_stock_level: 3, max_stock_level: 50, requires_prescription: true, storage_condition: 'REFRIGERATED', notes: 'Conserver au réfrigérateur 2-8°C' },
+    { name: 'Insuline Rapide 100UI/ml', generic_name: 'Insuline Soluble', sku: 'INSU-RAP', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'VIAL', strength: '100UI/ml', manufacturer: 'Novo Nordisk', cost_price: 8000, selling_price: 15000, quantity: 15, reorder_level: 5, min_stock_level: 3, max_stock_level: 40, requires_prescription: true, storage_condition: 'REFRIGERATED', notes: 'Conserver au réfrigérateur 2-8°C' },
+    { name: 'Aspirine 100mg', generic_name: 'Acide acétylsalicylique', sku: 'ASP-100', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '100mg', manufacturer: 'Bayer', cost_price: 300, selling_price: 600, quantity: 200, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Dose cardiaque' },
+    { name: 'Clopidogrel 75mg', generic_name: 'Clopidogrel', sku: 'CLOPI-75', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '75mg', manufacturer: 'Sanofi', cost_price: 1500, selling_price: 3000, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Plavix' },
+    { name: 'Warfarine 5mg', generic_name: 'Warfarine', sku: 'WARF-5', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Bristol-Myers', cost_price: 1200, selling_price: 2500, quantity: 40, reorder_level: 10, min_stock_level: 5, max_stock_level: 100, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Coumadine - Anticoagulant' },
+    { name: 'Fer + Acide Folique', generic_name: 'Sulfate Ferreux/Acide Folique', sku: 'FER-FOL', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '200mg/0.4mg', manufacturer: 'WHO Essential', cost_price: 200, selling_price: 500, quantity: 400, reorder_level: 100, min_stock_level: 50, max_stock_level: 1000, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Grossesse & anémie' },
+    { name: 'Acide Folique 5mg', generic_name: 'Acide Folique', sku: 'AFOL-5', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Medis', cost_price: 200, selling_price: 400, quantity: 300, reorder_level: 80, min_stock_level: 30, max_stock_level: 800, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Vitamine B Complexe', generic_name: 'Vitamine B Complexe', sku: 'VITB-COMP', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '', manufacturer: 'Roche', cost_price: 400, selling_price: 800, quantity: 200, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Vitamine C 500mg', generic_name: 'Acide ascorbique', sku: 'VITC-500', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg', manufacturer: 'Roche', cost_price: 300, selling_price: 600, quantity: 250, reorder_level: 60, min_stock_level: 25, max_stock_level: 600, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Calcium + Vitamine D3', generic_name: 'Carbonate de Calcium/Cholécalciférol', sku: 'CALC-VD3', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '500mg/400UI', manufacturer: 'Bayer', cost_price: 600, selling_price: 1200, quantity: 120, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Multivitamines Adulte', generic_name: 'Multivitamines', sku: 'MULTI-ADU', category: 'SUPPLEMENT', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '', manufacturer: 'Pfizer', cost_price: 500, selling_price: 1000, quantity: 180, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Amoxicilline Sirop 250mg/5ml', generic_name: 'Amoxicilline', sku: 'AMOX-SYR', category: 'MEDICATION', dosage_form: 'SYRUP', unit_of_measure: 'BOTTLE', strength: '250mg/5ml', manufacturer: 'Sandoz', cost_price: 2000, selling_price: 4000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '100ml' },
+    { name: 'Paracétamol Sirop 120mg/5ml', generic_name: 'Paracétamol', sku: 'PARA-SYR', category: 'MEDICATION', dosage_form: 'SYRUP', unit_of_measure: 'BOTTLE', strength: '120mg/5ml', manufacturer: 'Sanofi', cost_price: 1500, selling_price: 3000, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Doliprane pédiatrique 100ml' },
+    { name: 'Ibuprofène Sirop 100mg/5ml', generic_name: 'Ibuprofène', sku: 'IBU-SYR', category: 'MEDICATION', dosage_form: 'SYRUP', unit_of_measure: 'BOTTLE', strength: '100mg/5ml', manufacturer: 'Ratiopharm', cost_price: 1800, selling_price: 3500, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '100ml' },
+    { name: 'Cotrimoxazole Sirop', generic_name: 'Sulfaméthoxazole/Triméthoprime', sku: 'COTRI-SYR', category: 'MEDICATION', dosage_form: 'SYRUP', unit_of_measure: 'BOTTLE', strength: '200/40mg per 5ml', manufacturer: 'Cipla', cost_price: 1500, selling_price: 3000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '100ml Bactrim pédiatrique' },
+    { name: 'Chlorphénamine 4mg', generic_name: 'Chlorphéniramine', sku: 'CHLOR-4', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '4mg', manufacturer: 'Novartis', cost_price: 300, selling_price: 600, quantity: 200, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antihistaminique' },
+    { name: 'Cétirizine 10mg', generic_name: 'Cétirizine', sku: 'CETIR-10', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '10mg', manufacturer: 'UCB', cost_price: 600, selling_price: 1200, quantity: 150, reorder_level: 40, min_stock_level: 15, max_stock_level: 400, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Zyrtec' },
+    { name: 'Loratadine 10mg', generic_name: 'Loratadine', sku: 'LORAT-10', category: 'OTC', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '10mg', manufacturer: 'Schering', cost_price: 500, selling_price: 1000, quantity: 160, reorder_level: 40, min_stock_level: 15, max_stock_level: 400, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Claritine' },
+    { name: 'Ranitidine 150mg', generic_name: 'Ranitidine', sku: 'RANIT-150', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '150mg', manufacturer: 'GSK', cost_price: 500, selling_price: 1000, quantity: 110, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Zantac' },
+    { name: 'Hydroxyde Aluminium/Magnésium', generic_name: 'Antiacide', sku: 'ANTAC-SUSP', category: 'OTC', dosage_form: 'SUSPENSION', unit_of_measure: 'BOTTLE', strength: '', manufacturer: 'Sanofi', cost_price: 1500, selling_price: 3000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Maalox 250ml' },
+    { name: 'Tramadol 50mg', generic_name: 'Tramadol', sku: 'TRAM-50', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '50mg', manufacturer: 'Grünenthal', cost_price: 800, selling_price: 1600, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antalgique opioïde faible' },
+    { name: 'Morphine Sulfate 10mg', generic_name: 'Morphine', sku: 'MORPH-10', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '10mg', manufacturer: 'Mundipharma', cost_price: 2000, selling_price: 4000, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Substance contrôlée' },
+    { name: 'Diazépam 5mg', generic_name: 'Diazépam', sku: 'DIAZ-5', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Roche', cost_price: 600, selling_price: 1200, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Valium - Anxiolytique' },
+    { name: 'Phénobarbital 100mg', generic_name: 'Phénobarbital', sku: 'PHENO-100', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '100mg', manufacturer: 'Sanofi', cost_price: 400, selling_price: 800, quantity: 70, reorder_level: 20, min_stock_level: 10, max_stock_level: 180, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antiépileptique' },
+    { name: 'Carbamazépine 200mg', generic_name: 'Carbamazépine', sku: 'CARBA-200', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '200mg', manufacturer: 'Novartis', cost_price: 700, selling_price: 1400, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Tegretol' },
+    { name: 'Phénytoïne 100mg', generic_name: 'Phénytoïne', sku: 'PHENY-100', category: 'MEDICATION', dosage_form: 'CAPSULE', unit_of_measure: 'CAPSULE', strength: '100mg', manufacturer: 'Pfizer', cost_price: 600, selling_price: 1200, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Di-Hydan' },
+    { name: 'Amitriptyline 25mg', generic_name: 'Amitriptyline', sku: 'AMIT-25', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '25mg', manufacturer: 'Ratiopharm', cost_price: 500, selling_price: 1000, quantity: 70, reorder_level: 20, min_stock_level: 10, max_stock_level: 180, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antidépresseur / Douleur neuropathique' },
+    { name: 'Halopéridol 5mg', generic_name: 'Halopéridol', sku: 'HALO-5', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '5mg', manufacturer: 'Janssen', cost_price: 500, selling_price: 1000, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Antipsychotique' },
+    { name: 'Chlorpromazine 100mg', generic_name: 'Chlorpromazine', sku: 'CHLORP-100', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '100mg', manufacturer: 'Sanofi', cost_price: 600, selling_price: 1200, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Largactil' },
+    { name: 'Oxytocine 10UI/ml', generic_name: 'Oxytocine', sku: 'OXYTO-10', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'AMPOULE', strength: '10UI/ml', manufacturer: 'Novartis', cost_price: 2000, selling_price: 4000, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: true, storage_condition: 'REFRIGERATED', notes: 'Conserver entre 2-8°C' },
+    { name: 'Misoprostol 200mcg', generic_name: 'Misoprostol', sku: 'MISO-200', category: 'MEDICATION', dosage_form: 'TABLET', unit_of_measure: 'TABLET', strength: '200mcg', manufacturer: 'Pfizer', cost_price: 1500, selling_price: 3000, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Cytotec' },
+    { name: 'Sulfate de Magnésium 50%', generic_name: 'Sulfate de Magnésium', sku: 'MGSO4-50', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'AMPOULE', strength: '50% (10ml)', manufacturer: 'IDA Foundation', cost_price: 1500, selling_price: 3000, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Éclampsie / Pré-éclampsie' },
+    { name: 'Lidocaïne 2%', generic_name: 'Lidocaïne', sku: 'LIDO-2', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'VIAL', strength: '2% (20ml)', manufacturer: 'AstraZeneca', cost_price: 2000, selling_price: 4000, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Anesthésique local' },
+    { name: 'Kétamine 50mg/ml', generic_name: 'Kétamine', sku: 'KETA-50', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'VIAL', strength: '50mg/ml (10ml)', manufacturer: 'Pfizer', cost_price: 5000, selling_price: 10000, quantity: 15, reorder_level: 5, min_stock_level: 3, max_stock_level: 40, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Anesthésique - Substance contrôlée' },
+    { name: 'Atropine 1mg/ml', generic_name: 'Atropine', sku: 'ATRO-1', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'AMPOULE', strength: '1mg/ml', manufacturer: 'Medochemie', cost_price: 800, selling_price: 1600, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Urgence' },
+    { name: 'Adrénaline 1mg/ml', generic_name: 'Épinéphrine', sku: 'ADRE-1', category: 'MEDICATION', dosage_form: 'INJECTION', unit_of_measure: 'AMPOULE', strength: '1mg/ml', manufacturer: 'Medochemie', cost_price: 1200, selling_price: 2500, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Urgence - Anaphylaxie' },
+    { name: 'Glucosé 5% 500ml', generic_name: 'Dextrose', sku: 'GLUC-5-500', category: 'CONSUMABLE', dosage_form: 'INFUSION', unit_of_measure: 'BOTTLE', strength: '5%', manufacturer: 'Baxter', cost_price: 2500, selling_price: 5000, quantity: 50, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Perfusion' },
+    { name: 'NaCl 0.9% 500ml', generic_name: 'Chlorure de Sodium', sku: 'NACL-500', category: 'CONSUMABLE', dosage_form: 'INFUSION', unit_of_measure: 'BOTTLE', strength: '0.9%', manufacturer: 'Baxter', cost_price: 2000, selling_price: 4000, quantity: 60, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: 'Sérum physiologique' },
+    { name: 'Ringer Lactate 500ml', generic_name: 'Ringer Lactate', sku: 'RLACT-500', category: 'CONSUMABLE', dosage_form: 'INFUSION', unit_of_measure: 'BOTTLE', strength: '', manufacturer: 'Baxter', cost_price: 2500, selling_price: 5000, quantity: 50, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: true, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Eau pour injection 10ml', generic_name: 'Eau pour préparation injectable', sku: 'EAU-INJ', category: 'CONSUMABLE', dosage_form: 'INJECTION', unit_of_measure: 'AMPOULE', strength: '10ml', manufacturer: 'Baxter', cost_price: 300, selling_price: 600, quantity: 200, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Seringue 5ml', generic_name: 'Seringue jetable', sku: 'SER-5ML', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '5ml', manufacturer: 'BD', cost_price: 200, selling_price: 500, quantity: 500, reorder_level: 150, min_stock_level: 50, max_stock_level: 1500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Avec aiguille' },
+    { name: 'Seringue 10ml', generic_name: 'Seringue jetable', sku: 'SER-10ML', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '10ml', manufacturer: 'BD', cost_price: 250, selling_price: 600, quantity: 400, reorder_level: 120, min_stock_level: 40, max_stock_level: 1200, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Gants Latex (Boîte 100)', generic_name: 'Gants examen latex', sku: 'GANT-LAT', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'BOX', strength: 'M', manufacturer: 'Supermax', cost_price: 5000, selling_price: 9000, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Boîte de 100' },
+    { name: 'Compresses stériles 10x10', generic_name: 'Compresse stérile', sku: 'COMP-10', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'PACK', strength: '10x10cm', manufacturer: 'Hartmann', cost_price: 1500, selling_price: 3000, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Paquet de 10' },
+    { name: 'Sparadrap 2.5cm x 5m', generic_name: 'Sparadrap', sku: 'SPAR-25', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '2.5cm x 5m', manufacturer: 'BSN Medical', cost_price: 1000, selling_price: 2000, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Bande élastique 10cm', generic_name: 'Bande de contention', sku: 'BAND-10', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '10cm x 4m', manufacturer: 'Hartmann', cost_price: 800, selling_price: 1500, quantity: 80, reorder_level: 25, min_stock_level: 10, max_stock_level: 200, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Coton hydrophile 100g', generic_name: 'Coton', sku: 'COT-100', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '100g', manufacturer: 'Hartmann', cost_price: 800, selling_price: 1500, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Fil de suture Soie 2/0', generic_name: 'Suture soie', sku: 'SUT-SOIE', category: 'SURGICAL_SUPPLY', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '2/0', manufacturer: 'Ethicon', cost_price: 3000, selling_price: 6000, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Avec aiguille' },
+    { name: 'Cathéter IV 20G', generic_name: 'Cathéter intraveineux', sku: 'CATH-20G', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '20G', manufacturer: 'BD', cost_price: 500, selling_price: 1000, quantity: 200, reorder_level: 60, min_stock_level: 25, max_stock_level: 600, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Perfuseur standard', generic_name: 'Set de perfusion', sku: 'PERF-STD', category: 'CONSUMABLE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '', manufacturer: 'BD', cost_price: 500, selling_price: 1000, quantity: 150, reorder_level: 50, min_stock_level: 20, max_stock_level: 400, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Thermomètre digital', generic_name: 'Thermomètre', sku: 'THERM-DIG', category: 'MEDICAL_DEVICE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '', manufacturer: 'Omron', cost_price: 3000, selling_price: 6000, quantity: 20, reorder_level: 5, min_stock_level: 3, max_stock_level: 50, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Tensiomètre électronique', generic_name: 'Tensiomètre', sku: 'TENSI-ELE', category: 'MEDICAL_DEVICE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '', manufacturer: 'Omron', cost_price: 25000, selling_price: 45000, quantity: 5, reorder_level: 2, min_stock_level: 1, max_stock_level: 15, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Glucomètre + Bandelettes', generic_name: 'Glucomètre', sku: 'GLUCO-KIT', category: 'MEDICAL_DEVICE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '', manufacturer: 'Accu-Chek', cost_price: 20000, selling_price: 35000, quantity: 8, reorder_level: 3, min_stock_level: 1, max_stock_level: 20, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Avec 50 bandelettes' },
+    { name: 'Test de Grossesse (TDR)', generic_name: 'Test rapide hCG', sku: 'TEST-GROS', category: 'MEDICAL_DEVICE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '', manufacturer: 'Wondfo', cost_price: 500, selling_price: 2000, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Bandelette urinaire' },
+    { name: 'TDR Paludisme (Pf)', generic_name: 'Test rapide paludisme', sku: 'TDR-PALU', category: 'MEDICAL_DEVICE', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: '', manufacturer: 'SD Bioline', cost_price: 800, selling_price: 2500, quantity: 150, reorder_level: 50, min_stock_level: 20, max_stock_level: 500, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'P.falciparum' },
+    { name: 'Povidone-Iodée 10% 500ml', generic_name: 'Povidone-Iodée', sku: 'BETAD-500', category: 'CONSUMABLE', dosage_form: 'SOLUTION', unit_of_measure: 'BOTTLE', strength: '10%', manufacturer: 'Mundipharma', cost_price: 3000, selling_price: 6000, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Bétadine' },
+    { name: 'Chlorhexidine 0.5% 500ml', generic_name: 'Chlorhexidine', sku: 'CHLORHEX-500', category: 'CONSUMABLE', dosage_form: 'SOLUTION', unit_of_measure: 'BOTTLE', strength: '0.5%', manufacturer: 'Medis', cost_price: 2500, selling_price: 5000, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Alcool 70% 500ml', generic_name: 'Alcool isopropylique', sku: 'ALC-70', category: 'CONSUMABLE', dosage_form: 'SOLUTION', unit_of_measure: 'BOTTLE', strength: '70%', manufacturer: 'Medis', cost_price: 1500, selling_price: 3000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Peroxyde hydrogène 3% 500ml', generic_name: 'Eau oxygénée', sku: 'H2O2-3', category: 'CONSUMABLE', dosage_form: 'SOLUTION', unit_of_measure: 'BOTTLE', strength: '3%', manufacturer: 'Medis', cost_price: 1000, selling_price: 2000, quantity: 50, reorder_level: 15, min_stock_level: 5, max_stock_level: 120, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Lame de bistouri N°10', generic_name: 'Lame chirurgicale', sku: 'BIST-10', category: 'SURGICAL_SUPPLY', dosage_form: 'DEVICE', unit_of_measure: 'UNIT', strength: 'N°10', manufacturer: 'Swann-Morton', cost_price: 500, selling_price: 1000, quantity: 100, reorder_level: 30, min_stock_level: 10, max_stock_level: 300, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Boîte de 100' },
+    { name: 'Savon antiseptique 500ml', generic_name: 'Savon Chlorhexidine', sku: 'SAV-ANTI', category: 'PERSONAL_HYGIENE', dosage_form: 'SOLUTION', unit_of_measure: 'BOTTLE', strength: '', manufacturer: 'Medis', cost_price: 2000, selling_price: 4000, quantity: 40, reorder_level: 15, min_stock_level: 5, max_stock_level: 100, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Gel hydroalcoolique 500ml', generic_name: 'Solution hydroalcoolique', sku: 'GEL-HA', category: 'PERSONAL_HYGIENE', dosage_form: 'GEL', unit_of_measure: 'BOTTLE', strength: '', manufacturer: 'Anios', cost_price: 3000, selling_price: 6000, quantity: 30, reorder_level: 10, min_stock_level: 5, max_stock_level: 80, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Crème solaire SPF50', generic_name: 'Écran solaire', sku: 'SOLAIRE-50', category: 'COSMETIC', dosage_form: 'CREAM', unit_of_measure: 'UNIT', strength: 'SPF50', manufacturer: 'La Roche-Posay', cost_price: 8000, selling_price: 15000, quantity: 15, reorder_level: 5, min_stock_level: 2, max_stock_level: 40, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Vaseline pure 100g', generic_name: 'Vaseline', sku: 'VASEL-100', category: 'COSMETIC', dosage_form: 'OINTMENT', unit_of_measure: 'UNIT', strength: '100g', manufacturer: 'Unilever', cost_price: 1000, selling_price: 2000, quantity: 60, reorder_level: 20, min_stock_level: 10, max_stock_level: 150, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: '' },
+    { name: 'Couches bébé (Taille M)', generic_name: 'Couches jetables', sku: 'COUCH-M', category: 'BABY_CARE', dosage_form: 'DEVICE', unit_of_measure: 'PACK', strength: 'Taille M', manufacturer: 'Pampers', cost_price: 5000, selling_price: 8000, quantity: 25, reorder_level: 8, min_stock_level: 3, max_stock_level: 60, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'Paquet de 30' },
+    { name: 'Lait infantile 0-6 mois', generic_name: 'Formule infantile', sku: 'LAIT-06', category: 'BABY_CARE', dosage_form: 'POWDER', unit_of_measure: 'BOX', strength: '400g', manufacturer: 'Nestlé', cost_price: 6000, selling_price: 10000, quantity: 20, reorder_level: 5, min_stock_level: 3, max_stock_level: 50, requires_prescription: false, storage_condition: 'ROOM_TEMPERATURE', notes: 'NAN 1' },
+  ], []);
+
+  // ─── Import: Generate and download Excel template ────────
+  const handleDownloadTemplate = useCallback(async () => {
+    try {
+      const headers = [
+        'name', 'generic_name', 'sku', 'category', 'dosage_form',
+        'unit_of_measure', 'strength', 'manufacturer', 'cost_price',
+        'selling_price', 'quantity', 'reorder_level', 'min_stock_level',
+        'max_stock_level', 'requires_prescription', 'storage_condition', 'notes',
+      ];
+      const wsData = [headers, ...TEMPLATE_MEDICATIONS.map(m => headers.map(h => (m as any)[h] ?? ''))];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Column widths for readability
+      ws['!cols'] = [
+        { wch: 35 }, { wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+        { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 12 },
+        { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 30 },
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Modèle Inventaire');
+
+      // Add instruction sheet
+      const instrData = [
+        ['GUIDE D\'IMPORTATION INVENTAIRE'],
+        [''],
+        ['Colonnes obligatoires:', 'name (Nom du produit)'],
+        ['Colonnes optionnelles:', 'Toutes les autres colonnes'],
+        [''],
+        ['CATÉGORIES VALIDES:'],
+        ['MEDICATION', 'OTC', 'SUPPLEMENT', 'CONSUMABLE', 'MEDICAL_DEVICE', 'SURGICAL_SUPPLY', 'COSMETIC', 'BABY_CARE', 'PERSONAL_HYGIENE', 'LAB_REAGENT', 'OTHER'],
+        [''],
+        ['FORMES GALÉNIQUES VALIDES:'],
+        ['TABLET', 'CAPSULE', 'SYRUP', 'SUSPENSION', 'INJECTION', 'CREAM', 'OINTMENT', 'GEL', 'DROPS', 'INHALER', 'SUPPOSITORY', 'POWDER', 'SOLUTION', 'SPRAY', 'INFUSION', 'DEVICE', 'OTHER'],
+        [''],
+        ['UNITÉS DE MESURE VALIDES:'],
+        ['UNIT', 'TABLET', 'CAPSULE', 'ML', 'MG', 'G', 'VIAL', 'AMPOULE', 'BOTTLE', 'BOX', 'PACK'],
+        [''],
+        ['CONDITIONS DE STOCKAGE:'],
+        ['ROOM_TEMPERATURE', 'REFRIGERATED', 'FROZEN', 'COOL_DRY'],
+        [''],
+        ['NOTES:'],
+        ['- Le SKU est auto-généré si laissé vide'],
+        ['- Les prix sont en CDF (Franc Congolais)'],
+        ['- requires_prescription: true/false ou oui/non ou 1/0'],
+        ['- Si un SKU existe déjà, le produit sera mis à jour au lieu d\'être créé'],
+        ['- Les lignes avec des erreurs seront ignorées, les autres seront importées normalement'],
+      ];
+      const instrWs = XLSX.utils.aoa_to_sheet(instrData);
+      instrWs['!cols'] = [{ wch: 35 }, ...Array(10).fill({ wch: 18 })];
+      XLSX.utils.book_append_sheet(wb, instrWs, 'Instructions');
+
+      if (Platform.OS === 'web') {
+        XLSX.writeFile(wb, 'modele_inventaire.xlsx');
+        toast.success('Modèle téléchargé !');
+      } else {
+        // Mobile: write to temp then share
+        const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+        const uri = FileSystem.cacheDirectory + 'modele_inventaire.xlsx';
+        await FileSystem.writeAsStringAsync(uri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            dialogTitle: 'Exporter Modèle Inventaire',
+          });
+        } else {
+          toast.success('Fichier sauvegardé dans le cache');
+        }
+      }
+    } catch (err: any) {
+      console.error('Template download error:', err);
+      toast.error('Erreur lors du téléchargement du modèle');
+    }
+  }, [TEMPLATE_MEDICATIONS, toast]);
+
+  // ─── Import: Pick file & parse Excel ─────────────────────
+  const handlePickAndParseFile = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          'text/csv',
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+      const file = result.assets[0];
+      setImportLoading(true);
+      setImportResult(null);
+      setShowImportModal(true);
+
+      let data: any[];
+
+      if (Platform.OS === 'web') {
+        // Web: use fetch + arrayBuffer
+        const response = await fetch(file.uri);
+        const ab = await response.arrayBuffer();
+        const wb = XLSX.read(ab, { type: 'array' });
+        const sheetName = wb.SheetNames[0];
+        data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+      } else {
+        // Mobile: read base64 from file system
+        const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+        const wb = XLSX.read(base64, { type: 'base64' });
+        const sheetName = wb.SheetNames[0];
+        data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+      }
+
+      if (!data || data.length === 0) {
+        setImportLoading(false);
+        setImportResult({ error: 'Le fichier est vide ou ne contient pas de données valides.' });
+        return;
+      }
+
+      // Validate minimum: each row must have a 'name'
+      const validRows = data.filter((row: any) => row.name && String(row.name).trim());
+      const invalidCount = data.length - validRows.length;
+
+      if (validRows.length === 0) {
+        setImportLoading(false);
+        setImportResult({
+          error: 'Aucune ligne valide trouvée. Vérifiez que la colonne "name" est renseignée.',
+          totalRows: data.length,
+          invalidRows: invalidCount,
+        });
+        return;
+      }
+
+      // Normalize keys: trim whitespace, lowercase for safety
+      const normalizedRows = validRows.map((row: any) => {
+        const normalized: any = {};
+        Object.keys(row).forEach(key => {
+          const cleanKey = key.trim().toLowerCase().replace(/\s+/g, '_');
+          let val = row[key];
+          // Convert "TRUE"/"FALSE" strings
+          if (typeof val === 'string') {
+            const lower = val.trim().toLowerCase();
+            if (lower === 'true' || lower === 'oui') val = true;
+            if (lower === 'false' || lower === 'non') val = false;
+          }
+          normalized[cleanKey] = val;
+        });
+        return normalized;
+      });
+
+      // Send to backend
+      try {
+        const api = ApiService.getInstance();
+        const response = await api.post('/inventory/products/bulk-import/', {
+          products: normalizedRows,
+        });
+
+        if (response.success && response.data) {
+          setImportResult({
+            success: true,
+            ...response.data,
+            invalidRows: invalidCount,
+          });
+          // Reload inventory data
+          loadData();
+        } else {
+          setImportResult({
+            error: response.error?.message || 'Erreur lors de l\'importation.',
+            details: response.errors,
+          });
+        }
+      } catch (apiErr: any) {
+        setImportResult({
+          error: apiErr?.message || 'Erreur de connexion au serveur.',
+        });
+      }
+
+      setImportLoading(false);
+    } catch (err: any) {
+      console.error('Import error:', err);
+      setImportLoading(false);
+      if (err?.message?.includes('cancel') || err?.code === 'ERR_CANCELED') return;
+      setImportResult({ error: 'Erreur lors de la lecture du fichier: ' + (err?.message || 'Inconnue') });
+      setShowImportModal(true);
+    }
+  }, [loadData, toast]);
 
   // ─── Loading state ───────────────────────────────────────
   if (loading) {
@@ -400,16 +914,36 @@ export function InventoryScreen() {
           </View>
           <View style={styles.headerBtns}>
             <TouchableOpacity
-              style={[styles.btnOutline, products.length === 0 && { opacity: 0.4 }]}
-              onPress={() => {
-                if (products.length === 0) { toast.warning('Aucun produit disponible'); return; }
-                setAdjustProduct(products[0]); setShowAdjustModal(true);
-              }}
+              style={[styles.btnOutline, { borderColor: colors.info, opacity: refreshing ? 0.6 : 1 }]}
+              onPress={onRefresh}
+              disabled={refreshing}
               activeOpacity={0.7}
-              disabled={products.length === 0}
             >
-              <Ionicons name="swap-vertical" size={16} color={colors.primary} />
-              <Text style={styles.btnOutlineText}>Ajuster Stock</Text>
+              <Ionicons 
+                name={refreshing ? "sync" : "refresh-outline"} 
+                size={16} 
+                color={colors.info}
+                style={refreshing ? { transform: [{ rotate: '180deg' }] } : {}}
+              />
+              <Text style={[styles.btnOutlineText, { color: colors.info }]}>
+                {refreshing ? 'Actualisation...' : 'Actualiser'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnOutlineSuccess}
+              onPress={handleDownloadTemplate}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="download-outline" size={16} color="#10B981" />
+              <Text style={[styles.btnOutlineText, { color: '#10B981' }]}>Modèle Excel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnOutlineImport}
+              onPress={handlePickAndParseFile}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color={colors.info} />
+              <Text style={[styles.btnOutlineText, { color: colors.info }]}>Importer Excel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnFill}
@@ -522,7 +1056,37 @@ export function InventoryScreen() {
           products={products}
           onSelectProduct={setAdjustProduct}
           onClose={() => setShowAdjustModal(false)}
-          onSaved={() => { setShowAdjustModal(false); loadData(); }}
+          onSaved={(productId, newQty, newStatus) => {
+            console.log('🔄 Stock updated:', { productId, newQty, newStatus });
+            
+            // Immediately update the adjusted product in local state so UI is instant
+            setProducts(prev => {
+              const updated = prev.map(p => {
+                if (p.id !== productId) return p;
+                const updatedInv = p.inventoryItem
+                  ? { 
+                      ...p.inventoryItem, 
+                      quantityOnHand: newQty, 
+                      quantityAvailable: Math.max(0, newQty - (p.inventoryItem.quantityReserved || 0)), 
+                      status: newStatus as any,
+                      totalStockValue: newQty * (p.inventoryItem.averageCost || p.costPrice || 0),
+                      updatedAt: new Date().toISOString()
+                    }
+                  : undefined;
+                return { ...p, inventoryItem: updatedInv };
+              });
+              console.log('📦 Local state updated');
+              return updated;
+            });
+            
+            setShowAdjustModal(false);
+            
+            // Force refresh after a short delay to ensure backend sync
+            setTimeout(() => {
+              console.log('🔄 Reloading data from backend...');
+              loadData();
+            }, 500);
+          }}
         />
       )}
 
@@ -533,6 +1097,201 @@ export function InventoryScreen() {
           onCancel={() => { setShowDeleteConfirm(false); setDeletingProduct(null); }}
           onConfirm={handleDeleteProduct}
         />
+      )}
+
+      {/* ═══ IMPORT RESULTS MODAL ═══ */}
+      {showImportModal && (
+        <Modal transparent animationType="fade" visible>
+          <View style={modalS.backdrop}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={modalS.wrapper}>
+              <View style={[modalS.container, { maxHeight: '85%' }]}>
+                {/* Header */}
+                <View style={modalS.hdr}>
+                  <Text style={modalS.hdrTitle}>
+                    {importLoading ? 'Importation en cours…' : 'Résultat de l\'importation'}
+                  </Text>
+                  {!importLoading && (
+                    <TouchableOpacity onPress={() => { setShowImportModal(false); setImportResult(null); }}>
+                      <Ionicons name="close" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Body */}
+                <ScrollView style={modalS.body} contentContainerStyle={{ paddingBottom: 20 }}>
+                  {importLoading && (
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <ActivityIndicator size="large" color={colors.primary} />
+                      <Text style={{ marginTop: 16, fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>
+                        Lecture et importation des données…{'\n'}Veuillez patienter.
+                      </Text>
+                    </View>
+                  )}
+
+                  {!importLoading && importResult?.error && !importResult?.success && (
+                    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                      <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: colors.error + '15', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                        <Ionicons name="close-circle" size={36} color={colors.error} />
+                      </View>
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: colors.error, textAlign: 'center', marginBottom: 8 }}>
+                        Erreur d'importation
+                      </Text>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, paddingHorizontal: 10 }}>
+                        {importResult.error}
+                      </Text>
+                      {importResult.totalRows != null && (
+                        <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8 }}>
+                          {importResult.totalRows} lignes lues · {importResult.invalidRows || 0} sans nom
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  {!importLoading && importResult?.success && importResult?.summary && (
+                    <View>
+                      {/* Success header */}
+                      <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                        <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#10B98115', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                          <Ionicons name="checkmark-circle" size={36} color="#10B981" />
+                        </View>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#10B981' }}>
+                          Importation réussie !
+                        </Text>
+                      </View>
+
+                      {/* Summary cards */}
+                      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                        <View style={{ flex: 1, backgroundColor: colors.primary + '0A', borderRadius: borderRadius.lg, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.primary + '20' }}>
+                          <Text style={{ fontSize: 24, fontWeight: '800', color: colors.primary }}>{importResult.summary.total_rows}</Text>
+                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Lignes totales</Text>
+                        </View>
+                        <View style={{ flex: 1, backgroundColor: '#10B98108', borderRadius: borderRadius.lg, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#10B98120' }}>
+                          <Text style={{ fontSize: 24, fontWeight: '800', color: '#10B981' }}>{importResult.summary.created}</Text>
+                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Créés</Text>
+                        </View>
+                        <View style={{ flex: 1, backgroundColor: colors.info + '08', borderRadius: borderRadius.lg, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.info + '20' }}>
+                          <Text style={{ fontSize: 24, fontWeight: '800', color: colors.info }}>{importResult.summary.updated}</Text>
+                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Mis à jour</Text>
+                        </View>
+                        {importResult.summary.errors > 0 && (
+                          <View style={{ flex: 1, backgroundColor: colors.error + '08', borderRadius: borderRadius.lg, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.error + '20' }}>
+                            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.error }}>{importResult.summary.errors}</Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>Erreurs</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Skipped rows from frontend validation */}
+                      {importResult.invalidRows > 0 && (
+                        <View style={{ backgroundColor: colors.warning + '10', borderRadius: borderRadius.md, padding: 10, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: colors.warning }}>
+                          <Text style={{ fontSize: 12, color: colors.warning, fontWeight: '600' }}>
+                            {importResult.invalidRows} ligne(s) ignorée(s) – colonne "name" vide
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Error details */}
+                      {importResult.errors && importResult.errors.length > 0 && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.error, marginBottom: 8 }}>
+                            Détails des erreurs :
+                          </Text>
+                          {importResult.errors.slice(0, 20).map((e: any, i: number) => (
+                            <View key={i} style={{ flexDirection: 'row', gap: 8, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.outline }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.error, minWidth: 50 }}>
+                                Ligne {e.row}
+                              </Text>
+                              <Text style={{ fontSize: 11, color: colors.textSecondary, flex: 1 }}>
+                                {e.message}
+                              </Text>
+                            </View>
+                          ))}
+                          {importResult.errors.length > 20 && (
+                            <Text style={{ fontSize: 11, color: colors.textTertiary, fontStyle: 'italic', marginTop: 4 }}>
+                              … et {importResult.errors.length - 20} erreurs supplémentaires
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Created products preview */}
+                      {importResult.created_products && importResult.created_products.length > 0 && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#10B981', marginBottom: 8 }}>
+                            Produits créés ({importResult.created_products.length}) :
+                          </Text>
+                          {importResult.created_products.slice(0, 10).map((p: any, i: number) => (
+                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }}>
+                              <Ionicons name="checkmark" size={14} color="#10B981" />
+                              <Text style={{ fontSize: 12, color: colors.text, flex: 1 }} numberOfLines={1}>
+                                {p.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, color: colors.textTertiary }}>{p.sku}</Text>
+                              {p.quantity > 0 && (
+                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: '600' }}>
+                                  {p.quantity} unités
+                                </Text>
+                              )}
+                            </View>
+                          ))}
+                          {importResult.created_products.length > 10 && (
+                            <Text style={{ fontSize: 11, color: colors.textTertiary, fontStyle: 'italic', marginTop: 4 }}>
+                              … et {importResult.created_products.length - 10} autres produits
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Updated products preview */}
+                      {importResult.updated_products && importResult.updated_products.length > 0 && (
+                        <View>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.info, marginBottom: 8 }}>
+                            Produits mis à jour ({importResult.updated_products.length}) :
+                          </Text>
+                          {importResult.updated_products.slice(0, 10).map((p: any, i: number) => (
+                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }}>
+                              <Ionicons name="refresh" size={14} color={colors.info} />
+                              <Text style={{ fontSize: 12, color: colors.text, flex: 1 }} numberOfLines={1}>
+                                {p.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, color: colors.textTertiary }}>{p.sku}</Text>
+                            </View>
+                          ))}
+                          {importResult.updated_products.length > 10 && (
+                            <Text style={{ fontSize: 11, color: colors.textTertiary, fontStyle: 'italic', marginTop: 4 }}>
+                              … et {importResult.updated_products.length - 10} autres produits
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </ScrollView>
+
+                {/* Footer */}
+                {!importLoading && (
+                  <View style={modalS.footer}>
+                    <TouchableOpacity
+                      style={modalS.cancelBtn}
+                      onPress={() => { setShowImportModal(false); setImportResult(null); }}
+                    >
+                      <Text style={modalS.cancelText}>Fermer</Text>
+                    </TouchableOpacity>
+                    {importResult?.error && !importResult?.success && (
+                      <TouchableOpacity
+                        style={modalS.saveBtn}
+                        onPress={() => { setShowImportModal(false); setImportResult(null); handlePickAndParseFile(); }}
+                      >
+                        <Ionicons name="refresh" size={16} color="#FFF" />
+                        <Text style={modalS.saveText}>Réessayer</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
       )}
     </View>
   );
@@ -584,7 +1343,18 @@ function CatalogContent({ products, allProducts, searchQuery, setSearchQuery,
     { key: 'OTC', label: 'OTC', count: allProducts.filter(p => p.category === 'OTC').length },
     { key: 'CONSUMABLE', label: 'Consommables', count: allProducts.filter(p => p.category === 'CONSUMABLE').length },
     { key: 'LOW_STOCK', label: '⚠ Stock Bas', count: allProducts.filter(p => p.inventoryItem?.status === 'LOW_STOCK' || p.inventoryItem?.status === 'OUT_OF_STOCK').length },
-    { key: 'EXPIRING', label: '⏰ Exp. < 90j', count: allProducts.filter(p => p.batches.some(b => { const d = daysUntilExpiry(b.expiryDate); return d > 0 && d <= 90; })).length },
+    { key: 'EXPIRING', label: '⏰ Exp. < 90j', count: allProducts.filter(p => {
+      // Check both product-level and batch-level expiration
+      const productExpiring = p.expirationDate ? (() => {
+        const d = daysUntilExpiry(p.expirationDate);
+        return d > 0 && d <= 90;
+      })() : false;
+      const batchExpiring = p.batches.some(b => { 
+        const d = daysUntilExpiry(b.expiryDate); 
+        return d > 0 && d <= 90; 
+      });
+      return productExpiring || batchExpiring;
+    }).length },
   ];
 
   const sorts: { key: SortField; label: string }[] = [
@@ -685,7 +1455,18 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
   const inv = product.inventoryItem;
   const sc = statusColor(inv?.status);
   const margin = InventoryUtils.calculateMargin(product.costPrice, product.sellingPrice);
-  const hasExpiring = product.batches.some(b => { const d = daysUntilExpiry(b.expiryDate); return d > 0 && d <= 90; });
+  
+  // Check for expiring products (product-level or batch-level)
+  const hasExpiringProduct = product.expirationDate ? (() => {
+    const d = daysUntilExpiry(product.expirationDate);
+    return d > 0 && d <= 90;
+  })() : false;
+  const hasExpiringBatch = product.batches.some(b => { 
+    const d = daysUntilExpiry(b.expiryDate); 
+    return d > 0 && d <= 90; 
+  });
+  const hasExpiring = hasExpiringProduct || hasExpiringBatch;
+  
   const abcCol = product.abcClass === 'A' ? '#10B981' : product.abcClass === 'B' ? colors.warning : colors.textTertiary;
 
   return (
@@ -705,6 +1486,38 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
             {product.genericName ? `${product.genericName} · ` : ''}{product.sku}
             {product.strength ? ` · ${product.strength}` : ''}
           </Text>
+          {(() => {
+            // Show product-level expiration date if available
+            if (product.expirationDate) {
+              const d = daysUntilExpiry(product.expirationDate);
+              const isExp = d <= 0;
+              const isExpiring = d <= 90 && d > 0;
+              if (isExp || isExpiring) {
+                return (
+                  <Text style={{ fontSize: 11, color: isExp ? colors.error : colors.warning, marginTop: 2 }}>
+                    <Ionicons name="calendar-outline" size={11} color={isExp ? colors.error : colors.warning} />
+                    {' '}Produit: {isExp ? 'Expiré' : `Exp. ${new Date(product.expirationDate).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' })} (${d}j)`}
+                  </Text>
+                );
+              }
+            }
+            
+            // Show batch expiration as fallback/additional info
+            const earliest = product.batches
+              .filter(b => b.expiryDate)
+              .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime())[0];
+            if (!earliest) return null;
+            const d = daysUntilExpiry(earliest.expiryDate);
+            const isExp = d <= 0;
+            const isExpiring = d <= 90 && d > 0;
+            if (!isExp && !isExpiring) return null;
+            return (
+              <Text style={{ fontSize: 11, color: isExp ? colors.error : colors.warning, marginTop: 2 }}>
+                <Ionicons name="time-outline" size={11} color={isExp ? colors.error : colors.warning} />
+                {' '}Lot: {isExp ? 'Expiré' : `Exp. ${new Date(earliest.expiryDate).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' })} (${d}j)`}
+              </Text>
+            );
+          })()}
         </View>
         <View style={styles.cardRight}>
           <View style={[styles.statusPill, { backgroundColor: sc + '14' }]}>
@@ -734,6 +1547,23 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
               valColor={inv && inv.daysOfStockRemaining < 14 ? colors.error : undefined} />
             <Stat label="Classe ABC" val={product.abcClass || '—'} valColor={abcCol} />
             <Stat label="Valeur stock" val={fmtCurrency(inv?.totalStockValue || 0, product.currency)} />
+            {product.expirationDate && (
+              <Stat 
+                label="Exp. produit" 
+                val={(() => {
+                  const days = daysUntilExpiry(product.expirationDate);
+                  const isExp = days <= 0;
+                  const isExpiring = days <= 90 && days > 0;
+                  if (isExp) return 'EXPIRÉ';
+                  if (isExpiring) return `${days}j restants`;
+                  return new Date(product.expirationDate).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' });
+                })()} 
+                valColor={(() => {
+                  const days = daysUntilExpiry(product.expirationDate);
+                  return days <= 0 ? colors.error : days <= 90 ? colors.warning : undefined;
+                })()}
+              />
+            )}
           </View>
 
           {/* Thresholds */}
@@ -756,7 +1586,7 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
                   <View key={batch.id} style={styles.batchRow}>
                     <View style={styles.batchInfo}>
                       <Text style={styles.batchNum}>{batch.batchNumber}</Text>
-                      <Text style={styles.batchQty}>{batch.quantity} unités</Text>
+                      <Text style={styles.batchQty}>{batch.currentQuantity} unités</Text>
                     </View>
                     <View style={styles.expBar}>
                       <View style={[styles.expFill, {
@@ -766,9 +1596,16 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
                     </View>
                     <View style={[styles.expBadge, (isExp || isExpiring) && { backgroundColor: (isExp ? colors.error : colors.warning) + '14' }]}>
                       {(isExp || isExpiring) && <Ionicons name="warning" size={11} color={isExp ? colors.error : colors.warning} />}
-                      <Text style={[styles.expText, (isExp || isExpiring) && { color: isExp ? colors.error : colors.warning, fontWeight: '700' }]}>
-                        {isExp ? 'Expiré' : `${days}j`}
-                      </Text>
+                      <View>
+                        <Text style={[styles.expText, (isExp || isExpiring) && { color: isExp ? colors.error : colors.warning, fontWeight: '700' }]}>
+                          {isExp ? 'Expiré' : `${days}j`}
+                        </Text>
+                        {batch.expiryDate ? (
+                          <Text style={[styles.expDateText, isExp && { color: colors.error }, isExpiring && { color: colors.warning }]}>
+                            {new Date(batch.expiryDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                   </View>
                 );
@@ -901,12 +1738,17 @@ function BatchesContent({ products }: { products: EnrichedProduct[] }) {
               <View key={batch.id} style={styles.batchGroupRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.batchGroupProd}>{(batch as any).productName}</Text>
-                  <Text style={styles.batchGroupLot}>Lot: {batch.batchNumber} · {batch.quantity} unités</Text>
+                  <Text style={styles.batchGroupLot}>Lot: {batch.batchNumber} · {batch.currentQuantity} unités</Text>
                 </View>
                 <View style={[styles.batchGroupExp, { backgroundColor: group.color + '14' }]}>
                   <Text style={[styles.batchGroupExpText, { color: group.color }]}>
                     {days <= 0 ? 'EXPIRÉ' : `${days}j`}
                   </Text>
+                  {batch.expiryDate ? (
+                    <Text style={[styles.batchGroupExpDate, { color: group.color }]}>
+                      {new Date(batch.expiryDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             );
@@ -1035,6 +1877,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
   const [form, setForm] = useState({
     name: product?.name || '',
     genericName: product?.genericName || '',
+    brandName: product?.brandName || '',
     sku: product?.sku || `MED-${Date.now().toString(36).toUpperCase()}`,
     barcode: product?.barcode || '',
     category: (product?.category || 'MEDICATION') as ProductCategory,
@@ -1045,15 +1888,18 @@ function ProductFormModal({ product, onClose, onSaved }: {
     manufacturer: product?.manufacturer || '',
     costPrice: String(product?.costPrice || ''),
     sellingPrice: String(product?.sellingPrice || ''),
-    currency: product?.currency || 'USD',
-    taxRate: String(product?.taxRate || 0),
+    currency: product?.currency || 'CDF',
     requiresPrescription: product?.requiresPrescription ?? false,
     controlledSubstance: product?.controlledSubstance ?? false,
+    trackExpiry: true,
     reorderLevel: String(product?.reorderLevel || 10),
+    reorderQuantity: String(product?.reorderQuantity || 50),
     minStockLevel: String(product?.minStockLevel || 5),
     maxStockLevel: String(product?.maxStockLevel || 500),
     indication: product?.indication || '',
-    storageConditions: product?.storageConditions || 'ROOM_TEMPERATURE',
+    storageCondition: product?.storageConditions || 'ROOM_TEMPERATURE',
+    expirationDate: product?.expirationDate || '',
+    notes: '',
   });
 
   const upd = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
@@ -1092,60 +1938,60 @@ function ProductFormModal({ product, onClose, onSaved }: {
     }
     setSaving(true);
     try {
-      const db = DatabaseService.getInstance();
-      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
-      if (!license) { toast.error('Licence non trouvée'); setSaving(false); return; }
-      const org = await db.getOrganization(license.organizationId);
-      if (!org) { toast.error('Organisation non trouvée'); setSaving(false); return; }
+      const api = ApiService.getInstance();
 
+      // Backend uses snake_case field names
       const data: any = {
         name: form.name.trim(),
-        genericName: form.genericName.trim() || undefined,
+        generic_name: form.genericName.trim() || undefined,
+        brand_name: form.brandName.trim() || undefined,
         sku: form.sku.trim(),
         barcode: form.barcode.trim() || undefined,
         category: form.category,
-        dosageForm: form.dosageForm,
+        dosage_form: form.dosageForm,
         strength: form.strength.trim() || undefined,
-        unitOfMeasure: form.unitOfMeasure,
-        packSize: parseInt(form.packSize) || 1,
-        manufacturer: form.manufacturer.trim(),
-        costPrice: parseFloat(form.costPrice) || 0,
-        sellingPrice: parseFloat(form.sellingPrice) || 0,
+        unit_of_measure: form.unitOfMeasure,
+        pack_size: parseInt(form.packSize) || 1,
+        manufacturer: form.manufacturer.trim() || undefined,
+        cost_price: parseFloat(form.costPrice) || 0,
+        selling_price: parseFloat(form.sellingPrice) || 0,
         currency: form.currency,
-        taxRate: parseFloat(form.taxRate) || 0,
-        requiresPrescription: form.requiresPrescription,
-        controlledSubstance: form.controlledSubstance,
-        reorderLevel: parseInt(form.reorderLevel) || 10,
-        minStockLevel: parseInt(form.minStockLevel) || 5,
-        maxStockLevel: parseInt(form.maxStockLevel) || 500,
+        requires_prescription: form.requiresPrescription,
+        controlled_substance: form.controlledSubstance,
+        track_expiry: form.trackExpiry,
+        reorder_level: parseInt(form.reorderLevel) || 10,
+        reorder_quantity: parseInt(form.reorderQuantity) || 50,
+        min_stock_level: parseInt(form.minStockLevel) || 5,
+        max_stock_level: parseInt(form.maxStockLevel) || 500,
+        storage_condition: form.storageCondition,
         indication: form.indication.trim() || undefined,
-        storageConditions: form.storageConditions as StorageCondition,
-        activeIngredients: [],
-        insuranceReimbursable: false,
-        reorderQuantity: (parseInt(form.reorderLevel) || 10) * 2,
-        safetyStockDays: 7,
+        expiration_date: form.expirationDate.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+        is_active: true,
       };
 
       if (product) {
-        await db.updateProduct(product.id, data as ProductUpdate);
+        await api.patch(`/inventory/products/${product.id}/`, data);
         toast.success(`${data.name} mis à jour`);
       } else {
-        const created = await db.createProduct({ ...data, organizationId: org.id } as ProductCreate);
-        await db.createInventoryItem({
-          organizationId: org.id,
-          productId: created.id,
-          facilityId: 'pharmacy-main',
-          facilityType: 'PHARMACY',
-          quantityOnHand: 0, quantityReserved: 0, quantityAvailable: 0,
-          quantityOnOrder: 0, quantityDamaged: 0, quantityExpired: 0,
-          averageCost: created.costPrice, totalStockValue: 0,
-          lastPurchasePrice: created.costPrice, averageDailyUsage: 0,
-          daysOfStockRemaining: 0, status: 'OUT_OF_STOCK', isActive: true,
-        });
-        toast.success(`${created.name} ajouté à l'inventaire`);
+        // Create product — backend assigns organization from auth user
+        const createRes = await api.post('/inventory/products/', data);
+        const createdId = createRes?.data?.id ?? createRes?.id;
+        // Create a matching inventory item with zero stock
+        if (createdId) {
+          await api.post('/inventory/items/', {
+            product: createdId,
+            facility_id: 'pharmacy-main',
+            quantity_on_hand: 0,
+            quantity_reserved: 0,
+            quantity_on_order: 0,
+          });
+        }
+        toast.success(`${data.name} ajouté à l'inventaire`);
       }
       onSaved();
-    } catch {
+    } catch (err: any) {
+      console.error('Save product error:', err);
       toast.error('Erreur lors de l\'enregistrement');
     } finally {
       setSaving(false);
@@ -1169,7 +2015,10 @@ function ProductFormModal({ product, onClose, onSaved }: {
               {/* Identification */}
               <Text style={modalS.sec}>Identification</Text>
               <Field label="Nom commercial *" value={form.name} onChange={v => upd('name', v)} />
-              <Field label="DCI (Nom générique)" value={form.genericName} onChange={v => upd('genericName', v)} />
+              <View style={modalS.row}>
+                <Field label="DCI (Nom générique)" value={form.genericName} onChange={v => upd('genericName', v)} flex />
+                <Field label="Nom de marque" value={form.brandName} onChange={v => upd('brandName', v)} flex />
+              </View>
               <View style={modalS.row}>
                 <Field label="SKU *" value={form.sku} onChange={v => upd('sku', v)} flex />
                 <Field label="Code-barres" value={form.barcode} onChange={v => upd('barcode', v)} flex />
@@ -1205,9 +2054,9 @@ function ProductFormModal({ product, onClose, onSaved }: {
               {/* Pricing */}
               <Text style={modalS.sec}>Tarification</Text>
               <View style={modalS.row}>
-                <Field label="Prix d'achat ($) *" value={form.costPrice} onChange={v => upd('costPrice', v)} keyboardType="decimal-pad" placeholder="0.00" flex />
-                <Field label="Prix de vente ($) *" value={form.sellingPrice} onChange={v => upd('sellingPrice', v)} keyboardType="decimal-pad" placeholder="0.00" flex />
-                <Field label="TVA %" value={form.taxRate} onChange={v => upd('taxRate', v)} keyboardType="decimal-pad" flex />
+                <Field label="Prix d'achat *" value={form.costPrice} onChange={v => upd('costPrice', v)} keyboardType="decimal-pad" placeholder="0.00" flex />
+                <Field label="Prix de vente *" value={form.sellingPrice} onChange={v => upd('sellingPrice', v)} keyboardType="decimal-pad" placeholder="0.00" flex />
+                <Select label="Devise" value={form.currency} options={[{label:'CDF',value:'CDF'},{label:'USD',value:'USD'}]} onChange={v => upd('currency', v)} flex />
               </View>
               {computedMargin && <Text style={modalS.marginHint}>Marge: {computedMargin}%</Text>}
 
@@ -1218,10 +2067,30 @@ function ProductFormModal({ product, onClose, onSaved }: {
                 <Field label="Seuil réappro" value={form.reorderLevel} onChange={v => upd('reorderLevel', v)} keyboardType="numeric" flex />
                 <Field label="Stock maximum" value={form.maxStockLevel} onChange={v => upd('maxStockLevel', v)} keyboardType="numeric" flex />
               </View>
+              <View style={modalS.row}>
+                <Field label="Qté réappro" value={form.reorderQuantity} onChange={v => upd('reorderQuantity', v)} keyboardType="numeric" flex />
+                <Select label="Conservation" value={form.storageCondition} options={[
+                  {label:'Temp. ambiante',value:'ROOM_TEMPERATURE'},{label:'Réfrigéré',value:'REFRIGERATED'},
+                  {label:'Congelé',value:'FROZEN'},{label:'Protéger lumière',value:'PROTECT_FROM_LIGHT'},
+                ]} onChange={v => upd('storageCondition', v)} flex />
+              </View>
+              <Field 
+                label="Date d'expiration générale" 
+                value={form.expirationDate} 
+                onChange={v => upd('expirationDate', v)}
+                placeholder="YYYY-MM-DD ou JJ/MM/AAAA"
+              />
+              <View style={modalS.toggleRow}>
+                <TouchableOpacity style={[modalS.toggle, form.trackExpiry && modalS.toggleOn]} onPress={() => upd('trackExpiry', !form.trackExpiry)}>
+                  <Ionicons name={form.trackExpiry ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={form.trackExpiry ? '#8B5CF6' : colors.textTertiary} />
+                  <Text style={modalS.toggleText}>Suivre dates d'expiration</Text>
+                </TouchableOpacity>
+              </View>
 
               {/* Extra */}
               <Text style={modalS.sec}>Informations supplémentaires</Text>
               <Field label="Indication thérapeutique" value={form.indication} onChange={v => upd('indication', v)} multiline />
+              <Field label="Notes internes" value={form.notes} onChange={v => upd('notes', v)} multiline />
             </ScrollView>
 
             {/* Footer */}
@@ -1257,7 +2126,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
 function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved }: {
   product: EnrichedProduct; products: EnrichedProduct[];
   onSelectProduct: (p: EnrichedProduct) => void;
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: (productId: string, newQty: number, newStatus: string) => void;
 }) {
   const toast = useToast();
   const [adjType, setAdjType] = useState<'add' | 'subtract'>('add');
@@ -1292,41 +2161,64 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
   const handleSave = async () => {
     if (!adjQty || !adjReason) { toast.warning('Quantité et raison requises'); return; }
     if (qty <= 0) { toast.warning('Quantité invalide'); return; }
-    if (!inv) { toast.warning('Pas d\'inventaire pour ce produit'); return; }
     if (willSubtractExcess) {
       toast.warning(`Retrait plafonné à ${currentQty} (stock actuel)`);
     }
     setSaving(true);
     try {
-      const db = DatabaseService.getInstance();
-      const safeAvailable = Math.max(0, newQty - (inv.quantityReserved || 0));
-      await db.updateInventoryItem(inv.id, {
-        quantityOnHand: newQty,
-        quantityAvailable: safeAvailable,
-        totalStockValue: newQty * (inv.averageCost || product.costPrice),
-        status: computedStatus as any,
+      const api = ApiService.getInstance();
+
+      // Resolve the inventory item: use cached one, or look it up, or create it
+      let invId = inv?.id;
+      if (!invId) {
+        // Try fetching an existing item for this product first
+        const fetchRes = await api.get('/inventory/items/', { product: product.id, page_size: 1 });
+        const existing = fetchRes?.data?.results?.[0] ?? fetchRes?.data?.[0];
+        if (existing?.id) {
+          invId = existing.id;
+        } else {
+          // Truly no item — create one
+          const createRes = await api.post('/inventory/items/', {
+            product: product.id,
+            facility_id: 'pharmacy-main',
+            quantity_on_hand: 0,
+            quantity_reserved: 0,
+            quantity_on_order: 0,
+          });
+          invId = createRes?.data?.id;
+          if (!invId) { toast.error('Impossible de créer l\'inventaire'); setSaving(false); return; }
+        }
+      }
+
+      // Record the stock movement first (with balance info)
+      await api.post('/inventory/movements/', {
+        inventory_item: invId,
+        movement_type: adjType === 'add' ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
+        direction: adjType === 'add' ? 'IN' : 'OUT',
+        quantity: adjType === 'add' ? qty : Math.min(qty, currentQty),
+        unit_cost: product.costPrice,
+        reason: adjReason,
+        movement_date: new Date().toISOString(),
+        balance_before: currentQty,
+        balance_after: newQty,
       });
 
-      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
-      await db.createStockMovement({
-        organizationId: license?.organizationId || '',
-        inventoryItemId: inv.id,
-        productId: product.id,
-        movementType: adjType === 'add' ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
-        direction: adjType === 'add' ? 'IN' : 'OUT',
-        quantity: qty,
-        unitCost: product.costPrice,
-        totalCost: qty * product.costPrice,
-        previousBalance: currentQty,
-        newBalance: newQty,
-        performedBy: 'admin',
-        movementDate: new Date().toISOString(),
-        reason: adjReason,
+      // Update the inventory item quantity
+      const updateResponse = await api.patch(`/inventory/items/${invId}/`, {
+        quantity_on_hand: newQty,
       });
+      
+      console.log('📦 Stock update response:', updateResponse);
+      
+      // Verify the update was successful
+      if (!updateResponse.success) {
+        throw new Error(updateResponse.error?.message || 'Update failed');
+      }
 
       toast.success(`Stock ajusté: ${product.name} (${currentQty} → ${newQty})`);
-      onSaved();
-    } catch {
+      onSaved(product.id, newQty, computedStatus);
+    } catch (error) {
+      console.error('❌ Stock adjustment error:', error);
       toast.error('Erreur lors de l\'ajustement');
     } finally {
       setSaving(false);
@@ -1343,19 +2235,13 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
           </View>
 
           <ScrollView style={modalS.body} showsVerticalScrollIndicator={false}>
-            {/* Product picker */}
+            {/* Selected product header */}
             <Text style={modalS.sec}>Produit</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-              {products.map(p => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.chip, p.id === product.id && styles.chipActive, { marginRight: 8 }]}
-                  onPress={() => onSelectProduct(p)}
-                >
-                  <Text style={[styles.chipText, p.id === product.id && styles.chipTextActive]} numberOfLines={1}>{p.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <View style={{ backgroundColor: colors.primary + '12', borderRadius: 10, padding: 12, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: colors.primary }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{product.name}</Text>
+              {!!product.genericName && <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{product.genericName}</Text>}
+              <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 2 }}>SKU: {product.sku}</Text>
+            </View>
 
             {/* Current */}
             <View style={styles.adjBox}>
@@ -1547,11 +2433,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 },
   headerTitle: { fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
   headerSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  headerBtns: { flexDirection: 'row', gap: 10 },
+  headerBtns: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   btnFill: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg, gap: 6, ...shadows.sm },
   btnFillText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
   btnOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '0A', borderWidth: 1, borderColor: colors.primary + '30', paddingHorizontal: 14, paddingVertical: 9, borderRadius: borderRadius.lg, gap: 6 },
   btnOutlineText: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  btnOutlineSuccess: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98108', borderWidth: 1, borderColor: '#10B98130', paddingHorizontal: 14, paddingVertical: 9, borderRadius: borderRadius.lg, gap: 6 },
+  btnOutlineImport: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.info + '08', borderWidth: 1, borderColor: colors.info + '30', paddingHorizontal: 14, paddingVertical: 9, borderRadius: borderRadius.lg, gap: 6 },
 
   // KPIs
   kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
@@ -1644,8 +2532,9 @@ const styles = StyleSheet.create({
   batchQty: { fontSize: 11, color: colors.textSecondary },
   expBar: { flex: 1, height: 4, backgroundColor: colors.surfaceVariant, borderRadius: 2, overflow: 'hidden' },
   expFill: { height: '100%', borderRadius: 2 },
-  expBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, minWidth: 50, justifyContent: 'center' },
+  expBadge: { flexDirection: 'row', alignItems: 'flex-start', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, minWidth: 50, justifyContent: 'center' },
   expText: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  expDateText: { fontSize: 10, color: colors.textTertiary, marginTop: 1 },
   mvtMini: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
   mvtMiniLbl: { flex: 1, fontSize: 11, color: colors.text },
   mvtMiniQty: { fontSize: 12, fontWeight: '700', minWidth: 40, textAlign: 'right' },
@@ -1667,6 +2556,7 @@ const styles = StyleSheet.create({
   batchGroupLot: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
   batchGroupExp: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.sm },
   batchGroupExpText: { fontSize: 11, fontWeight: '700' },
+  batchGroupExpDate: { fontSize: 10, fontWeight: '500', marginTop: 1 },
 
   // Movements tab
   mvtDateHdr: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 6, marginTop: 4 },

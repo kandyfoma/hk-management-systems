@@ -208,6 +208,59 @@ def current_organization_licenses(request):
             else:
                 module_type = 'TRIAL'
             
+            # Define features based on license type
+            features = []
+            if license_obj.type == 'COMBINED':
+                # Combined license includes all features from all modules
+                features = [
+                    # Hospital features
+                    'patient_management', 'appointment_scheduling', 'medical_records',
+                    'emergency_management', 'ward_management', 'laboratory_integration',
+                    'clinical_notes', 'hospital_billing', 'consultation_management',
+                    'admission_management', 'medication_administration', 'triage_system',
+                    
+                    # Pharmacy features
+                    'pos_system', 'basic_inventory', 'advanced_inventory',
+                    'prescription_management', 'supplier_management', 'stock_alerts',
+                    'expiry_tracking', 'dispensing_records', 'drug_interaction_checking',
+                    
+                    # Occupational Health features
+                    'occupational_health', 'health_surveillance', 'risk_assessment',
+                    'ppe_management', 'incident_reporting', 'compliance_tracking',
+                    'certificate_management', 'medical_examinations',
+                    
+                    # General features
+                    'basic_reporting', 'advanced_reporting', 'analytics',
+                    'user_management', 'audit_trail', 'data_export'
+                ]
+            elif license_obj.type == 'HOSPITAL':
+                features = [
+                    'patient_management', 'appointment_scheduling', 'medical_records',
+                    'emergency_management', 'ward_management', 'laboratory_integration',
+                    'clinical_notes', 'hospital_billing', 'consultation_management',
+                    'admission_management', 'medication_administration', 'triage_system',
+                    'basic_reporting', 'user_management', 'audit_trail'
+                ]
+            elif license_obj.type == 'PHARMACY':
+                features = [
+                    'pos_system', 'basic_inventory', 'advanced_inventory',
+                    'prescription_management', 'supplier_management', 'stock_alerts',
+                    'expiry_tracking', 'dispensing_records', 'drug_interaction_checking',
+                    'basic_reporting', 'user_management', 'audit_trail'
+                ]
+            elif license_obj.type == 'OCCUPATIONAL_HEALTH':
+                features = [
+                    'occupational_health', 'health_surveillance', 'risk_assessment',
+                    'ppe_management', 'incident_reporting', 'compliance_tracking',
+                    'certificate_management', 'medical_examinations', 'patient_management',
+                    'basic_reporting', 'user_management', 'audit_trail'
+                ]
+            else:  # TRIAL
+                features = [
+                    'patient_management', 'basic_inventory', 'prescription_management',
+                    'basic_reporting', 'medical_records'
+                ]
+            
             license_data.append({
                 'id': str(license_obj.id),
                 'licenseKey': license_obj.license_number,
@@ -219,10 +272,7 @@ def current_organization_licenses(request):
                 'expiryDate': license_obj.expiry_date.isoformat() if license_obj.expiry_date else None,
                 'maxUsers': None,  # Unlimited for now
                 'maxFacilities': None,  # Unlimited for now
-                'features': [
-                    'patient_management', 'appointment_scheduling', 'basic_inventory',
-                    'prescription_management', 'basic_reporting', 'medical_records',
-                ],  # Default features based on license type
+                'features': features,
                 'billingCycle': 'ANNUAL',
                 'autoRenew': license_obj.renewal_required,
                 'createdAt': license_obj.created_at.isoformat(),

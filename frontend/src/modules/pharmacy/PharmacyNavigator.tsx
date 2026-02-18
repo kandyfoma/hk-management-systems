@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SidebarLayout, SidebarSection } from '../../components/SidebarLayout';
 import { PharmacyDashboardContent } from './screens/PharmacyDashboard';
 import { InventoryScreen } from './screens/InventoryScreen';
@@ -12,9 +12,10 @@ import { PharmacyReportsScreen } from './screens/PharmacyReportsScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
+import ApiService from '../../services/ApiService';
 
-// ─── Sidebar Menu Configuration ──────────────────────────────
-const pharmacySections: SidebarSection[] = [
+// ─── Sidebar Menu Static Config (badges updated dynamically) ──
+const baseSections: SidebarSection[] = [
   {
     title: 'Principal',
     items: [
@@ -25,11 +26,11 @@ const pharmacySections: SidebarSection[] = [
   {
     title: 'Gestion',
     items: [
-      { id: 'inventory', label: 'Inventaire', icon: 'cube-outline', iconActive: 'cube', badge: 7 },
-      { id: 'ordonnances', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text', badge: 12 },
+      { id: 'inventory', label: 'Inventaire', icon: 'cube-outline', iconActive: 'cube' },
+      { id: 'ordonnances', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'prescriptions', label: 'Prescriptions Basic', icon: 'receipt-outline', iconActive: 'receipt' },
       { id: 'suppliers', label: 'Fournisseurs', icon: 'business-outline', iconActive: 'business' },
-      { id: 'stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle', badge: 3 },
+      { id: 'stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
     ],
   },
   {
@@ -167,6 +168,37 @@ const pharmacyScreens: Record<string, { title: string; subtitle: string; icon: a
 // ─── Navigator Component ─────────────────────────────────────
 export function PharmacyNavigator() {
   const [activeScreen, setActiveScreen] = useState('dashboard');
+  const [pharmacySections, setPharmacySections] = useState<SidebarSection[]>(baseSections);
+
+  // ─── Fetch live badge counts from stats endpoint ──────────
+  const loadBadges = useCallback(async () => {
+    try {
+      const api = ApiService.getInstance();
+      const res = await api.get('/inventory/reports/stats/');
+      const stats = res?.data ?? {};
+      const lowStock: number = (stats.low_stock_count ?? 0) + (stats.out_of_stock_count ?? 0);
+      const activeAlerts: number = stats.active_alerts ?? 0;
+
+      setPharmacySections(prev =>
+        prev.map(section => ({
+          ...section,
+          items: section.items.map(item => {
+            if (item.id === 'inventory') return { ...item, badge: lowStock > 0 ? lowStock : undefined };
+            if (item.id === 'stock-alerts') return { ...item, badge: activeAlerts > 0 ? activeAlerts : undefined };
+            return item;
+          }),
+        }))
+      );
+    } catch {
+      // silently fail — badges just won't update
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBadges();
+    const interval = setInterval(loadBadges, 60_000); // refresh every 60s
+    return () => clearInterval(interval);
+  }, [loadBadges]);
 
   const renderContent = () => {
     switch (activeScreen) {

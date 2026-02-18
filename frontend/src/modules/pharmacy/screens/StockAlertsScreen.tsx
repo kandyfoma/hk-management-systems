@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
-import DatabaseService from '../../../services/DatabaseService';
+import ApiService from '../../../services/ApiService';
 import { InventoryAlert, Product } from '../../../models/Inventory';
 
 const { width } = Dimensions.get('window');
@@ -88,28 +88,49 @@ export function StockAlertsScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const db = DatabaseService.getInstance();
-      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
-      if (!license) return;
-
-      const orgId = license.organizationId;
-      const [rawAlerts, productsMap] = await Promise.all([
-        db.getActiveAlerts(orgId),
-        db.getProductsMap(orgId),
+      const api = ApiService.getInstance();
+      const [alertsRes, productsRes] = await Promise.all([
+        api.get('/inventory/alerts/', { is_active: true, page_size: 500 }),
+        api.get('/inventory/products/', { page_size: 500 }),
       ]);
 
-      // Enrich alerts with product data
-      const enriched = rawAlerts.map((alert) => ({
-        ...alert,
-        product: productsMap.get(alert.productId),
+      const rawAlerts: any[] = alertsRes?.data?.results ?? alertsRes?.data ?? [];
+      const rawProducts: any[] = productsRes?.data?.results ?? productsRes?.data ?? [];
+
+      // Build products map by id
+      const productsMap = new Map<string, any>();
+      rawProducts.forEach((p: any) => productsMap.set(p.id, p));
+
+      // Map to InventoryAlert shape and enrich with product
+      const enriched = rawAlerts.map((a: any) => ({
+        id: a.id,
+        organizationId: '',
+        productId: a.product,
+        inventoryItemId: a.inventory_item ?? '',
+        batchId: a.batch ?? '',
+        alertType: a.alert_type as any,
+        severity: a.severity as any,
+        message: a.message ?? a.title ?? '',
+        isActive: a.is_active ?? true,
+        isAcknowledged: !!a.acknowledged_at,
+        isResolved: !!a.resolved_at,
+        thresholdValue: 0,
+        currentValue: 0,
+        createdAt: a.created_at,
+        updatedAt: a.created_at,
+        // keep raw fields for UI
+        status: a.acknowledged_at ? 'ACKNOWLEDGED' : 'ACTIVE',
+        product: productsMap.get(a.product) ? {
+          id: productsMap.get(a.product).id,
+          name: productsMap.get(a.product).name,
+          strength: productsMap.get(a.product).strength,
+        } as any : undefined,
       }));
 
       // Sort: CRITICAL first, then by createdAt descending
       const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
       enriched.sort((a, b) => {
-        const sa = a.severity;
-        const sb = b.severity;
-        const diff = (severityOrder[sa] ?? 9) - (severityOrder[sb] ?? 9);
+        const diff = (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9);
         if (diff !== 0) return diff;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
@@ -133,8 +154,8 @@ export function StockAlertsScreen() {
 
   const handleAcknowledge = async (alert: InventoryAlert) => {
     try {
-      const db = DatabaseService.getInstance();
-      await db.acknowledgeAlert(alert.id, 'admin');
+      const api = ApiService.getInstance();
+      await api.patch(`/inventory/alerts/${alert.id}/`, { acknowledged_at: new Date().toISOString() });
       toast.success('Alerte acquittée');
       loadData();
     } catch {
@@ -144,8 +165,8 @@ export function StockAlertsScreen() {
 
   const handleResolve = async (alert: InventoryAlert) => {
     try {
-      const db = DatabaseService.getInstance();
-      await db.resolveAlert(alert.id, 'admin');
+      const api = ApiService.getInstance();
+      await api.patch(`/inventory/alerts/${alert.id}/`, { is_active: false, resolved_at: new Date().toISOString() });
       toast.success('Alerte résolue');
       loadData();
     } catch {

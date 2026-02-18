@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import DatabaseService from '../../../services/DatabaseService';
+import ApiService from '../../../services/ApiService';
 import {
   Product,
   InventoryItem,
@@ -46,7 +47,7 @@ interface ShopProduct extends Product {
 //  HELPERS
 // ═══════════════════════════════════════════════════════════════
 
-const fmt = (n: number, c = 'USD') => SaleUtils.formatCurrency(n, c);
+const fmt = (n: number, c = 'CDF') => SaleUtils.formatCurrency(n, c);
 
 function getCategoryIcon(cat: string): keyof typeof Ionicons.glyphMap {
   const m: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -93,22 +94,80 @@ export function POSScreen() {
   // ─── Load Products ─────────────────────────────────────
   const loadProducts = useCallback(async () => {
     try {
-      const db = DatabaseService.getInstance();
-      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
-      if (!license) return;
-      setOrgId(license.organizationId);
-
-      const [rawProducts, invItems] = await Promise.all([
-        db.getProductsByOrganization(license.organizationId, { activeOnly: true }),
-        db.getInventoryItemsByOrganization(license.organizationId),
+      const api = ApiService.getInstance();
+      const [productsRes, itemsRes] = await Promise.all([
+        api.get('/inventory/products/', { is_active: true, page_size: 500 }),
+        api.get('/inventory/items/', { page_size: 500 }),
       ]);
 
-      const invMap = new Map<string, InventoryItem>();
-      invItems.forEach((i) => invMap.set(i.productId, i));
+      const rawProducts: any[] = productsRes?.data?.results ?? productsRes?.data ?? [];
+      const rawItems: any[] = itemsRes?.data?.results ?? itemsRes?.data ?? [];
 
-      const enriched: ShopProduct[] = rawProducts.map((p) => {
+      // Build inventory map: productId → inventory item
+      const invMap = new Map<string, InventoryItem>();
+      rawItems.forEach((i: any) => {
+        const inv: InventoryItem = {
+          id: i.id,
+          organizationId: i.organization,
+          productId: i.product,
+          facilityId: i.facility_id ?? 'pharmacy-main',
+          facilityType: 'PHARMACY',
+          quantityOnHand: parseFloat(i.quantity_on_hand ?? '0'),
+          quantityReserved: parseFloat(i.quantity_reserved ?? '0'),
+          quantityAvailable: parseFloat(i.quantity_available ?? '0'),
+          quantityOnOrder: parseFloat(i.quantity_on_order ?? '0'),
+          quantityDamaged: 0,
+          quantityExpired: 0,
+          averageCost: parseFloat(i.average_cost ?? '0'),
+          totalStockValue: parseFloat(i.total_value ?? '0'),
+          lastPurchasePrice: parseFloat(i.average_cost ?? '0'),
+          averageDailyUsage: 0,
+          daysOfStockRemaining: 0,
+          status: i.stock_status as any,
+          isActive: true,
+          createdAt: i.created_at,
+          updatedAt: i.updated_at,
+        };
+        invMap.set(i.product, inv);
+      });
+
+      const enriched: ShopProduct[] = rawProducts.map((p: any) => {
         const inv = invMap.get(p.id);
-        return { ...p, inventoryItem: inv, availableQty: inv?.quantityAvailable ?? 0 };
+        const product: Product = {
+          id: p.id,
+          organizationId: p.organization,
+          name: p.name,
+          genericName: p.generic_name ?? '',
+          brandName: p.brand_name ?? '',
+          sku: p.sku,
+          barcode: p.barcode ?? '',
+          description: p.notes ?? '',
+          category: p.category,
+          dosageForm: p.dosage_form,
+          strength: p.strength ?? '',
+          unitOfMeasure: p.unit_of_measure,
+          packSize: p.pack_size ?? 1,
+          manufacturer: p.manufacturer ?? '',
+          requiresPrescription: p.requires_prescription ?? false,
+          controlledSubstance: p.controlled_substance ?? false,
+          costPrice: parseFloat(p.cost_price ?? '0'),
+          sellingPrice: parseFloat(p.selling_price ?? '0'),
+          currency: p.currency ?? 'CDF',
+          taxRate: 0,
+          reorderLevel: p.reorder_level ?? 10,
+          minStockLevel: p.min_stock_level ?? 5,
+          maxStockLevel: p.max_stock_level ?? 500,
+          reorderQuantity: p.reorder_quantity ?? 50,
+          storageConditions: p.storage_condition ?? '',
+          activeIngredients: [],
+          insuranceReimbursable: false,
+          safetyStockDays: 7,
+          isActive: p.is_active ?? true,
+          isDiscontinued: p.is_discontinued ?? false,
+          createdAt: p.created_at,
+          updatedAt: p.updated_at,
+        };
+        return { ...product, inventoryItem: inv, availableQty: inv?.quantityAvailable ?? 0 };
       });
 
       setProducts(enriched);
@@ -247,19 +306,78 @@ export function POSScreen() {
 
   const handleCheckout = useCallback(async (payments: SalePayment[]) => {
     if (cart.items.length === 0) return;
-    if (checkoutInProgress) return; // Prevent double-tap
+    if (checkoutInProgress) return;
     if (cartTotals.grandTotal <= 0) {
       toast.warning('Le total doit être supérieur à zéro');
       return;
     }
     setCheckoutInProgress(true);
     try {
-      const db = DatabaseService.getInstance();
-      const sale = await db.processSale(
-        cart, payments,
-        'admin', 'Admin HK',
-        orgId, facilityId,
-      );
+      const api = ApiService.getInstance();
+
+      // Map cart items → backend SaleItem shape
+      const items = cart.items.map((item) => ({
+        product: item.productId,
+        product_name: item.product.name,
+        product_sku: item.product.sku ?? '',
+        unit_of_measure: item.product.unitOfMeasure ?? 'UNIT',
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        unit_cost: item.product.costPrice ?? 0,
+        discount_amount: item.discountAmount ?? 0,
+        discount_value: item.discountPercent ?? 0,
+      }));
+
+      // Map payments → backend SalePayment shape
+      const backendPayments = payments.map((p) => ({
+        payment_method: p.method,
+        amount: p.amount,
+        currency: p.currency ?? 'CDF',
+        reference_number: p.reference ?? '',
+      }));
+
+      const payload: any = {
+        type: cart.prescriptionId ? 'PRESCRIPTION' : 'REGULAR',
+        notes: cart.notes ?? '',
+        items,
+        payments: backendPayments,
+      };
+      if (cart.customerId) payload.customer = cart.customerId;
+      if (cart.customerName) payload.customer_name = cart.customerName;
+
+      const res = await api.post('/sales/', payload);
+      if (!res?.data?.id) throw new Error('Invalid response from server');
+
+      const backendSale = res.data;
+      // Map backend response to frontend Sale shape for receipt
+      const sale: Sale = {
+        id: backendSale.id,
+        saleNumber: backendSale.sale_number ?? backendSale.id,
+        receiptNumber: backendSale.receipt_number ?? '',
+        organizationId: orgId,
+        facilityId,
+        cashierId: '',
+        cashierName: backendSale.cashier_name ?? 'Admin',
+        status: backendSale.status ?? 'COMPLETED',
+        type: backendSale.type ?? 'REGULAR',
+        customerId: backendSale.customer ?? '',
+        customerName: backendSale.customer_name ?? '',
+        customerPhone: backendSale.customer_phone ?? '',
+        prescriptionId: backendSale.prescription ?? '',
+        items: cart.items,
+        payments,
+        subtotal: cartTotals.subtotal,
+        taxTotal: cartTotals.taxTotal,
+        discountTotal: cartTotals.totalDiscount,
+        grandTotal: cartTotals.grandTotal,
+        totalAmount: cartTotals.grandTotal,
+        currency: cart.items[0]?.product?.currency ?? 'CDF',
+        itemCount: cart.items.length,
+        notes: cart.notes ?? '',
+        createdAt: backendSale.created_at ?? new Date().toISOString(),
+        updatedAt: backendSale.updated_at ?? new Date().toISOString(),
+      };
+
       setLastSale(sale);
       setShowPayment(false);
       setShowReceipt(true);
@@ -272,7 +390,7 @@ export function POSScreen() {
     } finally {
       setCheckoutInProgress(false);
     }
-  }, [cart, cartTotals.grandTotal, orgId, facilityId, clearCart, loadProducts, toast, checkoutInProgress]);
+  }, [cart, cartTotals, orgId, facilityId, clearCart, loadProducts, toast, checkoutInProgress]);
 
   // ═══════════════════════════════════════════════════════
   //  RENDER
@@ -408,7 +526,7 @@ export function POSScreen() {
       <PaymentModal
         visible={showPayment}
         totals={cartTotals}
-        currency={cart.items[0]?.product.currency || 'USD'}
+        currency={cart.items[0]?.product.currency || 'CDF'}
         onClose={() => setShowPayment(false)}
         onConfirm={handleCheckout}
       />
@@ -909,37 +1027,100 @@ function SalesHistoryModal({ visible, orgId, onClose, onViewReceipt }: {
   const toast = useToast();
 
   useEffect(() => {
-    if (!visible || !orgId) return;
+    if (!visible) return;
     (async () => {
       setLoading(true);
       try {
-        const db = DatabaseService.getInstance();
-        const [allSales, todaySummary] = await Promise.all([
-          db.getSalesByOrganization(orgId, { limit: 50 }),
-          db.getTodaysSalesSummary(orgId),
+        const api = ApiService.getInstance();
+        const today = new Date().toISOString().split('T')[0];
+        const [salesRes, statsRes] = await Promise.all([
+          api.get('/sales/', { page_size: 50, ordering: '-created_at' }),
+          api.get('/sales/reports/stats/'),
         ]);
-        setSales(allSales);
-        setSummary(todaySummary);
+
+        const rawSales: any[] = salesRes?.data?.results ?? salesRes?.data ?? [];
+        const stats = statsRes?.data ?? {};
+
+        // Map backend sale to frontend Sale shape
+        const mapped: Sale[] = rawSales.map((s: any) => ({
+          id: s.id,
+          saleNumber: s.sale_number ?? s.id,
+          receiptNumber: s.receipt_number ?? '',
+          organizationId: '',
+          facilityId: '',
+          cashierId: '',
+          cashierName: s.cashier_name ?? '',
+          status: s.status ?? 'COMPLETED',
+          type: s.type ?? 'REGULAR',
+          customerId: s.customer ?? '',
+          customerName: s.customer_name ?? '',
+          customerPhone: s.customer_phone ?? '',
+          prescriptionId: '',
+          items: [],
+          payments: (s.payments ?? []).map((p: any) => ({
+            id: p.id,
+            method: p.payment_method,
+            amount: parseFloat(p.amount ?? '0'),
+            currency: p.currency ?? 'CDF',
+            reference: p.reference_number ?? '',
+            status: p.status ?? 'COMPLETED',
+            processedAt: p.processed_at,
+          })),
+          subtotal: parseFloat(s.subtotal ?? s.total_amount ?? '0'),
+          taxTotal: parseFloat(s.tax_amount ?? '0'),
+          discountTotal: parseFloat(s.discount_amount ?? '0'),
+          grandTotal: parseFloat(s.total_amount ?? '0'),
+          totalAmount: parseFloat(s.total_amount ?? '0'),
+          currency: 'CDF',
+          itemCount: s.item_count ?? 0,
+          notes: s.notes ?? '',
+          createdAt: s.created_at,
+          updatedAt: s.updated_at ?? s.created_at,
+        }));
+
+        setSales(mapped);
+        setSummary({
+          totalSales: stats.today_sales_count ?? mapped.filter(s => s.status === 'COMPLETED').length,
+          totalRevenue: parseFloat(stats.today_sales_amount ?? '0') || mapped.filter(s => s.status === 'COMPLETED').reduce((sum, s) => sum + s.totalAmount, 0),
+          totalProfit: 0,
+          totalItems: mapped.reduce((sum, s) => sum + s.itemCount, 0),
+          avgSaleValue: mapped.length ? mapped.reduce((sum, s) => sum + s.totalAmount, 0) / mapped.length : 0,
+          paymentBreakdown: {},
+        });
       } catch {
         toast.error('Erreur lors du chargement de l\'historique');
       } finally {
         setLoading(false);
       }
     })();
-  }, [visible, orgId]);
+  }, [visible]);
 
   const handleVoid = async (sale: Sale) => {
     try {
-      const db = DatabaseService.getInstance();
-      await db.voidSale(sale.id, 'admin', 'Annulation manuelle');
+      const api = ApiService.getInstance();
+      await api.patch(`/sales/${sale.id}/`, { status: 'VOIDED', void_reason: 'Annulation manuelle' });
       toast.success('Vente annulée');
-      // Refresh both sales list AND summary KPIs
-      const [refreshed, refreshedSummary] = await Promise.all([
-        db.getSalesByOrganization(orgId, { limit: 50 }),
-        db.getTodaysSalesSummary(orgId),
+      // Refresh list
+      const [salesRes, statsRes] = await Promise.all([
+        api.get('/sales/', { page_size: 50, ordering: '-created_at' }),
+        api.get('/sales/reports/stats/'),
       ]);
-      setSales(refreshed);
-      setSummary(refreshedSummary);
+      const rawSales: any[] = salesRes?.data?.results ?? salesRes?.data ?? [];
+      const stats = statsRes?.data ?? {};
+      setSales(rawSales.map((s: any) => ({
+        id: s.id, saleNumber: s.sale_number ?? s.id, receiptNumber: s.receipt_number ?? '',
+        organizationId: '', facilityId: '', cashierId: '', cashierName: s.cashier_name ?? '',
+        status: s.status ?? 'COMPLETED', type: s.type ?? 'REGULAR',
+        customerId: s.customer ?? '', customerName: s.customer_name ?? '', customerPhone: '',
+        prescriptionId: '', items: [],
+        payments: (s.payments ?? []).map((p: any) => ({ id: p.id, method: p.payment_method, amount: parseFloat(p.amount ?? '0'), currency: p.currency ?? 'CDF', reference: p.reference_number ?? '', status: p.status ?? 'COMPLETED', processedAt: p.processed_at })),
+        subtotal: parseFloat(s.subtotal ?? s.total_amount ?? '0'),
+        taxTotal: parseFloat(s.tax_amount ?? '0'), discountTotal: parseFloat(s.discount_amount ?? '0'),
+        grandTotal: parseFloat(s.total_amount ?? '0'), totalAmount: parseFloat(s.total_amount ?? '0'),
+        currency: 'CDF', itemCount: s.item_count ?? 0, notes: s.notes ?? '',
+        createdAt: s.created_at, updatedAt: s.updated_at ?? s.created_at,
+      })));
+      setSummary(prev => ({ ...prev, totalSales: stats.today_sales_count ?? prev.totalSales, totalRevenue: parseFloat(stats.today_sales_amount ?? '0') || prev.totalRevenue }));
     } catch {
       toast.error('Erreur lors de l\'annulation');
     }

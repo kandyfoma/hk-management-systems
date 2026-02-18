@@ -385,6 +385,13 @@ function DesktopApp() {
   // Create dynamic sidebar sections based on user's licenses
   const dynamicSections = useMemo(() => {
     const hasFeature = (feature: string) => allFeatures.includes(feature);
+    
+    // Debug logging to see what's available
+    console.log('🔍 Navigation Debug:');
+    console.log('📄 Active Modules:', activeModules);
+    console.log('🎯 All Features:', allFeatures);
+    console.log('🏢 Organization:', organization);
+    
     const sections = createDynamicSections(activeModules, hasFeature);
     
     // Always add settings section

@@ -42,16 +42,18 @@ class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         serializer.save(updated_by=self.request.user)
 
 
-class InventoryItemListAPIView(generics.ListAPIView):
-    queryset = InventoryItem.objects.select_related('product', 'organization')
+class InventoryItemListAPIView(generics.ListCreateAPIView):
+    queryset = InventoryItem.objects.select_related('product', 'organization').order_by('-last_movement', 'id')
     serializer_class = InventoryItemSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['stock_status']
-    ordering = ['-last_movement']
+    filterset_fields = ['stock_status', 'product']
+
+    def perform_create(self, serializer):
+        serializer.save(organization=self.request.user.organization)
 
 
 class InventoryItemDetailAPIView(generics.RetrieveUpdateAPIView):
-    queryset = InventoryItem.objects.select_related('product', 'organization')
+    queryset = InventoryItem.objects.select_related('product', 'organization').order_by('id')
     serializer_class = InventoryItemSerializer
 
 
@@ -76,43 +78,43 @@ class InventoryBatchDetailAPIView(generics.RetrieveUpdateAPIView):
 
 class StockMovementListAPIView(generics.ListCreateAPIView):
     queryset = StockMovement.objects.select_related(
-        'inventory_batch__inventory_item__product',
-        'related_sale',
+        'inventory_item__product',
+        'batch',
+        'performed_by',
         'created_by',
-        'updated_by'
     )
     serializer_class = StockMovementSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['movement_type', 'inventory_batch__inventory_item']
-    ordering = ['-date_created']
-    
+    filterset_fields = ['movement_type', 'direction', 'inventory_item']
+    ordering = ['-movement_date']
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
 
 class StockMovementDetailAPIView(generics.RetrieveUpdateAPIView):
     queryset = StockMovement.objects.select_related(
-        'inventory_batch__inventory_item__product',
-        'related_sale',
+        'inventory_item__product',
+        'batch',
+        'performed_by',
         'created_by',
-        'updated_by'
     )
     serializer_class = StockMovementSerializer
-    
-    def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
 
 
 class InventoryAlertListAPIView(generics.ListCreateAPIView):
     queryset = InventoryAlert.objects.select_related(
-        'inventory_item__product',
+        'product',
+        'inventory_item',
+        'batch',
         'created_by',
-        'updated_by'
+        'acknowledged_by',
+        'resolved_by',
     )
     serializer_class = InventoryAlertSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['alert_type', 'is_resolved']
-    ordering = ['-date_created']
+    filterset_fields = ['alert_type', 'is_active']
+    ordering = ['-created_at']
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -120,14 +122,14 @@ class InventoryAlertListAPIView(generics.ListCreateAPIView):
 
 class InventoryAlertDetailAPIView(generics.RetrieveUpdateAPIView):
     queryset = InventoryAlert.objects.select_related(
-        'inventory_item__product',
+        'product',
+        'inventory_item',
+        'batch',
         'created_by',
-        'updated_by'
+        'acknowledged_by',
+        'resolved_by',
     )
     serializer_class = InventoryAlertSerializer
-    
-    def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
 
 
 @api_view(['GET'])
@@ -162,13 +164,23 @@ def low_stock_products_view(request):
 def inventory_stats_view(request):
     total_products = Product.objects.filter(is_active=True).count()
     total_value = InventoryItem.objects.aggregate(Sum('total_value'))['total_value__sum'] or 0
-    
+
+    cutoff_90 = timezone.now().date() + timedelta(days=90)
+    expiring_soon_count = InventoryBatch.objects.filter(
+        status='AVAILABLE',
+        expiry_date__isnull=False,
+        expiry_date__lte=cutoff_90,
+        expiry_date__gte=timezone.now().date(),
+        current_quantity__gt=0
+    ).count()
+
     stats = {
         'total_products': total_products,
-        'total_value': total_value,
+        'total_value': float(total_value),
         'low_stock_count': InventoryItem.objects.filter(stock_status='LOW_STOCK').count(),
         'out_of_stock_count': InventoryItem.objects.filter(stock_status='OUT_OF_STOCK').count(),
         'active_alerts': InventoryAlert.objects.filter(is_active=True).count(),
+        'expiring_soon_count': expiring_soon_count,
     }
     return Response(stats)
 

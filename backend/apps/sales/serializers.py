@@ -6,19 +6,19 @@ from apps.inventory.models import Product, InventoryItem
 
 
 class SaleItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source='product.name', read_only=True)
-    product_sku = serializers.CharField(source='product.sku', read_only=True)
-    line_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    product_name_display = serializers.CharField(source='product.name', read_only=True)
+    product_sku_display = serializers.CharField(source='product.sku', read_only=True)
     
     class Meta:
         model = SaleItem
         fields = [
-            'id', 'sale', 'product', 'product_name', 'product_sku', 'product_code',
-            'product_description', 'quantity', 'unit_price', 'discount_percentage',
-            'discount_amount', 'line_total', 'tax_rate', 'tax_amount', 'batch_number',
-            'expiry_date', 'notes'
+            'id', 'sale', 'product', 'product_name', 'product_sku', 'unit_of_measure',
+            'product_name_display', 'product_sku_display',
+            'quantity', 'unit_price', 'unit_cost', 'discount_type', 'discount_value',
+            'discount_amount', 'line_total', 'inventory_batch',
+            'is_substitution', 'pharmacist_notes', 'patient_counseling', 'created_at'
         ]
-        read_only_fields = ['id', 'line_total']
+        read_only_fields = ['id', 'line_total', 'created_at']
 
 
 class SalePaymentSerializer(serializers.ModelSerializer):
@@ -72,10 +72,14 @@ class SaleDetailSerializer(serializers.ModelSerializer):
             'customer_name', 'customer_phone', 'cashier', 'cashier_name',
             'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
             'payment_status', 'payment_status_display', 'item_count',
-            'prescription', 'insurance_claim_number', 'void_reason',
+            'prescription', 'void_reason',
             'voided_by', 'voided_at', 'notes', 'created_at', 'updated_at',
             'items', 'payments'
         ]
+        read_only_fields = ['id', 'organization', 'sale_number', 'receipt_number',
+                            'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
+                            'item_count', 'cashier', 'cashier_name', 'voided_by', 'voided_at',
+                            'created_at', 'updated_at', 'items', 'payments']
 
 
 class SaleCreateSerializer(serializers.ModelSerializer):
@@ -86,7 +90,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         model = Sale
         fields = [
             'customer', 'customer_name', 'customer_phone', 'type', 'prescription',
-            'insurance_claim_number', 'notes', 'items', 'payments'
+            'notes', 'items', 'payments'
         ]
     
     @transaction.atomic
@@ -96,25 +100,20 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         
         # Calculate totals
         subtotal = Decimal('0.00')
-        tax_amount = Decimal('0.00')
         
         for item_data in items_data:
             quantity = item_data['quantity']
             unit_price = item_data['unit_price']
             discount = item_data.get('discount_amount', Decimal('0.00'))
-            tax_rate = item_data.get('tax_rate', Decimal('0.00'))
             
             line_total = (quantity * unit_price) - discount
-            line_tax = line_total * (tax_rate / 100)
-            
             subtotal += line_total
-            tax_amount += line_tax
         
-        total_amount = subtotal + tax_amount
+        total_amount = subtotal
         
         sale = Sale.objects.create(
             subtotal=subtotal,
-            tax_amount=tax_amount,
+            tax_amount=Decimal('0.00'),
             total_amount=total_amount,
             item_count=len(items_data),
             **validated_data

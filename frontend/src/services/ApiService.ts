@@ -89,9 +89,9 @@ class ApiService {
       (response) => response,
       async (error: AxiosError) => {
         if (error.response?.status === 401) {
-          // Token expired or invalid
-          await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-          // You might want to dispatch a logout action here
+          // Token expired or invalid - but don't automatically clear it here
+          // Let the ApiAuthService handle proper logout flow
+          console.log('401 error detected, token may be invalid');
         }
         return Promise.reject(error);
       }

@@ -372,7 +372,7 @@ export class SyncService {
   private getApiEndpoint(tableName: string): string {
     const endpointMap: { [key: string]: string } = {
       patients: '/patients/',
-      inventory: '/inventory/',
+      inventory: '/inventory/items/',
       prescriptions: '/prescriptions/',
       sales: '/sales/',
       suppliers: '/suppliers/',

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { useToast } from '../../../components/GlobalUI';
 import DatabaseService from '../../../services/DatabaseService';
+import ApiService from '../../../services/ApiService';
 import { AnalyticsScreen } from './AnalyticsScreen';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -74,7 +75,7 @@ export function PharmacyReportsScreen() {
   const [complianceAlerts, setComplianceAlerts] = useState<ComplianceAlert[]>([]);
   const [generatingReportId, setGeneratingReportId] = useState<string | null>(null);
   
-  const { showToast } = useToast();
+  const toast = useToast();
 
   // ─── Data Loading ───────────────────────────────────────────
   const loadReportsData = useCallback(async () => {
@@ -146,41 +147,66 @@ export function PharmacyReportsScreen() {
         },
       ];
 
-      // Load compliance alerts
-      const alerts: ComplianceAlert[] = [
-        {
+      // Load compliance alerts from backend
+      const api = ApiService.getInstance();
+      const [statsRes, expiringRes, lowStockRes] = await Promise.all([
+        api.get('/inventory/reports/stats/'),
+        api.get('/inventory/reports/expiring/', { days: 30 }),
+        api.get('/inventory/reports/low-stock/'),
+      ]);
+      const stats = statsRes?.data ?? {};
+      const expiringCount: number = expiringRes?.data?.count ?? 0;
+      const lowStockCount: number = lowStockRes?.data?.count ?? 0;
+      const activeAlerts: number = stats.active_alerts ?? 0;
+      const outOfStockCount: number = stats.out_of_stock_count ?? 0;
+
+      const alerts: ComplianceAlert[] = [];
+      if (expiringCount > 0) {
+        alerts.push({
           id: 'exp-001',
           type: 'expiry',
-          severity: 'high',
-          title: '23 médicaments expireront bientôt',
+          severity: expiringCount > 10 ? 'high' : 'medium',
+          title: `${expiringCount} médicament${expiringCount !== 1 ? 's' : ''} expireront dans 30 jours`,
           description: 'Médicaments expirant dans les 30 prochains jours',
-          dueDate: '2024-02-15',
           action: 'Vérifier et retirer du stock',
-        },
-        {
-          id: 'lic-002',
-          type: 'license',
-          severity: 'medium',
-          title: 'Licence de la pharmacie à renouveler',
-          description: 'La licence professionnelle expire dans 60 jours',
-          dueDate: '2024-03-20',
-          action: 'Démarrer le processus de renouvellement',
-        },
-        {
-          id: 'doc-003',
+        });
+      }
+      if (outOfStockCount > 0) {
+        alerts.push({
+          id: 'oos-001',
+          type: 'documentation',
+          severity: outOfStockCount > 5 ? 'high' : 'medium',
+          title: `${outOfStockCount} produit${outOfStockCount !== 1 ? 's' : ''} en rupture de stock`,
+          description: 'Produits dont le stock est à zéro',
+          action: 'Passer des commandes de réapprovisionnement',
+        });
+      }
+      if (lowStockCount > 0) {
+        alerts.push({
+          id: 'low-001',
           type: 'documentation',
           severity: 'low',
-          title: 'Mise à jour des protocoles',
-          description: 'Certains protocoles de dispensation sont obsolètes',
-          action: 'Réviser la documentation',
-        },
-      ];
+          title: `${lowStockCount} produit${lowStockCount !== 1 ? 's' : ''} en stock bas`,
+          description: 'Produits en dessous du seuil de réapprovisionnement',
+          action: 'Planifier le réapprovisionnement',
+        });
+      }
+      if (activeAlerts > 0) {
+        alerts.push({
+          id: 'alrt-001',
+          type: 'license',
+          severity: activeAlerts > 10 ? 'high' : 'medium',
+          title: `${activeAlerts} alerte${activeAlerts !== 1 ? 's' : ''} de stock active${activeAlerts !== 1 ? 's' : ''}`,
+          description: 'Alertes de stock nécessitant attention',
+          action: 'Consulter les alertes de stock',
+        });
+      }
 
       setQuickReports(reports);
       setComplianceAlerts(alerts);
     } catch (error) {
       console.error('Error loading reports data:', error);
-      showToast('Erreur lors du chargement des rapports', 'error');
+      toast.error('Erreur lors du chargement des rapports');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -196,7 +222,7 @@ export function PharmacyReportsScreen() {
     setGeneratingReportId(report.id);
     
     try {
-      showToast(`Génération du rapport "${report.title}"...`, 'info');
+      toast.info(`Génération du rapport "${report.title}"...`);
       
       // Mock report generation process
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -204,7 +230,7 @@ export function PharmacyReportsScreen() {
       // In a real implementation, this would call the appropriate API
       const reportData = await generateReportData(report);
       
-      showToast(`Rapport "${report.title}" généré avec succès`, 'success');
+      toast.success(`Rapport "${report.title}" généré avec succès`);
       
       // Update last generated time
       setQuickReports(prev => 
@@ -219,7 +245,7 @@ export function PharmacyReportsScreen() {
       exportReport(reportData);
       
     } catch (error) {
-      showToast('Erreur lors de la génération du rapport', 'error');
+      toast.error('Erreur lors de la génération du rapport');
     } finally {
       setGeneratingReportId(null);
     }
@@ -280,24 +306,24 @@ export function PharmacyReportsScreen() {
   };
 
   const exportToPDF = async (reportData: ReportData) => {
-    showToast('Export PDF en cours...', 'info');
+    toast.info('Export PDF en cours...');
     // Mock PDF export
     setTimeout(() => {
-      showToast('Rapport PDF exporté avec succès', 'success');
+      toast.success('Rapport PDF exporté avec succès');
     }, 1500);
   };
 
   const exportToExcel = async (reportData: ReportData) => {
-    showToast('Export Excel en cours...', 'info');
+    toast.info('Export Excel en cours...');
     setTimeout(() => {
-      showToast('Rapport Excel exporté avec succès', 'success');
+      toast.success('Rapport Excel exporté avec succès');
     }, 1500);
   };
 
   const printReport = async (reportData: ReportData) => {
-    showToast('Impression du rapport...', 'info');
+    toast.info('Impression du rapport...');
     setTimeout(() => {
-      showToast('Rapport envoyé à l\'imprimante', 'success');
+      toast.success('Rapport envoyé à l\'imprimante');
     }, 1000);
   };
 

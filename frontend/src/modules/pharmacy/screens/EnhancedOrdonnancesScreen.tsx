@@ -91,7 +91,7 @@ export function EnhancedPrescriptionsScreen() {
   const [processingAction, setProcessingAction] = useState<PrescriptionProcessingAction | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   
-  const { showToast } = useToast();
+  const toast = useToast();
 
   // ─── Data Loading ───────────────────────────────────────────
   const loadPrescriptions = useCallback(async () => {
@@ -132,7 +132,7 @@ export function EnhancedPrescriptionsScreen() {
       
     } catch (error) {
       console.error('Error loading prescriptions:', error);
-      showToast('Erreur lors du chargement des ordonnances', 'error');
+      toast.error('Erreur lors du chargement des ordonnances');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -249,13 +249,13 @@ export function EnhancedPrescriptionsScreen() {
       // Mock processing - in real implementation, this would update the database
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      showToast(`Action ${action.type} effectuée avec succès`, 'success');
+      toast.success(`Action ${action.type} effectuée avec succès`);
       setShowProcessingModal(false);
       setProcessingAction(null);
       await loadPrescriptions();
       
     } catch (error) {
-      showToast('Erreur lors du traitement', 'error');
+      toast.error('Erreur lors du traitement');
     } finally {
       setLoading(false);
     }
@@ -263,13 +263,13 @@ export function EnhancedPrescriptionsScreen() {
 
   const exportPrescriptions = async () => {
     try {
-      showToast('Export en cours...', 'info');
+      toast.info('Export en cours...');
       // Mock export functionality
       setTimeout(() => {
-        showToast('Liste des ordonnances exportée', 'success');
+        toast.success('Liste des ordonnances exportée');
       }, 2000);
     } catch (error) {
-      showToast('Erreur lors de l\'export', 'error');
+      toast.error('Erreur lors de l\'export');
     }
   };
 

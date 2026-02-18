@@ -102,7 +102,7 @@ export function AnalyticsScreen() {
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const { showToast } = useToast();
+  const toast = useToast();
 
   // ─── Load Analytics Data ─────────────────────────────────────
   const loadAnalyticsData = useCallback(async () => {
@@ -130,7 +130,7 @@ export function AnalyticsScreen() {
       
     } catch (error) {
       console.error('Error loading analytics:', error);
-      showToast('Erreur lors du chargement des données', 'error');
+      toast.error('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
     }
@@ -324,13 +324,13 @@ export function AnalyticsScreen() {
 
   const exportReport = async () => {
     try {
-      showToast('Export en cours...', 'info');
+      toast.info('Export en cours...');
       // Mock export functionality
       setTimeout(() => {
-        showToast('Rapport exporté avec succès', 'success');
+        toast.success('Rapport exporté avec succès');
       }, 2000);
     } catch (error) {
-      showToast('Erreur lors de l\'export', 'error');
+      toast.error('Erreur lors de l\'export');
     }
   };
 

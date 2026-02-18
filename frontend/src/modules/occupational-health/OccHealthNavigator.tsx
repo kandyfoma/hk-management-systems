@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SidebarLayout, SidebarSection } from '../../components/SidebarLayout';
 import { OccHealthDashboardContent } from './screens/OccHealthDashboard';
 import { OccHealthConsultationScreen } from './screens/OccHealthConsultationScreen';
 import { PreviousVisitsScreen } from './screens/PreviousVisitsScreen';
 import { CertificatesScreen } from './screens/CertificatesScreen';
 import { OHPatientsScreen } from './screens/OHPatientsScreen';
+import { OHPatientIntakeScreen, PENDING_CONSULTATIONS_KEY, type PendingConsultation } from './screens/OHPatientIntakeScreen';
 import { IncidentsScreen } from './screens/IncidentsScreen';
 import { DiseasesScreen } from './screens/DiseasesScreen';
 import { SurveillanceScreen } from './screens/SurveillanceScreen';
@@ -19,47 +21,10 @@ import { colors } from '../../theme/theme';
 // Occupational Health accent color
 const ACCENT = '#D97706';
 
-// ─── Sidebar Menu Configuration ──────────────────────────────
-const occHealthSections: SidebarSection[] = [
-  {
-    title: 'Principal',
-    items: [
-      { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
-      { id: 'patients', label: 'Patients', icon: 'people-outline', iconActive: 'people' },
-    ],
-  },
-  {
-    title: 'Médecine du Travail',
-    items: [
-      { id: 'medical-exams', label: 'Visites Médicales', icon: 'medkit-outline', iconActive: 'medkit', badge: 8 },
-      { id: 'previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
-      { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
-      { id: 'surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
-      { id: 'diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
-    ],
-  },
-  {
-    title: 'Sécurité au Travail',
-    items: [
-      { id: 'incidents', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
-      { id: 'risk-assessment', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
-      { id: 'ppe-management', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
-    ],
-  },
-  {
-    title: 'Rapports & Conformité',
-    items: [
-      { id: 'reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
-      { id: 'compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
-      { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
-    ],
-  },
-];
-
 // ─── Screen Definitions ──────────────────────────────────────
 const occHealthScreens: Record<string, { title: string; subtitle: string; icon: any; features: string[] }> = {
   patients: {
-    title: 'Patients — Santé au Travail',
+    title: 'Gestion Patients — Santé au Travail',
     subtitle: 'Registre des patients par secteur d\'activité et entreprise.',
     icon: 'people',
     features: [
@@ -222,6 +187,67 @@ const occHealthScreens: Record<string, { title: string; subtitle: string; icon: 
 export function OccHealthNavigator() {
   const [activeScreen, setActiveScreen] = useState('dashboard');
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Refresh pending queue count
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+      if (stored) {
+        const list: PendingConsultation[] = JSON.parse(stored);
+        setPendingCount(list.filter(c => c.status === 'waiting').length);
+      } else {
+        setPendingCount(0);
+      }
+    } catch (e) {
+      console.error('Failed to get pending count:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPendingCount();
+    // Poll every 30s for updates
+    const interval = setInterval(refreshPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, [refreshPendingCount]);
+
+  // Build sidebar sections dynamically so badge is reactive
+  const occHealthSections: SidebarSection[] = [
+    {
+      title: 'Principal',
+      items: [
+        { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
+        { id: 'patients', label: 'Gestion Patients', icon: 'people-outline', iconActive: 'people' },
+        { id: 'intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
+      ],
+    },
+    {
+      title: 'Médecine du Travail',
+      items: [
+        { id: 'medical-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit', badge: pendingCount > 0 ? pendingCount : undefined },
+        { id: 'previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
+        { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
+        { id: 'surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
+        { id: 'diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
+      ],
+    },
+    {
+      title: 'Sécurité au Travail',
+      items: [
+        { id: 'incidents', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
+        { id: 'risk-assessment', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
+        { id: 'ppe-management', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
+      ],
+    },
+    {
+      title: 'Rapports & Conformité',
+      items: [
+        { id: 'reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
+        { id: 'compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
+        { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
+      ],
+    },
+  ];
 
   const handleResumeDraft = (draftId: string) => {
     setDraftToLoad(draftId);
@@ -233,13 +259,35 @@ export function OccHealthNavigator() {
     setActiveScreen('medical-exams');
   };
 
+  const handleConsultationQueued = useCallback(() => {
+    refreshPendingCount();
+  }, [refreshPendingCount]);
+
+  const handleNavigateToConsultation = useCallback(() => {
+    setActiveScreen('medical-exams');
+  }, []);
+
   const renderContent = () => {
     if (activeScreen === 'dashboard') {
       return <OccHealthDashboardContent />;
     }
 
+    if (activeScreen === 'intake') {
+      return (
+        <OHPatientIntakeScreen
+          onConsultationQueued={handleConsultationQueued}
+          onNavigateToConsultation={handleNavigateToConsultation}
+        />
+      );
+    }
+
     if (activeScreen === 'medical-exams') {
-      return <OccHealthConsultationScreen draftToLoad={draftToLoad} onDraftLoaded={() => setDraftToLoad(null)} />;
+      return (
+        <OccHealthConsultationScreen
+          draftToLoad={draftToLoad}
+          onDraftLoaded={() => setDraftToLoad(null)}
+        />
+      );
     }
 
     if (activeScreen === 'previous-visits') {

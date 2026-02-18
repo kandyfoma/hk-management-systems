@@ -918,7 +918,8 @@ export const ADDITIONAL_PRODUCTS: Product[] = [
     tags: ['otc', 'anti-inflammatory', 'pain-relief'],
     createdAt: '2024-02-01T10:00:00Z',
     updatedAt: '2025-02-11T08:20:00Z',
-  }];
+  },
+  {
     id: 'PROD-004',
     organizationId: 'ORG-001',
     name: 'Amoxicilline',

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/theme';
-import DatabaseService from '../../../services/DatabaseService';
+import HybridDataService from '../../../services/HybridDataService';
 import { PatientCreate, Patient } from '../../../models/Patient';
 
 const { width } = Dimensions.get('window');
@@ -131,7 +131,7 @@ export function PatientRegistrationScreen({ onBack, onPatientCreated, editingPat
       const chronicConditions = chronicText.split(',').map(c => c.trim()).filter(Boolean);
       const currentMedications = medicationsText.split(',').map(m => m.trim()).filter(Boolean);
 
-      const db = DatabaseService.getInstance();
+      const db = HybridDataService.getInstance();
 
       if (isEditMode && editingPatient) {
         // Update existing patient

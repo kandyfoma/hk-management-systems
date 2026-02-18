@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,11 @@ import {
   Dimensions,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
+import { type PendingConsultation, PENDING_CONSULTATIONS_KEY } from './OHPatientIntakeScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DatabaseService from '../../../services/DatabaseService';
+import HybridDataService from '../../../services/HybridDataService';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
@@ -45,9 +47,6 @@ const ACCENT = '#D97706';
 // ═══════════════════════════════════════════════════════════════
 
 type ConsultationStep =
-  | 'worker_identification'
-  | 'visit_reason'
-  | 'vital_signs'
   | 'physical_exam'
   | 'sector_questions'
   | 'sector_tests'
@@ -56,9 +55,6 @@ type ConsultationStep =
   | 'summary';
 
 const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'worker_identification', label: 'Identification', icon: 'person' },
-  { key: 'visit_reason', label: 'Motif de Visite', icon: 'clipboard' },
-  { key: 'vital_signs', label: 'Signes Vitaux', icon: 'pulse' },
   { key: 'physical_exam', label: 'Examen Physique', icon: 'body' },
   { key: 'sector_questions', label: 'Questionnaire Sectoriel', icon: 'list' },
   { key: 'sector_tests', label: 'Tests Sectoriels', icon: 'flask' },
@@ -474,15 +470,45 @@ function getSectorQuestionnaire(sector: IndustrySector): SectorQuestionnaireConf
 export function OccHealthConsultationScreen({ 
   draftToLoad,
   onDraftLoaded,
-  onNavigateBack
+  onNavigateBack,
+  pendingConsultationToLoad,
+  onPendingLoaded,
 }: {
   draftToLoad?: string | null;
   onDraftLoaded?: () => void;
   onNavigateBack?: () => void;
+  pendingConsultationToLoad?: string | null;
+  onPendingLoaded?: () => void;
 }) {
-  console.log('🏥 OccHealthConsultationScreen mounted', { draftToLoad });
+  console.log('🏥 OccHealthConsultationScreen mounted', { draftToLoad, pendingConsultationToLoad });
+
+  // ─── Waiting room state ──
+  const [pendingConsultations, setPendingConsultations] = useState<PendingConsultation[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(false);
+  const [activePendingId, setActivePendingId] = useState<string | null>(null);
+
+  // Load pending consultations queue
+  const loadPendingQueue = useCallback(async () => {
+    setLoadingQueue(true);
+    try {
+      const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+      if (stored) {
+        const list: PendingConsultation[] = JSON.parse(stored);
+        setPendingConsultations(list.filter(c => c.status === 'waiting' || c.status === 'in_consultation'));
+      }
+    } catch (e) {
+      console.error('Failed to load pending queue:', e);
+    } finally {
+      setLoadingQueue(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPendingQueue();
+  }, [loadPendingQueue]);
+
   // ─── Step state ──
-  const [currentStep, setCurrentStep] = useState<ConsultationStep>('worker_identification');
+  const [currentStep, setCurrentStep] = useState<ConsultationStep>('physical_exam');
   const currentStepIdx = STEPS.findIndex(s => s.key === currentStep);
 
   // ─── Worker identification ──
@@ -495,14 +521,14 @@ export function OccHealthConsultationScreen({
   useEffect(() => {
     const loadWorkers = async () => {
       try {
-        const db = DatabaseService.getInstance();
-        const occHealthPatients = await db.getOccHealthPatients();
+        const db = HybridDataService.getInstance();
+        const result = await db.getAllPatients();
+        const occHealthPatients = result.data ?? [];
         
         if (occHealthPatients.length > 0) {
-          setWorkers(occHealthPatients as OccupationalHealthPatient[]);
+          setWorkers(occHealthPatients as unknown as OccupationalHealthPatient[]);
           console.log(`📋 Loaded ${occHealthPatients.length} workers from DatabaseService`);
         } else {
-          // Fallback to sample workers
           setWorkers(SAMPLE_WORKERS);
           console.log(`📋 Using ${SAMPLE_WORKERS.length} sample workers`);
         }
@@ -514,13 +540,46 @@ export function OccHealthConsultationScreen({
     loadWorkers();
   }, []);
 
-  // Auto-select first worker for testing if none selected
-  useEffect(() => {
-    if (!selectedWorker && !draftToLoad && workers.length > 0) {
-      console.log('🤖 Auto-selecting first worker for testing:', workers[0].firstName);
-      setSelectedWorker(workers[0]);
+  // Load a specific pending consultation when requested from the queue
+  const loadPendingConsultation = useCallback(async (pendingId: string) => {
+    try {
+      const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+      if (!stored) return;
+      const list: PendingConsultation[] = JSON.parse(stored);
+      const pending = list.find(c => c.id === pendingId);
+      if (!pending) return;
+
+      // Pre-populate all intake data
+      setSelectedWorker(pending.patient);
+      setExamType(pending.examType);
+      setVisitReason(pending.visitReason);
+      setReferredBy(pending.referredBy);
+      setVitals(pending.vitals);
+      setCurrentStep('physical_exam');
+      setActivePendingId(pendingId);
+
+      // Mark as in_consultation in queue
+      const updated = list.map(c =>
+        c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
+      );
+      await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
+      setPendingConsultations(prev => prev.map(c =>
+        c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
+      ));
+
+      console.log(`📋 Loaded pending consultation for ${pending.patient.firstName} ${pending.patient.lastName}`);
+    } catch (e) {
+      console.error('Failed to load pending consultation:', e);
     }
-  }, [selectedWorker, draftToLoad, workers]);
+  }, []);
+
+  // Auto-load pending consultation if one is passed
+  useEffect(() => {
+    if (pendingConsultationToLoad) {
+      loadPendingConsultation(pendingConsultationToLoad);
+      onPendingLoaded?.();
+    }
+  }, [pendingConsultationToLoad, loadPendingConsultation, onPendingLoaded]);
 
   // ─── Visit reason ──
   const [examType, setExamType] = useState<ExamType>('periodic');
@@ -769,7 +828,7 @@ export function OccHealthConsultationScreen({
           setFollowUpNeeded(false);
           setFollowUpDate('');
           setConsultationNotes('Consultation en cours - données partielles');
-          setCurrentStep('vital_signs'); // Continue from where it was left off
+          setCurrentStep('physical_exam'); // Continue from where it was left off
           
           setDraftId(id);
           setIsDraft(true);
@@ -855,11 +914,7 @@ export function OccHealthConsultationScreen({
     if (idx > 0) setCurrentStep(STEPS[idx - 1].key);
   };
   const canGoNext = (): boolean => {
-    switch (currentStep) {
-      case 'worker_identification': return !!selectedWorker;
-      case 'visit_reason': return !!examType;
-      default: return true;
-    }
+    return true; // all steps after intake are optional
   };
 
   // ─── Worker search ──
@@ -974,7 +1029,19 @@ export function OccHealthConsultationScreen({
             if (draftId) {
               await deleteDraft(draftId);
             }
-            // Reset form to initial state
+            // Mark pending consultation as completed and remove from queue
+            if (activePendingId) {
+              try {
+                const storedQueue = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+                if (storedQueue) {
+                  const queueList: PendingConsultation[] = JSON.parse(storedQueue);
+                  const updatedQueue = queueList.filter(c => c.id !== activePendingId);
+                  await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updatedQueue));
+                }
+              } catch (e) { console.error('Failed to remove from pending queue:', e); }
+            }
+            // Reload queue and reset form
+            loadPendingQueue();
             resetForm();
           }
         }]
@@ -987,8 +1054,9 @@ export function OccHealthConsultationScreen({
 
   // Reset form to initial state
   const resetForm = () => {
-    setCurrentStep('worker_identification');
+    setCurrentStep('physical_exam');
     setSelectedWorker(null);
+    setActivePendingId(null);
     setExamType('periodic');
     setVisitReason('');
     setReferredBy('');
@@ -2151,9 +2219,6 @@ export function OccHealthConsultationScreen({
 
   const renderStep = () => {
     switch (currentStep) {
-      case 'worker_identification': return renderWorkerIdentification();
-      case 'visit_reason': return renderVisitReason();
-      case 'vital_signs': return renderVitalSigns();
       case 'physical_exam': return renderPhysicalExam();
       case 'sector_questions': return renderSectorQuestions();
       case 'sector_tests': return renderSectorTests();
@@ -2165,6 +2230,146 @@ export function OccHealthConsultationScreen({
 
   return (
     <View style={styles.container}>
+      {/* ── WAITING ROOM VIEW (no patient active) ── */}
+      {!selectedWorker ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+          {/* Header */}
+          <View style={qStyles.queueHeader}>
+            <View style={qStyles.queueHeaderLeft}>
+              <View style={[qStyles.queueHeaderIcon, { backgroundColor: ACCENT + '14' }]}>
+                <Ionicons name="medkit" size={22} color={ACCENT} />
+              </View>
+              <View>
+                <Text style={qStyles.queueHeaderTitle}>Visite du Médecin</Text>
+                <Text style={qStyles.queueHeaderSub}>Sélectionnez un patient en attente pour commencer la consultation</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={qStyles.refreshBtn} onPress={loadPendingQueue}>
+              <Ionicons name="refresh" size={18} color={ACCENT} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Queue info banner */}
+          <View style={qStyles.queueBanner}>
+            <Ionicons name="people" size={18} color={ACCENT} />
+            <Text style={qStyles.queueBannerText}>
+              <Text style={{ fontWeight: '700' }}>{pendingConsultations.filter(c => c.status === 'waiting').length}</Text> patient{pendingConsultations.filter(c => c.status === 'waiting').length !== 1 ? 's' : ''} en attente
+              {pendingConsultations.filter(c => c.status === 'in_consultation').length > 0 && (
+                ` · ${pendingConsultations.filter(c => c.status === 'in_consultation').length} en consultation`
+              )}
+            </Text>
+            <Text style={qStyles.queueBannerHint}>Enregistrez les patients via "Accueil Patient"</Text>
+          </View>
+
+          {loadingQueue ? (
+            <View style={qStyles.loadingBox}>
+              <ActivityIndicator size="large" color={ACCENT} />
+              <Text style={qStyles.loadingText}>Chargement de la file d'attente...</Text>
+            </View>
+          ) : pendingConsultations.length === 0 ? (
+            <View style={qStyles.emptyQueue}>
+              <Ionicons name="time-outline" size={56} color={colors.textSecondary} />
+              <Text style={qStyles.emptyQueueTitle}>Aucun patient en attente</Text>
+              <Text style={qStyles.emptyQueueSub}>
+                Les patients enregistrés via "Accueil Patient" apparaîtront ici.
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: 12, marginTop: 8 }}>
+              {pendingConsultations.map((pending) => {
+                const sp = SECTOR_PROFILES[pending.patient.sector];
+                const isInConsultation = pending.status === 'in_consultation';
+                const arrivalTime = new Date(pending.arrivalTime);
+                const waitMinutes = Math.floor((Date.now() - arrivalTime.getTime()) / 60000);
+                return (
+                  <TouchableOpacity
+                    key={pending.id}
+                    style={[qStyles.queueCard, isInConsultation && { borderColor: colors.warning, opacity: 0.7 }]}
+                    onPress={() => !isInConsultation && loadPendingConsultation(pending.id)}
+                    activeOpacity={isInConsultation ? 1 : 0.75}
+                  >
+                    {/* Left: avatar + info */}
+                    <View style={[qStyles.queueAvatar, { backgroundColor: sp.color + '18' }]}>
+                      <Text style={[qStyles.queueAvatarText, { color: sp.color }]}>
+                        {pending.patient.firstName[0]}{pending.patient.lastName[0]}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={qStyles.queuePatientName}>
+                          {pending.patient.firstName} {pending.patient.lastName}
+                        </Text>
+                        {isInConsultation && (
+                          <View style={[qStyles.statusChip, { backgroundColor: colors.warning + '18' }]}>
+                            <Text style={[qStyles.statusChipText, { color: colors.warning }]}>En consultation</Text>
+                          </View>
+                        )}
+                        {!isInConsultation && (
+                          <View style={[qStyles.statusChip, { backgroundColor: colors.success + '14' }]}>
+                            <Text style={[qStyles.statusChipText, { color: colors.success }]}>En attente</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={qStyles.queueMeta}>{pending.patient.employeeId} · {pending.patient.company}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <Ionicons name={sp.icon as any} size={11} color={sp.color} />
+                        <Text style={[qStyles.queueMeta, { color: sp.color }]}>{sp.label}</Text>
+                        <Text style={qStyles.queueMeta}>· {OccHealthUtils.getExamTypeLabel(pending.examType)}</Text>
+                      </View>
+                      {/* Vitals preview if available */}
+                      {(pending.vitals.bloodPressureSystolic || pending.vitals.temperature || pending.vitals.heartRate) && (
+                        <View style={qStyles.vitalsPreview}>
+                          {pending.vitals.temperature && (
+                            <Text style={qStyles.vitalsPreviewText}>🌡 {pending.vitals.temperature}°C</Text>
+                          )}
+                          {pending.vitals.bloodPressureSystolic && (
+                            <Text style={qStyles.vitalsPreviewText}>
+                              ❤ {pending.vitals.bloodPressureSystolic}/{pending.vitals.bloodPressureDiastolic ?? '?'} mmHg
+                            </Text>
+                          )}
+                          {pending.vitals.heartRate && (
+                            <Text style={qStyles.vitalsPreviewText}>⚡ {pending.vitals.heartRate} bpm</Text>
+                          )}
+                          {pending.vitals.bloodPressureSystolic && pending.vitals.bloodPressureSystolic >= 140 && (
+                            <View style={qStyles.vitalAlert}>
+                              <Ionicons name="alert-circle" size={12} color={colors.error} />
+                              <Text style={[qStyles.vitalsPreviewText, { color: colors.error }]}>TA élevée</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                    {/* Right: wait time + action */}
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Text style={qStyles.waitTime}>
+                        {waitMinutes < 60 ? `${waitMinutes} min` : `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60 > 0 ? `${waitMinutes % 60}` : ''}`}
+                      </Text>
+                      {!isInConsultation && (
+                        <TouchableOpacity
+                          style={[qStyles.startBtn, { backgroundColor: sp.color }]}
+                          onPress={() => loadPendingConsultation(pending.id)}
+                        >
+                          <Text style={qStyles.startBtnText}>Consulter →</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Drafts section — resumable */}
+          <View style={[qStyles.queueBanner, { marginTop: 24 }]}>
+            <Ionicons name="document-text" size={16} color={colors.textSecondary} />
+            <Text style={[qStyles.queueBannerText, { color: colors.textSecondary }]}>
+              Brouillons en cours disponibles — allez dans "Historique Visites" pour les reprendre.
+            </Text>
+          </View>
+        </ScrollView>
+      ) : (
+        /* ── ACTIVE CONSULTATION VIEW ── */
+        <>
       {/* Draft Status Bar */}
       {(isDraft || selectedWorker) && (
         <View style={styles.draftStatusBar}>
@@ -2192,20 +2397,8 @@ export function OccHealthConsultationScreen({
             )}
           </View>
           <TouchableOpacity
-            style={[styles.saveDraftBtn, !selectedWorker && { opacity: 0.5 }]}
-            onPress={() => {
-              console.log('🖱️ Save button pressed', { 
-                selectedWorker: selectedWorker?.firstName,
-                hasSelectedWorker: !!selectedWorker 
-              });
-              if (selectedWorker) {
-                saveDraft();
-              } else {
-                console.warn('⚠️ No selected worker for saving');
-                Alert.alert('Attention', 'Veuillez sélectionner un travailleur avant de sauvegarder');
-              }
-            }}
-            disabled={!selectedWorker}
+            style={styles.saveDraftBtn}
+            onPress={() => saveDraft()}
             activeOpacity={0.7}
           >
             <Ionicons name="save" size={16} color={ACCENT} />
@@ -2340,6 +2533,8 @@ export function OccHealthConsultationScreen({
           </View>
         </View>
       </Modal>
+        </>
+      )}
     </View>
   );
 }
@@ -2809,4 +3004,67 @@ const sectorQuestionStyles = StyleSheet.create({
     backgroundColor: colors.error + '08',
   },
   alertInlineText: { fontSize: 11, color: colors.error, fontWeight: '600', flex: 1 },
+});
+// ─── Queue / Waiting Room Styles ───────────────────────────────
+const qStyles = StyleSheet.create({
+  queueHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant,
+  },
+  queueHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  queueHeaderIcon: {
+    width: 46, height: 46, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  queueHeaderTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  queueHeaderSub: { fontSize: 13, color: colors.textSecondary, marginTop: 3, lineHeight: 18 },
+  refreshBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: ACCENT + '14', borderWidth: 1, borderColor: ACCENT + '30',
+  },
+  queueBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    padding: 12, borderRadius: 10, marginTop: 14,
+    backgroundColor: ACCENT + '08', borderWidth: 1, borderColor: ACCENT + '25',
+  },
+  queueBannerText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
+  queueBannerHint: { fontSize: 11, color: colors.textSecondary, marginTop: 3 },
+  loadingBox: {
+    alignItems: 'center', paddingVertical: 60, gap: 14,
+  },
+  loadingText: { fontSize: 14, color: colors.textSecondary },
+  emptyQueue: {
+    alignItems: 'center', paddingVertical: 60, gap: 14,
+  },
+  emptyQueueTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+  emptyQueueSub: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', maxWidth: 320, lineHeight: 20 },
+
+  // Queue card
+  queueCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14,
+    backgroundColor: colors.surface, borderRadius: 14,
+    borderWidth: 1.5, borderColor: colors.outlineVariant,
+    ...shadows.sm,
+  },
+  queueAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center', marginTop: 2,
+  },
+  queueAvatarText: { fontSize: 15, fontWeight: '800' },
+  queuePatientName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  queueMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  statusChip: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
+  },
+  statusChipText: { fontSize: 11, fontWeight: '700' },
+  vitalsPreview: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  vitalsPreviewText: { fontSize: 11, color: colors.textSecondary },
+  vitalAlert: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  waitTime: { fontSize: 12, fontWeight: '700', color: ACCENT },
+  startBtn: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 10, alignItems: 'center',
+  },
+  startBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
 });

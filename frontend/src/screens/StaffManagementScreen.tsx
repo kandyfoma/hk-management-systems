@@ -49,22 +49,42 @@ interface UserFormData {
   employee_id: string;
   primary_role: string;
   department: string;
-  password: string;
+  password?: string;
 }
 
 const ROLE_OPTIONS = [
-  { value: 'ADMIN', label: 'Administrateur' },
-  { value: 'MANAGER', label: 'Gestionnaire' },
-  { value: 'DOCTOR', label: 'Médecin' },
-  { value: 'NURSE', label: 'Infirmier(e)' },
-  { value: 'PHARMACIST', label: 'Pharmacien' },
-  { value: 'RECEPTIONIST', label: 'Réceptionniste' },
-  { value: 'EMPLOYEE', label: 'Employé' },
+  { value: 'admin', label: 'Super Administrateur' },
+  { value: 'hospital_admin', label: 'Administrateur Hospitalier' },
+  { value: 'pharmacy_admin', label: 'Administrateur Pharmacie' },
+  { value: 'doctor', label: 'Médecin' },
+  { value: 'nurse', label: 'Infirmier(e)' },
+  { value: 'pharmacist', label: 'Pharmacien' },
+  { value: 'pharmacy_tech', label: 'Technicien Pharmacie' },
+  { value: 'receptionist', label: 'Réceptionniste' },
+  { value: 'lab_technician', label: 'Technicien Laboratoire' },
+  { value: 'cashier', label: 'Caissier(ière)' },
+  { value: 'inventory_manager', label: 'Gestionnaire Inventaire' },
+];
+
+const DEPARTMENT_OPTIONS = [
+  { value: 'Médecine Générale', label: 'Médecine Générale' },
+  { value: 'Pédiatrie', label: 'Pédiatrie' },
+  { value: 'Chirurgie', label: 'Chirurgie' },
+  { value: 'Obstétrique-Gynécologie', label: 'Obstétrique-Gynécologie' },
+  { value: 'Urgences', label: 'Urgences' },
+  { value: 'Pharmacie', label: 'Pharmacie' },
+  { value: 'Laboratoire', label: 'Laboratoire' },
+  { value: 'Radiologie', label: 'Radiologie' },
+  { value: 'Cardiologie', label: 'Cardiologie' },
+  { value: 'Santé Professionnelle', label: 'Santé Professionnelle' },
+  { value: 'Administration', label: 'Administration' },
+  { value: 'Comptabilité', label: 'Comptabilité' },
+  { value: 'Ressources Humaines', label: 'Ressources Humaines' },
 ];
 
 export function StaffManagementScreen() {
   const { showToast } = useToast();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user, organization } = useSelector((state: RootState) => state.auth);
   
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +103,6 @@ export function StaffManagementScreen() {
     employee_id: '',
     primary_role: 'EMPLOYEE',
     department: '',
-    password: '',
   });
   const [formLoading, setFormLoading] = useState(false);
   
@@ -119,16 +138,17 @@ export function StaffManagementScreen() {
     setRefreshing(false);
   };
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = users.filter(u => {
+    if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      user.first_name.toLowerCase().includes(query) ||
-      user.last_name.toLowerCase().includes(query) ||
-      user.phone.includes(query) ||
-      (user.email && user.email.toLowerCase().includes(query)) ||
-      (user.employee_id && user.employee_id.toLowerCase().includes(query)) ||
-      user.primary_role.toLowerCase().includes(query) ||
-      (user.department && user.department.toLowerCase().includes(query))
+      (u.first_name || '').toLowerCase().includes(query) ||
+      (u.last_name || '').toLowerCase().includes(query) ||
+      (u.phone || '').includes(query) ||
+      (u.email || '').toLowerCase().includes(query) ||
+      (u.employee_id || '').toLowerCase().includes(query) ||
+      (u.primary_role || '').toLowerCase().includes(query) ||
+      (u.department || '').toLowerCase().includes(query)
     );
   });
 
@@ -139,9 +159,8 @@ export function StaffManagementScreen() {
       phone: '',
       email: '',
       employee_id: '',
-      primary_role: 'EMPLOYEE',
+      primary_role: 'nurse',
       department: '',
-      password: '',
     });
   };
 
@@ -151,16 +170,58 @@ export function StaffManagementScreen() {
       return;
     }
 
+    // Validate phone number format
+    let formattedPhone = formData.phone.trim();
+    if (!formattedPhone.startsWith('+')) {
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+243' + formattedPhone.substring(1);
+      } else {
+        formattedPhone = '+243' + formattedPhone;
+      }
+    }
+
+    // Generate a secure random password
+    const generatePassword = () => {
+      const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$%';
+      let password = '';
+      for (let i = 0; i < 12; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return password;
+    };
+
+    const generatedPassword = generatePassword();
+
     try {
       setFormLoading(true);
-      const response = await ApiService.getInstance().post('/auth/users/', formData);
+      const userData = {
+        ...formData,
+        phone: formattedPhone,
+        password: generatedPassword,
+        confirm_password: generatedPassword,
+        organization: organization?.id, // Auto-set to current user's organization
+      };
+      
+      const response = await ApiService.getInstance().post('/auth/users/', userData);
       if (response.success) {
-        showToast('Personnel ajouté avec succès', 'success');
+        showToast(
+          `Personnel ajouté avec succès\nMot de passe temporaire: ${generatedPassword}\n(L'utilisateur doit le changer à la première connexion)`, 
+          'success'
+        );
         setShowAddModal(false);
         resetForm();
         loadUsers();
       } else {
-        showToast(response.error?.message || 'Erreur lors de l\'ajout', 'error');
+        console.log('API Error:', response);
+        if (response.errors) {
+          // Handle field-specific errors
+          const errorMessages = Object.entries(response.errors).map(([field, messages]) => {
+            return `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
+          }).join('\n');
+          showToast(`Erreurs de validation:\n${errorMessages}`, 'error');
+        } else {
+          showToast(response.error?.message || 'Erreur lors de l\'ajout', 'error');
+        }
       }
     } catch (error) {
       console.error('Add user error:', error);
@@ -179,9 +240,6 @@ export function StaffManagementScreen() {
     try {
       setFormLoading(true);
       const updateData = { ...formData };
-      if (!updateData.password) {
-        delete updateData.password; // Don't update password if not provided
-      }
       
       const response = await ApiService.getInstance().patch(`/auth/users/${editingUser.id}/`, updateData);
       if (response.success) {
@@ -191,7 +249,14 @@ export function StaffManagementScreen() {
         resetForm();
         loadUsers();
       } else {
-        showToast(response.error?.message || 'Erreur lors de la modification', 'error');
+        if (response.errors) {
+          const errorMessages = Object.entries(response.errors).map(([field, messages]) => {
+            return `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
+          }).join('\n');
+          showToast(`Erreurs de validation:\n${errorMessages}`, 'error');
+        } else {
+          showToast(response.error?.message || 'Erreur lors de la modification', 'error');
+        }
       }
     } catch (error) {
       console.error('Update user error:', error);
@@ -575,13 +640,25 @@ export function StaffManagementScreen() {
               
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>Département</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={formData.department}
-                  onChangeText={(text) => setFormData({ ...formData, department: text })}
-                  placeholder="Département"
-                  placeholderTextColor={colors.textSecondary}
-                />
+                <View style={styles.departmentSelector}>
+                  {DEPARTMENT_OPTIONS.map((dept) => (
+                    <TouchableOpacity
+                      key={dept.value}
+                      style={[
+                        styles.departmentOption,
+                        formData.department === dept.value && styles.departmentOptionSelected
+                      ]}
+                      onPress={() => setFormData({ ...formData, department: dept.value })}
+                    >
+                      <Text style={[
+                        styles.departmentOptionText,
+                        formData.department === dept.value && styles.departmentOptionTextSelected
+                      ]}>
+                        {dept.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
             </View>
             
@@ -608,19 +685,37 @@ export function StaffManagementScreen() {
               </View>
             </View>
             
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>
-                {isEdit ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe *'}
-              </Text>
-              <TextInput
-                style={styles.textInput}
-                value={formData.password}
-                onChangeText={(text) => setFormData({ ...formData, password: text })}
-                placeholder={isEdit ? "Laisser vide pour conserver" : "Mot de passe"}
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry
-              />
-            </View>
+            Only show password field for editing users
+            {isEdit && (
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>
+                  Nouveau mot de passe (optionnel)
+                </Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={formData.password || ''}
+                  onChangeText={(text) => setFormData({ ...formData, password: text })}
+                  placeholder="Laisser vide pour conserver"
+                  placeholderTextColor={colors.textSecondary}
+                  secureTextEntry
+                />
+                <Text style={styles.fieldHelp}>
+                  Laissez vide pour ne pas changer le mot de passe existant
+                </Text>
+              </View>
+            )}
+            
+            {/* Info message for new user password */}
+            {!isEdit && (
+              <View style={styles.infoBox}>
+                <View style={styles.infoRow}>
+                  <Ionicons name="information-circle" size={20} color={colors.info} />
+                  <Text style={styles.infoText}>
+                    Un mot de passe sécurisé sera généré automatiquement et affiché après la création de l'utilisateur.
+                  </Text>
+                </View>
+              </View>
+            )}
             
             <View style={styles.formActions}>
               <TouchableOpacity
@@ -1108,6 +1203,62 @@ const styles = StyleSheet.create({
   roleOptionTextSelected: {
     color: colors.surface,
     fontWeight: '600',
+  },
+  
+  // Department selector styles
+  departmentSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  departmentOption: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.background,
+    marginBottom: spacing.xs,
+  },
+  departmentOptionSelected: {
+    backgroundColor: colors.secondary,
+    borderColor: colors.secondary,
+  },
+  departmentOptionText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  departmentOptionTextSelected: {
+    color: colors.surface,
+    fontWeight: '600',
+  },
+  
+  // Info box styles
+  infoBox: {
+    backgroundColor: colors.info + '14',
+    borderWidth: 1,
+    borderColor: colors.info + '40',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  fieldHelp: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
   },
   formActions: {
     flexDirection: 'row',

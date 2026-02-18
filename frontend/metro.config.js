@@ -1,15 +1,19 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
 // Add support for .wasm files
 config.resolver.assetExts.push('wasm');
+config.resolver.sourceExts.push('wasm');
 
-// Ensure .wasm files are treated as assets
-config.resolver.platforms = ['ios', 'android', 'native', 'web'];
-
-// Configure source extensions with proper order
-config.resolver.sourceExts = ['ts', 'tsx', 'js', 'jsx', 'json', 'wasm'];
+// Shim Node.js built-ins that xlsx (and other packages) reference on web
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  fs: path.resolve(__dirname, 'src/shims/empty.js'),
+  crypto: path.resolve(__dirname, 'src/shims/empty.js'),
+  stream: path.resolve(__dirname, 'src/shims/empty.js'),
+};
 
 // Web-specific configuration for MIME types
 if (process.env.EXPO_PLATFORM === 'web') {

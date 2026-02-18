@@ -49,9 +49,32 @@ export const authSlice = createSlice({
       state.organization = action.payload.organization;
       state.licenses = action.payload.licenses;
       state.userModuleAccess = action.payload.userModuleAccess;
-      state.activeModules = action.payload.licenses
-        .filter(license => license.isActive && !isLicenseExpired(license))
-        .map(license => license.moduleType);
+      
+      // Debug logging for licenses
+      console.log('🔍 Auth Debug - Raw licenses:', action.payload.licenses);
+      
+      const activeLicenses = action.payload.licenses.filter(license => {
+        const isActive = license.isActive;
+        const isNotExpired = !isLicenseExpired(license);
+        console.log(`📄 License ${license.moduleType}: isActive=${isActive}, isNotExpired=${isNotExpired}`, license);
+        return isActive && isNotExpired;
+      });
+      
+      // Calculate active modules - for combined licenses, include all modules
+      const activeModules = [];
+      for (const license of activeLicenses) {
+        if (license.moduleType === 'COMBINED') {
+          // Combined license enables all modules
+          activeModules.push('HOSPITAL', 'PHARMACY', 'OCCUPATIONAL_HEALTH');
+        } else {
+          activeModules.push(license.moduleType);
+        }
+      }
+      
+      // Remove duplicates
+      state.activeModules = [...new Set(activeModules)];
+      console.log('🎯 Calculated activeModules:', state.activeModules);
+      
       state.isLoading = false;
       state.error = null;
     },
@@ -77,9 +100,22 @@ export const authSlice = createSlice({
     },
     updateLicenses: (state, action: PayloadAction<License[]>) => {
       state.licenses = action.payload;
-      state.activeModules = action.payload
-        .filter(license => license.isActive && !isLicenseExpired(license))
-        .map(license => license.moduleType);
+      
+      const activeLicenses = action.payload.filter(license => license.isActive && !isLicenseExpired(license));
+      
+      // Calculate active modules - for combined licenses, include all modules
+      const activeModules = [];
+      for (const license of activeLicenses) {
+        if (license.moduleType === 'COMBINED') {
+          // Combined license enables all modules
+          activeModules.push('HOSPITAL', 'PHARMACY', 'OCCUPATIONAL_HEALTH');
+        } else {
+          activeModules.push(license.moduleType);
+        }
+      }
+      
+      // Remove duplicates
+      state.activeModules = [...new Set(activeModules)];
     },
     updateUserModuleAccess: (state, action: PayloadAction<UserModuleAccess[]>) => {
       state.userModuleAccess = action.payload;
