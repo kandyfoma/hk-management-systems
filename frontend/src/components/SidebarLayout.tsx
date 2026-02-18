@@ -47,7 +47,6 @@ function MobileSidebarModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="formSheet"
       onRequestClose={onClose}
     >
       <View style={mobileSidebarStyles.container}>

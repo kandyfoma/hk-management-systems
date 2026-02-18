@@ -20,6 +20,8 @@ import {
   type OccupationalHealthPatient,
 } from '../../../models/OccupationalHealth';
 import { PatientUtils } from '../../../models/Patient';
+import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
+import type { OccSector, OccDepartment, OccPosition } from '../../../models/OccHealthProtocol';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -508,6 +510,8 @@ function getContractLabel(c: string): string {
 function AddPatientModal({
   visible, onClose, onSave
 }: { visible: boolean; onClose: () => void; onSave: (p: OccupationalHealthPatient) => void }) {
+  const svc = OccHealthProtocolService.getInstance();
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [employeeId, setEmployeeId] = useState('');
@@ -518,6 +522,35 @@ function AddPatientModal({
   const [jobTitle, setJobTitle] = useState('');
   const [phone, setPhone] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
+
+  // Structured protocol codes
+  const [selectedSectorCode, setSelectedSectorCode] = useState<string>('');
+  const [selectedDeptCode, setSelectedDeptCode] = useState<string>('');
+  const [selectedPositionCode, setSelectedPositionCode] = useState<string>('');
+
+  const occSectors = useMemo(() => svc.getAllSectors(), []);
+  const occDepts = useMemo(() => selectedSectorCode ? svc.getDepartmentsBySector(selectedSectorCode) : [], [selectedSectorCode]);
+  const occPositions = useMemo(() => selectedDeptCode ? svc.getPositionsByDepartment(selectedDeptCode) : [], [selectedDeptCode]);
+
+  const handleSelectSectorCode = (code: string) => {
+    setSelectedSectorCode(code);
+    setSelectedDeptCode('');
+    setSelectedPositionCode('');
+    // Auto-map to IndustrySector if possible
+    const sec = svc.getSectorByCode(code);
+    if (sec?.industrySectorKey) setSector(sec.industrySectorKey as IndustrySector);
+  };
+  const handleSelectDept = (code: string) => {
+    setSelectedDeptCode(code);
+    setSelectedPositionCode('');
+    const dept = svc.getDepartmentByCode(code);
+    if (dept) setDepartment(dept.name);
+  };
+  const handleSelectPosition = (code: string) => {
+    setSelectedPositionCode(code);
+    const pos = svc.getPositionByCode(code);
+    if (pos) setJobTitle(pos.name);
+  };
 
   const handleSave = () => {
     if (!firstName.trim() || !lastName.trim() || !employeeId.trim()) {
@@ -547,23 +580,32 @@ function AddPatientModal({
       company: company.trim() || 'Non spécifié',
       sector,
       site: site.trim() || 'Non spécifié',
-      department: department.trim() || 'Non spécifié',
+      department: department.trim() || department || 'Non spécifié',
       jobTitle: jobTitle.trim() || 'Non spécifié',
       jobCategory: 'other',
       shiftPattern: 'regular',
       hireDate: new Date().toISOString().split('T')[0],
       contractType: 'permanent',
       fitnessStatus: 'pending_evaluation',
-      exposureRisks: sectorProfile.typicalRisks.slice(0, 3) as ExposureRisk[],
-      ppeRequired: [] as PPEType[],
+      exposureRisks: selectedPositionCode
+        ? (svc.getPositionByCode(selectedPositionCode)?.typicalExposures ?? sectorProfile.typicalRisks.slice(0, 3)) as ExposureRisk[]
+        : sectorProfile.typicalRisks.slice(0, 3) as ExposureRisk[],
+      ppeRequired: selectedPositionCode
+        ? (svc.getPositionByCode(selectedPositionCode)?.recommendedPPE ?? []) as PPEType[]
+        : [] as PPEType[],
       riskLevel: sectorProfile.riskLevel,
       vaccinationStatus: [],
+      // Structured protocol references
+      sectorCode: selectedSectorCode || undefined,
+      departmentCode: selectedDeptCode || undefined,
+      positionCode: selectedPositionCode || undefined,
     };
     onSave(newPatient);
     // Reset
     setFirstName(''); setLastName(''); setEmployeeId(''); setCompany('');
     setSector('mining'); setSite(''); setDepartment(''); setJobTitle('');
     setPhone(''); setDateOfBirth('');
+    setSelectedSectorCode(''); setSelectedDeptCode(''); setSelectedPositionCode('');
   };
 
   return (
@@ -600,33 +642,80 @@ function AddPatientModal({
               <Text style={styles.formLabel}>Entreprise</Text>
               <TextInput style={styles.formInput} value={company} onChangeText={setCompany} placeholder="Nom de l'entreprise" />
             </View>
+            {/* ── Structured Sector / Department / Position ── */}
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Secteur d'Activité</Text>
-              <View style={styles.sectorGrid}>
-                {(Object.keys(SECTOR_PROFILES) as IndustrySector[]).slice(0, 8).map(s => {
-                  const sp = SECTOR_PROFILES[s];
-                  const isSelected = sector === s;
-                  return (
-                    <TouchableOpacity key={s}
-                      style={[styles.sectorChip, isSelected && { backgroundColor: sp.color + '20', borderColor: sp.color }]}
-                      onPress={() => setSector(s)}>
-                      <Ionicons name={sp.icon as any} size={14} color={isSelected ? sp.color : colors.textSecondary} />
-                      <Text style={[styles.sectorChipText, isSelected && { color: sp.color, fontWeight: '600' }]}>{sp.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <Text style={styles.formLabel}>Secteur (Protocoles Médicaux)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {occSectors.map(s => {
+                    const sp = s.industrySectorKey ? SECTOR_PROFILES[s.industrySectorKey as IndustrySector] : null;
+                    const isSelected = selectedSectorCode === s.code;
+                    return (
+                      <TouchableOpacity key={s.code}
+                        style={[styles.sectorChip, isSelected && { backgroundColor: (sp?.color || ACCENT) + '20', borderColor: sp?.color || ACCENT }]}
+                        onPress={() => handleSelectSectorCode(s.code)}>
+                        {sp && <Ionicons name={sp.icon as any} size={14} color={isSelected ? sp.color : colors.textSecondary} />}
+                        <Text style={[styles.sectorChipText, isSelected && { color: sp?.color || ACCENT, fontWeight: '600' }]}>{s.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
+            {selectedSectorCode !== '' && occDepts.length > 0 && (
+              <View style={styles.formSection}>
+                <Text style={styles.formLabel}>Département</Text>
+                <View style={styles.sectorGrid}>
+                  {occDepts.map(d => {
+                    const isSelected = selectedDeptCode === d.code;
+                    return (
+                      <TouchableOpacity key={d.code}
+                        style={[styles.sectorChip, isSelected && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]}
+                        onPress={() => handleSelectDept(d.code)}>
+                        <Text style={[styles.sectorChipText, isSelected && { color: ACCENT, fontWeight: '600' }]}>{d.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+            {selectedDeptCode !== '' && occPositions.length > 0 && (
+              <View style={styles.formSection}>
+                <Text style={styles.formLabel}>Poste (Protocole Auto-détecté)</Text>
+                <View style={styles.sectorGrid}>
+                  {occPositions.map(p => {
+                    const isSelected = selectedPositionCode === p.code;
+                    return (
+                      <TouchableOpacity key={p.code}
+                        style={[styles.sectorChip, isSelected && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]}
+                        onPress={() => handleSelectPosition(p.code)}>
+                        <Text style={[styles.sectorChipText, isSelected && { color: ACCENT, fontWeight: '600' }]}>{p.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {selectedPositionCode && (
+                  <View style={{ marginTop: 6, padding: 8, backgroundColor: ACCENT + '10', borderRadius: 8 }}>
+                    <Text style={{ fontSize: 11, color: ACCENT, fontWeight: '600' }}>
+                      ✓ {svc.getAvailableVisitTypes(selectedPositionCode).length} protocole(s) disponible(s) pour ce poste
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                      {svc.getPositionBreadcrumb(selectedPositionCode)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Site</Text>
               <TextInput style={styles.formInput} value={site} onChangeText={setSite} placeholder="Nom du site" />
             </View>
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Département</Text>
-              <TextInput style={styles.formInput} value={department} onChangeText={setDepartment} placeholder="Département" />
+              <Text style={styles.formLabel}>Département (texte libre)</Text>
+              <TextInput style={styles.formInput} value={department} onChangeText={setDepartment} placeholder="ex: Opérations Souterraines" />
             </View>
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Poste</Text>
+              <Text style={styles.formLabel}>Intitulé Poste</Text>
               <TextInput style={styles.formInput} value={jobTitle} onChangeText={setJobTitle} placeholder="Intitulé du poste" />
             </View>
           </ScrollView>

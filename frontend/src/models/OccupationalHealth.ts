@@ -290,6 +290,17 @@ export interface OccupationalHealthPatient extends Patient {
   shiftPattern: ShiftPattern;
   hireDate: string;
   contractType: 'permanent' | 'contract' | 'seasonal' | 'intern' | 'daily_worker';
+
+  // ─── Structured Protocol References ───────────────────────────
+  // These codes link to OccSector / OccDepartment / OccPosition in
+  // occHealthProtocolData.ts. Use OccHealthProtocolService.getInstance()
+  // to resolve protocols, exam requirements, and checklists automatically.
+  /** e.g. "MIN" — links to OccSector.code */
+  sectorCode?: string;
+  /** e.g. "MIN_UNDER" — links to OccDepartment.code */
+  departmentCode?: string;
+  /** e.g. "FOREUR" — links to OccPosition.code */
+  positionCode?: string;
   
   // Occupational Health Status
   fitnessStatus: FitnessStatus;

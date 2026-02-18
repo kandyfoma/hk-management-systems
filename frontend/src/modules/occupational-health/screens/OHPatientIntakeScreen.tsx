@@ -23,6 +23,13 @@ import {
   type VitalSigns,
 } from '../../../models/OccupationalHealth';
 import HybridDataService from '../../../services/HybridDataService';
+import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
+import {
+  EXAM_CATEGORY_COLORS,
+  EXAM_CATEGORY_LABELS,
+  EXAM_CATEGORY_ICONS,
+  type ProtocolQueryResult,
+} from '../../../models/OccHealthProtocol';
 
 // ─── Constants ───────────────────────────────────────────────
 const { width } = Dimensions.get('window');
@@ -134,6 +141,9 @@ export function OHPatientIntakeScreen({
   // Vital signs
   const [vitals, setVitals] = useState<VitalSigns>({});
 
+  // Protocol
+  const [protocolResult, setProtocolResult] = useState<ProtocolQueryResult | null>(null);
+
   // Submitting
   const [submitting, setSubmitting] = useState(false);
 
@@ -181,6 +191,17 @@ export function OHPatientIntakeScreen({
     () => selectedPatient ? SECTOR_PROFILES[selectedPatient.sector] : null,
     [selectedPatient],
   );
+
+  // Resolve protocol whenever patient or exam type changes
+  useEffect(() => {
+    if (!selectedPatient?.positionCode) {
+      setProtocolResult(null);
+      return;
+    }
+    const svc = OccHealthProtocolService.getInstance();
+    const result = svc.getProtocolForVisit(selectedPatient.positionCode, examType);
+    setProtocolResult(result);
+  }, [selectedPatient, examType]);
 
   const bmi = calculateBMI(vitals.weight, vitals.height);
   const bmiCat = getBMICategory(bmi);
@@ -428,6 +449,65 @@ export function OHPatientIntakeScreen({
             );
           })}
         </View>
+
+        {/* Protocol Exam Checklist Preview */}
+        {protocolResult && protocolResult.hasProtocol && (
+          <View style={vStyles.protocolBox}>
+            <View style={vStyles.protocolHeader}>
+              <Ionicons name="list" size={16} color={ACCENT} />
+              <Text style={vStyles.protocolTitle}>
+                Examens Requis — {protocolResult.protocol?.visitTypeLabel}
+              </Text>
+              <View style={vStyles.protocolCountChip}>
+                <Text style={vStyles.protocolCountText}>{protocolResult.requiredExams.length} examens</Text>
+              </View>
+            </View>
+            {protocolResult.protocol?.regulatoryNote && (
+              <Text style={vStyles.protocolRegNote}>
+                <Ionicons name="shield-checkmark" size={11} color={colors.textSecondary} /> {protocolResult.protocol.regulatoryNote}
+              </Text>
+            )}
+            {/* Group by category */}
+            {Object.entries(
+              protocolResult.requiredExams.reduce<Record<string, typeof protocolResult.requiredExams>>((acc, ex) => {
+                if (!acc[ex.category]) acc[ex.category] = [];
+                acc[ex.category].push(ex);
+                return acc;
+              }, {})
+            ).map(([cat, exams]) => (
+              <View key={cat} style={vStyles.protocolCatGroup}>
+                <View style={vStyles.protocolCatHeader}>
+                  <View style={[vStyles.protocolCatDot, { backgroundColor: EXAM_CATEGORY_COLORS[cat as keyof typeof EXAM_CATEGORY_COLORS] }]} />
+                  <Text style={[vStyles.protocolCatLabel, { color: EXAM_CATEGORY_COLORS[cat as keyof typeof EXAM_CATEGORY_COLORS] }]}>
+                    {EXAM_CATEGORY_LABELS[cat as keyof typeof EXAM_CATEGORY_LABELS]}
+                  </Text>
+                </View>
+                {exams.map((ex) => (
+                  <View key={ex.code} style={vStyles.protocolExamRow}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color={colors.textSecondary} />
+                    <Text style={vStyles.protocolExamText}>{ex.label}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+            {protocolResult.recommendedExams.length > 0 && (
+              <View style={vStyles.protocolRecBox}>
+                <Text style={vStyles.protocolRecTitle}>Recommandés ({protocolResult.recommendedExams.length})</Text>
+                <Text style={vStyles.protocolRecList}>
+                  {protocolResult.recommendedExams.map((e) => e.label).join(' · ')}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+        {selectedPatient && !selectedPatient.positionCode && (
+          <View style={vStyles.protocolNoPosition}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+            <Text style={vStyles.protocolNoPositionText}>
+              Aucun code de poste renseigné pour ce patient. Complétez le profil dans "Gestion Patients" pour des examens automatiques.
+            </Text>
+          </View>
+        )}
 
         {/* Notes */}
         <View style={vStyles.formGroup}>
@@ -864,4 +944,52 @@ const vStyles = StyleSheet.create({
   navBtnFilled: { backgroundColor: ACCENT },
   navBtnText: { fontSize: 14, fontWeight: '700' },
   stepCounter: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+
+  // Protocol Checklist
+  protocolBox: {
+    backgroundColor: colors.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: ACCENT + '40',
+    padding: 14, marginTop: 16, marginBottom: 4,
+  },
+  protocolHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10,
+  },
+  protocolTitle: {
+    flex: 1, fontSize: 13, fontWeight: '700', color: colors.text,
+  },
+  protocolCountChip: {
+    backgroundColor: ACCENT + '18', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  protocolCountText: { fontSize: 11, fontWeight: '700', color: ACCENT },
+  protocolRegNote: {
+    fontSize: 11, color: colors.textSecondary, marginBottom: 10,
+    fontStyle: 'italic', lineHeight: 16,
+  },
+  protocolCatGroup: { marginBottom: 8 },
+  protocolCatHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4,
+  },
+  protocolCatDot: { width: 8, height: 8, borderRadius: 4 },
+  protocolCatLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  protocolExamRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingLeft: 14, paddingVertical: 3,
+  },
+  protocolExamText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
+  protocolRecBox: {
+    marginTop: 8, padding: 10, borderRadius: 8,
+    backgroundColor: colors.surfaceVariant || colors.background,
+    borderWidth: 1, borderColor: colors.outlineVariant,
+  },
+  protocolRecTitle: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginBottom: 4 },
+  protocolRecList: { fontSize: 11, color: colors.textSecondary, lineHeight: 18 },
+  protocolNoPosition: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12,
+    backgroundColor: colors.warning + '10', borderRadius: 10,
+    borderWidth: 1, borderColor: colors.warning + '30', marginTop: 16,
+  },
+  protocolNoPositionText: {
+    fontSize: 12, color: colors.warning, flex: 1, lineHeight: 18,
+  },
 });
