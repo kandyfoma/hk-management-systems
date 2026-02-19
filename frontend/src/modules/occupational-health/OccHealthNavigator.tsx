@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SidebarLayout, SidebarSection } from '../../components/SidebarLayout';
 import { OccHealthDashboardContent } from './screens/OccHealthDashboard';
@@ -15,11 +15,12 @@ import { PPEManagementScreen } from './screens/PPEManagementScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { ComplianceScreen } from './screens/ComplianceScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
+import { ProtocolManagementScreen } from './screens/ProtocolManagementScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 
 // Occupational Health accent color
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 
 // ─── Screen Definitions ──────────────────────────────────────
 const occHealthScreens: Record<string, { title: string; subtitle: string; icon: any; features: string[] }> = {
@@ -187,6 +188,7 @@ const occHealthScreens: Record<string, { title: string; subtitle: string; icon: 
 export function OccHealthNavigator() {
   const [activeScreen, setActiveScreen] = useState('dashboard');
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
+  const [pendingConsultationToLoad, setPendingConsultationToLoad] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
 
   // Refresh pending queue count
@@ -225,6 +227,7 @@ export function OccHealthNavigator() {
       title: 'Médecine du Travail',
       items: [
         { id: 'medical-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit', badge: pendingCount > 0 ? pendingCount : undefined },
+        { id: 'protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
         { id: 'previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
         { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
         { id: 'surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
@@ -251,11 +254,13 @@ export function OccHealthNavigator() {
 
   const handleResumeDraft = (draftId: string) => {
     setDraftToLoad(draftId);
+    setPendingConsultationToLoad(null);
     setActiveScreen('medical-exams');
   };
 
   const handleNewConsultation = () => {
     setDraftToLoad(null);
+    setPendingConsultationToLoad(null);
     setActiveScreen('medical-exams');
   };
 
@@ -263,7 +268,9 @@ export function OccHealthNavigator() {
     refreshPendingCount();
   }, [refreshPendingCount]);
 
-  const handleNavigateToConsultation = useCallback(() => {
+  const handleNavigateToConsultation = useCallback((pendingId?: string) => {
+    setDraftToLoad(null);
+    setPendingConsultationToLoad(pendingId || null);
     setActiveScreen('medical-exams');
   }, []);
 
@@ -286,8 +293,14 @@ export function OccHealthNavigator() {
         <OccHealthConsultationScreen
           draftToLoad={draftToLoad}
           onDraftLoaded={() => setDraftToLoad(null)}
+          pendingConsultationToLoad={pendingConsultationToLoad}
+          onPendingLoaded={() => setPendingConsultationToLoad(null)}
         />
       );
+    }
+
+    if (activeScreen === 'protocol') {
+      return <ProtocolManagementScreen />;
     }
 
     if (activeScreen === 'previous-visits') {

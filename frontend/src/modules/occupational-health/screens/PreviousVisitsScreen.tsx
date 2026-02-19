@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,22 +8,72 @@ import {
   StyleSheet,
   Dimensions,
   Modal,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { 
   SECTOR_PROFILES, 
   OccHealthUtils,
   type Worker,
+  type OccupationalHealthPatient,
   type MedicalExamination,
   type ExamType,
   type FitnessStatus,
 } from '../../../models/OccupationalHealth';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
+
+type PreviousExamItem = MedicalExamination & {
+  workerName: string;
+  company: string;
+  sector: string;
+  jobTitle: string;
+  status: 'completed' | 'draft';
+  apiId?: number;
+};
+
+const mapBackendExamTypeToFrontend = (value?: string): ExamType => {
+  switch (value) {
+    case 'exit': return 'exit_medical';
+    case 'special': return 'special_request';
+    case 'pre_employment':
+    case 'periodic':
+    case 'return_to_work':
+    case 'post_incident':
+    case 'night_work':
+    case 'pregnancy_related':
+      return value;
+    default:
+      return 'periodic';
+  }
+};
+
+const mapBackendFitnessToFrontend = (value?: string): FitnessStatus => {
+  switch (value) {
+    case 'fit':
+    case 'fit_with_restrictions':
+    case 'temporarily_unfit':
+    case 'permanently_unfit':
+      return value;
+    default:
+      return 'pending_evaluation';
+  }
+};
+
+const parseRestrictions = (value?: string | null): string[] => {
+  if (!value) return [];
+  return value
+    .split(';')
+    .map((x) => x.trim())
+    .filter(Boolean);
+};
 
 // ─── Sample previous medical examinations ────────────────────
 const SAMPLE_EXAMINATIONS: (MedicalExamination & { 
@@ -342,15 +392,194 @@ export function PreviousVisitsScreen({
   onResumeDraft?: (draftId: string) => void;
   onNewConsultation?: () => void;
 }) {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [examinations, setExaminations] = useState<PreviousExamItem[]>(SAMPLE_EXAMINATIONS);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterExamType, setFilterExamType] = useState<ExamType | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'draft'>('all');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedExam, setSelectedExam] = useState<typeof SAMPLE_EXAMINATIONS[0] | null>(null);
+  const [selectedExam, setSelectedExam] = useState<PreviousExamItem | null>(null);
+
+  const loadFromBackend = useCallback(async () => {
+    const [workersRes, examsRes] = await Promise.all([
+      occHealthApi.listWorkers({ page: 1 }),
+      occHealthApi.listMedicalExaminations({ page: 1 }),
+    ]);
+
+    if (workersRes.error || examsRes.error) {
+      throw new Error(workersRes.error || examsRes.error || 'Erreur de chargement backend');
+    }
+
+    const workersById = new Map<string, OccupationalHealthPatient>();
+    (workersRes.data || []).forEach((w) => workersById.set(String(w.id), w));
+
+    const detailed = await Promise.all(
+      (examsRes.data || []).map(async (e: any) => {
+        const detail = await occHealthApi.getMedicalExamination(e.id);
+        return detail.data || e;
+      })
+    );
+
+    const mapped: PreviousExamItem[] = detailed.map((e: any) => {
+      const workerId = String(e.worker ?? '');
+      const worker = workersById.get(workerId);
+      const certificate = e.fitness_certificate;
+
+      return {
+        id: `EXAM-${e.id}`,
+        apiId: e.id,
+        patientId: workerId,
+        workerName: e.worker_name || (worker ? `${worker.firstName} ${worker.lastName}` : 'Travailleur'),
+        company: e.enterprise_name || worker?.company || 'Non spécifié',
+        sector: worker?.sector || 'other',
+        jobTitle: worker?.jobTitle || '—',
+        workerSector: worker?.sector || 'other',
+        examType: mapBackendExamTypeToFrontend(e.exam_type),
+        examDate: e.exam_date,
+        examinerName: e.examining_doctor_name || 'Médecin',
+        vitals: e.vital_signs ? {
+          temperature: e.vital_signs.temperature,
+          bloodPressureSystolic: e.vital_signs.systolic_bp,
+          bloodPressureDiastolic: e.vital_signs.diastolic_bp,
+          heartRate: e.vital_signs.heart_rate,
+          respiratoryRate: e.vital_signs.respiratory_rate,
+          weight: e.vital_signs.weight,
+          height: e.vital_signs.height,
+          waistCircumference: e.vital_signs.waist_circumference,
+        } : undefined,
+        physicalExam: e.physical_exam ? {
+          generalAppearance: e.physical_exam.general_appearance ? 'abnormal' : 'normal',
+          generalNotes: e.physical_exam.general_appearance || '',
+          cardiovascular: e.physical_exam.cardiovascular ? 'abnormal' : 'normal',
+          cardiovascularNotes: e.physical_exam.cardiovascular || '',
+          respiratory: e.physical_exam.respiratory ? 'abnormal' : 'normal',
+          respiratoryNotes: e.physical_exam.respiratory || '',
+          musculoskeletal: e.physical_exam.musculoskeletal ? 'abnormal' : 'normal',
+          musculoskeletalNotes: e.physical_exam.musculoskeletal || '',
+          neurological: e.physical_exam.neurological ? 'abnormal' : 'normal',
+          neurologicalNotes: e.physical_exam.neurological || '',
+          dermatological: e.physical_exam.skin ? 'abnormal' : 'normal',
+          dermatologicalNotes: e.physical_exam.skin || '',
+          ent: e.physical_exam.ent ? 'abnormal' : 'normal',
+          entNotes: e.physical_exam.ent || '',
+          abdomen: e.physical_exam.abdominal ? 'abnormal' : 'normal',
+          abdomenNotes: e.physical_exam.abdominal || '',
+          mentalHealth: 'normal',
+          ophthalmological: 'normal',
+        } : {
+          generalAppearance: 'normal',
+          cardiovascular: 'normal',
+          respiratory: 'normal',
+          musculoskeletal: 'normal',
+          neurological: 'normal',
+          dermatological: 'normal',
+          ent: 'normal',
+          abdomen: 'normal',
+          mentalHealth: 'normal',
+          ophthalmological: 'normal',
+        },
+        fitnessDecision: mapBackendFitnessToFrontend(certificate?.fitness_decision),
+        restrictions: parseRestrictions(certificate?.restrictions),
+        recommendations: e.recommendations ? [e.recommendations] : [],
+        certificateNumber: certificate?.certificate_number,
+        certificateIssued: !!certificate,
+        notes: e.results_summary || e.chief_complaint || '',
+        createdAt: e.created_at || new Date().toISOString(),
+        updatedAt: e.updated_at,
+        status: 'completed',
+        expiryDate: certificate?.valid_until,
+        examinerDoctorId: e.examining_doctor ? String(e.examining_doctor) : undefined,
+      };
+    });
+
+    return mapped;
+  }, []);
+
+  const loadDrafts = useCallback(async (): Promise<PreviousExamItem[]> => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const draftKeys = keys.filter((k) => k.startsWith('consultation_draft_'));
+      if (draftKeys.length === 0) return [];
+
+      const draftPairs = await AsyncStorage.multiGet(draftKeys);
+      return draftPairs
+        .map(([, value]) => {
+          if (!value) return null;
+          const d = JSON.parse(value);
+          const workerName = d?.selectedWorker ? `${d.selectedWorker.firstName} ${d.selectedWorker.lastName}` : 'Travailleur';
+          return {
+            id: d.id,
+            patientId: d?.selectedWorker?.id || '',
+            workerName,
+            company: d?.selectedWorker?.company || 'Non spécifié',
+            sector: d?.selectedWorker?.sector || 'other',
+            jobTitle: d?.selectedWorker?.jobTitle || '—',
+            workerSector: d?.selectedWorker?.sector || 'other',
+            examType: d?.examType || 'periodic',
+            examDate: d?.updatedAt || d?.createdAt || new Date().toISOString(),
+            examinerName: 'Brouillon',
+            vitals: d?.vitals || {},
+            physicalExam: d?.physicalExam || {
+              generalAppearance: 'normal',
+              cardiovascular: 'normal',
+              respiratory: 'normal',
+              musculoskeletal: 'normal',
+              neurological: 'normal',
+              dermatological: 'normal',
+              ent: 'normal',
+              abdomen: 'normal',
+              mentalHealth: 'normal',
+              ophthalmological: 'normal',
+            },
+            fitnessDecision: d?.fitnessDecision || 'pending_evaluation',
+            restrictions: d?.restrictions || [],
+            recommendations: d?.recommendations ? [d.recommendations] : [],
+            certificateIssued: false,
+            notes: d?.consultationNotes || 'Brouillon en cours',
+            createdAt: d?.createdAt || new Date().toISOString(),
+            updatedAt: d?.updatedAt,
+            status: 'draft' as const,
+          } as PreviousExamItem;
+        })
+        .filter((x): x is PreviousExamItem => !!x);
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const reloadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const [drafts, backend] = await Promise.all([
+        loadDrafts(),
+        loadFromBackend().catch((e) => {
+          console.error('Backend load failed in PreviousVisitsScreen:', e);
+          return [] as PreviousExamItem[];
+        }),
+      ]);
+
+      const merged = [...drafts, ...backend];
+      if (merged.length > 0) {
+        setExaminations(merged);
+      } else {
+        setExaminations(SAMPLE_EXAMINATIONS);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [loadDrafts, loadFromBackend]);
+
+  useEffect(() => {
+    reloadData();
+  }, [reloadData]);
 
   // ─── Filtered examinations ──
   const filteredExams = useMemo(() => {
-    let filtered = SAMPLE_EXAMINATIONS;
+    let filtered = examinations;
 
     // Search filter
     if (searchQuery.trim()) {
@@ -379,24 +608,24 @@ export function PreviousVisitsScreen({
 
   // ─── Stats ──
   const stats = useMemo(() => {
-    const total = SAMPLE_EXAMINATIONS.length;
-    const completed = SAMPLE_EXAMINATIONS.filter(e => e.status === 'completed').length;
-    const drafts = SAMPLE_EXAMINATIONS.filter(e => e.status === 'draft').length;
-    const thisMonth = SAMPLE_EXAMINATIONS.filter(e => {
+    const total = examinations.length;
+    const completed = examinations.filter(e => e.status === 'completed').length;
+    const drafts = examinations.filter(e => e.status === 'draft').length;
+    const thisMonth = examinations.filter(e => {
       const examDate = new Date(e.examDate);
       const now = new Date();
       return examDate.getMonth() === now.getMonth() && examDate.getFullYear() === now.getFullYear();
     }).length;
 
     return { total, completed, drafts, thisMonth };
-  }, []);
+  }, [examinations]);
 
   // ─── Handlers ──
-  const handleExamPress = (exam: typeof SAMPLE_EXAMINATIONS[0]) => {
+  const handleExamPress = (exam: PreviousExamItem) => {
     setSelectedExam(exam);
   };
 
-  const handleResumeDraft = (exam: typeof SAMPLE_EXAMINATIONS[0]) => {
+  const handleResumeDraft = (exam: PreviousExamItem) => {
     if (exam.status === 'draft' && onResumeDraft) {
       // Show loading feedback
       console.log(
@@ -545,7 +774,17 @@ export function PreviousVisitsScreen({
       </View>
 
       {/* Examinations List */}
-      <ScrollView style={styles.examsList} contentContainerStyle={styles.examsListContent}>
+      <ScrollView
+        style={styles.examsList}
+        contentContainerStyle={styles.examsListContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reloadData(true)} colors={[ACCENT]} tintColor={ACCENT} />}
+      >
+        {loading && (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={ACCENT} />
+            <Text style={styles.loadingText}>Chargement depuis la base backend...</Text>
+          </View>
+        )}
         {filteredExams.map(exam => (
           <ExamCard
             key={exam.id}
@@ -639,7 +878,11 @@ export function PreviousVisitsScreen({
                   {selectedExam.recommendations && (
                     <View style={styles.modalSection}>
                       <Text style={styles.modalSectionTitle}>Recommandations</Text>
-                      <Text style={styles.modalText}>{selectedExam.recommendations}</Text>
+                      <Text style={styles.modalText}>
+                        {Array.isArray(selectedExam.recommendations)
+                          ? selectedExam.recommendations.join(' · ')
+                          : selectedExam.recommendations}
+                      </Text>
                     </View>
                   )}
 
@@ -733,6 +976,19 @@ const styles = StyleSheet.create({
   // Exams List
   examsList: { flex: 1 },
   examsListContent: { paddingHorizontal: isDesktop ? 32 : 16, paddingBottom: 16, gap: 12 },
+  loadingState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  loadingText: { fontSize: 12, color: colors.textSecondary },
 
   // Exam Card
   examCard: {

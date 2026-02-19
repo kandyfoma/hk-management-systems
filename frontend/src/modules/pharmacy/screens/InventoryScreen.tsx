@@ -29,6 +29,7 @@ import {
   InventoryUtils,
 } from '../../../models/Inventory';
 import { getTextColor, getIconBackgroundColor, getSecondaryTextColor, getTertiaryTextColor } from '../../../utils/colorContrast';
+import DateInput from '../../../components/DateInput';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const IS_DESKTOP = SCREEN_W >= 1024;
@@ -253,7 +254,7 @@ export function InventoryScreen() {
       // Fetch products, inventory items, batches, movements and alerts in parallel
       const [productsRes, itemsRes, batchesRes, movementsRes, alertsRes, statsRes] = await Promise.all([
         api.get('/inventory/products/', { page_size: 500, ...cacheBuster }),
-        api.get('/inventory/items/', { page_size: 500, ...cacheBuster }),
+        api.get('/inventory/items/', { page_size: 500, facility_id: 'pharmacy-main', ...cacheBuster }),
         api.get('/inventory/batches/', { page_size: 500, ...cacheBuster }),
         api.get('/inventory/movements/', { page_size: 200, ...cacheBuster }),
         api.get('/inventory/alerts/', { is_active: true, page_size: 200, ...cacheBuster }),
@@ -309,7 +310,7 @@ export function InventoryScreen() {
         id: i.id,
         organizationId: i.organization,
         productId: i.product,
-        facilityId: i.location ?? 'pharmacy-main',
+        facilityId: i.facility_id ?? 'pharmacy-main',
         facilityType: 'PHARMACY',
         quantityOnHand: parseFloat(i.quantity_on_hand ?? '0'),
         quantityReserved: parseFloat(i.quantity_reserved ?? '0'),
@@ -410,7 +411,27 @@ export function InventoryScreen() {
 
       // Build lookup maps
       const invByProduct = new Map<string, InventoryItem>();
-      mappedItems.forEach(i => invByProduct.set(i.productId, i));
+      mappedItems.forEach(i => {
+        const existing = invByProduct.get(i.productId);
+        if (!existing) {
+          invByProduct.set(i.productId, i);
+          return;
+        }
+
+        const existingIsMain = existing.facilityId === 'pharmacy-main';
+        const currentIsMain = i.facilityId === 'pharmacy-main';
+        if (currentIsMain && !existingIsMain) {
+          invByProduct.set(i.productId, i);
+          return;
+        }
+        if (currentIsMain === existingIsMain) {
+          const existingTs = new Date(existing.updatedAt || 0).getTime();
+          const currentTs = new Date(i.updatedAt || 0).getTime();
+          if (currentTs > existingTs) {
+            invByProduct.set(i.productId, i);
+          }
+        }
+      });
 
       const batchesByItem = new Map<string, InventoryBatch[]>();
       mappedBatches.forEach(b => {
@@ -2079,6 +2100,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
                 value={form.expirationDate} 
                 onChange={v => upd('expirationDate', v)}
                 placeholder="YYYY-MM-DD ou JJ/MM/AAAA"
+                isDate
               />
               <View style={modalS.toggleRow}>
                 <TouchableOpacity style={[modalS.toggle, form.trackExpiry && modalS.toggleOn]} onPress={() => upd('trackExpiry', !form.trackExpiry)}>
@@ -2172,7 +2194,7 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
       let invId = inv?.id;
       if (!invId) {
         // Try fetching an existing item for this product first
-        const fetchRes = await api.get('/inventory/items/', { product: product.id, page_size: 1 });
+        const fetchRes = await api.get('/inventory/items/', { product: product.id, facility_id: 'pharmacy-main', page_size: 1 });
         const existing = fetchRes?.data?.results?.[0] ?? fetchRes?.data?.[0];
         if (existing?.id) {
           invId = existing.id;
@@ -2191,7 +2213,7 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
       }
 
       // Record the stock movement first (with balance info)
-      await api.post('/inventory/movements/', {
+      const movementRes = await api.post('/inventory/movements/', {
         inventory_item: invId,
         movement_type: adjType === 'add' ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
         direction: adjType === 'add' ? 'IN' : 'OUT',
@@ -2202,6 +2224,9 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
         balance_before: currentQty,
         balance_after: newQty,
       });
+      if (!movementRes.success) {
+        throw new Error(movementRes.error?.message || 'Échec de création du mouvement de stock');
+      }
 
       // Update the inventory item quantity
       const updateResponse = await api.patch(`/inventory/items/${invId}/`, {
@@ -2215,8 +2240,21 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
         throw new Error(updateResponse.error?.message || 'Update failed');
       }
 
-      toast.success(`Stock ajusté: ${product.name} (${currentQty} → ${newQty})`);
-      onSaved(product.id, newQty, computedStatus);
+      const verifyRes = await api.get(`/inventory/items/${invId}/`);
+      if (!verifyRes.success || !verifyRes.data) {
+        throw new Error(verifyRes.error?.message || 'Impossible de vérifier le stock mis à jour');
+      }
+      const confirmedQty = parseFloat(verifyRes.data.quantity_on_hand ?? String(newQty));
+      const confirmedStatus = confirmedQty === 0
+        ? 'OUT_OF_STOCK'
+        : confirmedQty <= product.minStockLevel
+          ? 'LOW_STOCK'
+          : confirmedQty >= product.maxStockLevel
+            ? 'OVER_STOCK'
+            : 'IN_STOCK';
+
+      toast.success(`Stock ajusté: ${product.name} (${currentQty} → ${confirmedQty})`);
+      onSaved(product.id, confirmedQty, confirmedStatus);
     } catch (error) {
       console.error('❌ Stock adjustment error:', error);
       toast.error('Erreur lors de l\'ajustement');
@@ -2367,22 +2405,34 @@ function ConfirmDeleteModal({ productName, onCancel, onConfirm }: {
 // FORM COMPONENTS
 // ═══════════════════════════════════════════════════════════════
 
-function Field({ label, value, onChange, placeholder, keyboardType, multiline, flex }: {
+function Field({ label, value, onChange, placeholder, keyboardType, multiline, flex, isDate }: {
   label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; keyboardType?: string; multiline?: boolean; flex?: boolean;
+  placeholder?: string; keyboardType?: string; multiline?: boolean; flex?: boolean; isDate?: boolean;
 }) {
   return (
     <View style={[modalS.field, flex && { flex: 1 }]}>
       <Text style={modalS.fieldLbl}>{label}</Text>
-      <TextInput
-        style={[modalS.fieldInput, multiline && { height: 72, textAlignVertical: 'top' }]}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder || label}
-        placeholderTextColor={colors.placeholder}
-        keyboardType={keyboardType as any}
-        multiline={multiline}
-      />
+      {isDate ? (
+        <View style={modalS.fieldInput}>
+          <DateInput
+            value={value}
+            onChangeText={onChange}
+            placeholder={placeholder || label}
+            placeholderTextColor={colors.placeholder}
+            format="iso"
+          />
+        </View>
+      ) : (
+        <TextInput
+          style={[modalS.fieldInput, multiline && { height: 72, textAlignVertical: 'top' }]}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder || label}
+          placeholderTextColor={colors.placeholder}
+          keyboardType={keyboardType as any}
+          multiline={multiline}
+        />
+      )}
     </View>
   );
 }

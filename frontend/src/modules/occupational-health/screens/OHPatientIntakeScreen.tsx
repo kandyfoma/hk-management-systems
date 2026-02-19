@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+﻿import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,7 @@ import {
   type ExamType,
   type VitalSigns,
 } from '../../../models/OccupationalHealth';
-import HybridDataService from '../../../services/HybridDataService';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
 import {
   EXAM_CATEGORY_COLORS,
@@ -34,8 +35,45 @@ import {
 // ─── Constants ───────────────────────────────────────────────
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 export const PENDING_CONSULTATIONS_KEY = '@occ_pending_consultations';
+
+function safeParsePendingConsultations(raw: string | null): PendingConsultation[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function upsertPendingConsultationQueue(
+  queue: PendingConsultation[],
+  nextItem: PendingConsultation,
+): PendingConsultation[] {
+  // Keep only one active intake entry per patient in waiting/in_consultation.
+  const activeStatuses: PendingConsultation['status'][] = ['waiting', 'in_consultation'];
+  const existingIndex = queue.findIndex(
+    item =>
+      item.patient?.id === nextItem.patient?.id &&
+      activeStatuses.includes(item.status),
+  );
+
+  if (existingIndex >= 0) {
+    const updated = [...queue];
+    // Refresh latest triage details while keeping the same queue id for stability.
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      ...nextItem,
+      id: updated[existingIndex].id,
+      status: 'waiting',
+    };
+    return updated;
+  }
+
+  return [...queue, nextItem];
+}
 
 // ─── Types ───────────────────────────────────────────────────
 export interface PendingConsultation {
@@ -122,7 +160,7 @@ export function OHPatientIntakeScreen({
   onNavigateToConsultation,
 }: {
   onConsultationQueued?: () => void;
-  onNavigateToConsultation?: () => void;
+  onNavigateToConsultation?: (pendingId?: string) => void;
 }): React.JSX.Element {
   const [currentStep, setCurrentStep] = useState<IntakeStep>('patient_search');
   const currentStepIdx = INTAKE_STEPS.findIndex(s => s.key === currentStep);
@@ -147,16 +185,18 @@ export function OHPatientIntakeScreen({
   // Submitting
   const [submitting, setSubmitting] = useState(false);
 
-  // Load patients
+  // Load patients and bootstrap protocol data from API
   useEffect(() => {
     const load = async () => {
       setLoadingPatients(true);
       try {
-        const db = HybridDataService.getInstance();
-        const result = await db.getAllPatients();
-        const all = result.data ?? [];
-        if (all.length > 0) {
-          setPatients(all as unknown as OccupationalHealthPatient[]);
+        const svc = OccHealthProtocolService.getInstance();
+        if (!svc.isLoadedFromApi) {
+          await svc.loadFromApi();
+        }
+        const { data, error } = await occHealthApi.listWorkers();
+        if (!error && data.length > 0) {
+          setPatients(data);
         } else {
           // Fallback: try stored data from AsyncStorage
           const stored = await AsyncStorage.getItem('@occ_health_patients');
@@ -226,7 +266,7 @@ export function OHPatientIntakeScreen({
 
   // Save pending consultation
   const handleSave = useCallback(async () => {
-    if (!selectedPatient) return;
+    if (!selectedPatient || submitting) return;
     setSubmitting(true);
     try {
       const pending: PendingConsultation = {
@@ -242,37 +282,51 @@ export function OHPatientIntakeScreen({
 
       // Load existing list
       const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
-      const list: PendingConsultation[] = stored ? JSON.parse(stored) : [];
-      list.push(pending);
+      const list = upsertPendingConsultationQueue(safeParsePendingConsultations(stored), pending);
       await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(list));
 
-      Alert.alert(
-        'Patient Enregistré',
-        `${selectedPatient.firstName} ${selectedPatient.lastName} est maintenant dans la file d'attente du médecin.`,
-        [
-          {
-            text: 'Accueil Suivant',
-            onPress: () => {
-              // Reset for next patient
-              setCurrentStep('patient_search');
-              setSelectedPatient(null);
-              setSearchQuery('');
-              setExamType('periodic');
-              setVisitReason('');
-              setReferredBy('');
-              setVitals({});
-              onConsultationQueued?.();
+      const resetForNextPatient = () => {
+        setCurrentStep('patient_search');
+        setSelectedPatient(null);
+        setSearchQuery('');
+        setExamType('periodic');
+        setVisitReason('');
+        setReferredBy('');
+        setVitals({});
+      };
+
+      const successMessage = `${selectedPatient.firstName} ${selectedPatient.lastName} est maintenant dans la file d'attente du médecin.`;
+
+      if (Platform.OS === 'web') {
+        const goToConsultation = window.confirm(`${successMessage}\n\nOK: Aller chez le Médecin\nAnnuler: Accueil Suivant`);
+        onConsultationQueued?.();
+        if (goToConsultation) {
+          onNavigateToConsultation?.(pending.id);
+        } else {
+          resetForNextPatient();
+        }
+      } else {
+        Alert.alert(
+          'Patient Enregistré',
+          successMessage,
+          [
+            {
+              text: 'Accueil Suivant',
+              onPress: () => {
+                resetForNextPatient();
+                onConsultationQueued?.();
+              },
             },
-          },
-          {
-            text: 'Aller chez le Médecin',
-            onPress: () => {
-              onConsultationQueued?.();
-              onNavigateToConsultation?.();
+            {
+              text: 'Aller chez le Médecin',
+              onPress: () => {
+                onConsultationQueued?.();
+                onNavigateToConsultation?.(pending.id);
+              },
             },
-          },
-        ],
-      );
+          ],
+        );
+      }
     } catch (err) {
       console.error('Error queuing consultation:', err);
       Alert.alert('Erreur', 'Impossible d\'enregistrer le patient. Réessayez.');
@@ -280,6 +334,21 @@ export function OHPatientIntakeScreen({
       setSubmitting(false);
     }
   }, [selectedPatient, examType, visitReason, referredBy, vitals, onConsultationQueued, onNavigateToConsultation]);
+
+  const handleAutoFillNormalVitals = useCallback(() => {
+    setVitals({
+      temperature: 36.7,
+      bloodPressureSystolic: 120,
+      bloodPressureDiastolic: 80,
+      heartRate: 72,
+      respiratoryRate: 16,
+      oxygenSaturation: 98,
+      weight: 70,
+      height: 170,
+      waistCircumference: 85,
+      visualAcuity: '10/10',
+    });
+  }, []);
 
   // ─── Step Renderers ──────────────────────────────────────
 
@@ -545,6 +614,13 @@ export function OHPatientIntakeScreen({
         icon="pulse"
       />
 
+      <View style={vStyles.quickActionRow}>
+        <TouchableOpacity style={vStyles.quickFillBtn} onPress={handleAutoFillNormalVitals} activeOpacity={0.75}>
+          <Ionicons name="flash" size={14} color={ACCENT} />
+          <Text style={vStyles.quickFillBtnText}>Auto-remplir (aptitude normale)</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Patient + motif reminder */}
       {selectedPatient && sectorProfile && (
         <View style={[vStyles.patientReminder, { borderColor: sectorProfile.color + '40' }]}>
@@ -795,6 +871,29 @@ const vStyles = StyleSheet.create({
   },
   stepTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
   stepSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 3, lineHeight: 18 },
+
+  // Vital step quick action
+  quickActionRow: {
+    alignItems: 'flex-end',
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  quickFillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: ACCENT + '0F',
+    borderWidth: 1,
+    borderColor: ACCENT + '3A',
+  },
+  quickFillBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: ACCENT,
+  },
 
   // Search
   searchBox: {

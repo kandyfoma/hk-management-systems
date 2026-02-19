@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
   StyleSheet, Dimensions, Modal, Alert,
@@ -11,10 +11,11 @@ import {
   type IndustrySector, type IncidentType, type IncidentSeverity, type IncidentCategory,
   type WorkplaceIncident, type CorrectiveAction, type AffectedWorker,
 } from '../../../models/OccupationalHealth';
+import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 const STORAGE_KEY = '@occhealth_incidents';
 
 // ─── Sample Incidents ────────────────────────────────────────
@@ -260,7 +261,14 @@ function AddIncidentModal({
 
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Date de l'incident</Text>
-              <TextInput style={styles.formInput} value={incidentDate} onChangeText={setIncidentDate} placeholder="AAAA-MM-JJ" />
+              <View style={styles.formInput}>
+                <DateInput
+                  value={incidentDate}
+                  onChangeText={setIncidentDate}
+                  placeholder="AAAA-MM-JJ"
+                  format="iso"
+                />
+              </View>
             </View>
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Heure</Text>

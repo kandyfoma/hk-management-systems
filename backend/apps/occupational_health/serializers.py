@@ -402,6 +402,12 @@ class FitnessCertificateSerializer(serializers.ModelSerializer):
     days_until_expiry = serializers.ReadOnlyField()
     issued_by_name = serializers.CharField(source='issued_by.get_full_name', read_only=True)
     worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
+    worker_employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
+    worker_job_title = serializers.CharField(source='examination.worker.job_title', read_only=True)
+    worker_company = serializers.CharField(source='examination.worker.enterprise.name', read_only=True)
+    worker_sector = serializers.CharField(source='examination.worker.sector', read_only=True)
+    exam_type = serializers.CharField(source='examination.exam_type', read_only=True)
+    exam_date = serializers.DateField(source='examination.exam_date', read_only=True)
     fitness_decision_display = serializers.CharField(source='get_fitness_decision_display', read_only=True)
     
     class Meta:
@@ -663,14 +669,23 @@ class MedicalExaminationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicalExamination
         fields = [
-            'worker', 'exam_type', 'exam_date', 'exam_location', 'examining_doctor',
-            'reason_for_exam', 'work_fitness_assessment', 'recommendations',
+            'worker', 'exam_type', 'exam_date', 'examining_doctor',
+            'chief_complaint', 'medical_history_review',
+            'results_summary', 'recommendations',
+            'examination_completed',
             'follow_up_required', 'follow_up_date', 'next_periodic_exam'
         ]
+
+    def validate(self, attrs):
+        follow_up_required = attrs.get('follow_up_required', False)
+        follow_up_date = attrs.get('follow_up_date')
+        if follow_up_required and not follow_up_date:
+            raise serializers.ValidationError({'follow_up_date': 'Date de suivi requise lorsque le suivi est activé.'})
+        return attrs
     
     def create(self, validated_data):
         # Generate exam number
-        validated_data['examination_completed'] = False
+        validated_data['examination_completed'] = validated_data.get('examination_completed', False)
         return super().create(validated_data)
 
 class WorkerCreateSerializer(serializers.ModelSerializer):

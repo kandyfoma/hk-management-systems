@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,8 @@ import {
   Dimensions,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { 
@@ -20,15 +20,16 @@ import {
   type FitnessStatus,
   type IndustrySector,
 } from '../../../models/OccupationalHealth';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 
 // ─── Certificate Interface ──────────────────────────────────
 interface Certificate {
-  id: string;
+  id: number;
   patientId: string;
   patientName: string;
   patientNumber: string;
@@ -43,6 +44,8 @@ interface Certificate {
   certificateNumber: string;
   sector: IndustrySector;
   createdAt: string;
+  isActive: boolean;
+  rawRestrictions?: string;
 }
 
 // ─── Helper Components ───────────────────────────────────────
@@ -159,85 +162,49 @@ export function CertificatesScreen({
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'expired' | 'expiring_soon'>('all');
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
 
-  // Load certificates from AsyncStorage
+  const mapApiCertificate = (item: any): Certificate => {
+    const restrictionList = String(item.restrictions || '')
+      .split(';')
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    return {
+      id: Number(item.id),
+      patientId: String(item.examination ?? ''),
+      patientName: item.worker_name || 'Travailleur',
+      patientNumber: item.worker_employee_id || '-',
+      company: item.worker_company || '-',
+      jobTitle: item.worker_job_title || '-',
+      examType: (item.exam_type || 'periodic') as ExamType,
+      examDate: item.exam_date || item.issue_date,
+      expiryDate: item.valid_until,
+      fitnessDecision: (item.fitness_decision || 'fit') as FitnessStatus,
+      restrictions: restrictionList,
+      examinerName: item.issued_by_name || 'Médecin',
+      certificateNumber: item.certificate_number || `CERT-${item.id}`,
+      sector: (item.worker_sector || 'other') as IndustrySector,
+      createdAt: item.created_at || item.issue_date,
+      isActive: item.is_active !== false,
+      rawRestrictions: item.restrictions || '',
+    };
+  };
+
+  // Load certificates from backend
   const loadCertificates = async () => {
     try {
       setLoading(true);
-      const certificatesData = await AsyncStorage.getItem('certificates_list');
-      if (certificatesData) {
-        const parsedCertificates = JSON.parse(certificatesData) as Certificate[];
-        setCertificates(parsedCertificates.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      } else {
-        // Create some sample certificates for testing
-        await createSampleCertificates();
-      }
+      const res = await occHealthApi.listFitnessCertificates();
+      if (res.error) throw new Error(res.error);
+
+      const mapped = res.data
+        .map(mapApiCertificate)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setCertificates(mapped);
     } catch (error) {
       console.error('Error loading certificates:', error);
+      Alert.alert('Erreur', 'Impossible de charger les certificats depuis le backend.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Create sample certificates for testing
-  const createSampleCertificates = async () => {
-    const sampleCertificates: Certificate[] = [
-      {
-        id: 'CERT-2024-001',
-        patientId: 'W001',
-        patientName: 'Kabamba Mutombo',
-        patientNumber: 'PAT-0421',
-        company: 'Gécamines SA',
-        jobTitle: 'Mineur de fond',
-        examType: 'periodic',
-        examDate: '2024-01-15T09:30:00Z',
-        expiryDate: '2024-07-15T23:59:59Z',
-        fitnessDecision: 'fit_with_restrictions',
-        restrictions: ['Pas de travail en hauteur > 3m', 'Port obligatoire EPI auditif'],
-        examinerName: 'Dr. Mukendi',
-        certificateNumber: 'CERT-2024-001',
-        sector: 'mining',
-        createdAt: '2024-01-15T09:30:00Z',
-      },
-      {
-        id: 'CERT-2024-002',
-        patientId: 'W002',
-        patientName: 'Mwamba Kalala',
-        patientNumber: 'PAT-1087',
-        company: 'Rawbank',
-        jobTitle: 'Chargée de Clientèle',
-        examType: 'pre_employment',
-        examDate: '2024-01-10T14:15:00Z',
-        expiryDate: '2025-01-10T23:59:59Z',
-        fitnessDecision: 'fit',
-        examinerName: 'Dr. Tshilombo',
-        certificateNumber: 'CERT-2024-002',
-        sector: 'banking_finance',
-        createdAt: '2024-01-10T14:15:00Z',
-      },
-      {
-        id: 'CERT-2024-003',
-        patientId: 'W003',
-        patientName: 'Tshisekedi Ilunga',
-        patientNumber: 'PAT-0562',
-        company: 'Bâtiment Congo SARL',
-        jobTitle: 'Soudeur-Monteur',
-        examType: 'return_to_work',
-        examDate: '2024-01-08T11:20:00Z',
-        expiryDate: '2024-04-08T23:59:59Z',
-        fitnessDecision: 'fit_with_restrictions',
-        restrictions: ['Éviter soudure aérienne prolongée', 'Contrôle TA mensuel'],
-        examinerName: 'Dr. Mukendi',
-        certificateNumber: 'CERT-2024-003',
-        sector: 'construction',
-        createdAt: '2024-01-08T11:20:00Z',
-      },
-    ];
-
-    try {
-      await AsyncStorage.setItem('certificates_list', JSON.stringify(sampleCertificates));
-      setCertificates(sampleCertificates);
-    } catch (error) {
-      console.error('Error creating sample certificates:', error);
     }
   };
 
@@ -305,9 +272,26 @@ export function CertificatesScreen({
       `Télécharger le certificat ${certificate.certificateNumber} pour ${certificate.patientName}?`,
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Télécharger', onPress: () => {
-          // TODO: Implement PDF generation and download
-          Alert.alert('Info', 'Fonctionnalité de téléchargement en développement');
+        { text: 'Télécharger', onPress: async () => {
+          const result = await occHealthApi.downloadFitnessCertificatePdf(certificate.id);
+          if (result.error || !result.blob) {
+            Alert.alert('Erreur', result.error || 'Impossible de télécharger le PDF.');
+            return;
+          }
+
+          if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            const url = window.URL.createObjectURL(result.blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = result.fileName || `${certificate.certificateNumber}.pdf`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.URL.revokeObjectURL(url);
+            return;
+          }
+
+          Alert.alert('Info', 'Téléchargement PDF disponible sur la version web.');
         }}
       ]
     );
@@ -321,14 +305,11 @@ export function CertificatesScreen({
         { text: 'Annuler', style: 'cancel' },
         { text: 'Révoquer', style: 'destructive', onPress: async () => {
           try {
-            // Remove from certificates list
-            const updatedCertificates = certificates.filter(c => c.id !== certificate.id);
-            setCertificates(updatedCertificates);
-            await AsyncStorage.setItem('certificates_list', JSON.stringify(updatedCertificates));
-            
-            // Remove individual certificate record
-            await AsyncStorage.removeItem(`certificate_${certificate.certificateNumber}`);
-            
+            const revokeRes = await occHealthApi.revokeFitnessCertificate(certificate.id, 'Révoqué via interface certificats');
+            if (revokeRes.error) {
+              throw new Error(revokeRes.error);
+            }
+            await loadCertificates();
             Alert.alert('Succès', 'Certificat révoqué avec succès');
           } catch (error) {
             console.error('Error revoking certificate:', error);

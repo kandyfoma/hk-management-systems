@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity,
+  View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator,
   StyleSheet, Dimensions, Modal, Alert, Platform, RefreshControl,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import HybridDataService from '../../../services/HybridDataService';
-import ApiService from '../../../services/ApiService';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -19,254 +17,13 @@ import {
   type ExposureRisk, type PPEType, type ShiftPattern, type JobCategory,
   type OccupationalHealthPatient,
 } from '../../../models/OccupationalHealth';
-import { PatientUtils } from '../../../models/Patient';
 import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
 import type { OccSector, OccDepartment, OccPosition } from '../../../models/OccHealthProtocol';
+import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
-const STORAGE_KEY = '@occhealth_patients';
-
-// ─── Sample Patients (with full Patient + OH fields) ─────────
-const SAMPLE_PATIENTS: OccupationalHealthPatient[] = [
-  {
-    id: 'w1',
-    firstName: 'Jean-Pierre',
-    lastName: 'Kabongo',
-    middleName: '',
-    dateOfBirth: '1985-03-15',
-    gender: 'male',
-    phone: '+243 812 345 678',
-    email: 'jpkabongo@mail.com',
-    address: '12 Ave Kasavubu, Lubumbashi',
-    city: 'Lubumbashi',
-    emergencyContactName: 'Marie Kabongo',
-    emergencyContactPhone: '+243 815 555 111',
-    // Patient required fields
-    allergies: [],
-    chronicConditions: [],
-    currentMedications: [],
-    patientNumber: PatientUtils.generatePatientNumber(),
-    registrationDate: '2015-06-01',
-    status: 'active',
-    createdAt: '2015-06-01T00:00:00.000Z',
-    accessCount: 0,
-    // OH fields
-    employeeId: 'EMP-001',
-    company: 'Kamoto Copper Company',
-    sector: 'mining',
-    site: 'Site Kamoto Principal',
-    department: 'Opérations Souterraines',
-    jobTitle: 'Mineur de Fond',
-    jobCategory: 'underground_work',
-    shiftPattern: 'rotating',
-    hireDate: '2015-06-01',
-    contractType: 'permanent',
-    fitnessStatus: 'fit',
-    lastMedicalExam: '2024-10-15',
-    nextMedicalExam: '2025-04-15',
-    exposureRisks: ['silica_dust', 'noise', 'vibration', 'confined_spaces'],
-    ppeRequired: ['hard_hat', 'safety_boots', 'ear_plugs', 'dust_mask', 'safety_glasses', 'high_vis_vest'],
-    riskLevel: 'very_high',
-    vaccinationStatus: [],
-  },
-  {
-    id: 'w2',
-    firstName: 'Grace',
-    lastName: 'Mwamba',
-    middleName: '',
-    dateOfBirth: '1990-07-22',
-    gender: 'female',
-    phone: '+243 821 456 789',
-    email: 'gmwamba@mail.com',
-    address: '45 Ave Mobutu, Kinshasa',
-    city: 'Kinshasa',
-    emergencyContactName: 'Paul Mwamba',
-    emergencyContactPhone: '+243 822 333 444',
-    allergies: [],
-    chronicConditions: [],
-    currentMedications: [],
-    patientNumber: PatientUtils.generatePatientNumber(),
-    registrationDate: '2019-01-15',
-    status: 'active',
-    createdAt: '2019-01-15T00:00:00.000Z',
-    accessCount: 0,
-    employeeId: 'EMP-002',
-    company: 'Rawbank S.A.',
-    sector: 'banking_finance',
-    site: 'Siège Social Kinshasa',
-    department: 'Opérations Bancaires',
-    jobTitle: 'Analyste Financier',
-    jobCategory: 'finance_accounting',
-    shiftPattern: 'regular',
-    hireDate: '2019-01-15',
-    contractType: 'permanent',
-    fitnessStatus: 'fit',
-    lastMedicalExam: '2024-09-20',
-    nextMedicalExam: '2025-09-20',
-    exposureRisks: ['ergonomic', 'vdt_screen', 'psychosocial', 'sedentary'],
-    ppeRequired: ['ergonomic_chair'],
-    riskLevel: 'low',
-    vaccinationStatus: [],
-  },
-  {
-    id: 'w3',
-    firstName: 'Patrick',
-    lastName: 'Lukusa',
-    middleName: 'Tshimanga',
-    dateOfBirth: '1988-11-08',
-    gender: 'male',
-    phone: '+243 833 567 890',
-    email: 'plukusa@mail.com',
-    address: '78 Blvd 30 Juin, Kolwezi',
-    city: 'Kolwezi',
-    emergencyContactName: 'Jeanne Lukusa',
-    emergencyContactPhone: '+243 834 222 333',
-    allergies: ['Poussière industrielle'],
-    chronicConditions: [],
-    currentMedications: [],
-    patientNumber: PatientUtils.generatePatientNumber(),
-    registrationDate: '2017-03-10',
-    status: 'active',
-    createdAt: '2017-03-10T00:00:00.000Z',
-    accessCount: 0,
-    employeeId: 'EMP-003',
-    company: 'Brasserie Simba',
-    sector: 'manufacturing',
-    site: 'Usine Kolwezi',
-    department: 'Production',
-    jobTitle: 'Opérateur Machine',
-    jobCategory: 'production_line',
-    shiftPattern: 'rotating',
-    hireDate: '2017-03-10',
-    contractType: 'permanent',
-    fitnessStatus: 'fit_with_restrictions',
-    lastMedicalExam: '2024-11-05',
-    nextMedicalExam: '2025-05-05',
-    exposureRisks: ['noise', 'chemical_exposure', 'ergonomic', 'machine_hazards'],
-    ppeRequired: ['ear_plugs', 'safety_glasses', 'safety_gloves', 'safety_boots'],
-    riskLevel: 'high',
-    vaccinationStatus: [],
-  },
-  {
-    id: 'w4',
-    firstName: 'Nadine',
-    lastName: 'Tshilombo',
-    middleName: '',
-    dateOfBirth: '1992-04-30',
-    gender: 'female',
-    phone: '+243 844 678 901',
-    email: 'ntshilombo@mail.com',
-    address: '33 Ave Lumumba, Lubumbashi',
-    city: 'Lubumbashi',
-    emergencyContactName: 'Robert Tshilombo',
-    emergencyContactPhone: '+243 845 444 555',
-    allergies: ['Latex'],
-    chronicConditions: [],
-    currentMedications: [],
-    patientNumber: PatientUtils.generatePatientNumber(),
-    registrationDate: '2016-08-20',
-    status: 'active',
-    createdAt: '2016-08-20T00:00:00.000Z',
-    accessCount: 0,
-    employeeId: 'EMP-004',
-    company: 'Hôpital Sendwe',
-    sector: 'healthcare',
-    site: 'Hôpital Général Jason Sendwe',
-    department: 'Soins Infirmiers',
-    jobTitle: 'Infirmière Chef',
-    jobCategory: 'nursing',
-    shiftPattern: 'rotating',
-    hireDate: '2016-08-20',
-    contractType: 'permanent',
-    fitnessStatus: 'fit',
-    lastMedicalExam: '2024-08-10',
-    nextMedicalExam: '2025-02-10',
-    exposureRisks: ['biological', 'needle_stick', 'chemical_exposure', 'psychosocial', 'shift_work'],
-    ppeRequired: ['safety_gloves', 'lab_coat', 'face_shield', 'dust_mask'],
-    riskLevel: 'high',
-    vaccinationStatus: [{ vaccine: 'Hepatitis B', date: '2016-09-01' }],
-  },
-  {
-    id: 'w5',
-    firstName: 'Samuel',
-    lastName: 'Ilunga',
-    middleName: '',
-    dateOfBirth: '1995-01-12',
-    gender: 'male',
-    phone: '+243 855 789 012',
-    email: 'silunga@mail.com',
-    address: '67 Ave Kamanyola, Kinshasa',
-    city: 'Kinshasa',
-    emergencyContactName: 'Alice Ilunga',
-    emergencyContactPhone: '+243 856 666 777',
-    allergies: [],
-    chronicConditions: [],
-    currentMedications: [],
-    patientNumber: PatientUtils.generatePatientNumber(),
-    registrationDate: '2021-02-01',
-    status: 'active',
-    createdAt: '2021-02-01T00:00:00.000Z',
-    accessCount: 0,
-    employeeId: 'EMP-005',
-    company: 'Vodacom Congo',
-    sector: 'telecom_it',
-    site: 'Tour Vodacom Kinshasa',
-    department: 'Développement IT',
-    jobTitle: 'Ingénieur Logiciel',
-    jobCategory: 'it_systems',
-    shiftPattern: 'regular',
-    hireDate: '2021-02-01',
-    contractType: 'permanent',
-    fitnessStatus: 'pending_evaluation',
-    lastMedicalExam: '2024-02-01',
-    nextMedicalExam: '2025-02-01',
-    exposureRisks: ['ergonomic', 'vdt_screen', 'psychosocial', 'sedentary'],
-    ppeRequired: ['ergonomic_chair', 'wrist_rest'],
-    riskLevel: 'low',
-    vaccinationStatus: [],
-  },
-  {
-    id: 'w6',
-    firstName: 'François',
-    lastName: 'Mutombo',
-    middleName: '',
-    dateOfBirth: '1980-06-18',
-    gender: 'male',
-    phone: '+243 866 890 123',
-    email: 'fmutombo@mail.com',
-    address: '14 Ave Kasai, Mbuji-Mayi',
-    city: 'Mbuji-Mayi',
-    emergencyContactName: 'Claire Mutombo',
-    emergencyContactPhone: '+243 867 888 999',
-    allergies: [],
-    chronicConditions: ['Hypertension légère'],
-    currentMedications: ['Amlodipine 5mg'],
-    patientNumber: PatientUtils.generatePatientNumber(),
-    registrationDate: '2010-04-15',
-    status: 'active',
-    createdAt: '2010-04-15T00:00:00.000Z',
-    accessCount: 0,
-    employeeId: 'EMP-006',
-    company: 'Tenke Fungurume Mining',
-    sector: 'mining',
-    site: 'Site TFM Fungurume',
-    department: 'Traitement Minerais',
-    jobTitle: 'Superviseur Usine',
-    jobCategory: 'processing_refining',
-    shiftPattern: 'day_shift',
-    hireDate: '2010-04-15',
-    contractType: 'permanent',
-    fitnessStatus: 'fit',
-    lastMedicalExam: '2024-12-01',
-    nextMedicalExam: '2025-06-01',
-    exposureRisks: ['chemical_exposure', 'noise', 'heat_stress', 'heavy_metals'],
-    ppeRequired: ['hard_hat', 'safety_glasses', 'respirator', 'safety_boots', 'coveralls', 'safety_gloves'],
-    riskLevel: 'very_high',
-    vaccinationStatus: [],
-  },
-];
+const ACCENT = colors.primary;
 
 // ─── Patient Card ────────────────────────────────────────────
 function PatientCard({ patient, onPress }: { patient: OccupationalHealthPatient; onPress: () => void }) {
@@ -279,8 +36,8 @@ function PatientCard({ patient, onPress }: { patient: OccupationalHealthPatient;
   return (
     <TouchableOpacity style={styles.patientCard} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.patientCardHeader}>
-        <View style={[styles.patientAvatar, { backgroundColor: sectorProfile.color + '14' }]}>
-          <Ionicons name={sectorProfile.icon as any} size={22} color={sectorProfile.color} />
+        <View style={[styles.patientAvatar, { backgroundColor: colors.primaryFaded }]}>
+          <Ionicons name={sectorProfile.icon as any} size={22} color={colors.primary} />
         </View>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -377,8 +134,8 @@ function PatientDetailModal({
             {/* Identity */}
             <View style={styles.detailSection}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <View style={[styles.detailAvatar, { backgroundColor: sectorProfile.color + '14' }]}>
-                  <Ionicons name={sectorProfile.icon as any} size={32} color={sectorProfile.color} />
+                <View style={[styles.detailAvatar, { backgroundColor: colors.primaryFaded }]}>
+                  <Ionicons name={sectorProfile.icon as any} size={32} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailName}>{patient.firstName} {patient.middleName || ''} {patient.lastName}</Text>
@@ -441,9 +198,9 @@ function PatientDetailModal({
               <Text style={styles.detailSectionTitle}>Risques d'Exposition</Text>
               <View style={styles.tagContainer}>
                 {patient.exposureRisks.map((risk, i) => (
-                  <View key={i} style={[styles.riskTag, { backgroundColor: '#EF444414' }]}>
-                    <Ionicons name="warning-outline" size={12} color="#EF4444" />
-                    <Text style={[styles.riskTagText, { color: '#EF4444' }]}>{OccHealthUtils.getExposureRiskLabel(risk)}</Text>
+                  <View key={i} style={[styles.riskTag, { backgroundColor: colors.errorLight }]}>
+                    <Ionicons name="warning-outline" size={12} color={colors.error} />
+                    <Text style={[styles.riskTagText, { color: colors.error }]}>{OccHealthUtils.getExposureRiskLabel(risk)}</Text>
                   </View>
                 ))}
               </View>
@@ -464,9 +221,9 @@ function PatientDetailModal({
           </ScrollView>
 
           <View style={styles.modalActions}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#EF444414' }]} onPress={onDelete}>
-              <Ionicons name="trash-outline" size={18} color="#EF4444" />
-              <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Supprimer</Text>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.errorLight }]} onPress={onDelete}>
+              <Ionicons name="trash-outline" size={18} color={colors.error} />
+              <Text style={[styles.actionBtnText, { color: colors.error }]}>Supprimer</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
               <Text style={[styles.actionBtnText, { color: colors.text }]}>Fermer</Text>
@@ -509,8 +266,9 @@ function getContractLabel(c: string): string {
 // ─── Add Patient Modal ───────────────────────────────────────
 function AddPatientModal({
   visible, onClose, onSave
-}: { visible: boolean; onClose: () => void; onSave: (p: OccupationalHealthPatient) => void }) {
+}: { visible: boolean; onClose: () => void; onSave: (p: OccupationalHealthPatient) => Promise<boolean> }) {
   const svc = OccHealthProtocolService.getInstance();
+  const [saving, setSaving] = useState(false);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -552,11 +310,17 @@ function AddPatientModal({
     if (pos) setJobTitle(pos.name);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     if (!firstName.trim() || !lastName.trim() || !employeeId.trim()) {
       Alert.alert('Erreur', 'Nom, prénom et matricule sont obligatoires.');
       return;
     }
+    if (dateOfBirth.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim())) {
+      Alert.alert('Erreur', 'La date de naissance doit être au format AAAA-MM-JJ.');
+      return;
+    }
+    setSaving(true);
     const sectorProfile = SECTOR_PROFILES[sector];
     const now = new Date().toISOString();
     const newPatient: OccupationalHealthPatient = {
@@ -570,7 +334,7 @@ function AddPatientModal({
       allergies: [],
       chronicConditions: [],
       currentMedications: [],
-      patientNumber: PatientUtils.generatePatientNumber(),
+      patientNumber: `PAT-${Date.now()}`,
       registrationDate: now,
       status: 'active',
       createdAt: now,
@@ -600,12 +364,18 @@ function AddPatientModal({
       departmentCode: selectedDeptCode || undefined,
       positionCode: selectedPositionCode || undefined,
     };
-    onSave(newPatient);
-    // Reset
-    setFirstName(''); setLastName(''); setEmployeeId(''); setCompany('');
-    setSector('mining'); setSite(''); setDepartment(''); setJobTitle('');
-    setPhone(''); setDateOfBirth('');
-    setSelectedSectorCode(''); setSelectedDeptCode(''); setSelectedPositionCode('');
+    try {
+      const success = await onSave(newPatient);
+      if (!success) return;
+      // Reset + close only when persisted successfully
+      setFirstName(''); setLastName(''); setEmployeeId(''); setCompany('');
+      setSector('mining'); setSite(''); setDepartment(''); setJobTitle('');
+      setPhone(''); setDateOfBirth('');
+      setSelectedSectorCode(''); setSelectedDeptCode(''); setSelectedPositionCode('');
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -632,7 +402,15 @@ function AddPatientModal({
             </View>
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Date de Naissance</Text>
-              <TextInput style={styles.formInput} value={dateOfBirth} onChangeText={setDateOfBirth} placeholder="AAAA-MM-JJ" />
+              <View style={styles.formInput}>
+                <DateInput
+                  value={dateOfBirth}
+                  onChangeText={setDateOfBirth}
+                  placeholder="AAAA-MM-JJ"
+                  format="iso"
+                  maximumDate={new Date()}
+                />
+              </View>
             </View>
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Téléphone</Text>
@@ -695,8 +473,8 @@ function AddPatientModal({
                   })}
                 </View>
                 {selectedPositionCode && (
-                  <View style={{ marginTop: 6, padding: 8, backgroundColor: ACCENT + '10', borderRadius: 8 }}>
-                    <Text style={{ fontSize: 11, color: ACCENT, fontWeight: '600' }}>
+                  <View style={{ marginTop: 6, padding: 8, backgroundColor: colors.successLight, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 11, color: colors.secondary, fontWeight: '600' }}>
                       ✓ {svc.getAvailableVisitTypes(selectedPositionCode).length} protocole(s) disponible(s) pour ce poste
                     </Text>
                     <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
@@ -724,9 +502,578 @@ function AddPatientModal({
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
               <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave}>
-              <Ionicons name="save-outline" size={18} color="#FFF" />
-              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Enregistrer</Text>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="save-outline" size={18} color="#FFF" />}
+              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Dropdown Picker ─────────────────────────────────────────
+function DropdownPicker({
+  label, value, displayValue, options, onSelect, disabled, placeholder, accentColor,
+}: {
+  label: string;
+  value: string;
+  displayValue: string;
+  options: { value: string; label: string; sublabel?: string }[];
+  onSelect: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  accentColor?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const accent = accentColor ?? ACCENT;
+  return (
+    <View style={styles.formSection}>
+      <Text style={styles.formLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.ddTrigger, disabled && styles.ddDisabled, open && { borderColor: accent }]}
+        onPress={() => !disabled && setOpen(o => !o)}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.ddValue, !value && { color: colors.placeholder ?? colors.textTertiary }]} numberOfLines={1}>
+          {displayValue || placeholder || 'Sélectionner...'}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={disabled ? colors.textTertiary : colors.textSecondary} />
+      </TouchableOpacity>
+      {open && (
+        <View style={styles.ddList}>
+          <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+            <TouchableOpacity style={styles.ddItem} onPress={() => { onSelect(''); setOpen(false); }}>
+              <Text style={[styles.ddItemText, { color: colors.textTertiary, fontStyle: 'italic' }]}>— Aucun —</Text>
+            </TouchableOpacity>
+            {options.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.ddItem, opt.value === value && { backgroundColor: accent + '14' }]}
+                onPress={() => { onSelect(opt.value); setOpen(false); }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.ddItemText, opt.value === value && { color: accent, fontWeight: '600' }]}>{opt.label}</Text>
+                  {opt.sublabel ? <Text style={styles.ddItemSub}>{opt.sublabel}</Text> : null}
+                </View>
+                {opt.value === value && <Ionicons name="checkmark" size={14} color={accent} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Edit Patient Modal ──────────────────────────────────────
+function EditPatientModal({
+  visible, patient, onClose, onSave,
+}: {
+  visible: boolean;
+  patient: OccupationalHealthPatient | null;
+  onClose: () => void;
+  onSave: (p: OccupationalHealthPatient) => Promise<boolean>;
+}) {
+  const svc = OccHealthProtocolService.getInstance();
+  const [saving, setSaving] = useState(false);
+
+  // — Identity & Contact
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [emergencyContactName, setEmergencyContactName] = useState('');
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  // — Employment
+  const [employeeId, setEmployeeId] = useState('');
+  const [company, setCompany] = useState('');
+  const [site, setSite] = useState('');
+  const [department, setDepartment] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobCategory, setJobCategory] = useState('');
+  const [shiftPattern, setShiftPattern] = useState('');
+  const [contractType, setContractType] = useState('');
+  const [hireDate, setHireDate] = useState('');
+  // — Protocol hierarchy
+  const [selectedSectorCode, setSelectedSectorCode] = useState('');
+  const [selectedDeptCode, setSelectedDeptCode] = useState('');
+  const [selectedPositionCode, setSelectedPositionCode] = useState('');
+  // — Medical
+  const [fitnessStatus, setFitnessStatus] = useState<string>('pending_evaluation');
+  const [lastMedicalExam, setLastMedicalExam] = useState('');
+  const [nextMedicalExam, setNextMedicalExam] = useState('');
+  const [allergiesText, setAllergiesText] = useState('');
+  const [chronicText, setChronicText] = useState('');
+  const [medicationsText, setMedicationsText] = useState('');
+
+  // Derived protocol lists
+  const occSectors = useMemo(() => svc.getAllSectors(), [svc]);
+  const occDepts = useMemo(() => selectedSectorCode ? svc.getDepartmentsBySector(selectedSectorCode) : [], [selectedSectorCode, svc]);
+  const occPositions = useMemo(() => selectedDeptCode ? svc.getPositionsByDepartment(selectedDeptCode) : [], [selectedDeptCode, svc]);
+  const selectedPosition = useMemo(() => selectedPositionCode ? occPositions.find(p => p.code === selectedPositionCode) : undefined, [occPositions, selectedPositionCode]);
+
+  useEffect(() => {
+    if (!patient) return;
+    setFirstName(patient.firstName);
+    setLastName(patient.lastName);
+    setPhone(patient.phone ?? '');
+    setEmail(patient.email ?? '');
+    setAddress(patient.address ?? '');
+    setCity(patient.city ?? '');
+    setEmergencyContactName(patient.emergencyContactName ?? '');
+    setEmergencyContactPhone(patient.emergencyContactPhone ?? '');
+    setDateOfBirth(patient.dateOfBirth ?? '');
+    setGender(patient.gender ?? '');
+    setEmployeeId(patient.employeeId ?? '');
+    setCompany(patient.company ?? '');
+    setSite(patient.site ?? '');
+    setDepartment(patient.department ?? '');
+    setJobTitle(patient.jobTitle ?? '');
+    setJobCategory(patient.jobCategory ?? '');
+    setShiftPattern(patient.shiftPattern ?? '');
+    setContractType((patient as any).contractType ?? '');
+    setHireDate(patient.hireDate ?? '');
+    setFitnessStatus(patient.fitnessStatus ?? 'pending_evaluation');
+    setLastMedicalExam(patient.lastMedicalExam ?? '');
+    setNextMedicalExam(patient.nextMedicalExam ?? '');
+    setAllergiesText((patient.allergies ?? []).join(', '));
+    setChronicText((patient.chronicConditions ?? []).join(', '));
+    setMedicationsText((patient.currentMedications ?? []).join(', '));
+    setSelectedSectorCode(patient.sectorCode ?? '');
+    setSelectedDeptCode(patient.departmentCode ?? '');
+    setSelectedPositionCode(patient.positionCode ?? '');
+  }, [patient]);
+
+  if (!patient) return null;
+
+  const FITNESS_OPTIONS = [
+    { value: 'fit', label: 'Apte' },
+    { value: 'fit_with_restrictions', label: 'Apte avec restrictions' },
+    { value: 'temporarily_unfit', label: 'Inapte temporaire' },
+    { value: 'permanently_unfit', label: 'Inapte définitif' },
+    { value: 'pending_evaluation', label: 'En attente' },
+  ];
+
+  const GENDER_OPTIONS = [
+    { value: 'male', label: 'Homme' },
+    { value: 'female', label: 'Femme' },
+    { value: 'other', label: 'Autre' },
+  ];
+
+  const JOB_CATEGORY_OPTIONS = [
+    { value: 'underground_miner', label: 'Mineur Souterrain', sublabel: 'Mining' },
+    { value: 'surface_miner', label: 'Mineur de Surface', sublabel: 'Mining' },
+    { value: 'machine_operator', label: 'Opérateur Machine', sublabel: 'Industrie' },
+    { value: 'electrician', label: 'Électricien' },
+    { value: 'welder', label: 'Soudeur' },
+    { value: 'mechanic', label: 'Mécanicien' },
+    { value: 'construction_worker', label: 'Ouvrier Construction', sublabel: 'BTP' },
+    { value: 'civil_engineer', label: 'Ingénieur Civil' },
+    { value: 'nurse', label: 'Infirmier(ère)', sublabel: 'Santé' },
+    { value: 'doctor', label: 'Médecin', sublabel: 'Santé' },
+    { value: 'lab_technician', label: 'Technicien de Labo' },
+    { value: 'cashier', label: 'Caissier(ère)', sublabel: 'Finance' },
+    { value: 'bank_teller', label: 'Guichetier(ère)', sublabel: 'Finance' },
+    { value: 'financial_analyst', label: 'Analyste Financier' },
+    { value: 'accountant', label: 'Comptable' },
+    { value: 'driver', label: 'Chauffeur / Conducteur' },
+    { value: 'quality_inspector', label: 'Contrôleur Qualité' },
+    { value: 'safety_officer', label: 'Responsable HSE' },
+    { value: 'office_worker', label: 'Employé de Bureau' },
+    { value: 'manager', label: 'Manager / Cadre' },
+    { value: 'security_guard', label: 'Agent de Sécurité' },
+    { value: 'cleaner', label: 'Agent d\'Entretien' },
+    { value: 'it_technician', label: 'Technicien Informatique', sublabel: 'IT' },
+    { value: 'agricultural_worker', label: 'Ouvrier Agricole', sublabel: 'Agriculture' },
+    { value: 'other_job', label: 'Autre poste' },
+  ];
+
+  const SHIFT_OPTIONS = [
+    { value: 'day_shift', label: 'Équipe de Jour' },
+    { value: 'night_shift', label: 'Équipe de Nuit' },
+    { value: 'rotating', label: 'Rotation (Jour/Nuit)' },
+    { value: 'on_call', label: 'Astreinte / On Call' },
+    { value: 'regular', label: 'Horaires Réguliers' },
+    { value: 'flexible', label: 'Horaires Flexibles' },
+    { value: 'split_shift', label: 'Horaire Coupé' },
+  ];
+
+  const CONTRACT_OPTIONS = [
+    { value: 'permanent', label: 'CDI — Contrat Permanent' },
+    { value: 'contract', label: 'CDD — Contrat à Durée Déterminée' },
+    { value: 'seasonal', label: 'Saisonnier' },
+    { value: 'intern', label: 'Stagiaire / Intern' },
+    { value: 'daily_worker', label: 'Journalier' },
+  ];
+
+  const sectorOptions = occSectors.map(s => ({ value: s.code, label: s.name }));
+  const deptOptions = occDepts.map(d => ({ value: d.code, label: d.name, sublabel: `${d.positions?.length ?? 0} poste(s)` }));
+  const positionOptions = occPositions.map(p => ({
+    value: p.code,
+    label: p.name,
+    sublabel: p.protocols?.length ? `${p.protocols.length} protocole(s)` : undefined,
+  }));
+
+  const sectorDisplayValue = occSectors.find(s => s.code === selectedSectorCode)?.name ?? '';
+  const deptDisplayValue = occDepts.find(d => d.code === selectedDeptCode)?.name ?? '';
+  const positionDisplayValue = occPositions.find(p => p.code === selectedPositionCode)?.name ?? '';
+  const jobCatDisplayValue = JOB_CATEGORY_OPTIONS.find(o => o.value === jobCategory)?.label ?? '';
+  const shiftDisplayValue = SHIFT_OPTIONS.find(o => o.value === shiftPattern)?.label ?? '';
+  const contractDisplayValue = CONTRACT_OPTIONS.find(o => o.value === contractType)?.label ?? '';
+  const genderDisplayValue = GENDER_OPTIONS.find(o => o.value === gender)?.label ?? '';
+
+  const handleSave = async () => {
+    if (saving) return;
+    if (!firstName.trim() || !lastName.trim() || !employeeId.trim()) {
+      Alert.alert('Erreur', 'Nom, prénom et matricule sont obligatoires.');
+      return;
+    }
+    if (dateOfBirth.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim())) {
+      Alert.alert('Erreur', 'La date de naissance doit être au format AAAA-MM-JJ.');
+      return;
+    }
+    if (hireDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(hireDate.trim())) {
+      Alert.alert('Erreur', 'La date d\'embauche doit être au format AAAA-MM-JJ.');
+      return;
+    }
+    if (lastMedicalExam.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(lastMedicalExam.trim())) {
+      Alert.alert('Erreur', 'Le dernier examen médical doit être au format AAAA-MM-JJ.');
+      return;
+    }
+    if (nextMedicalExam.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(nextMedicalExam.trim())) {
+      Alert.alert('Erreur', 'Le prochain examen médical doit être au format AAAA-MM-JJ.');
+      return;
+    }
+    setSaving(true);
+    // Resolve sector from protocol if available
+    const resolvedSector = selectedSectorCode
+      ? (occSectors.find(s => s.code === selectedSectorCode)?.industrySectorKey as IndustrySector ?? patient.sector)
+      : patient.sector;
+    // Auto-fill from position data if available
+    const resolvedExposures = selectedPosition?.typicalExposures as ExposureRisk[] ?? patient.exposureRisks;
+    const resolvedPPE = selectedPosition?.recommendedPPE as PPEType[] ?? patient.ppeRequired;
+    const resolvedRiskLevel = selectedSectorCode
+      ? (SECTOR_PROFILES[resolvedSector]?.riskLevel ?? patient.riskLevel)
+      : patient.riskLevel;
+    const allergies = allergiesText.split(',').map(v => v.trim()).filter(Boolean);
+    const chronicConditions = chronicText.split(',').map(v => v.trim()).filter(Boolean);
+    const currentMedications = medicationsText.split(',').map(v => v.trim()).filter(Boolean);
+    const updated: OccupationalHealthPatient = {
+      ...patient,
+      firstName: firstName.trim() || patient.firstName,
+      lastName: lastName.trim() || patient.lastName,
+      phone: phone.trim(),
+      email: email.trim(),
+      address: address.trim(),
+      city: city.trim(),
+      emergencyContactName: emergencyContactName.trim(),
+      emergencyContactPhone: emergencyContactPhone.trim(),
+      dateOfBirth: dateOfBirth.trim() || patient.dateOfBirth,
+      gender: (gender as any) || patient.gender,
+      employeeId: employeeId.trim() || patient.employeeId,
+      company: company.trim() || patient.company,
+      site: site.trim() || patient.site,
+      department: department.trim() || patient.department,
+      jobTitle: jobTitle.trim() || patient.jobTitle,
+      jobCategory: (jobCategory as JobCategory) || patient.jobCategory,
+      shiftPattern: (shiftPattern as ShiftPattern) || patient.shiftPattern,
+      contractType: (contractType as any) || (patient as any).contractType,
+      hireDate: hireDate.trim() || patient.hireDate,
+      sector: resolvedSector,
+      sectorCode: selectedSectorCode || undefined,
+      departmentCode: selectedDeptCode || undefined,
+      positionCode: selectedPositionCode || undefined,
+      fitnessStatus: fitnessStatus as FitnessStatus,
+      lastMedicalExam: lastMedicalExam.trim() || undefined,
+      nextMedicalExam: nextMedicalExam.trim() || undefined,
+      exposureRisks: resolvedExposures,
+      ppeRequired: resolvedPPE,
+      riskLevel: resolvedRiskLevel,
+      allergies,
+      chronicConditions,
+      currentMedications,
+    };
+    try {
+      const success = await onSave(updated);
+      if (success) onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { maxHeight: '92%' }]}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Modifier — {patient.firstName} {patient.lastName}</Text>
+              <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+
+            {/* ── Section: Identité ── */}
+            <Text style={styles.editSectionLabel}>Identité & Contact</Text>
+
+            {[
+              { label: 'Prénom *', value: firstName, set: setFirstName },
+              { label: 'Nom *', value: lastName, set: setLastName },
+              { label: 'Téléphone', value: phone, set: setPhone },
+              { label: 'Email', value: email, set: setEmail, placeholder: 'prenom.nom@entreprise.cd' },
+              { label: 'Adresse', value: address, set: setAddress },
+              { label: 'Ville', value: city, set: setCity },
+              { label: 'Contact urgence — nom', value: emergencyContactName, set: setEmergencyContactName },
+              { label: 'Contact urgence — téléphone', value: emergencyContactPhone, set: setEmergencyContactPhone },
+            ].map(f => (
+              <View key={f.label} style={styles.formSection}>
+                <Text style={styles.formLabel}>{f.label}</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={f.value}
+                  onChangeText={f.set}
+                  placeholder={(f as any).placeholder ?? ''}
+                  placeholderTextColor={colors.textTertiary}
+                />
+              </View>
+            ))}
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Date de naissance (AAAA-MM-JJ)</Text>
+              <View style={styles.formInput}>
+                <DateInput
+                  value={dateOfBirth}
+                  onChangeText={setDateOfBirth}
+                  placeholder="1985-03-15"
+                  placeholderTextColor={colors.textTertiary}
+                  format="iso"
+                  maximumDate={new Date()}
+                />
+              </View>
+            </View>
+
+            <DropdownPicker
+              label="Genre"
+              value={gender}
+              displayValue={genderDisplayValue}
+              options={GENDER_OPTIONS}
+              onSelect={setGender}
+              placeholder="Sélectionner le genre..."
+            />
+
+            {/* ── Section: Emploi ── */}
+            <Text style={styles.editSectionLabel}>Emploi</Text>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Matricule Employé *</Text>
+              <TextInput style={styles.formInput} value={employeeId} onChangeText={setEmployeeId} placeholder="EMP-001" placeholderTextColor={colors.textTertiary} />
+            </View>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Entreprise</Text>
+              <TextInput style={styles.formInput} value={company} onChangeText={setCompany} />
+            </View>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Site de travail</Text>
+              <TextInput style={styles.formInput} value={site} onChangeText={setSite} />
+            </View>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Date d'embauche (AAAA-MM-JJ)</Text>
+              <View style={styles.formInput}>
+                <DateInput
+                  value={hireDate}
+                  onChangeText={setHireDate}
+                  placeholder="2020-01-15"
+                  placeholderTextColor={colors.textTertiary}
+                  format="iso"
+                />
+              </View>
+            </View>
+
+            <DropdownPicker
+              label="Type de contrat"
+              value={contractType}
+              displayValue={contractDisplayValue}
+              options={CONTRACT_OPTIONS}
+              onSelect={setContractType}
+              placeholder="Sélectionner le contrat..."
+            />
+
+            <DropdownPicker
+              label="Rythme / Horaires"
+              value={shiftPattern}
+              displayValue={shiftDisplayValue}
+              options={SHIFT_OPTIONS}
+              onSelect={setShiftPattern}
+              placeholder="Sélectionner les horaires..."
+            />
+
+            {/* ── Section: Protocole Médecine du Travail ── */}
+            <Text style={styles.editSectionLabel}>Protocole — Médecine du Travail</Text>
+
+            <DropdownPicker
+              label="Secteur d'activité"
+              value={selectedSectorCode}
+              displayValue={sectorDisplayValue}
+              options={sectorOptions}
+              onSelect={code => {
+                setSelectedSectorCode(code);
+                setSelectedDeptCode('');
+                setSelectedPositionCode('');
+              }}
+              placeholder="Sélectionner le secteur..."
+            />
+
+            <DropdownPicker
+              label="Département (protocole)"
+              value={selectedDeptCode}
+              displayValue={deptDisplayValue}
+              options={deptOptions}
+              onSelect={code => {
+                setSelectedDeptCode(code);
+                setSelectedPositionCode('');
+              }}
+              disabled={!selectedSectorCode}
+              placeholder={selectedSectorCode ? 'Sélectionner le département...' : 'Choisir un secteur d\'abord'}
+            />
+
+            <DropdownPicker
+              label="Poste de travail"
+              value={selectedPositionCode}
+              displayValue={positionDisplayValue}
+              options={positionOptions}
+              onSelect={code => {
+                setSelectedPositionCode(code);
+                const pos = occPositions.find(p => p.code === code);
+                if (pos) {
+                  setJobTitle(pos.name);
+                  const dept = occDepts.find(d => d.code === selectedDeptCode);
+                  if (dept) setDepartment(dept.name);
+                }
+              }}
+              disabled={!selectedDeptCode}
+              placeholder={selectedDeptCode ? 'Sélectionner le poste...' : 'Choisir un département d\'abord'}
+            />
+
+            {/* Auto-fill info banner when position selected */}
+            {selectedPosition && (
+              <View style={styles.protocolBanner}>
+                <Ionicons name="shield-checkmark-outline" size={16} color={ACCENT} />
+                <Text style={styles.protocolBannerText}>
+                  Poste sélectionné · {selectedPosition.protocols?.length ?? 0} protocole(s) d'examen associé(s)
+                  {selectedPosition.typicalExposures?.length ? ` · ${selectedPosition.typicalExposures.length} risque(s) d'exposition` : ''}
+                </Text>
+              </View>
+            )}
+
+            {/* Intitulé Poste — editable even after auto-fill */}
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Intitulé du Poste (libre)</Text>
+              <TextInput style={styles.formInput} value={jobTitle} onChangeText={setJobTitle} />
+            </View>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Département (libre)</Text>
+              <TextInput style={styles.formInput} value={department} onChangeText={setDepartment} />
+            </View>
+
+            <DropdownPicker
+              label="Catégorie de poste"
+              value={jobCategory}
+              displayValue={jobCatDisplayValue}
+              options={JOB_CATEGORY_OPTIONS}
+              onSelect={setJobCategory}
+              placeholder="Sélectionner la catégorie..."
+            />
+
+            {/* ── Section: Suivi Médical ── */}
+            <Text style={styles.editSectionLabel}>Suivi Médical</Text>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Statut d'Aptitude</Text>
+              <View style={styles.sectorGrid}>
+                {FITNESS_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.sectorChip, fitnessStatus === opt.value && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]}
+                    onPress={() => setFitnessStatus(opt.value)}
+                  >
+                    <Text style={[styles.sectorChipText, fitnessStatus === opt.value && { color: ACCENT, fontWeight: '600' }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Dernier examen médical (AAAA-MM-JJ)</Text>
+              <View style={styles.formInput}>
+                <DateInput
+                  value={lastMedicalExam}
+                  onChangeText={setLastMedicalExam}
+                  placeholder="2024-01-15"
+                  placeholderTextColor={colors.textTertiary}
+                  format="iso"
+                />
+              </View>
+            </View>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Prochain examen médical (AAAA-MM-JJ)</Text>
+              <View style={styles.formInput}>
+                <DateInput
+                  value={nextMedicalExam}
+                  onChangeText={setNextMedicalExam}
+                  placeholder="2025-01-15"
+                  placeholderTextColor={colors.textTertiary}
+                  format="iso"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Allergies (séparées par virgule)</Text>
+              <TextInput
+                style={styles.formInput}
+                value={allergiesText}
+                onChangeText={setAllergiesText}
+                placeholder="Pénicilline, Latex"
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Conditions chroniques (séparées par virgule)</Text>
+              <TextInput
+                style={styles.formInput}
+                value={chronicText}
+                onChangeText={setChronicText}
+                placeholder="Asthme, HTA"
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Médications actuelles (séparées par virgule)</Text>
+              <TextInput
+                style={styles.formInput}
+                value={medicationsText}
+                onChangeText={setMedicationsText}
+                placeholder="Salbutamol, Metformine"
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="save-outline" size={18} color="#FFF" />}
+              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -737,101 +1084,47 @@ function AddPatientModal({
 
 // ─── Main Screen ─────────────────────────────────────────────
 export function OHPatientsScreen() {
-  const [patients, setPatients] = useState<OccupationalHealthPatient[]>(SAMPLE_PATIENTS);
+  const [patients, setPatients] = useState<OccupationalHealthPatient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSector, setFilterSector] = useState<IndustrySector | 'all'>('all');
   const [filterFitness, setFilterFitness] = useState<FitnessStatus | 'all'>('all');
   const [selectedPatient, setSelectedPatient] = useState<OccupationalHealthPatient | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
+
+  // Bootstrap protocol data from API on mount
+  useEffect(() => {
+    OccHealthProtocolService.getInstance().loadFromApi().catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadPatients();
   }, []);
 
   const loadPatients = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      const db = HybridDataService.getInstance();
-      const api = ApiService.getInstance();
-      
-      // Try to load from API first (for occupational health workers)
-      try {
-        const response = await api.get('/occupational-health/api/workers/');
-        if (response.success && response.data) {
-          // Convert workers to OccupationalHealthPatient format
-          const apiPatients: OccupationalHealthPatient[] = response.data.map((worker: any) => {
-            const patientNumber = worker.patient_number || PatientUtils.generatePatientNumber();
-            return {
-              id: worker.id || worker.uuid,
-              firstName: worker.first_name,
-              lastName: worker.last_name,
-              middleName: worker.middle_name || '',
-              dateOfBirth: worker.date_of_birth || '1990-01-01',
-              gender: worker.gender || 'male',
-              phone: worker.phone || '',
-              email: worker.email || '',
-              address: worker.address || '',
-              city: worker.city || '',
-              emergencyContactName: worker.emergency_contact_name || '',
-              emergencyContactPhone: worker.emergency_contact_phone || '',
-              // Patient required fields
-              allergies: worker.allergies || [],
-              chronicConditions: worker.chronic_conditions || [],
-              currentMedications: worker.current_medications || [],
-              patientNumber,
-              registrationDate: worker.created_at || worker.hire_date,
-              status: worker.is_active ? 'active' : 'inactive',
-              createdAt: worker.created_at || new Date().toISOString(),
-              accessCount: 0,
-              // OH specific fields
-              employeeId: worker.employee_id,
-              company: worker.enterprise?.name || worker.company || 'Non spécifié',
-              sector: worker.enterprise?.sector || worker.sector || 'other',
-              site: worker.work_site?.name || worker.site || 'Non spécifié',
-              department: worker.department,
-              jobTitle: worker.job_title,
-              jobCategory: worker.job_category || 'other',
-              shiftPattern: worker.shift_pattern || 'regular',
-              hireDate: worker.hire_date,
-              contractType: worker.contract_type || 'permanent',
-              fitnessStatus: worker.fitness_status || 'pending_evaluation',
-              lastMedicalExam: worker.last_medical_exam,
-              nextMedicalExam: worker.next_medical_exam,
-              exposureRisks: worker.exposure_risks || [],
-              ppeRequired: worker.ppe_required || [],
-              riskLevel: worker.risk_level || 'low',
-              vaccinationStatus: worker.vaccination_status || [],
-            };
-          });
-          
-          if (apiPatients.length > 0) {
-            setPatients(apiPatients);
-            console.log(`📋 Loaded ${apiPatients.length} patients from API`);
-            return;
-          }
-        }
-      } catch (apiError) {
-        console.warn('API load failed, trying local storage:', apiError);
-      }
-
-      // Fallback to HybridDataService for local patients
-      const occHealthPatientsResult = await db.getAllPatients();
-      const occHealthPatients = occHealthPatientsResult.success ? occHealthPatientsResult.data : [];
-      if (occHealthPatients && occHealthPatients.length > 0) {
-        setPatients(occHealthPatients as OccupationalHealthPatient[]);
-        console.log(`📋 Loaded ${occHealthPatients.length} patients from HybridDataService`);
+      const { data, error } = await occHealthApi.listWorkers();
+      if (error) {
+        setLoadError(error);
+        console.warn('[OHPatientsScreen] API load failed:', error);
       } else {
-        // Final fallback to sample data
-        setPatients(SAMPLE_PATIENTS);
-        console.log(`📋 Using ${SAMPLE_PATIENTS.length} sample patients`);
+        setPatients(data);
       }
-    } catch (error) {
-      console.error('Failed to load patients:', error);
-      setPatients(SAMPLE_PATIENTS);
+    } catch (err: any) {
+      setLoadError(err?.message ?? 'Erreur de connexion au serveur');
+      console.error('Failed to load patients:', err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -841,92 +1134,63 @@ export function OHPatientsScreen() {
     setRefreshing(false);
   }, [loadPatients]);
 
-  const savePatients = async (list: OccupationalHealthPatient[]) => {
+  const handleAddPatient = async (p: OccupationalHealthPatient): Promise<boolean> => {
+    if (isMutating) return false;
+    setIsMutating(true);
     try {
-      setPatients(list);
-      console.log(`💾 Updated patient list: ${list.length} patients`);
-    } catch (error) {
-      console.error('Failed to update patients list:', error);
+      const { data, error } = await occHealthApi.createWorker(p);
+      if (!error && data) {
+        await loadPatients();
+        Alert.alert('Succès', `${p.firstName} ${p.lastName} enregistré(e).`);
+        return true;
+      }
+      Alert.alert('Erreur', error ?? 'Impossible de créer le patient. Vérifiez la connexion au serveur.');
+      return false;
+    } finally {
+      setIsMutating(false);
     }
   };
 
-  const handleAddPatient = async (p: OccupationalHealthPatient) => {
+  const handleEditPatient = async (updated: OccupationalHealthPatient): Promise<boolean> => {
+    if (isMutating) return false;
+    setIsMutating(true);
     try {
-      const api = ApiService.getInstance();
-      
-      // POST single worker to API
-      const workerData = {
-        employee_id: p.employeeId,
-        first_name: p.firstName,
-        last_name: p.lastName,
-        date_of_birth: p.dateOfBirth,
-        gender: p.gender,
-        phone: p.phone || '',
-        email: p.email || '',
-        address: p.address || '',
-        emergency_contact_name: p.emergencyContactName || '',
-        emergency_contact_phone: p.emergencyContactPhone || '',
-        hire_date: p.hireDate,
-        department: p.department || '',
-        job_title: p.jobTitle || '',
-        job_category: p.jobCategory || 'other_job',
-        shift_pattern: p.shiftPattern || 'regular',
-        contract_type: p.contractType || 'permanent',
-        fitness_status: p.fitnessStatus || 'pending_evaluation',
-        exposure_risks: p.exposureRisks || [],
-        ppe_required: p.ppeRequired || [],
-        allergies: (p.allergies || []).join(', '),
-        chronic_conditions: (p.chronicConditions || []).join(', '),
-        medications: (p.currentMedications || []).join(', '),
-        company: p.company || '',
-        sector: p.sector || 'other',
-        site: p.site || '',
-      };
-
-      const response = await api.post('/occupational-health/api/workers/', workerData);
-      
-      if (response.success) {
-        // Reload from API to get authoritative data
+      const { data, error } = await occHealthApi.updateWorker(updated.id, updated);
+      if (!error && data) {
         await loadPatients();
-        setShowAddModal(false);
-        Alert.alert('Succès', `${p.firstName} ${p.lastName} enregistré(e) avec succès.`);
-      } else {
-        // Fallback: save locally and add to list
-        const updated = [p, ...patients];
-        setPatients(updated);
-        setShowAddModal(false);
-        Alert.alert(
-          'Enregistré localement',
-          `${p.firstName} ${p.lastName} enregistré(e) localement — N° ${p.patientNumber}.\n\nErreur API: ${response.error?.message || 'Connexion indisponible'}`
-        );
+        setShowDetail(false);
+        setSelectedPatient(null);
+        Alert.alert('Succès', 'Dossier mis à jour.');
+        return true;
       }
-    } catch (error: any) {
-      // Fallback: save locally
-      const updated = [p, ...patients];
-      setPatients(updated);
-      setShowAddModal(false);
-      Alert.alert('Enregistré localement', `${p.firstName} ${p.lastName} enregistré(e) localement — N° ${p.patientNumber}`);
+      Alert.alert('Erreur', error ?? 'Impossible de mettre à jour. Vérifiez la connexion au serveur.');
+      return false;
+    } finally {
+      setIsMutating(false);
     }
   };
 
   const handleDeletePatient = (id: string) => {
-    Alert.alert('Confirmer', 'Supprimer ce patient du registre ?', [
+    if (isMutating) return;
+    Alert.alert('Confirmer la suppression', 'Cette action est irréversible.', [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer', style: 'destructive', onPress: async () => {
+          if (isMutating) return;
+          setIsMutating(true);
           try {
-            const api = ApiService.getInstance();
-            // Try to delete on API (ignore non-local IDs)
-            if (!id.startsWith('import-') && !id.startsWith('p-') && !id.startsWith('w')) {
-              await api.delete(`/occupational-health/api/workers/${id}/`);
+            const { error } = await occHealthApi.deleteWorker(id);
+            if (error) {
+              Alert.alert('Erreur', error ?? 'Impossible de supprimer ce patient.');
+              return;
             }
-          } catch (e) {
-            console.warn('API delete failed:', e);
+            setShowDetail(false);
+            setSelectedPatient(null);
+            await loadPatients();
+          } finally {
+            setIsMutating(false);
           }
-          setPatients(prev => prev.filter(p => p.id !== id));
-          setShowDetail(false);
-          setSelectedPatient(null);
-        }
+        },
       },
     ]);
   };
@@ -1050,7 +1314,7 @@ export function OHPatientsScreen() {
 
   const handleBulkImport = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
+      const pickerResult = await DocumentPicker.getDocumentAsync({
         type: [
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           'application/vnd.ms-excel',
@@ -1059,9 +1323,9 @@ export function OHPatientsScreen() {
         copyToCacheDirectory: true,
       });
 
-      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) return;
 
-      const file = result.assets[0];
+      const file = pickerResult.assets[0];
       setImportLoading(true);
       setImportResult(null);
       setShowImportModal(true);
@@ -1132,25 +1396,20 @@ export function OHPatientsScreen() {
       }));
 
       // Send to backend bulk-import endpoint
-      const api = ApiService.getInstance();
-      const apiResponse = await api.post('/occupational-health/api/workers/bulk-import/', workersForApi);
+      const importApiResult = await occHealthApi.bulkImportWorkers(workersForApi);
 
-      if (apiResponse.success && apiResponse.data) {
-        const result = apiResponse.data;
-        
-        // Reload data from backend to get the authoritative list
+      if (!importApiResult.error) {
         await loadPatients();
-
         setImportResult({
           success: true,
           totalRows: data.length,
           validRows: validRows.length,
           invalidRows: invalidCount,
-          processedRows: (result.created || 0) + (result.updated || 0),
-          created: result.created || 0,
-          updated: result.updated || 0,
-          apiErrors: result.errors || 0,
-          errorDetails: result.error_details || [],
+          processedRows: importApiResult.created + importApiResult.updated,
+          created: importApiResult.created,
+          updated: importApiResult.updated,
+          apiErrors: importApiResult.errors,
+          errorDetails: importApiResult.errorDetails,
         });
       } else {
         // API failed — fallback to local storage
@@ -1174,7 +1433,7 @@ export function OHPatientsScreen() {
             allergies: [],
             chronicConditions: [],
             currentMedications: [],
-            patientNumber: PatientUtils.generatePatientNumber(),
+            patientNumber: `PAT-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             registrationDate: now,
             status: 'active',
             createdAt: now,
@@ -1327,12 +1586,12 @@ export function OHPatientsScreen() {
       {/* Stats */}
       <View style={styles.statsRow}>
         {[
-          { label: 'Total', value: stats.total, icon: 'people', color: ACCENT },
-          { label: 'Aptes', value: stats.fit, icon: 'checkmark-circle', color: '#22C55E' },
-          { label: 'Restrictions', value: stats.restricted, icon: 'warning', color: '#F59E0B' },
-          { label: 'Inaptes', value: stats.unfit, icon: 'close-circle', color: '#EF4444' },
-          { label: 'En attente', value: stats.pending, icon: 'time', color: '#6366F1' },
-          { label: 'Exam. en retard', value: stats.overdue, icon: 'alert-circle', color: '#DC2626' },
+          { label: 'Total', value: stats.total, icon: 'people', color: colors.primary },
+          { label: 'Aptes', value: stats.fit, icon: 'checkmark-circle', color: colors.secondary },
+          { label: 'Restrictions', value: stats.restricted, icon: 'warning', color: colors.warningDark },
+          { label: 'Inaptes', value: stats.unfit, icon: 'close-circle', color: colors.error },
+          { label: 'En attente', value: stats.pending, icon: 'time', color: colors.secondaryDark },
+          { label: 'Exam. en retard', value: stats.overdue, icon: 'alert-circle', color: colors.errorDark },
         ].map((s, i) => {
           const textColor = getTextColor(s.color);
           return (
@@ -1391,18 +1650,39 @@ export function OHPatientsScreen() {
       {/* Patients List */}
       <Text style={styles.resultsCount}>{filteredPatients.length} patient(s) trouvé(s)</Text>
       <View style={styles.patientsList}>
-        {filteredPatients.map((p, index) => (
-          <React.Fragment key={p.id}>
-            <PatientCard patient={p} onPress={() => { setSelectedPatient(p); setShowDetail(true); }} />
-            {index < filteredPatients.length - 1 && <View style={styles.patientSeparator} />}
-          </React.Fragment>
-        ))}
-        {filteredPatients.length === 0 && (
+        {loading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.emptySubtext}>Chargement des patients...</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="cloud-offline-outline" size={48} color={colors.error} />
+            <Text style={styles.emptyText}>Serveur inaccessible</Text>
+            <Text style={styles.emptySubtext}>{loadError}</Text>
+            <TouchableOpacity
+              style={{ marginTop: 12, backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: borderRadius.lg }}
+              onPress={loadPatients}>
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
+        ) : filteredPatients.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>Aucun patient trouvé</Text>
-            <Text style={styles.emptySubtext}>Ajustez les filtres ou enregistrez un nouveau patient</Text>
+            <Text style={styles.emptyText}>{patients.length === 0 ? 'Aucun patient enregistré' : 'Aucun résultat'}</Text>
+            <Text style={styles.emptySubtext}>
+              {patients.length === 0
+                ? 'Ajoutez un patient ou importez un fichier Excel'
+                : 'Ajustez les filtres ou la recherche'}
+            </Text>
           </View>
+        ) : (
+          filteredPatients.map((p, index) => (
+            <React.Fragment key={p.id}>
+              <PatientCard patient={p} onPress={() => { setSelectedPatient(p); setShowDetail(true); }} />
+              {index < filteredPatients.length - 1 && <View style={styles.patientSeparator} />}
+            </React.Fragment>
+          ))
         )}
       </View>
 
@@ -1411,10 +1691,16 @@ export function OHPatientsScreen() {
         visible={showDetail}
         patient={selectedPatient}
         onClose={() => { setShowDetail(false); setSelectedPatient(null); }}
-        onEdit={() => { Alert.alert('Info', 'Fonction de modification en cours de développement.'); }}
+        onEdit={() => { setShowDetail(false); setShowEditModal(true); }}
         onDelete={() => { if (selectedPatient) handleDeletePatient(selectedPatient.id); }}
       />
       <AddPatientModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleAddPatient} />
+      <EditPatientModal
+        visible={showEditModal}
+        patient={selectedPatient}
+        onClose={() => setShowEditModal(false)}
+        onSave={handleEditPatient}
+      />
       
       {/* Bulk Import Modal */}
       {showImportModal && (
@@ -1444,7 +1730,7 @@ export function OHPatientsScreen() {
                         <View style={[styles.resultIcon, { backgroundColor: '#EF444414' }]}>
                           <Ionicons name="alert-circle" size={32} color="#EF4444" />
                         </View>
-                        <Text style={[styles.resultTitle, { color: '#EF4444' }]}>Erreur d'import</Text>
+                        <Text style={[styles.resultTitle, { color: colors.error }]}>Erreur d'import</Text>
                         <Text style={styles.resultMessage}>{importResult.error}</Text>
                         
                         {importResult.totalRows && (
@@ -1455,7 +1741,7 @@ export function OHPatientsScreen() {
                             </View>
                             {importResult.invalidRows > 0 && (
                               <View style={styles.statItem}>
-                                <Text style={[styles.importStatValue, { color: '#EF4444' }]}>{importResult.invalidRows}</Text>
+                                <Text style={[styles.importStatValue, { color: colors.error }]}>{importResult.invalidRows}</Text>
                                 <Text style={styles.importStatLabel}>Lignes invalides</Text>
                               </View>
                             )}
@@ -1464,10 +1750,10 @@ export function OHPatientsScreen() {
                       </View>
                     ) : (
                       <View style={styles.resultContainer}>
-                        <View style={[styles.resultIcon, { backgroundColor: '#22C55E14' }]}>
-                          <Ionicons name="checkmark-circle" size={32} color="#22C55E" />
+                        <View style={[styles.resultIcon, { backgroundColor: colors.successLight }]}>
+                          <Ionicons name="checkmark-circle" size={32} color={colors.secondary} />
                         </View>
-                        <Text style={[styles.resultTitle, { color: '#22C55E' }]}>Import réussi!</Text>
+                        <Text style={[styles.resultTitle, { color: colors.secondary }]}>Import réussi!</Text>
                         <Text style={styles.resultMessage}>
                           {importResult.processedRows} patient(s) ont été importés avec succès dans le système de médecine du travail.
                           {importResult.localOnly && '\n\n⚠️ Sauvegardé localement (serveur indisponible).'}
@@ -1480,31 +1766,31 @@ export function OHPatientsScreen() {
                           </View>
                           {importResult.created != null && (
                             <View style={styles.statItem}>
-                              <Text style={[styles.importStatValue, { color: '#22C55E' }]}>{importResult.created}</Text>
+                              <Text style={[styles.importStatValue, { color: colors.secondary }]}>{importResult.created}</Text>
                               <Text style={styles.importStatLabel}>Créés</Text>
                             </View>
                           )}
                           {importResult.updated != null && importResult.updated > 0 && (
                             <View style={styles.statItem}>
-                              <Text style={[styles.importStatValue, { color: '#3B82F6' }]}>{importResult.updated}</Text>
+                              <Text style={[styles.importStatValue, { color: colors.primary }]}>{importResult.updated}</Text>
                               <Text style={styles.importStatLabel}>Mis à jour</Text>
                             </View>
                           )}
                           {importResult.validRows != null && !importResult.created && (
                             <View style={styles.statItem}>
-                              <Text style={[styles.importStatValue, { color: '#22C55E' }]}>{importResult.validRows}</Text>
+                              <Text style={[styles.importStatValue, { color: colors.secondary }]}>{importResult.validRows}</Text>
                               <Text style={styles.importStatLabel}>Lignes valides</Text>
                             </View>
                           )}
                           {importResult.invalidRows > 0 && (
                             <View style={styles.statItem}>
-                              <Text style={[styles.importStatValue, { color: '#F59E0B' }]}>{importResult.invalidRows}</Text>
+                              <Text style={[styles.importStatValue, { color: colors.warning }]}>{importResult.invalidRows}</Text>
                               <Text style={styles.importStatLabel}>Lignes ignorées</Text>
                             </View>
                           )}
                           {importResult.apiErrors > 0 && (
                             <View style={styles.statItem}>
-                              <Text style={[styles.importStatValue, { color: '#EF4444' }]}>{importResult.apiErrors}</Text>
+                              <Text style={[styles.importStatValue, { color: colors.error }]}>{importResult.apiErrors}</Text>
                               <Text style={styles.importStatLabel}>Erreurs API</Text>
                             </View>
                           )}
@@ -1513,7 +1799,7 @@ export function OHPatientsScreen() {
                         {importResult.errorDetails && importResult.errorDetails.length > 0 && (
                           <View style={[styles.successNote, { backgroundColor: '#FEF2F214' }]}>
                             <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
-                            <Text style={[styles.successNoteText, { color: '#EF4444' }]}>
+                            <Text style={[styles.successNoteText, { color: colors.error }]}>
                               {importResult.errorDetails.slice(0, 5).map((e: any) => `Ligne ${e.row}: ${e.error}`).join('\n')}
                             </Text>
                           </View>
@@ -1564,12 +1850,12 @@ const styles = StyleSheet.create({
   screenTitle: { fontSize: 24, fontWeight: '700', color: colors.text },
   screenSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  addButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: ACCENT, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg },
   addButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
-  importButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#6366F1', paddingHorizontal: 12, paddingVertical: 10, borderRadius: borderRadius.lg },
+  importButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.secondary, paddingHorizontal: 12, paddingVertical: 10, borderRadius: borderRadius.lg },
   importButtonText: { color: '#FFF', fontWeight: '500', fontSize: 13 },
-  syncIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: ACCENT + '14', paddingHorizontal: 8, paddingVertical: 4, borderRadius: borderRadius.md },
-  syncText: { fontSize: 11, color: ACCENT, fontWeight: '500' },
+  syncIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryFaded, paddingHorizontal: 8, paddingVertical: 4, borderRadius: borderRadius.md },
+  syncText: { fontSize: 11, color: colors.primary, fontWeight: '500' },
 
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   statCard: { 
@@ -1589,7 +1875,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, color: colors.text },
   filterScrollRow: { flexGrow: 0 },
   filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: borderRadius.full, backgroundColor: colors.surfaceVariant, marginRight: 8 },
-  filterChipActive: { backgroundColor: ACCENT },
+  filterChipActive: { backgroundColor: colors.primary },
   filterChipText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
   filterChipTextActive: { color: '#FFF', fontWeight: '600' },
 
@@ -1627,7 +1913,7 @@ const styles = StyleSheet.create({
   ppeMoreText: { fontSize: 11, color: colors.textTertiary, alignSelf: 'center' },
   examDate: { fontSize: 11, color: colors.textSecondary },
 
-  overdueBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.full },
+  overdueBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.error, paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.full },
   overdueBadgeText: { fontSize: 9, fontWeight: '700', color: '#FFF' },
 
   emptyState: { alignItems: 'center', padding: 40, gap: 8 },
@@ -1644,7 +1930,7 @@ const styles = StyleSheet.create({
   actionBtnText: { fontWeight: '600', fontSize: 14 },
 
   detailSection: { marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  detailSectionTitle: { fontSize: 14, fontWeight: '700', color: ACCENT, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  detailSectionTitle: { fontSize: 14, fontWeight: '700', color: colors.primary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   detailAvatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   detailName: { fontSize: 18, fontWeight: '700', color: colors.text },
   detailSubtext: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
@@ -1663,6 +1949,44 @@ const styles = StyleSheet.create({
   sectorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   sectorChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
   sectorChipText: { fontSize: 11, color: colors.textSecondary },
+
+  // Dropdown picker
+  ddTrigger: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md,
+    paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: colors.outline,
+  },
+  ddDisabled: { opacity: 0.45 },
+  ddValue: { flex: 1, fontSize: 14, color: colors.text, marginRight: 8 },
+  ddList: {
+    marginTop: 4, backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: colors.outline, overflow: 'hidden',
+    ...shadows.sm,
+    zIndex: 9999,
+  },
+  ddItem: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: colors.outline,
+  },
+  ddItemText: { fontSize: 13, color: colors.text },
+  ddItemSub: { fontSize: 11, color: colors.textTertiary, marginTop: 2 },
+
+  // Edit section header
+  editSectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    marginTop: 4, marginBottom: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: colors.outline,
+  },
+
+  // Protocol banner
+  protocolBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: ACCENT + '10', borderRadius: borderRadius.md,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16,
+    borderWidth: 1, borderColor: ACCENT + '30',
+  },
+  protocolBannerText: { flex: 1, fontSize: 12, color: ACCENT, lineHeight: 16, fontWeight: '500' },
 
   // Import Modal styles
   loadingContainer: { alignItems: 'center', padding: 40, gap: 12 },

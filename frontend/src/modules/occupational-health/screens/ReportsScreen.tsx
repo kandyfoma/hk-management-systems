@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions, Alert,
@@ -9,7 +9,7 @@ import { OccHealthUtils, SECTOR_PROFILES, type IndustrySector } from '../../../m
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 
 interface ReportData {
   id: string;

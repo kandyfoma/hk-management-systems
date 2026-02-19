@@ -26,9 +26,9 @@ import { PPEManagementScreen } from '../modules/occupational-health/screens/PPEM
 import { ReportsScreen } from '../modules/occupational-health/screens/ReportsScreen';
 import { ComplianceScreen } from '../modules/occupational-health/screens/ComplianceScreen';
 import { AnalyticsScreen } from '../modules/occupational-health/screens/AnalyticsScreen';
+import { ProtocolManagementScreen } from '../modules/occupational-health/screens/ProtocolManagementScreen';
 import { PlaceholderScreen } from '../modules/shared/PlaceholderScreen';
 import { StaffManagementScreen } from '../screens/StaffManagementScreen';
-import { OrganizationTestScreen } from '../screens/OrganizationTestScreen';
 import { POSScreen } from '../modules/pharmacy/screens/POSScreen';
 import { InventoryScreen } from '../modules/pharmacy/screens/InventoryScreen';
 import { SuppliersScreen } from '../modules/pharmacy/screens/SuppliersScreen';
@@ -126,7 +126,6 @@ const createDynamicSections = (
       items: [
         { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
         { id: 'staff-management', label: 'Gestion Personnel', icon: 'people-outline', iconActive: 'people' },
-        { id: 'organization-test', label: 'Test Organisation', icon: 'bug-outline', iconActive: 'bug' },
       ],
     }
   ];
@@ -164,6 +163,8 @@ const createDynamicSections = (
 
     sections.push({
       title: 'Pharmacie',
+      collapsible: true,
+      defaultCollapsed: false,
       items: pharmacyItems
     });
   }
@@ -212,6 +213,8 @@ const createDynamicSections = (
 
     sections.push({
       title: 'Hôpital',
+      collapsible: true,
+      defaultCollapsed: false,
       items: hospitalItems
     });
   }
@@ -221,26 +224,26 @@ const createDynamicSections = (
     // Principal
     sections.push({
       title: 'Méd. du Travail',
+      collapsible: true,
+      defaultCollapsed: false,
       items: [
         { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' },
         { id: 'oh-patients', label: 'Gestion Patients', icon: 'people-outline', iconActive: 'people' },
         { id: 'oh-intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
+        { id: 'oh-protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
+        { id: 'oh-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit' },
+        { id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
+        { id: 'oh-certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
+        { id: 'oh-surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
+        { id: 'oh-diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
       ],
     });
-
-    // Médecine du Travail
-    const medItems: SidebarMenuItem[] = [
-      { id: 'oh-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit' },
-      { id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
-      { id: 'oh-certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
-      { id: 'oh-surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
-      { id: 'oh-diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
-    ];
-    sections.push({ title: 'Médecine du Travail', items: medItems });
 
     // Sécurité au Travail
     sections.push({
       title: 'Sécurité au Travail',
+      collapsible: true,
+      defaultCollapsed: false,
       items: [
         { id: 'oh-incidents', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
         { id: 'oh-risk', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
@@ -251,6 +254,8 @@ const createDynamicSections = (
     // Rapports & Conformité
     sections.push({
       title: 'Rapports & Conformité',
+      collapsible: true,
+      defaultCollapsed: false,
       items: [
         { id: 'oh-reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
         { id: 'oh-compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
@@ -320,6 +325,8 @@ function DesktopApp() {
 
   // Occupational health draft management
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
+  const [pendingConsultationToLoad, setPendingConsultationToLoad] = useState<string | null>(null);
+  const [ohExamsScreenKey, setOhExamsScreenKey] = useState(0);
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatientId(patient.id);
@@ -344,11 +351,19 @@ function DesktopApp() {
 
   const handleResumeDraft = (draftId: string) => {
     setDraftToLoad(draftId);
+    setPendingConsultationToLoad(null);
     setActiveScreen('oh-exams');
   };
 
   const handleNewConsultation = () => {
     setDraftToLoad(null);
+    setPendingConsultationToLoad(null);
+    setActiveScreen('oh-exams');
+  };
+
+  const handleNavigateToOccConsultation = (pendingId?: string) => {
+    setDraftToLoad(null);
+    setPendingConsultationToLoad(pendingId || null);
     setActiveScreen('oh-exams');
   };
   const handleBackToPatientList = () => { 
@@ -368,6 +383,15 @@ function DesktopApp() {
   };
 
   const handleScreenChange = (screen: string) => {
+    if (screen === 'oh-exams') {
+      // Opening "Visite du Médecin" from menu should always start on waiting-room landing view.
+      setDraftToLoad(null);
+      setPendingConsultationToLoad(null);
+      if (activeScreen === 'oh-exams') {
+        setOhExamsScreenKey(prev => prev + 1);
+      }
+    }
+
     setActiveScreen(screen);
     if (screen !== 'hp-patients') { 
       setPatientView('list'); 
@@ -404,7 +428,6 @@ function DesktopApp() {
     // Main screens
     if (activeScreen === 'dashboard') return <DashboardScreen onNavigate={handleScreenChange} />;
     if (activeScreen === 'staff-management') return <StaffManagementScreen />;
-    if (activeScreen === 'organization-test') return <OrganizationTestScreen />;
     if (activeScreen === 'connectivity') return <ConnectivityScreen />;
     if (activeScreen === 'settings') return <SettingsScreen />;
 
@@ -495,11 +518,15 @@ function DesktopApp() {
     if (activeScreen === 'oh-dashboard') return <OccHealthDashboardContent onNavigate={handleScreenChange} />;
     if (activeScreen === 'oh-exams') return (
       <OccHealthConsultationScreen 
+        key={`oh-exams-${ohExamsScreenKey}`}
         draftToLoad={draftToLoad} 
         onDraftLoaded={() => setDraftToLoad(null)}
+        pendingConsultationToLoad={pendingConsultationToLoad}
+        onPendingLoaded={() => setPendingConsultationToLoad(null)}
         onNavigateBack={() => setActiveScreen('oh-dashboard')}
       />
     );
+    if (activeScreen === 'oh-protocol') return <ProtocolManagementScreen />;
     if (activeScreen === 'oh-previous-visits') return (
       <PreviousVisitsScreen 
         onResumeDraft={handleResumeDraft} 
@@ -516,7 +543,7 @@ function DesktopApp() {
     if (activeScreen === 'oh-intake') return (
       <OHPatientIntakeScreen
         onConsultationQueued={() => {}}
-        onNavigateToConsultation={() => handleScreenChange('oh-exams')}
+        onNavigateToConsultation={handleNavigateToOccConsultation}
       />
     );
     if (activeScreen === 'oh-incidents') return <IncidentsScreen />;

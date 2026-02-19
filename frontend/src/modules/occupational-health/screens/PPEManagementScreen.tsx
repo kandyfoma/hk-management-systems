@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
   StyleSheet, Dimensions, Modal, Alert,
@@ -10,7 +10,7 @@ import { type PPEType } from '../../../models/OccupationalHealth';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 const STORAGE_KEY = '@occhealth_ppe';
 
 interface PPEItem {

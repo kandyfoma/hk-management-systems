@@ -14,6 +14,7 @@ from django.db.models import Count, Q, Sum, Avg, F
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
 
 from .models import (
     # Protocol hierarchy models
@@ -493,6 +494,12 @@ class WorkerViewSet(viewsets.ModelViewSet):
     search_fields = ['first_name', 'last_name', 'employee_id', 'job_title']
     ordering_fields = ['last_name', 'hire_date', 'next_exam_due']
     ordering = ['last_name', 'first_name']
+
+    FRONTEND_DROP_FIELDS = {
+        'company', 'site', 'sector', 'sectorCode', 'departmentCode', 'positionCode',
+        'risk_level', 'contract_type', 'shift_pattern', 'last_medical_exam',
+        'current_medications', 'city', 'blood_type',
+    }
     
     def get_queryset(self):
         return Worker.objects.select_related(
@@ -510,6 +517,84 @@ class WorkerViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def _normalize_worker_payload(self, data):
+        payload = dict(data)
+
+        # Accept frontend aliases
+        if 'fitness_status' in payload and 'current_fitness_status' not in payload:
+            payload['current_fitness_status'] = payload.get('fitness_status')
+        if 'next_medical_exam' in payload and 'next_exam_due' not in payload:
+            payload['next_exam_due'] = payload.get('next_medical_exam')
+        if 'current_medications' in payload and 'medications' not in payload:
+            payload['medications'] = payload.get('current_medications')
+
+        # Resolve protocol codes -> FK ids
+        occ_sector_code = (payload.get('occ_sector_code') or '').strip()
+        if occ_sector_code:
+            sector = OccSector.objects.filter(code=occ_sector_code).first()
+            if sector:
+                payload['occ_sector'] = sector.id
+
+        occ_department_code = (payload.get('occ_department_code') or '').strip()
+        if occ_department_code:
+            dept = OccDepartment.objects.filter(code=occ_department_code).first()
+            if dept:
+                payload['occ_department'] = dept.id
+
+        occ_position_code = (payload.get('occ_position_code') or '').strip()
+        if occ_position_code:
+            pos = OccPosition.objects.filter(code=occ_position_code).first()
+            if pos:
+                payload['occ_position'] = pos.id
+
+        # Normalize list values expected as text on Worker model
+        for field in ['allergies', 'chronic_conditions', 'medications']:
+            if isinstance(payload.get(field), list):
+                payload[field] = ', '.join([str(v).strip() for v in payload[field] if str(v).strip()])
+
+        # Remove fields unknown to serializer/model
+        for key in list(payload.keys()):
+            if key in self.FRONTEND_DROP_FIELDS or key in {'occ_sector_code', 'occ_department_code', 'occ_position_code'}:
+                payload.pop(key, None)
+
+        return payload
+
+    def create(self, request, *args, **kwargs):
+        mutable_data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+        normalized = self._normalize_worker_payload(mutable_data)
+        serializer = self.get_serializer(data=normalized)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        mutable_data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+        normalized = self._normalize_worker_payload(mutable_data)
+
+        # For PATCH requests, avoid failing validation by writing empty strings
+        # into required model fields.
+        if partial:
+            required_non_blank_fields = [
+                'employee_id', 'first_name', 'last_name', 'date_of_birth',
+                'gender', 'phone', 'address', 'emergency_contact_name',
+                'emergency_contact_phone', 'job_category', 'job_title', 'hire_date',
+            ]
+            for field in required_non_blank_fields:
+                if field in normalized and (normalized[field] is None or str(normalized[field]).strip() == ''):
+                    normalized.pop(field, None)
+
+        serializer = self.get_serializer(instance, data=normalized, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def risk_profile(self, request, pk=None):
@@ -599,9 +684,12 @@ class WorkerViewSet(viewsets.ModelViewSet):
                         name=enterprise_name.strip(),
                         defaults={
                             'sector': row.get('sector', 'other'),
-                            'address': row.get('address', ''),
+                            'address': row.get('address', '') or 'N/A',
                             'contact_person': f"{first_name} {last_name}",
-                            'contact_phone': row.get('phone', ''),
+                            'phone': (row.get('phone', '') or '')[:20],
+                            'rccm': row.get('rccm', '') or f'AUTO-{enterprise_name.strip()[:10]}',
+                            'nif': row.get('nif', '') or f'AUTO-{enterprise_name.strip()[:10]}',
+                            'contract_start_date': timezone.now().date(),
                             'created_by': request.user,
                         }
                     )
@@ -644,11 +732,11 @@ class WorkerViewSet(viewsets.ModelViewSet):
                     'job_category': row.get('job_category', 'other_job'),
                     'job_title': row.get('job_title', 'Non spécifié'),
                     'hire_date': hire_date,
-                    'phone': row.get('phone', ''),
+                    'phone': (row.get('phone', '') or '')[:20],
                     'email': row.get('email', ''),
-                    'address': row.get('address', ''),
+                    'address': row.get('address', '') or '',
                     'emergency_contact_name': row.get('emergency_contact_name', ''),
-                    'emergency_contact_phone': row.get('emergency_contact_phone', ''),
+                    'emergency_contact_phone': (row.get('emergency_contact_phone', '') or '')[:20],
                     'exposure_risks': row.get('exposure_risks', []),
                     'ppe_required': row.get('ppe_required', []),
                     'allergies': row.get('allergies', ''),
@@ -666,8 +754,9 @@ class WorkerViewSet(viewsets.ModelViewSet):
                         name=site_name.strip(),
                         enterprise=enterprise,
                         defaults={
-                            'address': row.get('address', ''),
-                            'created_by': request.user,
+                            'address': row.get('address', '') or 'N/A',
+                            'site_manager': '',
+                            'phone': '',
                         }
                     )
                     worker_data['work_site'] = work_site
@@ -903,6 +992,172 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return FitnessCertificate.objects.select_related('examination__worker', 'issued_by')
+
+    @action(detail=True, methods=['get'], url_path='download-pdf')
+    def download_pdf(self, request, pk=None):
+        """Generate and return a PDF for a fitness certificate."""
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+        except Exception:
+            return Response(
+                {
+                    'detail': 'PDF generation backend dependency is missing. Install reportlab in the backend environment.'
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        certificate = self.get_object()
+        worker = certificate.examination.worker
+
+        response = HttpResponse(content_type='application/pdf')
+        filename = f"{certificate.certificate_number}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        pdf = canvas.Canvas(response, pagesize=A4)
+        width, height = A4
+
+        y = height - 50
+        pdf.setTitle(f"Certificat {certificate.certificate_number}")
+
+        def ensure_space(lines_needed=1):
+            nonlocal y
+            if y - (lines_needed * 14) < 70:
+                pdf.showPage()
+                y = height - 50
+
+        def draw_wrapped(text, font_name="Helvetica", font_size=10, leading=14, max_width=510):
+            nonlocal y
+            pdf.setFont(font_name, font_size)
+            words = (text or '').split()
+            if not words:
+                y -= leading
+                return
+            line = words[0]
+            for word in words[1:]:
+                candidate = f"{line} {word}"
+                if pdf.stringWidth(candidate, font_name, font_size) <= max_width:
+                    line = candidate
+                else:
+                    ensure_space(1)
+                    pdf.drawString(40, y, line)
+                    y -= leading
+                    line = word
+            ensure_space(1)
+            pdf.drawString(40, y, line)
+            y -= leading
+
+        decision = certificate.fitness_decision
+        if decision in ['fit', 'fit_with_restrictions']:
+            certificate_title = "CERTIFICAT D'APTITUDE AU TRAVAIL"
+        else:
+            certificate_title = "AVIS MÉDICAL D'INAPTITUDE AU POSTE"
+
+        enterprise_name = getattr(worker.enterprise, 'name', '-')
+        enterprise_address = getattr(worker.enterprise, 'address', '') or ''
+        enterprise_phone = getattr(worker.enterprise, 'phone', '') or ''
+        enterprise_email = getattr(worker.enterprise, 'email', '') or ''
+
+        doctor_name = certificate.issued_by.get_full_name() if certificate.issued_by else 'Médecin non renseigné'
+        doctor_license = getattr(certificate.issued_by, 'professional_license', '') if certificate.issued_by else ''
+
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(40, y, certificate_title)
+        y -= 20
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(40, y, f"Organisation: {enterprise_name}")
+        y -= 14
+        if enterprise_address:
+            draw_wrapped(f"Adresse: {enterprise_address}")
+        if enterprise_phone or enterprise_email:
+            draw_wrapped(f"Contact: {enterprise_phone or '-'}  |  Email: {enterprise_email or '-'}")
+
+        ensure_space(3)
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(40, y, "Références du document")
+        y -= 16
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(40, y, f"N° Document: {certificate.certificate_number}")
+        y -= 14
+        pdf.drawString(40, y, f"Date d'émission: {certificate.issue_date}")
+        y -= 14
+        pdf.drawString(40, y, f"Valide jusqu'au: {certificate.valid_until}")
+        y -= 18
+
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(40, y, "Informations du travailleur")
+        y -= 16
+        pdf.setFont("Helvetica", 10)
+        draw_wrapped(f"Nom: {worker.full_name}")
+        draw_wrapped(f"Matricule: {worker.employee_id}")
+        draw_wrapped(f"Entreprise: {enterprise_name}")
+        draw_wrapped(f"Poste: {worker.job_title or '-'}")
+        draw_wrapped(f"Type de visite: {certificate.examination.get_exam_type_display()}  |  Date examen: {certificate.examination.exam_date}")
+
+        ensure_space(3)
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(40, y, "Décision médicale")
+        y -= 16
+        pdf.setFont("Helvetica", 10)
+        draw_wrapped(f"Décision: {certificate.get_fitness_decision_display()}")
+        draw_wrapped(f"Justification: {(certificate.decision_rationale or '').strip() or '-'}")
+        draw_wrapped(f"Restrictions: {(certificate.restrictions or '').strip() or 'Aucune restriction déclarée'}")
+        draw_wrapped(f"Limitations de travail: {(certificate.work_limitations or '').strip() or 'Aucune limitation supplémentaire'}")
+        if certificate.requires_follow_up:
+            draw_wrapped(f"Suivi requis: Oui. Instructions: {(certificate.follow_up_instructions or '').strip() or 'Suivi médical selon prescription.'}")
+        else:
+            draw_wrapped("Suivi requis: Non")
+
+        ensure_space(5)
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(40, y, "Médecin évaluateur")
+        y -= 16
+        pdf.setFont("Helvetica", 10)
+        draw_wrapped(f"Nom: {doctor_name}")
+        draw_wrapped(f"N° d'autorisation / licence: {doctor_license or 'Non renseigné'}")
+
+        ensure_space(8)
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawString(40, y, "Mentions légales")
+        y -= 14
+        pdf.setFont("Helvetica", 9)
+        draw_wrapped(
+            "Ce document est établi dans le cadre de la médecine du travail. La décision médicale s'applique au poste évalué, "
+            "à la date d'examen, et sous réserve de l'exactitude des informations déclarées et des résultats disponibles.",
+            font_size=9,
+            leading=12,
+        )
+        draw_wrapped(
+            "L'employeur est tenu de respecter les restrictions et aménagements prescrits. Toute modification du poste, de l'exposition "
+            "ou de l'état de santé impose une réévaluation médicale.",
+            font_size=9,
+            leading=12,
+        )
+        draw_wrapped(
+            "Document généré par le système de Médecine du Travail. Signature électronique/numérique selon politique interne.",
+            font_size=9,
+            leading=12,
+        )
+
+        pdf.showPage()
+        pdf.save()
+        return response
+
+    @action(detail=True, methods=['post'], url_path='revoke')
+    def revoke(self, request, pk=None):
+        """Revoke a certificate and deactivate it."""
+        certificate = self.get_object()
+        if not certificate.is_active:
+            return Response({'detail': 'Ce certificat est déjà révoqué.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = (request.data.get('reason') or '').strip()
+        certificate.is_active = False
+        certificate.revoked_date = timezone.now().date()
+        certificate.revocation_reason = reason
+        certificate.save(update_fields=['is_active', 'revoked_date', 'revocation_reason', 'updated_at'])
+
+        serializer = self.get_serializer(certificate)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def expiring_soon(self, request):

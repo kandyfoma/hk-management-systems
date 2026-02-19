@@ -1,0 +1,42 @@
+# =============================================================================
+# docker-compose.uat.yml — UAT environment override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.uat.yml up -d
+# =============================================================================
+version: "3.9"
+
+services:
+  db:
+    environment:
+      POSTGRES_DB: ${DB_NAME:-hk_management_uat}
+      POSTGRES_USER: ${DB_USER:-hk_uat}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data_uat:/var/lib/postgresql/data
+
+  backend:
+    image: ${REGISTRY:-ghcr.io}/hk-management/backend:${IMAGE_TAG:-uat}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env.uat
+    environment:
+      DJANGO_ENV: uat
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-hk_management_uat}
+      DB_USER: ${DB_USER:-hk_uat}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DEBUG: "False"
+      GUNICORN_WORKERS: 2
+    volumes: []               # no source mount in UAT — use image only
+
+  celery:
+    image: ${REGISTRY:-ghcr.io}/hk-management/backend:${IMAGE_TAG:-uat}
+    env_file:
+      - ./backend/.env.uat
+    environment:
+      DJANGO_ENV: uat
+      DB_HOST: db
+
+volumes:
+  postgres_data_uat:

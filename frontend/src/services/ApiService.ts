@@ -214,10 +214,33 @@ class ApiService {
     }
   }
 
-  async delete<T = any>(url: string): Promise<ApiResponse<T>> {
+  async delete<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
     try {
-      const response = await this.axiosInstance.delete(url);
+      const response = await this.axiosInstance.delete(url, data ? { data } : undefined);
       return this.handleApiResponse<T>(response);
+    } catch (error) {
+      return this.handleApiError(error as AxiosError);
+    }
+  }
+
+  async getBlob(url: string, params?: any): Promise<ApiResponse<{ blob: Blob; fileName?: string }>> {
+    try {
+      const response = await this.axiosInstance.get(url, {
+        params,
+        responseType: 'blob',
+      });
+
+      const disposition = response.headers?.['content-disposition'] as string | undefined;
+      const fileNameMatch = disposition?.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+      const fileName = fileNameMatch?.[1]?.replace(/"/g, '');
+
+      return {
+        success: true,
+        data: {
+          blob: response.data as Blob,
+          fileName,
+        },
+      };
     } catch (error) {
       return this.handleApiError(error as AxiosError);
     }
@@ -254,7 +277,8 @@ class ApiService {
       return response.status === 200;
     } catch (error) {
       // Check if it's a network error vs API error
-      if (error?.response?.status) {
+      const maybeAxiosError = error as any;
+      if (maybeAxiosError?.response?.status) {
         // Got a response from server (even if error), so connection is working
         return true; 
       }

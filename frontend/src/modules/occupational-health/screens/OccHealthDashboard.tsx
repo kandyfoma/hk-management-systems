@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import type { IndustrySector, SectorRiskLevel } from '../../../models/Occupation
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 
 interface MetricCard {
   title: string;
@@ -28,10 +28,10 @@ interface MetricCard {
 
 // ─── Sample Data (sector-agnostic) ───────────────────────────
 const metrics: MetricCard[] = [
-  { title: 'Travailleurs Actifs', value: '1.247', change: '+23', changeType: 'up', icon: 'people', color: '#3B82F6' },
-  { title: 'Visites Aujourd\'hui', value: '18', change: '+4', changeType: 'up', icon: 'medkit', color: ACCENT },
+  { title: 'Travailleurs Actifs', value: '1.247', change: '+23', changeType: 'up', icon: 'people', color: colors.primary },
+  { title: 'Visites Aujourd\'hui', value: '18', change: '+4', changeType: 'up', icon: 'medkit', color: colors.secondary },
   { title: 'Taux Aptitude', value: '94.2%', change: '+1.3%', changeType: 'up', icon: 'shield-checkmark', color: '#22C55E' },
-  { title: 'Incidents (Mois)', value: '3', change: '-2', changeType: 'up', icon: 'warning', color: '#EF4444' },
+  { title: 'Incidents (Mois)', value: '3', change: '-2', changeType: 'up', icon: 'warning', color: colors.error },
 ];
 
 const fitnessOverview = [
@@ -173,7 +173,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
           <Text style={styles.headerTitle}>Medecine du Travail</Text>
           <Text style={styles.headerSubtitle}>Sante & Securite au Travail - ISO 45001 - ILO C155/C161</Text>
         </View>
-        <TouchableOpacity style={[styles.addBtn, { backgroundColor: ACCENT }]} activeOpacity={0.7} onPress={() => onNavigate?.('oh-exams')}>
+        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('oh-exams')}>
           <Ionicons name="add-circle" size={20} color="#FFF" />
           <Text style={styles.addBtnText}>Nouvelle Visite</Text>
         </TouchableOpacity>
@@ -182,24 +182,24 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
       {/* ══════ QUICK ACTIONS ══════ */}
       <View style={styles.quickActionsGrid}>
         <TouchableOpacity 
-          style={[styles.quickActionCard, { borderLeftColor: '#3B82F6' }]} 
+          style={[styles.quickActionCard, { borderLeftColor: colors.primary }]} 
           activeOpacity={0.7}
           onPress={() => onNavigate?.('patients')}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(59,130,246,0.12)' }]}>
-            <Ionicons name="people-outline" size={24} color="#3B82F6" />
+          <View style={[styles.quickActionIcon, { backgroundColor: colors.primaryFaded }]}>
+            <Ionicons name="people-outline" size={24} color={colors.primary} />
           </View>
           <Text style={styles.quickActionTitle}>Gestion Patients</Text>
           <Text style={styles.quickActionDesc}>Enregistrer et gérer les patients</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.quickActionCard, { borderLeftColor: ACCENT }]} 
+          style={[styles.quickActionCard, { borderLeftColor: colors.secondary }]} 
           activeOpacity={0.7}
           onPress={() => onNavigate?.('intake')}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: `${ACCENT}14` }]}>
-            <Ionicons name="person-add-outline" size={24} color={ACCENT} />
+          <View style={[styles.quickActionIcon, { backgroundColor: colors.secondaryLight + '22' }]}>
+            <Ionicons name="person-add-outline" size={24} color={colors.secondary} />
           </View>
           <Text style={styles.quickActionTitle}>Accueil Patient</Text>
           <Text style={styles.quickActionDesc}>Accueil et signes vitaux</Text>
@@ -211,7 +211,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         title="Secteurs Actifs"
         subtitle="Entreprises couvertes par secteur d'activite"
         icon="business"
-        accentColor="#6366F1"
+        accentColor={colors.primary}
         ctaLabel="Ajouter Entreprise"
         ctaIcon="add-circle-outline"
         onCtaPress={() => onNavigate?.('oh-patients')}
@@ -244,7 +244,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         title="Indicateurs Cles"
         subtitle="Apercu global - tous secteurs confondus"
         icon="pulse"
-        accentColor={ACCENT}
+        accentColor={colors.primary}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
         onCtaPress={() => onNavigate?.('oh-reports')}
@@ -272,7 +272,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         title="Aptitude & Securite"
         subtitle="Statut des travailleurs et indicateurs SST (ISO 45001)"
         icon="shield-checkmark"
-        accentColor="#22C55E"
+        accentColor={colors.secondary}
       />
       <View style={styles.row}>
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
@@ -311,7 +311,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         title="Visites Medicales Recentes"
         subtitle="Dernieres consultations - tous secteurs"
         icon="medkit"
-        accentColor={ACCENT}
+        accentColor={colors.primary}
         ctaLabel="Planifier Visite"
         ctaIcon="add-circle-outline"
         onCtaPress={() => onNavigate?.('oh-exams')}
@@ -344,7 +344,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         title="Alertes & Incidents"
         subtitle="Incidents recents et certificats a renouveler"
         icon="warning"
-        accentColor="#EF4444"
+        accentColor={colors.error}
       />
       <View style={styles.row}>
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
@@ -400,7 +400,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         title="Cadre Reglementaire"
         subtitle="Standards internationaux & conformite"
         icon="shield"
-        accentColor="#6366F1"
+        accentColor={colors.secondary}
       />
       <View style={styles.row}>
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
@@ -457,7 +457,8 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 18, paddingVertical: 10, borderRadius: borderRadius.lg, ...shadows.sm,
+    paddingHorizontal: 18, paddingVertical: 10, borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary, ...shadows.sm,
   },
   addBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
   quickActionsGrid: { 
@@ -521,9 +522,9 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   cardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
   viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  viewAllText: { fontSize: 12, fontWeight: '600', color: ACCENT },
-  tableHeader: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: colors.outline, marginBottom: 2 },
-  th: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  viewAllText: { fontSize: 12, fontWeight: '600', color: colors.primary },
+  tableHeader: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.primary + '08', borderRadius: borderRadius.md, marginBottom: 4, borderWidth: 1, borderColor: colors.primary + '20' },
+  th: { fontSize: 11, fontWeight: '700', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
   tableRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.outline + '60' },
   td: { fontSize: 13, color: colors.text, paddingVertical: 10 },
   badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start' },

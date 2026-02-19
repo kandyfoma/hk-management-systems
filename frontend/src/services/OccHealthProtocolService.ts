@@ -39,14 +39,81 @@ import {
   EXAM_CATALOG_MAP,
   MEDICAL_EXAM_CATALOG,
 } from '../data/occHealthProtocolData';
+import { OccHealthApiService } from './OccHealthApiService';
 
 export class OccHealthProtocolService {
   // ─── Singleton ───────────────────────────────────────────────
   private static _instance: OccHealthProtocolService;
+
+  // ─── Live API cache ──────────────────────────────────────────
+  private _sectors: OccSector[] = OCC_SECTORS_DATA;
+  private _sectorsByCode: Record<string, OccSector> = SECTORS_BY_CODE;
+  private _deptsByCode: Record<string, OccDepartment> = DEPARTMENTS_BY_CODE;
+  private _positionsByCode: Record<string, OccPosition> = POSITIONS_BY_CODE;
+  private _examCatalogMap: Record<string, MedicalExamCatalogEntry> = EXAM_CATALOG_MAP;
+  private _examCatalog: MedicalExamCatalogEntry[] = MEDICAL_EXAM_CATALOG;
+  private _loaded = false;
+
   static getInstance(): OccHealthProtocolService {
     if (!this._instance) this._instance = new OccHealthProtocolService();
     return this._instance;
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BOOTSTRAP — call once at app start or when doctor updates data
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Pulls the full sector tree + exam catalog from the backend and
+   * rebuilds all lookup maps.  Silently falls back to static data on error.
+   */
+  async loadFromApi(): Promise<{ loaded: boolean; error?: string }> {
+    const api = OccHealthApiService.getInstance();
+
+    const [treeResult, catalogResult] = await Promise.all([
+      api.getSectorTree(),
+      api.listExamCatalog({ is_active: true }),
+    ]);
+
+    if (treeResult.error && catalogResult.error) {
+      // Backend unreachable — keep static fallback
+      console.warn('[OccHealthProtocolService] API unavailable, using static data:', treeResult.error);
+      return { loaded: false, error: treeResult.error };
+    }
+
+    // ── Rebuild sector/dept/position indexes ──────────────────
+    if (!treeResult.error && treeResult.data.length > 0) {
+      this._sectors = treeResult.data;
+      this._sectorsByCode = {};
+      this._deptsByCode = {};
+      this._positionsByCode = {};
+
+      for (const sector of this._sectors) {
+        this._sectorsByCode[sector.code] = sector;
+        for (const dept of sector.departments) {
+          this._deptsByCode[dept.code] = dept;
+          for (const pos of dept.positions) {
+            this._positionsByCode[pos.code] = pos;
+          }
+        }
+      }
+    }
+
+    // ── Rebuild exam catalog map ──────────────────────────────
+    if (!catalogResult.error && catalogResult.data.length > 0) {
+      this._examCatalog = catalogResult.data;
+      this._examCatalogMap = {};
+      for (const exam of this._examCatalog) {
+        this._examCatalogMap[exam.code] = exam;
+      }
+    }
+
+    this._loaded = true;
+    return { loaded: true };
+  }
+
+  /** True after a successful loadFromApi() call */
+  get isLoadedFromApi(): boolean { return this._loaded; }
 
   // ═══════════════════════════════════════════════════════════════
   // SECTOR QUERIES
@@ -54,12 +121,12 @@ export class OccHealthProtocolService {
 
   /** Returns all sectors sorted by name */
   getAllSectors(): OccSector[] {
-    return [...OCC_SECTORS_DATA].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return [...this._sectors].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }
 
   /** Returns a single sector by code, or undefined */
   getSectorByCode(code: string): OccSector | undefined {
-    return SECTORS_BY_CODE[code];
+    return this._sectorsByCode[code];
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -68,14 +135,14 @@ export class OccHealthProtocolService {
 
   /** Returns all departments for a given sector code */
   getDepartmentsBySector(sectorCode: string): OccDepartment[] {
-    const sector = SECTORS_BY_CODE[sectorCode];
+    const sector = this._sectorsByCode[sectorCode];
     if (!sector) return [];
     return [...sector.departments].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }
 
   /** Returns a single department by its code */
   getDepartmentByCode(code: string): OccDepartment | undefined {
-    return DEPARTMENTS_BY_CODE[code];
+    return this._deptsByCode[code];
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -84,19 +151,18 @@ export class OccHealthProtocolService {
 
   /** Returns all positions within a department */
   getPositionsByDepartment(departmentCode: string): OccPosition[] {
-    const dept = DEPARTMENTS_BY_CODE[departmentCode];
+    const dept = this._deptsByCode[departmentCode];
     if (!dept) return [];
     return [...dept.positions].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }
 
   /** Returns a single position by code */
   getPositionByCode(positionCode: string): OccPosition | undefined {
-    return POSITIONS_BY_CODE[positionCode];
+    return this._positionsByCode[positionCode];
   }
 
   /**
    * Returns all positions that have a protocol for a specific visit type.
-   * Useful for filtering positions available for a visit type.
    */
   getPositionsWithProtocol(departmentCode: string, visitType: ExamType): OccPosition[] {
     return this.getPositionsByDepartment(departmentCode).filter((p) =>
@@ -118,9 +184,9 @@ export class OccHealthProtocolService {
     positionCode: string,
     visitType: ExamType
   ): ProtocolQueryResult {
-    const position = POSITIONS_BY_CODE[positionCode];
-    const department = position ? DEPARTMENTS_BY_CODE[position.departmentCode] : undefined;
-    const sector = position ? SECTORS_BY_CODE[position.sectorCode] : undefined;
+    const position = this._positionsByCode[positionCode];
+    const department = position ? this._deptsByCode[position.departmentCode] : undefined;
+    const sector = position ? this._sectorsByCode[position.sectorCode] : undefined;
 
     if (!position || !department || !sector) {
       return {
@@ -139,7 +205,7 @@ export class OccHealthProtocolService {
 
     const resolveExams = (codes: string[]): MedicalExamCatalogEntry[] =>
       codes
-        .map((c) => EXAM_CATALOG_MAP[c])
+        .map((c) => this._examCatalogMap[c])
         .filter((e): e is MedicalExamCatalogEntry => !!e);
 
     const availableVisitTypes = position.protocols.map((p) => p.visitType) as ExamType[];
@@ -165,15 +231,12 @@ export class OccHealthProtocolService {
    */
   getVisitProtocol(positionCode: string, visitType: ExamType): ExamVisitProtocol | null {
     return (
-      POSITIONS_BY_CODE[positionCode]?.protocols.find((p) => p.visitType === visitType) ?? null
+      this._positionsByCode[positionCode]?.protocols.find((p) => p.visitType === visitType) ?? null
     );
   }
 
-  /**
-   * Returns which visit types are available for a position.
-   */
   getAvailableVisitTypes(positionCode: string): ExamType[] {
-    return (POSITIONS_BY_CODE[positionCode]?.protocols.map((p) => p.visitType) ?? []) as ExamType[];
+    return (this._positionsByCode[positionCode]?.protocols.map((p) => p.visitType) ?? []) as ExamType[];
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -182,18 +245,18 @@ export class OccHealthProtocolService {
 
   /** Returns all exams in the catalog */
   getAllExams(): MedicalExamCatalogEntry[] {
-    return MEDICAL_EXAM_CATALOG;
+    return this._examCatalog;
   }
 
   /** Returns a single exam by code */
   getExamByCode(code: string): MedicalExamCatalogEntry | undefined {
-    return EXAM_CATALOG_MAP[code];
+    return this._examCatalogMap[code];
   }
 
   /** Returns exams grouped by category */
   getExamsByCategory(): Record<string, MedicalExamCatalogEntry[]> {
     const grouped: Record<string, MedicalExamCatalogEntry[]> = {};
-    for (const exam of MEDICAL_EXAM_CATALOG) {
+    for (const exam of this._examCatalog) {
       if (!grouped[exam.category]) grouped[exam.category] = [];
       grouped[exam.category].push(exam);
     }
@@ -286,7 +349,6 @@ export class OccHealthProtocolService {
 
   /**
    * Full-text search across sectors, departments and positions.
-   * Returns matching positions with their full path context.
    */
   searchPositions(query: string): Array<{
     sector: OccSector;
@@ -304,7 +366,7 @@ export class OccHealthProtocolService {
       matchScore: number;
     }> = [];
 
-    for (const sector of OCC_SECTORS_DATA) {
+    for (const sector of this._sectors) {
       for (const department of sector.departments) {
         for (const position of department.positions) {
           let score = 0;
@@ -331,10 +393,10 @@ export class OccHealthProtocolService {
    * "Minier → Mine Souterraine → Foreur / Dynamiteur"
    */
   getPositionBreadcrumb(positionCode: string): string {
-    const position = POSITIONS_BY_CODE[positionCode];
+    const position = this._positionsByCode[positionCode];
     if (!position) return positionCode;
-    const department = DEPARTMENTS_BY_CODE[position.departmentCode];
-    const sector = SECTORS_BY_CODE[position.sectorCode];
+    const department = this._deptsByCode[position.departmentCode];
+    const sector = this._sectorsByCode[position.sectorCode];
     return [sector?.name, department?.name, position.name].filter(Boolean).join(' → ');
   }
 

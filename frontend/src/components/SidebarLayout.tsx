@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing, typography } from '../theme/theme';
-const SIDEBAR_WIDTH = 260;
-const SIDEBAR_COLLAPSED = 68;
+const SIDEBAR_WIDTH = 200;
+const SIDEBAR_COLLAPSED = 52;
 
 // ─── Mobile Sidebar Modal ───────────────────────────────────
 function MobileSidebarModal({
@@ -359,6 +359,8 @@ export interface SidebarMenuItem {
 export interface SidebarSection {
   title?: string;
   items: SidebarMenuItem[];
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 interface SidebarLayoutProps {
@@ -390,6 +392,19 @@ export function SidebarLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH;
+
+  // Per-section collapse state (keyed by section title)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    sections.forEach(s => {
+      if (s.title && s.collapsible) init[s.title] = s.defaultCollapsed ?? false;
+    });
+    return init;
+  });
+
+  const toggleSection = (title: string) => {
+    setCollapsedSections(prev => ({ ...prev, [title]: !prev[title] }));
+  };
 
   // Track navigation history for back button
   const [navHistory, setNavHistory] = useState<string[]>([]);
@@ -534,14 +549,31 @@ export function SidebarLayout({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.sidebarScrollContent}
         >
-          {sections.map((section, sIdx) => (
+          {sections.map((section, sIdx) => {
+            const isSectionCollapsed = !!(section.collapsible && section.title && collapsedSections[section.title]);
+            return (
             <View key={sIdx}>
               {/* ── Section Divider ── */}
               {sIdx > 0 && <View style={styles.sectionDivider} />}
 
               {/* Section Label */}
               {section.title && !collapsed && (
-                <Text style={styles.sectionLabel}>{section.title}</Text>
+                section.collapsible ? (
+                  <TouchableOpacity
+                    style={styles.sectionLabelRow}
+                    onPress={() => toggleSection(section.title!)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.sectionLabel}>{section.title}</Text>
+                    <Ionicons
+                      name={isSectionCollapsed ? 'chevron-forward' : 'chevron-down'}
+                      size={12}
+                      color={colors.sidebarText}
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.sectionLabel}>{section.title}</Text>
+                )
               )}
               {section.title && collapsed && (
                 <View style={styles.sectionDotRow}>
@@ -550,7 +582,7 @@ export function SidebarLayout({
               )}
 
               {/* Section Items */}
-              {section.items.map((item) => {
+              {!isSectionCollapsed && section.items.map((item) => {
                 const isActive = item.id === activeId;
                 return (
                   <TouchableOpacity
@@ -572,7 +604,7 @@ export function SidebarLayout({
                     >
                       <Ionicons
                         name={isActive ? (item.iconActive || item.icon) : item.icon}
-                        size={20}
+                        size={16}
                         color={isActive ? accentColor : colors.sidebarText}
                       />
                     </View>
@@ -601,7 +633,8 @@ export function SidebarLayout({
                 );
               })}
             </View>
-          ))}
+            );
+          })}
         </ScrollView>
 
         {/* Sidebar Footer — Toggle + Status */}
@@ -668,7 +701,8 @@ const styles = StyleSheet.create({
 
   // ── Sidebar ─────────────────────────────────────────
   sidebar: {
-    flex: 1,
+    flexShrink: 0,
+    flexGrow: 0,
     flexDirection: 'column',
     backgroundColor: colors.sidebar,
     borderRightWidth: 1,
@@ -681,17 +715,17 @@ const styles = StyleSheet.create({
   sidebarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.sidebarHover,
-    gap: 12,
-    minHeight: 72,
+    gap: 8,
+    minHeight: 56,
   },
   sidebarHeaderIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.lg,
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -699,13 +733,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sidebarTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.sidebarTextActive,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   sidebarSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.sidebarText,
   },
   sidebarOrganization: {
@@ -727,18 +761,26 @@ const styles = StyleSheet.create({
   sectionDivider: {
     height: 1,
     backgroundColor: colors.sidebarHover,
-    marginHorizontal: 16,
-    marginVertical: 10,
+    marginHorizontal: 12,
+    marginVertical: 6,
   },
   sectionLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: colors.sidebarText,
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
+    letterSpacing: 1,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   sectionDotRow: {
     alignItems: 'center',
@@ -754,33 +796,33 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    marginHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginHorizontal: 6,
     marginVertical: 1,
     borderRadius: borderRadius.md,
-    borderLeftWidth: 3,
+    borderLeftWidth: 2,
     borderLeftColor: 'transparent',
-    gap: 12,
+    gap: 8,
   },
   menuItemCollapsed: {
     justifyContent: 'center',
     paddingHorizontal: 0,
-    marginHorizontal: 6,
+    marginHorizontal: 4,
   },
   menuItemActive: {
     backgroundColor: colors.sidebarActive,
   },
   menuIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.md,
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   menuLabel: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     color: colors.sidebarText,
   },

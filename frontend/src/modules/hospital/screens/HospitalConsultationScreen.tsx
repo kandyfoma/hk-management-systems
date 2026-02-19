@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { Patient } from '../../../models/Patient';
 import { Encounter, EncounterType, EncounterStatus } from '../../../models/Encounter';
+import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -878,13 +879,15 @@ export function HospitalConsultationScreen({
         {followUpNeeded && (
           <View style={styles.followUpDetails}>
             <Text style={styles.fieldLabel}>Date de suivi</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="JJ/MM/AAAA"
-              placeholderTextColor={colors.textSecondary}
-              value={followUpDate}
-              onChangeText={setFollowUpDate}
-            />
+            <View style={styles.input}>
+              <DateInput
+                value={followUpDate}
+                onChangeText={setFollowUpDate}
+                placeholder="JJ/MM/AAAA"
+                placeholderTextColor={colors.textSecondary}
+                format="fr"
+              />
+            </View>
             <Text style={styles.fieldLabel}>Notes de suivi</Text>
             <TextInput
               style={styles.textArea}

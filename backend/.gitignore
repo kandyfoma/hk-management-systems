@@ -75,3 +75,8 @@ error.log
 # Temporary files
 *.tmp
 *.temp
+
+# Environment files (real secrets — only examples are committed)
+.env
+.env.uat
+.env.prod

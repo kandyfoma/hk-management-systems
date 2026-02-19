@@ -36,6 +36,8 @@ export type MedicalExamCategory =
 
 // ─── Medical Exam Entry (catalog item) ─────────────────────── 
 export interface MedicalExamCatalogEntry {
+  /** Backend ID (present when loaded from API) */
+  id?: number;
   /** Unique code, e.g. "RADIO_THORAX" */
   code: string;
   /** Human-readable French label */
@@ -46,6 +48,8 @@ export interface MedicalExamCatalogEntry {
   description?: string;
   /** Whether a specialist referral is typically needed */
   requiresSpecialist?: boolean;
+  /** Whether active (API field) */
+  isActive?: boolean;
   /** Whether the result must be documented before fitness decision */
   mandatory?: boolean;
 }
@@ -54,10 +58,14 @@ export interface MedicalExamCatalogEntry {
 // A protocol binds a visit type (pre_employment, periodic…) to
 // a list of required exam codes for a specific position.
 export interface ExamVisitProtocol {
+  /** Backend ID (present when loaded from API) */
+  id?: number;
   /** Maps to ExamType: 'pre_employment' | 'periodic' | 'return_to_work' | … */
   visitType: ExamType;
   /** Human label for display, e.g. "Visite d'Embauche" */
   visitTypeLabel: string;
+  /** Position code this protocol belongs to (present when loaded from API) */
+  positionCode?: string;
   /** Ordered list of exam codes required for this visit */
   requiredExams: string[];
   /** Exam codes that are strongly recommended but not strictly mandatory */
@@ -66,10 +74,16 @@ export interface ExamVisitProtocol {
   regulatoryNote?: string;
   /** Validity period in months (0 = one-time only) */
   validityMonths?: number;
+  /** Whether active (API field) */
+  isActive?: boolean;
+  /** ISO timestamp (API field) */
+  createdAt?: string;
 }
 
 // ─── Position ────────────────────────────────────────────────
 export interface OccPosition {
+  /** Backend ID (present when loaded from API) */
+  id?: number;
   /** Unique code scoped to the department, e.g. "FOREUR" */
   code: string;
   /** Full French job title, e.g. "Foreur / Dynamiteur" */
@@ -84,10 +98,14 @@ export interface OccPosition {
   typicalExposures?: string[];
   /** Recommended PPE */
   recommendedPPE?: string[];
+  /** Whether active (API field) */
+  isActive?: boolean;
 }
 
 // ─── Department ───────────────────────────────────────────────
 export interface OccDepartment {
+  /** Backend ID (present when loaded from API) */
+  id?: number;
   /** Unique code, e.g. "MIN_UNDER" */
   code: string;
   /** French name of the department / work area */
@@ -96,10 +114,14 @@ export interface OccDepartment {
   sectorCode: string;
   /** All positions within this department */
   positions: OccPosition[];
+  /** Whether active (API field) */
+  isActive?: boolean;
 }
 
 // ─── Sector ──────────────────────────────────────────────────
 export interface OccSector {
+  /** Backend ID (present when loaded from API) */
+  id?: number;
   /** Short code, e.g. "MIN" */
   code: string;
   /** Full French name */
@@ -109,6 +131,8 @@ export interface OccSector {
    * Used to fetch SECTOR_PROFILES data (risk level, icon, color, etc.)
    */
   industrySectorKey?: string;
+  /** Whether active (API field) */
+  isActive?: boolean;
   /** All departments within this sector */
   departments: OccDepartment[];
 }

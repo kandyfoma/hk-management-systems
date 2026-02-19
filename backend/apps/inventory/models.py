@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 import uuid
+from decimal import Decimal
 
 
 class ProductCategory(models.TextChoices):
@@ -310,6 +311,31 @@ class InventoryItem(models.Model):
         verbose_name = 'Article Inventaire'
         verbose_name_plural = 'Articles Inventaire'
         unique_together = ('product', 'organization', 'facility_id')
+
+    def save(self, *args, **kwargs):
+        quantity_on_hand = int(self.quantity_on_hand or 0)
+        quantity_reserved = int(self.quantity_reserved or 0)
+
+        self.quantity_available = max(0, quantity_on_hand - quantity_reserved)
+
+        min_level = int(self.product.min_stock_level or 0) if self.product_id else 0
+        max_level = int(self.product.max_stock_level or 0) if self.product_id and self.product.max_stock_level is not None else None
+
+        if quantity_on_hand <= 0:
+            self.stock_status = 'OUT_OF_STOCK'
+        elif quantity_on_hand <= min_level:
+            self.stock_status = 'LOW_STOCK'
+        elif max_level is not None and max_level > 0 and quantity_on_hand >= max_level:
+            self.stock_status = 'OVER_STOCK'
+        elif self.product_id and self.product.is_discontinued:
+            self.stock_status = 'DISCONTINUED'
+        else:
+            self.stock_status = 'IN_STOCK'
+
+        avg_cost = self.average_cost if self.average_cost is not None else Decimal('0')
+        self.total_value = Decimal(quantity_on_hand) * avg_cost
+
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.product.name} - {self.quantity_on_hand} {self.product.unit_of_measure}"

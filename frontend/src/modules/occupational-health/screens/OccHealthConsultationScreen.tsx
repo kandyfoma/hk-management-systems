@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+﻿import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,14 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { type PendingConsultation, PENDING_CONSULTATIONS_KEY } from './OHPatientIntakeScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import HybridDataService from '../../../services/HybridDataService';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
   SECTOR_PROFILES,
@@ -36,11 +39,201 @@ import {
   type VisionTestResult,
   type DrugScreeningResult,
 } from '../../../models/OccupationalHealth';
+import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
+import {
+  EXAM_CATEGORY_ICONS,
+  type MedicalExamCatalogEntry,
+  type ProtocolQueryResult,
+} from '../../../models/OccHealthProtocol';
+import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
+
+type DraftConsultationStatus = 'in_progress' | 'tests_ordered' | 'awaiting_results';
+
+type SectorTestOption = {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  recommended: boolean;
+  required?: boolean;
+  desc: string;
+};
+
+type TestExecutionMode = 'external' | 'onsite';
+type TestInterpretation = 'normal' | 'abnormal' | 'inconclusive' | null;
+
+type OnsiteTestResult = {
+  completed: boolean;
+  interpretation: TestInterpretation;
+  value: string;
+  notes: string;
+  performedAt?: string;
+};
+
+const PROTOCOL_EXAM_CODE_TO_TEST_ID: Record<string, string> = {
+  AUDIOGRAMME: 'audiometry',
+  SPIROMETRIE: 'spirometry',
+  TEST_VISION_COMPLETE: 'vision_test',
+  TEST_VISION_NOCTURNE: 'vision_test',
+  TEST_ALCOOL_DROGUE: 'drug_screening',
+  RADIO_THORAX: 'chest_xray',
+  PLOMBEMIE: 'blood_lead',
+  COBALTEMIE: 'blood_lead',
+  ECG_REPOS: 'cardiac_screening',
+  TEST_EFFORT: 'cardiac_screening',
+  EVALUATION_STRESS: 'mental_health_screening',
+  EVALUATION_PSYCHOTECHNIQUE: 'mental_health_screening',
+  BILAN_HEPATIQUE: 'hepatitis_screening',
+  NFS: 'blood_work',
+};
+
+const LEGACY_TEST_LABELS: Record<string, string> = {
+  audiometry: 'Audiométrie',
+  spirometry: 'Spirométrie',
+  vision_test: 'Examen de Vision',
+  drug_screening: 'Dépistage Toxicologique',
+  chest_xray: 'Radiographie Thoracique',
+  blood_lead: 'Plombémie / Métaux Lourds',
+  blood_work: 'Bilan Sanguin',
+  cardiac_screening: 'Bilan Cardiovasculaire',
+  mental_health_screening: 'Évaluation Santé Mentale',
+  ergonomic_assessment: 'Évaluation Ergonomique',
+  musculoskeletal_screening: 'Dépistage Musculo-squelettique',
+  hepatitis_screening: 'Dépistage Hépatite B',
+  tb_screening: 'Dépistage Tuberculose',
+};
+
+const getProtocolDerivedTestId = (exam: MedicalExamCatalogEntry): string => {
+  if (PROTOCOL_EXAM_CODE_TO_TEST_ID[exam.code]) {
+    return PROTOCOL_EXAM_CODE_TO_TEST_ID[exam.code];
+  }
+  return `protocol_${exam.code.toLowerCase()}`;
+};
+
+const getTestDisplayLabel = (testId: string, fallback?: string): string => {
+  return LEGACY_TEST_LABELS[testId] || fallback || testId;
+};
+
+const getTestInterpretationLabel = (value: TestInterpretation): string => {
+  switch (value) {
+    case 'normal': return 'Normal';
+    case 'abnormal': return 'Anormal';
+    case 'inconclusive': return 'À contrôler';
+    default: return 'Non interprété';
+  }
+};
+
+const getTestInterpretationColor = (value: TestInterpretation): string => {
+  switch (value) {
+    case 'normal': return colors.success;
+    case 'abnormal': return colors.error;
+    case 'inconclusive': return colors.warning;
+    default: return colors.textSecondary;
+  }
+};
+
+const normalizeIcon = (icon?: string): keyof typeof Ionicons.glyphMap => {
+  if (icon && icon in Ionicons.glyphMap) {
+    return icon as keyof typeof Ionicons.glyphMap;
+  }
+  return 'flask';
+};
+
+const mapExamTypeToBackend = (examType: ExamType): string => {
+  const map: Partial<Record<ExamType, string>> = {
+    fitness_for_duty: 'special',
+    special_request: 'special',
+    exit_medical: 'exit',
+  };
+  return map[examType] || examType;
+};
+
+const parseWorkerIdForApi = (workerId?: string): number | null => {
+  if (!workerId) return null;
+  const parsed = Number(workerId);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const addMonthsToDate = (baseDate: Date, months: number): string => {
+  const next = new Date(baseDate);
+  next.setMonth(next.getMonth() + months);
+  return next.toISOString().split('T')[0];
+};
+
+const getCertificateTitleByDecision = (decision: FitnessStatus): string => {
+  if (decision === 'fit' || decision === 'fit_with_restrictions') {
+    return 'Certificat d\'Aptitude au Travail';
+  }
+  return 'Avis Médical d\'Inaptitude au Poste';
+};
+
+const getLegalWordingByDecision = (decision: FitnessStatus): string => {
+  if (decision === 'fit') {
+    return 'Conclusion médicale: travailleur apte au poste déclaré, sous réserve du respect des mesures de prévention et du port des EPI prescrits.';
+  }
+  if (decision === 'fit_with_restrictions') {
+    return 'Conclusion médicale: travailleur apte avec restrictions. L\'employeur doit mettre en œuvre les limitations et aménagements de poste mentionnés ci-dessous.';
+  }
+  if (decision === 'temporarily_unfit') {
+    return 'Conclusion médicale: inaptitude temporaire. Une réévaluation est obligatoire à la date de contrôle fixée; le retour au poste est conditionné à l\'avis médical ultérieur.';
+  }
+  return 'Conclusion médicale: inaptitude définitive au poste actuel. Une orientation vers reclassement professionnel/administratif est recommandée conformément aux obligations de santé au travail.';
+};
+
+const getSuggestedNextAppointmentDate = (decision: FitnessStatus, examType: ExamType): string => {
+  const now = new Date();
+  if (decision === 'temporarily_unfit') return addMonthsToDate(now, 1);
+  if (decision === 'fit_with_restrictions') return addMonthsToDate(now, 6);
+  if (decision === 'permanently_unfit') return addMonthsToDate(now, 12);
+  if (examType === 'pre_employment') return addMonthsToDate(now, 12);
+  return addMonthsToDate(now, 12);
+};
+
+const DRAFT_META_PREFIX = '[OH_DRAFT_META]';
+
+type DraftSyncStatus = 'pending' | 'synced' | 'failed';
+
+const dedupePendingQueue = (list: PendingConsultation[]): PendingConsultation[] => {
+  const activeStatuses: PendingConsultation['status'][] = ['waiting', 'in_consultation'];
+  const active = list.filter(item => activeStatuses.includes(item.status));
+  const byPatient = new Map<string, PendingConsultation>();
+
+  for (const item of active) {
+    const key = item.patient?.id ?? item.id;
+    const current = byPatient.get(key);
+    if (!current) {
+      byPatient.set(key, item);
+      continue;
+    }
+
+    // Keep most recent based on arrivalTime; fallback to current item.
+    const currentTs = Date.parse(current.arrivalTime || '') || 0;
+    const nextTs = Date.parse(item.arrivalTime || '') || 0;
+    if (nextTs >= currentTs) {
+      byPatient.set(key, item);
+    }
+  }
+
+  return Array.from(byPatient.values()).sort((a, b) => {
+    const aTs = Date.parse(a.arrivalTime || '') || 0;
+    const bTs = Date.parse(b.arrivalTime || '') || 0;
+    return bTs - aTs;
+  });
+};
+
+const hasInitialNurseScreening = (pending: PendingConsultation): boolean => {
+  const vitals = pending?.vitals || {};
+  return Boolean(
+    vitals.bloodPressureSystolic &&
+    vitals.bloodPressureDiastolic &&
+    vitals.heartRate &&
+    vitals.temperature
+  );
+};
 
 // ═══════════════════════════════════════════════════════════════
 //  Step-by-step wizard for occupational health consultation
@@ -52,6 +245,7 @@ type ConsultationStep =
   | 'sector_tests'
   | 'mental_ergonomic'
   | 'fitness_decision'
+  | 'next_appointment'
   | 'summary';
 
 const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -60,6 +254,7 @@ const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons
   { key: 'sector_tests', label: 'Tests Sectoriels', icon: 'flask' },
   { key: 'mental_ergonomic', label: 'Santé Mentale & Ergonomie', icon: 'happy' },
   { key: 'fitness_decision', label: 'Décision d\'Aptitude', icon: 'shield-checkmark' },
+  { key: 'next_appointment', label: 'Prochain RDV', icon: 'calendar' },
   { key: 'summary', label: 'Résumé & Certificat', icon: 'document-text' },
 ];
 
@@ -270,6 +465,97 @@ const SECTOR_QUESTIONNAIRES: SectorQuestionnaireConfig[] = [
   },
 ];
 
+const COMMON_OCCUPATIONAL_RISK_QUESTIONS: SectorQuestion[] = [
+  {
+    id: 'risk_physical',
+    question: 'Risques Physiques identifiés',
+    type: 'multi_select',
+    category: 'Risques Physiques',
+    categoryIcon: 'warning',
+    options: ['Bruit > 80 dB', 'Vibrations', 'Rayonnements ionisants', 'Rayonnements non ionisants', 'Températures extrêmes (chaud)', 'Températures extrêmes (froid)', 'Pression', 'Électricité', 'Aucun'],
+  },
+  {
+    id: 'risk_chemical',
+    question: 'Risques Chimiques identifiés',
+    type: 'multi_select',
+    category: 'Risques Chimiques',
+    categoryIcon: 'flask',
+    options: ['Agents CMR', 'Agents chimiques dangereux', 'Poussières', 'Fumées', 'Gaz/Vapeurs', 'Solvants', 'Métaux lourds', 'Amiante', 'Aucun'],
+  },
+  {
+    id: 'risk_chemical_products',
+    question: 'Produits chimiques utilisés',
+    type: 'text',
+    category: 'Risques Chimiques',
+    categoryIcon: 'flask',
+    placeholder: 'Lister les produits (optionnel)',
+  },
+  {
+    id: 'risk_biological',
+    question: 'Risques Biologiques identifiés',
+    type: 'multi_select',
+    category: 'Risques Biologiques',
+    categoryIcon: 'medkit',
+    options: ['Groupe 1', 'Groupe 2', 'Groupe 3', 'Groupe 4', 'Aucun'],
+  },
+  {
+    id: 'risk_ergonomic',
+    question: 'Contraintes Physiques et Ergonomiques',
+    type: 'multi_select',
+    category: 'Contraintes Ergonomiques',
+    categoryIcon: 'body',
+    options: ['Manutention manuelle', 'Postures pénibles', 'Gestes répétitifs', 'Station debout prolongée', 'Position assise prolongée', 'Travail sur écran > 4h/jour', 'Conduite de véhicules', 'Machines dangereuses', 'Aucune'],
+  },
+  {
+    id: 'risk_psychosocial',
+    question: 'Risques Psychosociaux',
+    type: 'multi_select',
+    category: 'Risques Psychosociaux',
+    categoryIcon: 'people',
+    options: ['Stress chronique', 'Horaires atypiques', 'Travail de nuit', 'Travail isolé', 'Contact avec le public', 'Risque de violence', 'Aucun'],
+  },
+  {
+    id: 'risk_ppe',
+    question: 'EPI requis / utilisés',
+    type: 'multi_select',
+    category: 'EPI',
+    categoryIcon: 'shield-checkmark',
+    options: ['Casque', 'Lunettes', 'Écran facial', 'Protection auditive', 'Masque anti-poussière', 'Masque FFP2/FFP3', 'Appareil respiratoire', 'Gants', 'Chaussures', 'Vêtements', 'Harnais', 'Aucun fourni'],
+  },
+  {
+    id: 'risk_smr_justification',
+    question: 'Justification SMR',
+    type: 'text',
+    category: 'SMR',
+    categoryIcon: 'document-text',
+    placeholder: 'Renseigner la justification SMR (optionnel)',
+  },
+  {
+    id: 'conclusion_recommendations',
+    question: 'Recommandations médicales',
+    type: 'text',
+    category: 'Conclusion et Aptitude',
+    categoryIcon: 'checkmark-circle',
+    placeholder: 'Recommandations (optionnel)',
+  },
+  {
+    id: 'conclusion_orientations',
+    question: 'Orientations médicales',
+    type: 'text',
+    category: 'Conclusion et Aptitude',
+    categoryIcon: 'checkmark-circle',
+    placeholder: 'Orientations (optionnel)',
+  },
+  {
+    id: 'conclusion_additional_exams',
+    question: 'Examens complémentaires à prévoir',
+    type: 'text',
+    category: 'Conclusion et Aptitude',
+    categoryIcon: 'checkmark-circle',
+    placeholder: 'Examens complémentaires (optionnel)',
+  },
+];
+
 // ─── Sample workers (would come from DB in production) ───────
 const SAMPLE_WORKERS: OccupationalHealthPatient[] = [
   {
@@ -463,6 +749,55 @@ function getSectorQuestionnaire(sector: IndustrySector): SectorQuestionnaireConf
   return SECTOR_QUESTIONNAIRES.find(q => q.sectors.includes(sector)) || null;
 }
 
+function buildPrefilledSectorAnswers(
+  worker: OccupationalHealthPatient,
+  questionnaire: SectorQuestionnaireConfig | null,
+  visitReason: string,
+): Record<string, any> {
+  if (!questionnaire) return {};
+
+  const answers: Record<string, any> = {};
+  const lowerReason = visitReason.toLowerCase();
+
+  for (const question of questionnaire.questions) {
+    if (question.id === 'screen_hours' && worker.exposureRisks.includes('vdt_screen')) {
+      answers[question.id] = '8';
+    }
+    if (question.id === 'sitting_hours' && worker.exposureRisks.includes('sedentary')) {
+      answers[question.id] = '4';
+    }
+    if (question.id === 'physical_activity' && worker.exposureRisks.includes('sedentary')) {
+      answers[question.id] = 'Occasionnellement';
+    }
+    if (question.id === 'shift_work_impact' && worker.exposureRisks.includes('shift_work')) {
+      answers[question.id] = ['Fatigue chronique'];
+    }
+    if (question.id === 'noise_exposure_hours' && worker.exposureRisks.includes('noise')) {
+      answers[question.id] = '6';
+    }
+    if (question.id === 'confined_space_experience' && worker.exposureRisks.includes('confined_spaces')) {
+      answers[question.id] = 'Régulièrement';
+    }
+    if (question.id === 'pesticide_use' && worker.exposureRisks.includes('pesticides')) {
+      answers[question.id] = 'Saisonnier';
+    }
+    if (question.id === 'animal_contact' && worker.exposureRisks.includes('animal_hazards')) {
+      answers[question.id] = 'Régulier';
+    }
+    if (question.id === 'chemical_exposure_type' && worker.exposureRisks.includes('chemical_exposure')) {
+      answers[question.id] = ['Solvants'];
+    }
+    if (question.id === 'respiratory_symptoms' && lowerReason.includes('toux')) {
+      answers[question.id] = ['Toux chronique'];
+    }
+    if (question.id === 'posture_complaints' && lowerReason.includes('douleur')) {
+      answers[question.id] = ['Bas du dos'];
+    }
+  }
+
+  return answers;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
@@ -494,7 +829,14 @@ export function OccHealthConsultationScreen({
       const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
       if (stored) {
         const list: PendingConsultation[] = JSON.parse(stored);
-        setPendingConsultations(list.filter(c => c.status === 'waiting' || c.status === 'in_consultation'));
+        const deduped = dedupePendingQueue(list).filter(c => c.status === 'waiting').filter(hasInitialNurseScreening);
+        setPendingConsultations(deduped);
+        // Persist cleaned queue to remove historical duplicates.
+        if (deduped.length !== list.filter(c => c.status === 'waiting' && hasInitialNurseScreening(c)).length) {
+          await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(deduped));
+        }
+      } else {
+        setPendingConsultations([]);
       }
     } catch (e) {
       console.error('Failed to load pending queue:', e);
@@ -512,33 +854,7 @@ export function OccHealthConsultationScreen({
   const currentStepIdx = STEPS.findIndex(s => s.key === currentStep);
 
   // ─── Worker identification ──
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorker, setSelectedWorker] = useState<OccupationalHealthPatient | null>(null);
-  const [showWorkerModal, setShowWorkerModal] = useState(false);
-  const [workers, setWorkers] = useState<OccupationalHealthPatient[]>(SAMPLE_WORKERS);
-
-  // Load workers from shared OccHealth patients storage
-  useEffect(() => {
-    const loadWorkers = async () => {
-      try {
-        const db = HybridDataService.getInstance();
-        const result = await db.getAllPatients();
-        const occHealthPatients = result.data ?? [];
-        
-        if (occHealthPatients.length > 0) {
-          setWorkers(occHealthPatients as unknown as OccupationalHealthPatient[]);
-          console.log(`📋 Loaded ${occHealthPatients.length} workers from DatabaseService`);
-        } else {
-          setWorkers(SAMPLE_WORKERS);
-          console.log(`📋 Using ${SAMPLE_WORKERS.length} sample workers`);
-        }
-      } catch (e) {
-        console.error('Failed to load workers:', e);
-        setWorkers(SAMPLE_WORKERS);
-      }
-    };
-    loadWorkers();
-  }, []);
 
   // Load a specific pending consultation when requested from the queue
   const loadPendingConsultation = useCallback(async (pendingId: string) => {
@@ -548,15 +864,27 @@ export function OccHealthConsultationScreen({
       const list: PendingConsultation[] = JSON.parse(stored);
       const pending = list.find(c => c.id === pendingId);
       if (!pending) return;
+      if (!hasInitialNurseScreening(pending)) {
+        Alert.alert('Données incomplètes', 'Ce patient n\'a pas encore terminé le screening infirmier à l\'accueil.');
+        return;
+      }
 
-      // Pre-populate all intake data
-      setSelectedWorker(pending.patient);
-      setExamType(pending.examType);
-      setVisitReason(pending.visitReason);
-      setReferredBy(pending.referredBy);
-      setVitals(pending.vitals);
-      setCurrentStep('physical_exam');
-      setActivePendingId(pendingId);
+      const linkedDraftId = (pending as any)?.resumeDraftId as string | undefined;
+
+      if (linkedDraftId) {
+        await loadDraft(linkedDraftId);
+        setDraftId(linkedDraftId);
+        setActivePendingId(pendingId);
+      } else {
+        // Pre-populate all intake data
+        setSelectedWorker(pending.patient);
+        setExamType(pending.examType);
+        setVisitReason(pending.visitReason);
+        setReferredBy(pending.referredBy);
+        setVitals(pending.vitals);
+        setCurrentStep('physical_exam');
+        setActivePendingId(pendingId);
+      }
 
       // Mark as in_consultation in queue
       const updated = list.map(c =>
@@ -585,6 +913,17 @@ export function OccHealthConsultationScreen({
   const [examType, setExamType] = useState<ExamType>('periodic');
   const [visitReason, setVisitReason] = useState('');
   const [referredBy, setReferredBy] = useState('');
+  const [protocolResult, setProtocolResult] = useState<ProtocolQueryResult | null>(null);
+
+  useEffect(() => {
+    if (!selectedWorker?.positionCode) {
+      setProtocolResult(null);
+      return;
+    }
+    const protocolSvc = OccHealthProtocolService.getInstance();
+    const next = protocolSvc.getProtocolForVisit(selectedWorker.positionCode, examType);
+    setProtocolResult(next);
+  }, [selectedWorker, examType]);
 
   // ─── Vital signs ──
   const [vitals, setVitals] = useState<VitalSigns>({});
@@ -598,6 +937,9 @@ export function OccHealthConsultationScreen({
 
   // ─── Sector-specific tests ──
   const [orderedTests, setOrderedTests] = useState<string[]>([]);
+  const [testExecutionMode, setTestExecutionMode] = useState<TestExecutionMode>('external');
+  const [onsiteTestResults, setOnsiteTestResults] = useState<Record<string, OnsiteTestResult>>({});
+  const [expandedOnsiteTestId, setExpandedOnsiteTestId] = useState<string | null>(null);
   const [audiometryDone, setAudiometryDone] = useState(false);
   const [spirometryDone, setSpirometryDone] = useState(false);
   const [visionDone, setVisionDone] = useState(false);
@@ -625,12 +967,21 @@ export function OccHealthConsultationScreen({
   const [recommendations, setRecommendations] = useState('');
   const [followUpNeeded, setFollowUpNeeded] = useState(false);
   const [followUpDate, setFollowUpDate] = useState('');
+  const [nextAppointmentDate, setNextAppointmentDate] = useState('');
+  const [nextAppointmentReason, setNextAppointmentReason] = useState('');
   const [consultationNotes, setConsultationNotes] = useState('');
+
+  const authUser = useSelector((state: RootState) => state.auth.user);
+  const authOrganization = useSelector((state: RootState) => state.auth.organization);
 
   // ─── Draft functionality ──
   const [isDraft, setIsDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [backendDraftExaminationId, setBackendDraftExaminationId] = useState<number | null>(null);
+  const draftSyncInFlight = useRef<Set<string>>(new Set());
+  const autoDraftRecoveryAttempted = useRef(false);
+  const [autoRestoreNotice, setAutoRestoreNotice] = useState<string | null>(null);
 
   // Draft state type
   type DraftState = {
@@ -642,6 +993,8 @@ export function OccHealthConsultationScreen({
     vitals: VitalSigns;
     physicalExam: PhysicalExamination;
     orderedTests: string[];
+    testExecutionMode: TestExecutionMode;
+    onsiteTestResults: Record<string, OnsiteTestResult>;
     audiometryDone: boolean;
     spirometryDone: boolean;
     visionDone: boolean;
@@ -658,20 +1011,94 @@ export function OccHealthConsultationScreen({
     recommendations: string;
     followUpNeeded: boolean;
     followUpDate: string;
+    nextAppointmentDate: string;
+    nextAppointmentReason: string;
     consultationNotes: string;
     currentStep: ConsultationStep;
+    consultationStatus: DraftConsultationStatus;
+    backendExaminationId?: number;
+    syncStatus?: DraftSyncStatus;
+    testOrderGeneratedAt?: string;
     createdAt: string;
     updatedAt: string;
   };
 
-  // Save current state as draft
-  const saveDraft = useCallback(async () => {
+  const buildMedicalHistoryWithDraftMeta = useCallback((draft: DraftState) => {
+    const lines: string[] = [];
+    if (draft.referredBy?.trim()) {
+      lines.push(`Référé par: ${draft.referredBy.trim()}`);
+    }
+    lines.push(
+      `${DRAFT_META_PREFIX}${JSON.stringify({
+        draftId: draft.id,
+        currentStep: draft.currentStep,
+        consultationStatus: draft.consultationStatus,
+        updatedAt: draft.updatedAt,
+      })}`
+    );
+    return lines.join('\n');
+  }, []);
+
+  const syncDraftToBackend = useCallback(async (draft: DraftState): Promise<number | null> => {
+    if (!draft.selectedWorker?.id) return null;
+    const workerId = parseWorkerIdForApi(draft.selectedWorker.id);
+    if (!workerId) return null;
+
+    if (draftSyncInFlight.current.has(draft.id)) {
+      return draft.backendExaminationId || null;
+    }
+
+    draftSyncInFlight.current.add(draft.id);
+    try {
+      const examDateOnly = new Date().toISOString().split('T')[0];
+      const apiExamType = mapExamTypeToBackend(draft.examType);
+      const followUpDateOnly = draft.followUpNeeded && draft.followUpDate ? draft.followUpDate : null;
+      const payload = {
+        exam_type: apiExamType,
+        exam_date: examDateOnly,
+        chief_complaint: draft.visitReason || '',
+        medical_history_review: buildMedicalHistoryWithDraftMeta(draft),
+        results_summary: draft.consultationNotes || `Décision provisoire: ${OccHealthUtils.getFitnessStatusLabel(draft.fitnessDecision)}`,
+        recommendations: draft.recommendations || '',
+        examination_completed: false,
+        follow_up_required: draft.followUpNeeded,
+        follow_up_date: followUpDateOnly,
+        next_periodic_exam: null,
+      };
+
+      const existingBackendId = draft.backendExaminationId || backendDraftExaminationId;
+      if (existingBackendId) {
+        const updateRes = await occHealthApi.updateMedicalExamination(existingBackendId, payload);
+        if (updateRes.error || !updateRes.data?.id) return null;
+        return Number(updateRes.data.id);
+      }
+
+      const createRes = await occHealthApi.createMedicalExamination({
+        worker: workerId,
+        ...payload,
+      });
+      if (createRes.error || !createRes.data?.id) return null;
+      return Number(createRes.data.id);
+    } catch (syncError) {
+      console.log('Draft sync pending (offline or backend unavailable):', syncError);
+      return null;
+    } finally {
+      draftSyncInFlight.current.delete(draft.id);
+    }
+  }, [backendDraftExaminationId, buildMedicalHistoryWithDraftMeta]);
+
+  const persistDraft = useCallback(async (options?: {
+    silent?: boolean;
+    status?: DraftConsultationStatus;
+    step?: ConsultationStep;
+    testOrderGeneratedAt?: string;
+  }) => {
     console.log('🔄 Save draft called', { selectedWorker: selectedWorker?.firstName, draftId });
-    
+
     try {
       const id = draftId || `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const now = new Date().toISOString();
-      
+
       const draft: DraftState = {
         id,
         selectedWorker,
@@ -681,6 +1108,8 @@ export function OccHealthConsultationScreen({
         vitals,
         physicalExam,
         orderedTests,
+        testExecutionMode,
+        onsiteTestResults,
         audiometryDone,
         spirometryDone,
         visionDone,
@@ -697,34 +1126,65 @@ export function OccHealthConsultationScreen({
         recommendations,
         followUpNeeded,
         followUpDate,
+        nextAppointmentDate,
+        nextAppointmentReason,
         consultationNotes,
-        currentStep,
+        currentStep: options?.step || currentStep,
+        consultationStatus: options?.status || 'in_progress',
+        backendExaminationId: backendDraftExaminationId || undefined,
+        syncStatus: 'pending',
+        testOrderGeneratedAt: options?.testOrderGeneratedAt,
         createdAt: draftId ? (await getDraftCreatedAt(id)) || now : now,
         updatedAt: now,
       };
 
-      console.log('💾 Saving draft to AsyncStorage with key:', `consultation_draft_${id}`);
-      await AsyncStorage.setItem(`consultation_draft_${id}`, JSON.stringify(draft));
-      
+      const draftKey = `consultation_draft_${id}`;
+      await AsyncStorage.setItem(draftKey, JSON.stringify(draft));
+
+      const syncedBackendId = await syncDraftToBackend(draft);
+      if (syncedBackendId) {
+        const syncedDraft: DraftState = {
+          ...draft,
+          backendExaminationId: syncedBackendId,
+          syncStatus: 'synced',
+        };
+        await AsyncStorage.setItem(draftKey, JSON.stringify(syncedDraft));
+        setBackendDraftExaminationId(syncedBackendId);
+      } else {
+        const pendingDraft: DraftState = {
+          ...draft,
+          syncStatus: 'pending',
+        };
+        await AsyncStorage.setItem(draftKey, JSON.stringify(pendingDraft));
+      }
+
       setDraftId(id);
       setIsDraft(true);
       setLastSaved(new Date());
-      
-      console.log('✅ Draft saved successfully:', id);
-      Alert.alert('Succès', 'Brouillon sauvegardé avec succès');
-      
+
+      if (!options?.silent) {
+        Alert.alert('Succès', 'Brouillon sauvegardé avec succès');
+      }
+
       return id;
     } catch (error) {
       console.error('❌ Error saving draft:', error);
-      Alert.alert('Erreur', 'Impossible de sauvegarder le brouillon');
+      if (!options?.silent) {
+        Alert.alert('Erreur', 'Impossible de sauvegarder le brouillon');
+      }
     }
   }, [
     draftId, selectedWorker, examType, visitReason, referredBy, vitals, physicalExam,
-    orderedTests, audiometryDone, spirometryDone, visionDone, drugScreeningDone,
+    orderedTests, testExecutionMode, onsiteTestResults, audiometryDone, spirometryDone, visionDone, drugScreeningDone,
     bloodWorkDone, xrayDone, mentalScreening, ergonomicNeeded, ergonomicNotes,
     mskComplaints, sectorAnswers, fitnessDecision, restrictions, recommendations, followUpNeeded,
-    followUpDate, consultationNotes, currentStep,
+    followUpDate, nextAppointmentDate, nextAppointmentReason, consultationNotes, currentStep, backendDraftExaminationId, syncDraftToBackend,
   ]);
+
+  // Save current state as draft
+  const saveDraft = useCallback(async () => {
+    await persistDraft({ silent: false, status: 'in_progress' });
+  }, [persistDraft]);
 
   // Get draft creation date
   const getDraftCreatedAt = async (id: string): Promise<string | null> => {
@@ -754,6 +1214,8 @@ export function OccHealthConsultationScreen({
         setVitals(parsed.vitals);
         setPhysicalExam(parsed.physicalExam);
         setOrderedTests(parsed.orderedTests);
+        setTestExecutionMode(parsed.testExecutionMode || 'external');
+        setOnsiteTestResults(parsed.onsiteTestResults || {});
         setAudiometryDone(parsed.audiometryDone);
         setSpirometryDone(parsed.spirometryDone);
         setVisionDone(parsed.visionDone);
@@ -770,8 +1232,11 @@ export function OccHealthConsultationScreen({
         setRecommendations(parsed.recommendations);
         setFollowUpNeeded(parsed.followUpNeeded);
         setFollowUpDate(parsed.followUpDate);
+        setNextAppointmentDate(parsed.nextAppointmentDate || '');
+        setNextAppointmentReason(parsed.nextAppointmentReason || '');
         setConsultationNotes(parsed.consultationNotes);
         setCurrentStep(parsed.currentStep);
+        setBackendDraftExaminationId(parsed.backendExaminationId ?? null);
         
         setDraftId(id);
         setIsDraft(true);
@@ -803,6 +1268,8 @@ export function OccHealthConsultationScreen({
             ophthalmological: 'normal',
           });
           setOrderedTests([]);
+          setTestExecutionMode('external');
+          setOnsiteTestResults({});
           setAudiometryDone(false);
           setSpirometryDone(false);
           setVisionDone(false);
@@ -827,8 +1294,11 @@ export function OccHealthConsultationScreen({
           setRecommendations('');
           setFollowUpNeeded(false);
           setFollowUpDate('');
+          setNextAppointmentDate('');
+          setNextAppointmentReason('');
           setConsultationNotes('Consultation en cours - données partielles');
           setCurrentStep('physical_exam'); // Continue from where it was left off
+          setBackendDraftExaminationId(null);
           
           setDraftId(id);
           setIsDraft(true);
@@ -848,10 +1318,11 @@ export function OccHealthConsultationScreen({
       if (idToDelete) {
         await AsyncStorage.removeItem(`consultation_draft_${idToDelete}`);
         
-        if (id === draftId) {
+        if (idToDelete === draftId) {
           setDraftId(null);
           setIsDraft(false);
           setLastSaved(null);
+          setBackendDraftExaminationId(null);
         }
       }
     } catch (error) {
@@ -864,11 +1335,57 @@ export function OccHealthConsultationScreen({
     if (!selectedWorker) return; // Don't auto-save if no worker selected
 
     const interval = setInterval(() => {
-      saveDraft();
+      persistDraft({ silent: true, status: 'in_progress' });
     }, 30000); // Auto-save every 30 seconds
 
     return () => clearInterval(interval);
-  }, [saveDraft, selectedWorker]);
+  }, [persistDraft, selectedWorker]);
+
+  const syncAllPendingDrafts = useCallback(async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const draftKeys = keys.filter(key => key.startsWith('consultation_draft_'));
+      if (draftKeys.length === 0) return;
+
+      const entries = await AsyncStorage.multiGet(draftKeys);
+      for (const [key, value] of entries) {
+        if (!value) continue;
+        try {
+          const parsed = JSON.parse(value) as DraftState;
+          if (!parsed.selectedWorker) continue;
+          if (parsed.consultationStatus !== 'in_progress' && parsed.consultationStatus !== 'tests_ordered' && parsed.consultationStatus !== 'awaiting_results') continue;
+
+          const syncedBackendId = await syncDraftToBackend(parsed);
+          if (!syncedBackendId) continue;
+
+          const syncedDraft: DraftState = {
+            ...parsed,
+            backendExaminationId: syncedBackendId,
+            syncStatus: 'synced',
+            updatedAt: new Date().toISOString(),
+          };
+          await AsyncStorage.setItem(key, JSON.stringify(syncedDraft));
+
+          if (draftId === parsed.id) {
+            setBackendDraftExaminationId(syncedBackendId);
+            setLastSaved(new Date());
+          }
+        } catch (draftError) {
+          console.log('Skipping invalid draft during sync:', draftError);
+        }
+      }
+    } catch (error) {
+      console.log('Pending draft sync skipped:', error);
+    }
+  }, [draftId, syncDraftToBackend]);
+
+  useEffect(() => {
+    syncAllPendingDrafts();
+    const interval = setInterval(() => {
+      syncAllPendingDrafts();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [syncAllPendingDrafts]);
 
   // Load draft when requested
   useEffect(() => {
@@ -887,6 +1404,56 @@ export function OccHealthConsultationScreen({
     }
   }, [draftToLoad, loadDraft, onDraftLoaded]);
 
+  useEffect(() => {
+    if (autoDraftRecoveryAttempted.current) return;
+    autoDraftRecoveryAttempted.current = true;
+
+    if (draftToLoad || pendingConsultationToLoad) return;
+
+    const restoreLatestDraft = async () => {
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const draftKeys = keys.filter(key => key.startsWith('consultation_draft_'));
+        if (draftKeys.length === 0) return;
+
+        const entries = await AsyncStorage.multiGet(draftKeys);
+        const activeDrafts = entries
+          .map(([, value]) => {
+            if (!value) return null;
+            try {
+              return JSON.parse(value) as DraftState;
+            } catch {
+              return null;
+            }
+          })
+          .filter((draft): draft is DraftState => {
+            if (!draft || !draft.selectedWorker) return false;
+            return draft.consultationStatus === 'in_progress'
+              || draft.consultationStatus === 'tests_ordered'
+              || draft.consultationStatus === 'awaiting_results';
+          });
+
+        if (activeDrafts.length === 0) return;
+
+        const latestDraft = activeDrafts.sort((a, b) => {
+          const aTs = Date.parse(a.updatedAt || '') || 0;
+          const bTs = Date.parse(b.updatedAt || '') || 0;
+          return bTs - aTs;
+        })[0];
+
+        await loadDraft(latestDraft.id);
+        const workerLabel = latestDraft.selectedWorker
+          ? `${latestDraft.selectedWorker.firstName} ${latestDraft.selectedWorker.lastName}`
+          : 'consultation';
+        setAutoRestoreNotice(`Brouillon restauré automatiquement pour ${workerLabel}.`);
+      } catch (error) {
+        console.log('Auto draft recovery skipped:', error);
+      }
+    };
+
+    restoreLatestDraft();
+  }, [draftToLoad, pendingConsultationToLoad, loadDraft]);
+
   // ─── Derived ──
   const sectorProfile = useMemo(
     () => selectedWorker ? SECTOR_PROFILES[selectedWorker.sector] : null,
@@ -904,39 +1471,168 @@ export function OccHealthConsultationScreen({
     [selectedWorker]
   );
 
+  const sectorTestOptions = useMemo<SectorTestOption[]>(() => {
+    if (!sectorProfile) return [];
+
+    const base: SectorTestOption[] = [
+      { id: 'audiometry', label: 'Audiométrie', icon: 'ear', recommended: sectorProfile.recommendedScreenings.includes('audiometry'), desc: 'Seuils auditifs 250–8000 Hz' },
+      { id: 'spirometry', label: 'Spirométrie', icon: 'cloud', recommended: sectorProfile.recommendedScreenings.includes('spirometry'), desc: 'FVC, FEV1, ratio FEV1/FVC' },
+      { id: 'vision_test', label: 'Examen de Vision', icon: 'eye', recommended: sectorProfile.recommendedScreenings.includes('vision_test'), desc: 'Acuité, couleur, profondeur, périphérique' },
+      { id: 'drug_screening', label: 'Dépistage Toxicologique', icon: 'flask', recommended: sectorProfile.recommendedScreenings.includes('drug_screening'), desc: 'Cannabis, opiacés, alcool...' },
+      { id: 'chest_xray', label: 'Radiographie Thoracique', icon: 'scan', recommended: sectorProfile.recommendedScreenings.includes('chest_xray'), desc: 'Classification ILO, dépistage TB' },
+      { id: 'blood_lead', label: 'Plombémie / Métaux Lourds', icon: 'water', recommended: sectorProfile.recommendedScreenings.includes('blood_lead'), desc: 'Plomb, mercure, arsenic sang' },
+      { id: 'cardiac_screening', label: 'Bilan Cardiovasculaire', icon: 'heart', recommended: sectorProfile.recommendedScreenings.includes('cardiac_screening') || sectorProfile.recommendedScreenings.includes('cardiovascular_screening'), desc: 'ECG, cholestérol, glycémie' },
+      { id: 'mental_health_screening', label: 'Évaluation Santé Mentale', icon: 'happy', recommended: sectorProfile.recommendedScreenings.includes('mental_health_screening'), desc: 'WHO-5, burnout, stress' },
+      { id: 'ergonomic_assessment', label: 'Évaluation Ergonomique', icon: 'desktop', recommended: sectorProfile.recommendedScreenings.includes('ergonomic_assessment'), desc: 'Poste de travail, posture, TMS' },
+      { id: 'musculoskeletal_screening', label: 'Dépistage Musculo-squelettique', icon: 'fitness', recommended: sectorProfile.recommendedScreenings.includes('musculoskeletal_screening'), desc: 'Dos, épaules, membres' },
+      { id: 'hepatitis_screening', label: 'Dépistage Hépatite B', icon: 'shield', recommended: sectorProfile.recommendedScreenings.includes('hepatitis_b_screening') || sectorProfile.recommendedScreenings.includes('hepatitis_screening'), desc: 'Sérologie HBs' },
+      { id: 'tb_screening', label: 'Dépistage Tuberculose', icon: 'medkit', recommended: sectorProfile.recommendedScreenings.includes('tb_screening'), desc: 'IDR / Quantiferon' },
+    ];
+
+    if (!protocolResult?.hasProtocol) {
+      return [...base].sort((a, b) => Number(b.recommended) - Number(a.recommended));
+    }
+
+    const protocolItems: SectorTestOption[] = [
+      ...protocolResult.requiredExams.map((exam) => ({
+        id: getProtocolDerivedTestId(exam),
+        label: exam.label,
+        icon: normalizeIcon(EXAM_CATEGORY_ICONS[exam.category]),
+        recommended: true,
+        required: true,
+        desc: exam.description || 'Examen requis par protocole',
+      })),
+      ...protocolResult.recommendedExams.map((exam) => ({
+        id: getProtocolDerivedTestId(exam),
+        label: exam.label,
+        icon: normalizeIcon(EXAM_CATEGORY_ICONS[exam.category]),
+        recommended: true,
+        required: false,
+        desc: exam.description || 'Examen recommandé par protocole',
+      })),
+    ];
+
+    const merged = new Map<string, SectorTestOption>();
+    for (const item of [...base, ...protocolItems]) {
+      const existing = merged.get(item.id);
+      if (!existing) {
+        merged.set(item.id, item);
+      } else {
+        merged.set(item.id, {
+          ...existing,
+          ...item,
+          required: existing.required || item.required,
+          recommended: existing.recommended || item.recommended,
+        });
+      }
+    }
+
+    return Array.from(merged.values()).sort((a, b) => {
+      if (a.required && !b.required) return -1;
+      if (!a.required && b.required) return 1;
+      if (a.recommended && !b.recommended) return -1;
+      if (!a.recommended && b.recommended) return 1;
+      return a.label.localeCompare(b.label, 'fr');
+    });
+  }, [sectorProfile, protocolResult]);
+
+  useEffect(() => {
+    if (!selectedWorker || !sectorQuestionnaire) return;
+    setSectorAnswers(prev => {
+      if (Object.keys(prev).length > 0) return prev;
+      return buildPrefilledSectorAnswers(selectedWorker, sectorQuestionnaire, visitReason);
+    });
+  }, [selectedWorker, sectorQuestionnaire, visitReason]);
+
+  useEffect(() => {
+    if (!selectedWorker) return;
+    setOrderedTests(prev => {
+      if (prev.length > 0) return prev;
+      const prefills = sectorTestOptions
+        .filter(t => t.required || t.recommended)
+        .map(t => t.id);
+      return Array.from(new Set(prefills));
+    });
+  }, [selectedWorker, sectorTestOptions]);
+
+  useEffect(() => {
+    setOnsiteTestResults(prev => {
+      const next: Record<string, OnsiteTestResult> = {};
+      for (const testId of orderedTests) {
+        next[testId] = prev[testId] || {
+          completed: false,
+          interpretation: null,
+          value: '',
+          notes: '',
+        };
+      }
+      return next;
+    });
+  }, [orderedTests]);
+
+  useEffect(() => {
+    if (testExecutionMode !== 'onsite') {
+      setExpandedOnsiteTestId(null);
+      return;
+    }
+
+    if (orderedTests.length === 0) {
+      setExpandedOnsiteTestId(null);
+      return;
+    }
+
+    setExpandedOnsiteTestId(prev => (prev && orderedTests.includes(prev) ? prev : orderedTests[0]));
+  }, [orderedTests, testExecutionMode]);
+
+  useEffect(() => {
+    if (testExecutionMode !== 'onsite') return;
+    setAudiometryDone(Boolean(onsiteTestResults.audiometry?.completed));
+    setSpirometryDone(Boolean(onsiteTestResults.spirometry?.completed));
+    setVisionDone(Boolean(onsiteTestResults.vision_test?.completed));
+    setDrugScreeningDone(Boolean(onsiteTestResults.drug_screening?.completed));
+    setBloodWorkDone(Boolean(onsiteTestResults.blood_work?.completed));
+    setXrayDone(Boolean(onsiteTestResults.chest_xray?.completed));
+  }, [onsiteTestResults, testExecutionMode]);
+
+  const completedOnsiteTestsCount = useMemo(
+    () => orderedTests.filter(testId => onsiteTestResults[testId]?.completed).length,
+    [orderedTests, onsiteTestResults]
+  );
+
+  useEffect(() => {
+    if (!selectedWorker) return;
+    persistDraft({ silent: true, status: 'in_progress', step: currentStep });
+  }, [currentStep, selectedWorker, persistDraft]);
+
   // ─── Navigation ──
   const goNext = () => {
     const idx = currentStepIdx;
-    if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].key);
+    if (idx < STEPS.length - 1) {
+      const nextStep = STEPS[idx + 1].key;
+      setCurrentStep(nextStep);
+      if (selectedWorker) {
+        persistDraft({ silent: true, status: 'in_progress', step: nextStep });
+      }
+    }
   };
   const goPrev = () => {
     const idx = currentStepIdx;
-    if (idx > 0) setCurrentStep(STEPS[idx - 1].key);
+    if (idx > 0) {
+      const prevStep = STEPS[idx - 1].key;
+      setCurrentStep(prevStep);
+      if (selectedWorker) {
+        persistDraft({ silent: true, status: 'in_progress', step: prevStep });
+      }
+    }
   };
   const canGoNext = (): boolean => {
+    if (currentStep === 'next_appointment') {
+      return Boolean((nextAppointmentDate || getSuggestedNextAppointmentDate(fitnessDecision, examType)).trim());
+    }
     return true; // all steps after intake are optional
   };
 
-  // ─── Worker search ──
-  const filteredWorkers = useMemo(() => {
-    if (!searchQuery.trim()) return workers;
-    const q = searchQuery.toLowerCase();
-    return workers.filter(w =>
-      w.firstName.toLowerCase().includes(q) ||
-      w.lastName.toLowerCase().includes(q) ||
-      w.employeeId.toLowerCase().includes(q) ||
-      w.company.toLowerCase().includes(q)
-    );
-  }, [searchQuery, workers]);
-
   // ─── Handlers ──
-  const handleSelectWorker = (w: Worker) => {
-    console.log('👤 Worker selected:', w.firstName, w.lastName, w.id);
-    setSelectedWorker(w);
-    setShowWorkerModal(false);
-    setSearchQuery('');
-  };
-
   const handleAddRestriction = () => {
     if (restrictionInput.trim()) {
       setRestrictions(prev => [...prev, restrictionInput.trim()]);
@@ -948,13 +1644,211 @@ export function OccHealthConsultationScreen({
     setRestrictions(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const handleRefreshWaitingRoom = useCallback(async () => {
+    await loadPendingQueue();
+  }, [loadPendingQueue]);
+
+  const handleRemoveFromQueue = useCallback((pendingId: string, workerName: string, patientId?: string) => {
+    Alert.alert(
+      'Retirer de la file',
+      `Retirer ${workerName} de la file d'attente ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Retirer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+              const queueList: PendingConsultation[] = stored ? JSON.parse(stored) : [];
+              const updatedQueue = queueList.filter(c => {
+                if (c.id === pendingId) return false;
+                if (patientId && c.patient?.id === patientId && c.status === 'waiting') return false;
+                return true;
+              });
+              await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updatedQueue));
+              setPendingConsultations(dedupePendingQueue(updatedQueue));
+
+              if (activePendingId === pendingId) {
+                resetForm();
+              }
+            } catch (error) {
+              console.error('Failed to remove patient from queue:', error);
+              Alert.alert('Erreur', 'Impossible de retirer le patient de la file.');
+            }
+          },
+        },
+      ]
+    );
+  }, [activePendingId]);
+
+  const handleDownloadTestOrderPdf = useCallback(() => {
+    if (!selectedWorker) return;
+    const selectedTests = sectorTestOptions.filter(t => orderedTests.includes(t.id));
+
+    if (selectedTests.length === 0) {
+      Alert.alert('Aucun test', 'Sélectionnez au moins un test avant de générer l’ordonnance.');
+      return;
+    }
+
+    const htmlEscape = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const now = new Date();
+    const html = `
+      <!doctype html>
+      <html lang="fr">
+      <head>
+        <meta charset="utf-8" />
+        <title>Ordonnance des examens - ${htmlEscape(selectedWorker.employeeId)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 28px; color: #111827; }
+          h1 { margin: 0 0 8px; font-size: 22px; }
+          .meta { margin-bottom: 18px; font-size: 13px; line-height: 1.5; color: #374151; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th, td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 13px; text-align: left; }
+          th { background: #f3f4f6; }
+          .required { color: #991b1b; font-weight: 700; }
+          .footer { margin-top: 30px; font-size: 12px; color: #4b5563; }
+        </style>
+      </head>
+      <body>
+        <h1>Ordonnance des examens complémentaires</h1>
+        <div class="meta">
+          <div><strong>Patient:</strong> ${htmlEscape(selectedWorker.firstName)} ${htmlEscape(selectedWorker.lastName)} (${htmlEscape(selectedWorker.employeeId)})</div>
+          <div><strong>Entreprise:</strong> ${htmlEscape(selectedWorker.company)} · <strong>Poste:</strong> ${htmlEscape(selectedWorker.jobTitle)}</div>
+          <div><strong>Secteur:</strong> ${htmlEscape(sectorProfile?.label || selectedWorker.sector)} · <strong>Type de visite:</strong> ${htmlEscape(OccHealthUtils.getExamTypeLabel(examType))}</div>
+          <div><strong>Date:</strong> ${now.toLocaleDateString('fr-CD')} ${now.toLocaleTimeString('fr-CD', { hour: '2-digit', minute: '2-digit' })}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Examen</th>
+              <th>Détails</th>
+              <th>Nature</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${selectedTests
+              .map((test, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${htmlEscape(test.label)}</td>
+                  <td>${htmlEscape(test.desc || '')}</td>
+                  <td class="${test.required ? 'required' : ''}">${test.required ? 'Requis' : 'Recommandé'}</td>
+                </tr>
+              `)
+              .join('')}
+          </tbody>
+        </table>
+        <div class="footer">Document généré depuis LaboMedPlus - Consultation Médecine du Travail.</div>
+      </body>
+      </html>
+    `;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=760');
+      if (!printWindow) {
+        Alert.alert('Blocage navigateur', 'Autorisez les popups pour générer le PDF.');
+        return;
+      }
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 250);
+      return;
+    }
+
+    Alert.alert(
+      'PDF sur mobile',
+      'La génération PDF directe est optimisée pour le mode Web. Sur mobile, utilisez la version Web pour imprimer/télécharger le document.'
+    );
+  }, [selectedWorker, orderedTests, sectorTestOptions, sectorProfile, examType]);
+
+  const handlePauseForTests = useCallback(async () => {
+    if (!selectedWorker || !activePendingId) {
+      Alert.alert('Information', 'Cette action est disponible pour un patient chargé depuis la file d’attente.');
+      return;
+    }
+    if (orderedTests.length === 0) {
+      Alert.alert('Aucun test', 'Sélectionnez les examens à prescrire avant de mettre en attente.');
+      return;
+    }
+
+    try {
+      const generatedAt = new Date().toISOString();
+      const nextDraftId = await persistDraft({
+        silent: true,
+        status: 'tests_ordered',
+        step: 'sector_tests',
+        testOrderGeneratedAt: generatedAt,
+      });
+
+      const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+      const queueList: PendingConsultation[] = stored ? JSON.parse(stored) : [];
+      const updatedQueue = queueList.map(item =>
+        item.id === activePendingId
+          ? {
+              ...item,
+              status: 'waiting' as const,
+              resumeDraftId: nextDraftId,
+              resumeStatus: 'tests_ordered',
+              resumeStep: 'sector_tests',
+            }
+          : item,
+      );
+
+      await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updatedQueue));
+
+      Alert.alert(
+        'Patient orienté vers examens',
+        'La consultation est mise en pause. Elle reprendra automatiquement depuis le brouillon au retour des résultats.',
+        [{ text: 'OK', onPress: () => { resetForm(); loadPendingQueue(); } }],
+      );
+    } catch (error) {
+      console.error('Failed to pause consultation for tests:', error);
+      Alert.alert('Erreur', 'Impossible de mettre la consultation en attente pour examens.');
+    }
+  }, [selectedWorker, activePendingId, orderedTests, persistDraft, loadPendingQueue]);
+
   const handleSubmitConsultation = async () => {
     if (!selectedWorker) return;
 
     try {
+      const onsiteResultLines = orderedTests
+        .map(testId => {
+          const result = onsiteTestResults[testId];
+          if (!result?.completed) return null;
+          const fromOptions = sectorTestOptions.find(option => option.id === testId);
+          const label = getTestDisplayLabel(testId, fromOptions?.label);
+          const parts = [
+            result.interpretation ? getTestInterpretationLabel(result.interpretation) : null,
+            result.value?.trim() || null,
+            result.notes?.trim() || null,
+          ].filter(Boolean) as string[];
+          return `• ${label}: ${parts.length > 0 ? parts.join(' · ') : 'Résultat saisi'}`;
+        })
+        .filter(Boolean) as string[];
+      const onsiteResultsBlock = onsiteResultLines.length > 0
+        ? `\n\nRésultats des tests réalisés sur place:\n${onsiteResultLines.join('\n')}`
+        : '';
+
       // Generate certificate
       const certificateNumber = `CERT-${Date.now().toString(36).toUpperCase()}`;
       const currentDate = new Date().toISOString();
+      const examDateOnly = currentDate.split('T')[0];
+      const doctorName = `${authUser?.firstName || ''} ${authUser?.lastName || ''}`.trim() || 'Dr. Système';
+      const doctorLicense = authUser?.professionalLicense ? ` (${authUser.professionalLicense})` : '';
+      const organizationName = authOrganization?.name || selectedWorker.company || 'Organisation';
+      const scheduledNextAppointment = (nextAppointmentDate || getSuggestedNextAppointmentDate(fitnessDecision, examType)).trim();
+      const legalTitle = getCertificateTitleByDecision(fitnessDecision);
+      const legalDecisionWording = getLegalWordingByDecision(fitnessDecision);
+
       const expiryDate = new Date();
       
       // Set expiry based on exam type and fitness decision
@@ -962,6 +1856,19 @@ export function OccHealthConsultationScreen({
         expiryDate.setFullYear(expiryDate.getFullYear() + 1); // 1 year
       } else if (fitnessDecision === 'fit_with_restrictions') {
         expiryDate.setMonth(expiryDate.getMonth() + 6); // 6 months
+      } else if (fitnessDecision === 'temporarily_unfit') {
+        if (scheduledNextAppointment) {
+          const dt = new Date(scheduledNextAppointment);
+          if (!isNaN(dt.getTime())) {
+            expiryDate.setTime(dt.getTime());
+          } else {
+            expiryDate.setMonth(expiryDate.getMonth() + 1);
+          }
+        } else {
+          expiryDate.setMonth(expiryDate.getMonth() + 1);
+        }
+      } else if (fitnessDecision === 'permanently_unfit') {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 3); // administrative review horizon
       } else {
         expiryDate.setFullYear(expiryDate.getFullYear() + 1); // 1 year
       }
@@ -975,17 +1882,17 @@ export function OccHealthConsultationScreen({
         examDate: currentDate,
         expiryDate: expiryDate.toISOString(),
         examinerDoctorId: 'DOC-001', // Default examiner
-        examinerName: 'Dr. Système', // Default examiner name
+        examinerName: doctorName,
         vitals,
         physicalExam,
         fitnessDecision,
         restrictions,
         recommendations: recommendations.trim() ? [recommendations] : [],
-        followUpDate: followUpNeeded ? followUpDate : undefined,
-        followUpReason: followUpNeeded ? 'Suivi médical requis' : undefined,
+        followUpDate: scheduledNextAppointment || undefined,
+        followUpReason: nextAppointmentReason || (followUpNeeded ? 'Suivi médical requis' : undefined),
         certificateNumber,
         certificateIssued: true,
-        notes: consultationNotes,
+        notes: `${consultationNotes || ''}${onsiteResultsBlock}\n\n${legalTitle}\n${legalDecisionWording}`.trim(),
         sectorQuestionnaireAnswers: Object.keys(sectorAnswers).length > 0 ? sectorAnswers : undefined,
         createdAt: currentDate,
       };
@@ -1003,13 +1910,110 @@ export function OccHealthConsultationScreen({
         expiryDate: expiryDate.toISOString(),
         fitnessDecision,
         restrictions,
-        examinerName: 'Dr. Système',
+        examinerName: `${doctorName}${doctorLicense}`,
         certificateNumber,
         sector: selectedWorker.sector,
         createdAt: currentDate,
       };
 
-      // Save to AsyncStorage
+      const workerId = parseWorkerIdForApi(selectedWorker.id);
+      if (!workerId) {
+        Alert.alert(
+          'Travailleur non synchronisé',
+          'Ce dossier n\'est pas encore synchronisé avec la base backend. Veuillez d\'abord importer/synchroniser le travailleur, puis réessayer.'
+        );
+        return;
+      }
+
+      const apiExamType = mapExamTypeToBackend(examType);
+      const nextPeriodicDateOnly = expiryDate.toISOString().split('T')[0];
+      const followUpDateOnly = scheduledNextAppointment || (followUpNeeded && followUpDate ? followUpDate : null);
+      const examPayload = {
+        exam_type: apiExamType,
+        exam_date: examDateOnly,
+        examining_doctor: authUser?.id ? Number(authUser.id) : undefined,
+        chief_complaint: visitReason || '',
+        medical_history_review: `${referredBy ? `Référé par: ${referredBy}\n` : ''}Organisation: ${organizationName}\nMédecin évaluateur: ${doctorName}${doctorLicense}`,
+        results_summary: `${consultationNotes || `Décision: ${OccHealthUtils.getFitnessStatusLabel(fitnessDecision)}`}\n\n${legalDecisionWording}${onsiteResultsBlock}`,
+        recommendations: recommendations || '',
+        examination_completed: true,
+        follow_up_required: followUpNeeded || Boolean(scheduledNextAppointment),
+        follow_up_date: followUpDateOnly,
+        next_periodic_exam: scheduledNextAppointment || nextPeriodicDateOnly,
+      };
+
+      let examinationId: number;
+      if (backendDraftExaminationId) {
+        const examUpdateRes = await occHealthApi.updateMedicalExamination(backendDraftExaminationId, examPayload);
+        if (examUpdateRes.error || !examUpdateRes.data?.id) {
+          throw new Error(examUpdateRes.error || 'Échec de mise à jour de l\'examen médical');
+        }
+        examinationId = Number(examUpdateRes.data.id);
+      } else {
+        const examCreateRes = await occHealthApi.createMedicalExamination({
+          worker: workerId,
+          ...examPayload,
+        });
+        if (examCreateRes.error || !examCreateRes.data?.id) {
+          throw new Error(examCreateRes.error || 'Échec de création de l\'examen médical');
+        }
+        examinationId = Number(examCreateRes.data.id);
+      }
+
+      const systolic = Number(vitals.bloodPressureSystolic ?? 120);
+      const diastolic = Number(vitals.bloodPressureDiastolic ?? 80);
+      const heartRate = Number(vitals.heartRate ?? 72);
+      const height = Number(vitals.height ?? 170);
+      const weight = Number(vitals.weight ?? 70);
+
+      const vitalRes = await occHealthApi.createVitalSigns({
+        examination: examinationId,
+        systolic_bp: systolic,
+        diastolic_bp: diastolic,
+        heart_rate: heartRate,
+        respiratory_rate: vitals.respiratoryRate ?? null,
+        temperature: vitals.temperature ?? null,
+        height,
+        weight,
+        waist_circumference: vitals.waistCircumference ?? null,
+        pain_scale: 0,
+        pain_location: '',
+      });
+
+      if (vitalRes.error) {
+        console.warn('Vital signs save warning:', vitalRes.error);
+      }
+
+      const certRes = await occHealthApi.createFitnessCertificate({
+        examination: examinationId,
+        fitness_decision: fitnessDecision,
+        decision_rationale: `${legalTitle}. ${legalDecisionWording}`,
+        restrictions: restrictions.join('; '),
+        work_limitations: restrictions.join('; '),
+        issue_date: examDateOnly,
+        valid_until: nextPeriodicDateOnly,
+        requires_follow_up: followUpNeeded || Boolean(scheduledNextAppointment),
+        follow_up_frequency_months: (followUpNeeded || Boolean(scheduledNextAppointment)) ? 3 : null,
+        follow_up_instructions: (followUpNeeded || Boolean(scheduledNextAppointment))
+          ? (`Rendez-vous planifié le ${scheduledNextAppointment || nextPeriodicDateOnly}. ${nextAppointmentReason || recommendations || 'Suivi médical requis.'}`)
+          : '',
+        is_active: true,
+      });
+
+      if (certRes.error || !certRes.data?.id) {
+        throw new Error(certRes.error || 'Échec de création du certificat d\'aptitude');
+      }
+
+      const patchRes = await occHealthApi.patchWorker(String(workerId), {
+        fitnessStatus: fitnessDecision,
+        lastMedicalExam: examDateOnly,
+        nextMedicalExam: scheduledNextAppointment || nextPeriodicDateOnly,
+      });
+      if (patchRes.error) {
+        console.warn('Worker patch warning:', patchRes.error);
+      }
+
+      // Keep local copy for offline/history screens
       await AsyncStorage.setItem(`medical_exam_${medicalExamination.id}`, JSON.stringify(medicalExamination));
       await AsyncStorage.setItem(`certificate_${certificateNumber}`, JSON.stringify(certificate));
 
@@ -1067,6 +2071,8 @@ export function OccHealthConsultationScreen({
       ent: 'normal', abdomen: 'normal', mentalHealth: 'normal', ophthalmological: 'normal',
     });
     setOrderedTests([]);
+    setTestExecutionMode('external');
+    setOnsiteTestResults({});
     setAudiometryDone(false);
     setSpirometryDone(false);
     setVisionDone(false);
@@ -1088,10 +2094,13 @@ export function OccHealthConsultationScreen({
     setRecommendations('');
     setFollowUpNeeded(false);
     setFollowUpDate('');
+    setNextAppointmentDate('');
+    setNextAppointmentReason('');
     setConsultationNotes('');
     setDraftId(null);
     setIsDraft(false);
     setLastSaved(null);
+    setBackendDraftExaminationId(null);
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -1103,7 +2112,7 @@ export function OccHealthConsultationScreen({
     <View>
       <StepHeader
         title="Identification du Travailleur"
-        subtitle="Recherchez le travailleur par nom, numéro employé ou entreprise."
+        subtitle="Le travailleur est chargé depuis la file d'attente après accueil et screening infirmier."
         icon="person"
       />
 
@@ -1125,10 +2134,10 @@ export function OccHealthConsultationScreen({
             </View>
             <TouchableOpacity
               style={styles.changeBtn}
-              onPress={() => { setSelectedWorker(null); setShowWorkerModal(true); }}
+              onPress={() => { setSelectedWorker(null); }}
             >
               <Ionicons name="swap-horizontal" size={16} color={ACCENT} />
-              <Text style={{ fontSize: 12, color: ACCENT, fontWeight: '600' }}>Changer</Text>
+              <Text style={{ fontSize: 12, color: ACCENT, fontWeight: '600' }}>Retour file d'attente</Text>
             </TouchableOpacity>
           </View>
 
@@ -1202,13 +2211,13 @@ export function OccHealthConsultationScreen({
           )}
         </View>
       ) : (
-        <TouchableOpacity style={styles.selectWorkerBtn} onPress={() => setShowWorkerModal(true)}>
+        <View style={styles.selectWorkerBtn}>
           <View style={styles.selectWorkerIcon}>
-            <Ionicons name="person-add" size={28} color={ACCENT} />
+            <Ionicons name="list" size={28} color={ACCENT} />
           </View>
-          <Text style={styles.selectWorkerTitle}>Sélectionner un Travailleur</Text>
-          <Text style={styles.selectWorkerSub}>Rechercher par nom, ID employé ou entreprise</Text>
-        </TouchableOpacity>
+          <Text style={styles.selectWorkerTitle}>Sélection depuis la file d'attente</Text>
+          <Text style={styles.selectWorkerSub}>Enregistrez d'abord le patient dans "Accueil Patient" avec screening infirmier.</Text>
+        </View>
       )}
     </View>
   );
@@ -1470,26 +2479,28 @@ export function OccHealthConsultationScreen({
 
   // ─── Step 5: Sector-Specific Questionnaire ──
   const renderSectorQuestions = () => {
-    if (!sectorQuestionnaire || !selectedWorker) {
+    if (!selectedWorker) {
       return (
         <View>
           <StepHeader
             title="Questionnaire Sectoriel"
-            subtitle="Aucun questionnaire spécifique pour ce secteur."
+            subtitle="Sélectionnez d'abord un travailleur pour continuer."
             icon="list"
           />
           <View style={styles.notApplicableCard}>
-            <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+            <Ionicons name="information-circle" size={24} color={colors.info} />
             <Text style={styles.notApplicableText}>
-              Pas de questionnaire sectoriel spécifique requis.
+              Aucun travailleur actif pour la consultation.
             </Text>
           </View>
         </View>
       );
     }
 
+    const allQuestions = [...(sectorQuestionnaire?.questions ?? []), ...COMMON_OCCUPATIONAL_RISK_QUESTIONS];
+
     // Group questions by category
-    const categories = sectorQuestionnaire.questions.reduce((acc, q) => {
+    const categories = allQuestions.reduce((acc, q) => {
       if (!acc[q.category]) acc[q.category] = { icon: q.categoryIcon, questions: [] };
       acc[q.category].questions.push(q);
       return acc;
@@ -1499,8 +2510,8 @@ export function OccHealthConsultationScreen({
       sectorAnswers[k] !== undefined && sectorAnswers[k] !== '' &&
       !(Array.isArray(sectorAnswers[k]) && sectorAnswers[k].length === 0)
     ).length;
-    const totalCount = sectorQuestionnaire.questions.length;
-    const alertCount = sectorQuestionnaire.questions.filter(q => {
+    const totalCount = allQuestions.length;
+    const alertCount = allQuestions.filter(q => {
       const answer = sectorAnswers[q.id];
       return q.alertCondition && answer !== undefined && q.alertCondition(answer);
     }).length;
@@ -1509,24 +2520,28 @@ export function OccHealthConsultationScreen({
       <View>
         <StepHeader
           title="Questionnaire Sectoriel"
-          subtitle={`Questions adaptées au secteur ${sectorQuestionnaire.label}.`}
+          subtitle={sectorQuestionnaire
+            ? `Questions adaptées au secteur ${sectorQuestionnaire.label}.`
+            : 'Questions communes de risques professionnels et conclusion.'}
           icon="list"
         />
 
         {/* Sector profile badge */}
-        <View style={[sectorQuestionStyles.sectorBadge, { backgroundColor: sectorQuestionnaire.color + '08', borderColor: sectorQuestionnaire.color + '30' }]}>
-          <View style={[sectorQuestionStyles.sectorBadgeIcon, { backgroundColor: sectorQuestionnaire.color + '14' }]}>
-            <Ionicons name={sectorQuestionnaire.icon} size={20} color={sectorQuestionnaire.color} />
+        {sectorQuestionnaire && (
+          <View style={[sectorQuestionStyles.sectorBadge, { backgroundColor: sectorQuestionnaire.color + '08', borderColor: sectorQuestionnaire.color + '30' }]}>
+            <View style={[sectorQuestionStyles.sectorBadgeIcon, { backgroundColor: sectorQuestionnaire.color + '14' }]}>
+              <Ionicons name={sectorQuestionnaire.icon} size={20} color={sectorQuestionnaire.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[sectorQuestionStyles.sectorBadgeTitle, { color: sectorQuestionnaire.color }]}>
+                {sectorQuestionnaire.label}
+              </Text>
+              <Text style={sectorQuestionStyles.sectorBadgeDesc}>
+                {sectorQuestionnaire.description}
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[sectorQuestionStyles.sectorBadgeTitle, { color: sectorQuestionnaire.color }]}>
-              {sectorQuestionnaire.label}
-            </Text>
-            <Text style={sectorQuestionStyles.sectorBadgeDesc}>
-              {sectorQuestionnaire.description}
-            </Text>
-          </View>
-        </View>
+        )}
 
         {/* Progress indicator */}
         <View style={sectorQuestionStyles.progressBar}>
@@ -1542,7 +2557,7 @@ export function OccHealthConsultationScreen({
             )}
           </View>
           <View style={sectorQuestionStyles.progressTrack}>
-            <View style={[sectorQuestionStyles.progressFill, { width: `${(answeredCount / totalCount) * 100}%`, backgroundColor: sectorQuestionnaire.color }]} />
+          <View style={[sectorQuestionStyles.progressFill, { width: `${totalCount > 0 ? (answeredCount / totalCount) * 100 : 0}%`, backgroundColor: sectorQuestionnaire?.color || ACCENT }]} />
           </View>
         </View>
 
@@ -1550,8 +2565,8 @@ export function OccHealthConsultationScreen({
         {Object.entries(categories).map(([catName, cat]) => (
           <View key={catName} style={sectorQuestionStyles.categorySection}>
             <View style={sectorQuestionStyles.categoryHeader}>
-              <Ionicons name={cat.icon} size={16} color={sectorQuestionnaire.color} />
-              <Text style={[sectorQuestionStyles.categoryTitle, { color: sectorQuestionnaire.color }]}>{catName}</Text>
+              <Ionicons name={cat.icon} size={16} color={sectorQuestionnaire?.color || ACCENT} />
+              <Text style={[sectorQuestionStyles.categoryTitle, { color: sectorQuestionnaire?.color || ACCENT }]}>{catName}</Text>
             </View>
 
             {cat.questions.map((q) => {
@@ -1705,71 +2720,260 @@ export function OccHealthConsultationScreen({
   const renderSectorTests = () => {
     if (!sectorProfile) return null;
 
-    const testOptions: { id: string; label: string; icon: keyof typeof Ionicons.glyphMap; recommended: boolean; desc: string }[] = [
-      { id: 'audiometry', label: 'Audiométrie', icon: 'ear', recommended: sectorProfile.recommendedScreenings.includes('audiometry'), desc: 'Seuils auditifs 250–8000 Hz' },
-      { id: 'spirometry', label: 'Spirométrie', icon: 'cloud', recommended: sectorProfile.recommendedScreenings.includes('spirometry'), desc: 'FVC, FEV1, ratio FEV1/FVC' },
-      { id: 'vision_test', label: 'Examen de Vision', icon: 'eye', recommended: sectorProfile.recommendedScreenings.includes('vision_test'), desc: 'Acuité, couleur, profondeur, périphérique' },
-      { id: 'drug_screening', label: 'Dépistage Toxicologique', icon: 'flask', recommended: sectorProfile.recommendedScreenings.includes('drug_screening'), desc: 'Cannabis, opiacés, alcool...' },
-      { id: 'chest_xray', label: 'Radiographie Thoracique', icon: 'scan', recommended: sectorProfile.recommendedScreenings.includes('chest_xray'), desc: 'Classification ILO, dépistage TB' },
-      { id: 'blood_lead', label: 'Plombémie / Métaux Lourds', icon: 'water', recommended: sectorProfile.recommendedScreenings.includes('blood_lead'), desc: 'Plomb, mercure, arsenic sang' },
-      { id: 'cardiac_screening', label: 'Bilan Cardiovasculaire', icon: 'heart', recommended: sectorProfile.recommendedScreenings.includes('cardiac_screening') || sectorProfile.recommendedScreenings.includes('cardiovascular_screening'), desc: 'ECG, cholestérol, glycémie' },
-      { id: 'mental_health_screening', label: 'Évaluation Santé Mentale', icon: 'happy', recommended: sectorProfile.recommendedScreenings.includes('mental_health_screening'), desc: 'WHO-5, burnout, stress' },
-      { id: 'ergonomic_assessment', label: 'Évaluation Ergonomique', icon: 'desktop', recommended: sectorProfile.recommendedScreenings.includes('ergonomic_assessment'), desc: 'Poste de travail, posture, TMS' },
-      { id: 'musculoskeletal_screening', label: 'Dépistage Musculo-squelettique', icon: 'fitness', recommended: sectorProfile.recommendedScreenings.includes('musculoskeletal_screening'), desc: 'Dos, épaules, membres' },
-      { id: 'hepatitis_screening', label: 'Dépistage Hépatite B', icon: 'shield', recommended: sectorProfile.recommendedScreenings.includes('hepatitis_b_screening') || sectorProfile.recommendedScreenings.includes('hepatitis_screening'), desc: 'Sérologie HBs' },
-      { id: 'tb_screening', label: 'Dépistage Tuberculose', icon: 'medkit', recommended: sectorProfile.recommendedScreenings.includes('tb_screening'), desc: 'IDR / Quantiferon' },
-    ];
-
-    // Sort recommended first
-    const sorted = [...testOptions].sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
-
     return (
       <View>
         <StepHeader
           title="Tests & Examens Complémentaires"
-          subtitle={`Tests recommandés pour le secteur ${sectorProfile.label} (risque ${OccHealthUtils.getSectorRiskLabel(sectorProfile.riskLevel).toLowerCase()}).`}
+          subtitle={protocolResult?.hasProtocol
+            ? `Pré-rempli selon protocole ${selectedWorker?.positionCode || ''} (${protocolResult.requiredExams.length} requis) et profil ${sectorProfile.label}.`
+            : `Tests recommandés pour le secteur ${sectorProfile.label} (risque ${OccHealthUtils.getSectorRiskLabel(sectorProfile.riskLevel).toLowerCase()}).`
+          }
           icon="flask"
         />
 
         <View style={[styles.alertBox, { backgroundColor: sectorProfile.color + '08', borderColor: sectorProfile.color + '30' }]}>
           <Ionicons name={sectorProfile.icon as any} size={18} color={sectorProfile.color} />
           <Text style={[styles.alertText, { marginLeft: 8, color: sectorProfile.color }]}>
-            Profil sectoriel: {sectorProfile.label} — Les tests marqués ★ sont recommandés pour ce secteur.
+            Profil sectoriel: {sectorProfile.label} — ★ = recommandé · 🔒 = requis protocolaire.
+          </Text>
+        </View>
+
+        {protocolResult?.hasProtocol && (
+          <View style={[styles.alertBox, { backgroundColor: ACCENT + '08', borderColor: ACCENT + '30', marginTop: 10 }]}> 
+            <Ionicons name="shield-checkmark" size={18} color={ACCENT} />
+            <Text style={[styles.alertText, { marginLeft: 8, color: ACCENT }]}>
+              Protocole actif: {protocolResult.protocol?.visitTypeLabel} · {protocolResult.requiredExams.length} requis / {protocolResult.recommendedExams.length} recommandés.
+            </Text>
+          </View>
+        )}
+
+        <View style={[styles.sectionCard, { marginTop: 12 }]}> 
+          <Text style={styles.fieldLabel}>Comment les tests seront réalisés ?</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <TouchableOpacity
+              style={[
+                styles.choiceChip,
+                { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 6 },
+                testExecutionMode === 'external' && styles.choiceChipActive,
+              ]}
+              onPress={() => setTestExecutionMode('external')}
+            >
+              <Ionicons name="business" size={14} color={testExecutionMode === 'external' ? '#FFF' : colors.textSecondary} />
+              <Text style={[styles.choiceChipText, testExecutionMode === 'external' && styles.choiceChipTextActive]}>Labo externe</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.choiceChip,
+                { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 6 },
+                testExecutionMode === 'onsite' && styles.choiceChipActive,
+              ]}
+              onPress={() => setTestExecutionMode('onsite')}
+            >
+              <Ionicons name="medkit" size={14} color={testExecutionMode === 'onsite' ? '#FFF' : colors.textSecondary} />
+              <Text style={[styles.choiceChipText, testExecutionMode === 'onsite' && styles.choiceChipTextActive]}>Réalisés sur place</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.helperText, { marginTop: 8 }]}>
+            {testExecutionMode === 'onsite'
+              ? `Les résultats sont saisis immédiatement dans la consultation (${completedOnsiteTestsCount}/${orderedTests.length} complétés).`
+              : 'Les examens sont prescrits puis la consultation est reprise quand les résultats reviennent.'}
           </Text>
         </View>
 
         <View style={{ marginTop: 16 }}>
-          {sorted.map((test) => {
+          {sectorTestOptions.map((test) => {
             const isOrdered = orderedTests.includes(test.id);
+            const result = onsiteTestResults[test.id] || {
+              completed: false,
+              interpretation: null,
+              value: '',
+              notes: '',
+            };
+            const interpretationColor = getTestInterpretationColor(result.interpretation);
+
             return (
-              <TouchableOpacity
+              <View
                 key={test.id}
-                style={[styles.testCard, isOrdered && { borderColor: ACCENT, backgroundColor: ACCENT + '06' }]}
-                onPress={() => {
-                  setOrderedTests(prev =>
-                    prev.includes(test.id) ? prev.filter(t => t !== test.id) : [...prev, test.id]
-                  );
-                }}
-                activeOpacity={0.7}
+                style={[
+                  styles.testCard,
+                  isOrdered && { borderColor: ACCENT, backgroundColor: ACCENT + '06' },
+                  testExecutionMode === 'onsite' && isOrdered && { flexDirection: 'column', alignItems: 'stretch', gap: 0 },
+                ]}
               >
-                <View style={[styles.testCheckbox, isOrdered && { backgroundColor: ACCENT, borderColor: ACCENT }]}>
-                  {isOrdered && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                </View>
-                <Ionicons name={test.icon} size={18} color={isOrdered ? ACCENT : colors.textSecondary} style={{ marginRight: 10 }} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[styles.testLabel, isOrdered && { color: ACCENT }]}>{test.label}</Text>
-                    {test.recommended && (
-                      <View style={[styles.recBadge, { backgroundColor: sectorProfile.color + '14' }]}>
-                        <Text style={[styles.recBadgeText, { color: sectorProfile.color }]}>★ Recommandé</Text>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center' }}
+                  onPress={() => {
+                    if (testExecutionMode === 'onsite' && isOrdered) {
+                      setExpandedOnsiteTestId(prev => (prev === test.id ? null : test.id));
+                      return;
+                    }
+
+                    setOrderedTests(prev => {
+                      if (prev.includes(test.id)) {
+                        return prev.filter(t => t !== test.id);
+                      }
+                      if (testExecutionMode === 'onsite') {
+                        setExpandedOnsiteTestId(test.id);
+                      }
+                      return [...prev, test.id];
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.testCheckbox, isOrdered && { backgroundColor: ACCENT, borderColor: ACCENT }]}>
+                    {isOrdered && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Ionicons name={test.icon} size={18} color={isOrdered ? ACCENT : colors.textSecondary} style={{ marginRight: 10, marginLeft: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.testLabel, isOrdered && { color: ACCENT }]}>{test.label}</Text>
+                      {test.required && (
+                        <View style={[styles.recBadge, { backgroundColor: colors.errorLight }]}> 
+                          <Text style={[styles.recBadgeText, { color: colors.errorDark }]}>🔒 Requis</Text>
+                        </View>
+                      )}
+                      {test.recommended && (
+                        <View style={[styles.recBadge, { backgroundColor: sectorProfile.color + '14' }]}>
+                          <Text style={[styles.recBadgeText, { color: sectorProfile.color }]}>★ Recommandé</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.testDesc}>{test.desc}</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {testExecutionMode === 'onsite' && isOrdered && expandedOnsiteTestId === test.id && (
+                  <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={[styles.testDesc, { fontWeight: '700' }]}>Résultat sur place</Text>
+                      <TouchableOpacity
+                        style={[styles.choiceChip, result.completed && styles.choiceChipActive]}
+                        onPress={() => {
+                          setOnsiteTestResults(prev => ({
+                            ...prev,
+                            [test.id]: {
+                              ...(prev[test.id] || result),
+                              completed: !(prev[test.id]?.completed),
+                              performedAt: !(prev[test.id]?.completed) ? new Date().toISOString() : prev[test.id]?.performedAt,
+                            },
+                          }));
+                        }}
+                      >
+                        <Text style={[styles.choiceChipText, result.completed && styles.choiceChipTextActive]}>
+                          {result.completed ? 'Fait' : 'Non fait'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {([
+                        { key: 'normal', label: 'Normal' },
+                        { key: 'abnormal', label: 'Anormal' },
+                        { key: 'inconclusive', label: 'À contrôler' },
+                      ] as { key: Exclude<TestInterpretation, null>; label: string }[]).map(option => (
+                        <TouchableOpacity
+                          key={option.key}
+                          style={[
+                            styles.choiceChip,
+                            result.interpretation === option.key && {
+                              borderColor: getTestInterpretationColor(option.key),
+                              backgroundColor: getTestInterpretationColor(option.key) + '14',
+                            },
+                          ]}
+                          onPress={() => {
+                            setOnsiteTestResults(prev => ({
+                              ...prev,
+                              [test.id]: {
+                                ...(prev[test.id] || result),
+                                interpretation: option.key,
+                                completed: true,
+                                performedAt: prev[test.id]?.performedAt || new Date().toISOString(),
+                              },
+                            }));
+                          }}
+                        >
+                          <Text style={[
+                            styles.choiceChipText,
+                            result.interpretation === option.key && { color: getTestInterpretationColor(option.key), fontWeight: '700' },
+                          ]}>
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <TextInput
+                      style={[styles.input, { marginTop: 8 }]}
+                      value={result.value}
+                      onChangeText={(value) => {
+                        setOnsiteTestResults(prev => ({
+                          ...prev,
+                          [test.id]: {
+                            ...(prev[test.id] || result),
+                            value,
+                            completed: true,
+                            performedAt: prev[test.id]?.performedAt || new Date().toISOString(),
+                          },
+                        }));
+                      }}
+                      placeholder="Valeur mesurée / résultat principal"
+                      placeholderTextColor={colors.placeholder}
+                    />
+                    <TextInput
+                      style={[styles.input, styles.textArea, { marginTop: 8 }]}
+                      value={result.notes}
+                      onChangeText={(notes) => {
+                        setOnsiteTestResults(prev => ({
+                          ...prev,
+                          [test.id]: {
+                            ...(prev[test.id] || result),
+                            notes,
+                            completed: true,
+                            performedAt: prev[test.id]?.performedAt || new Date().toISOString(),
+                          },
+                        }));
+                      }}
+                      placeholder="Observation clinique rapide"
+                      placeholderTextColor={colors.placeholder}
+                      multiline
+                      numberOfLines={2}
+                    />
+
+                    {result.interpretation && (
+                      <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}>
+                        <Ionicons name="checkmark-circle" size={14} color={interpretationColor} />
+                        <Text style={{ marginLeft: 6, fontSize: 12, color: interpretationColor, fontWeight: '600' }}>
+                          Interprétation: {getTestInterpretationLabel(result.interpretation)}
+                        </Text>
                       </View>
                     )}
                   </View>
-                  <Text style={styles.testDesc}>{test.desc}</Text>
-                </View>
-              </TouchableOpacity>
+                )}
+              </View>
             );
           })}
+        </View>
+
+        <View style={styles.testActionsRow}>
+          {testExecutionMode === 'external' ? (
+            <>
+              <TouchableOpacity style={styles.secondaryActionBtn} onPress={handleDownloadTestOrderPdf} activeOpacity={0.8}>
+                <Ionicons name="download" size={16} color={ACCENT} />
+                <Text style={styles.secondaryActionBtnText}>Télécharger PDF examens</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.secondaryActionBtn, styles.secondaryActionBtnFilled]} onPress={handlePauseForTests} activeOpacity={0.8}>
+                <Ionicons name="pause-circle" size={16} color="#FFF" />
+                <Text style={[styles.secondaryActionBtnText, { color: '#FFF' }]}>Envoyer aux tests & reprendre plus tard</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={[styles.alertBox, { flex: 1, backgroundColor: colors.successLight, borderColor: colors.success + '30' }]}>
+              <Ionicons name="checkmark-done" size={18} color={colors.success} />
+              <Text style={[styles.alertText, { marginLeft: 8, color: colors.successDark }]}>
+                Mode sur place actif: complétez les résultats ci-dessus puis continuez vers la décision d'aptitude.
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -2030,13 +3234,15 @@ export function OccHealthConsultationScreen({
             <Text style={styles.checkboxLabel}>Visite de contrôle nécessaire</Text>
           </TouchableOpacity>
           {followUpNeeded && (
-            <TextInput
-              style={[styles.input, { marginTop: 8, marginLeft: 32 }]}
-              value={followUpDate}
-              onChangeText={setFollowUpDate}
-              placeholder="Date de contrôle (JJ/MM/AAAA)"
-              placeholderTextColor={colors.placeholder}
-            />
+            <View style={[styles.input, { marginTop: 8, marginLeft: 32 }]}>
+              <DateInput
+                value={followUpDate}
+                onChangeText={setFollowUpDate}
+                placeholder="Date de contrôle (JJ/MM/AAAA)"
+                placeholderTextColor={colors.placeholder}
+                format="fr"
+              />
+            </View>
           )}
         </View>
 
@@ -2071,11 +3277,83 @@ export function OccHealthConsultationScreen({
     );
   };
 
-  // ─── Step 8: Summary ──
+  // ─── Step 8: Next Appointment ──
+  const renderNextAppointment = () => {
+    const suggestedDate = getSuggestedNextAppointmentDate(fitnessDecision, examType);
+    const effectiveDate = nextAppointmentDate || suggestedDate;
+
+    const recommendation = fitnessDecision === 'temporarily_unfit'
+      ? 'Contrôle rapproché recommandé (ex: 2 à 4 semaines).'
+      : fitnessDecision === 'fit_with_restrictions'
+        ? 'Suivi rapproché pour vérifier la tolérance au poste aménagé.'
+        : fitnessDecision === 'permanently_unfit'
+          ? 'Suivi d\'orientation/reclassement conseillé.'
+          : 'Suivi périodique annuel recommandé.';
+
+    return (
+      <View>
+        <StepHeader
+          title="Prochain Rendez-vous"
+          subtitle="Planifiez la prochaine visite et enregistrez-la dans le dossier patient."
+          icon="calendar"
+        />
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.fieldLabel}>Règle appliquée</Text>
+          <Text style={styles.helperText}>{recommendation}</Text>
+
+          <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Date du prochain rendez-vous *</Text>
+          <View style={styles.input}>
+            <DateInput
+              value={effectiveDate}
+              onChangeText={setNextAppointmentDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.placeholder}
+              format="iso"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.secondaryActionBtn, { marginTop: 10 }]}
+            onPress={() => setNextAppointmentDate(suggestedDate)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="sparkles" size={16} color={ACCENT} />
+            <Text style={styles.secondaryActionBtnText}>Utiliser la date suggérée ({suggestedDate})</Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Motif du prochain rendez-vous</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={nextAppointmentReason}
+            onChangeText={setNextAppointmentReason}
+            placeholder="Ex: contrôle tension artérielle, réévaluation aptitude avec restrictions..."
+            placeholderTextColor={colors.placeholder}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  // ─── Step 9: Summary ──
   const renderSummary = () => {
     if (!selectedWorker || !sectorProfile) return null;
 
     const decisionColor = OccHealthUtils.getFitnessStatusColor(fitnessDecision);
+    const onsiteSummaryItems = orderedTests
+      .map(testId => {
+        const testMeta = sectorTestOptions.find(option => option.id === testId);
+        const label = getTestDisplayLabel(testId, testMeta?.label);
+        const result = onsiteTestResults[testId];
+        if (!result?.completed) return `${label}: prescrit`;
+        const pieces = [
+          result.interpretation ? getTestInterpretationLabel(result.interpretation) : null,
+          result.value?.trim() || null,
+        ].filter(Boolean) as string[];
+        return `${label}: ${pieces.join(' · ') || 'résultat saisi'}`;
+      });
 
     return (
       <View>
@@ -2113,22 +3391,22 @@ export function OccHealthConsultationScreen({
             visitReason || 'Aucune note',
             referredBy ? `Référé par: ${referredBy}` : 'Auto-référé',
           ]} />
+          <SummaryCard title="Prochain RDV" icon="calendar" color={colors.infoDark} items={[
+            nextAppointmentDate || getSuggestedNextAppointmentDate(fitnessDecision, examType),
+            nextAppointmentReason || 'Suivi périodique selon décision médicale',
+          ]} />
           <SummaryCard title="Signes Vitaux" icon="pulse" color={colors.infoDark} items={[
             `TA: ${vitals.bloodPressureSystolic || '—'}/${vitals.bloodPressureDiastolic || '—'} mmHg`,
             `FC: ${vitals.heartRate || '—'} bpm · T: ${vitals.temperature || '—'}°C`,
             `IMC: ${calculateBMI(vitals.weight, vitals.height) || '—'} · SpO2: ${vitals.oxygenSaturation || '—'}%`,
           ]} />
           <SummaryCard title="Tests Prescrits" icon="flask" color={colors.secondary} items={
-            orderedTests.length > 0 ? orderedTests.map(t => {
-              const labels: Record<string, string> = {
-                audiometry: 'Audiométrie', spirometry: 'Spirométrie', vision_test: 'Vision',
-                drug_screening: 'Toxicologie', chest_xray: 'Radio Thorax', blood_lead: 'Métaux Lourds',
-                cardiac_screening: 'Cardio', mental_health_screening: 'Santé Mentale',
-                ergonomic_assessment: 'Ergonomie', musculoskeletal_screening: 'MSK',
-                hepatitis_screening: 'Hépatite B', tb_screening: 'TB',
-              };
-              return labels[t] || t;
-            }) : ['Aucun test prescrit']
+            orderedTests.length > 0
+              ? (testExecutionMode === 'onsite' ? onsiteSummaryItems : orderedTests.map(testId => {
+                  const fromOptions = sectorTestOptions.find(option => option.id === testId);
+                  return getTestDisplayLabel(testId, fromOptions?.label);
+                }))
+              : ['Aucun test prescrit']
           } />
         </View>
 
@@ -2224,6 +3502,7 @@ export function OccHealthConsultationScreen({
       case 'sector_tests': return renderSectorTests();
       case 'mental_ergonomic': return renderMentalErgonomic();
       case 'fitness_decision': return renderFitnessDecision();
+      case 'next_appointment': return renderNextAppointment();
       case 'summary': return renderSummary();
     }
   };
@@ -2244,7 +3523,7 @@ export function OccHealthConsultationScreen({
                 <Text style={qStyles.queueHeaderSub}>Sélectionnez un patient en attente pour commencer la consultation</Text>
               </View>
             </View>
-            <TouchableOpacity style={qStyles.refreshBtn} onPress={loadPendingQueue}>
+            <TouchableOpacity style={qStyles.refreshBtn} onPress={handleRefreshWaitingRoom}>
               <Ionicons name="refresh" size={18} color={ACCENT} />
             </TouchableOpacity>
           </View>
@@ -2253,12 +3532,9 @@ export function OccHealthConsultationScreen({
           <View style={qStyles.queueBanner}>
             <Ionicons name="people" size={18} color={ACCENT} />
             <Text style={qStyles.queueBannerText}>
-              <Text style={{ fontWeight: '700' }}>{pendingConsultations.filter(c => c.status === 'waiting').length}</Text> patient{pendingConsultations.filter(c => c.status === 'waiting').length !== 1 ? 's' : ''} en attente
-              {pendingConsultations.filter(c => c.status === 'in_consultation').length > 0 && (
-                ` · ${pendingConsultations.filter(c => c.status === 'in_consultation').length} en consultation`
-              )}
+              <Text style={{ fontWeight: '700' }}>{pendingConsultations.length}</Text> patient{pendingConsultations.length !== 1 ? 's' : ''} en attente
             </Text>
-            <Text style={qStyles.queueBannerHint}>Enregistrez les patients via "Accueil Patient"</Text>
+            <Text style={qStyles.queueBannerHint}>File issue de "Accueil Patient" + screening infirmier uniquement</Text>
           </View>
 
           {loadingQueue ? (
@@ -2271,22 +3547,20 @@ export function OccHealthConsultationScreen({
               <Ionicons name="time-outline" size={56} color={colors.textSecondary} />
               <Text style={qStyles.emptyQueueTitle}>Aucun patient en attente</Text>
               <Text style={qStyles.emptyQueueSub}>
-                Les patients enregistrés via "Accueil Patient" apparaîtront ici.
+                Les patients passés par "Accueil Patient" avec screening infirmier apparaîtront ici.
               </Text>
             </View>
           ) : (
             <View style={{ gap: 12, marginTop: 8 }}>
               {pendingConsultations.map((pending) => {
                 const sp = SECTOR_PROFILES[pending.patient.sector];
-                const isInConsultation = pending.status === 'in_consultation';
                 const arrivalTime = new Date(pending.arrivalTime);
                 const waitMinutes = Math.floor((Date.now() - arrivalTime.getTime()) / 60000);
                 return (
                   <TouchableOpacity
                     key={pending.id}
-                    style={[qStyles.queueCard, isInConsultation && { borderColor: colors.warning, opacity: 0.7 }]}
-                    onPress={() => !isInConsultation && loadPendingConsultation(pending.id)}
-                    activeOpacity={isInConsultation ? 1 : 0.75}
+                    style={qStyles.queueCard}
+                    activeOpacity={1}
                   >
                     {/* Left: avatar + info */}
                     <View style={[qStyles.queueAvatar, { backgroundColor: sp.color + '18' }]}>
@@ -2299,16 +3573,9 @@ export function OccHealthConsultationScreen({
                         <Text style={qStyles.queuePatientName}>
                           {pending.patient.firstName} {pending.patient.lastName}
                         </Text>
-                        {isInConsultation && (
-                          <View style={[qStyles.statusChip, { backgroundColor: colors.warning + '18' }]}>
-                            <Text style={[qStyles.statusChipText, { color: colors.warning }]}>En consultation</Text>
-                          </View>
-                        )}
-                        {!isInConsultation && (
-                          <View style={[qStyles.statusChip, { backgroundColor: colors.success + '14' }]}>
-                            <Text style={[qStyles.statusChipText, { color: colors.success }]}>En attente</Text>
-                          </View>
-                        )}
+                        <View style={[qStyles.statusChip, { backgroundColor: colors.success + '14' }]}>
+                          <Text style={[qStyles.statusChipText, { color: colors.success }]}>En attente</Text>
+                        </View>
                       </View>
                       <Text style={qStyles.queueMeta}>{pending.patient.employeeId} · {pending.patient.company}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -2344,14 +3611,19 @@ export function OccHealthConsultationScreen({
                       <Text style={qStyles.waitTime}>
                         {waitMinutes < 60 ? `${waitMinutes} min` : `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60 > 0 ? `${waitMinutes % 60}` : ''}`}
                       </Text>
-                      {!isInConsultation && (
-                        <TouchableOpacity
-                          style={[qStyles.startBtn, { backgroundColor: sp.color }]}
-                          onPress={() => loadPendingConsultation(pending.id)}
-                        >
-                          <Text style={qStyles.startBtnText}>Consulter →</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={qStyles.removeBtn}
+                        onPress={() => handleRemoveFromQueue(pending.id, `${pending.patient.firstName} ${pending.patient.lastName}`, pending.patient.id)}
+                      >
+                        <Ionicons name="trash-outline" size={12} color={colors.errorDark} />
+                        <Text style={qStyles.removeBtnText}>Retirer</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[qStyles.startBtn, { backgroundColor: colors.infoDark }]}
+                        onPress={() => loadPendingConsultation(pending.id)}
+                      >
+                        <Text style={qStyles.startBtnText}>Consulter →</Text>
+                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
                 );
@@ -2359,13 +3631,6 @@ export function OccHealthConsultationScreen({
             </View>
           )}
 
-          {/* Drafts section — resumable */}
-          <View style={[qStyles.queueBanner, { marginTop: 24 }]}>
-            <Ionicons name="document-text" size={16} color={colors.textSecondary} />
-            <Text style={[qStyles.queueBannerText, { color: colors.textSecondary }]}>
-              Brouillons en cours disponibles — allez dans "Historique Visites" pour les reprendre.
-            </Text>
-          </View>
         </ScrollView>
       ) : (
         /* ── ACTIVE CONSULTATION VIEW ── */
@@ -2374,6 +3639,20 @@ export function OccHealthConsultationScreen({
       {(isDraft || selectedWorker) && (
         <View style={styles.draftStatusBar}>
           <View style={styles.draftStatusLeft}>
+            <TouchableOpacity
+              style={styles.backToQueueBtn}
+              onPress={() => {
+                if (selectedWorker) {
+                  resetForm();
+                } else {
+                  onNavigateBack?.();
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={15} color={ACCENT} />
+              <Text style={styles.backToQueueBtnText}>Retour</Text>
+            </TouchableOpacity>
             {isDraft && (
               <>
                 <View style={styles.draftIndicator}>
@@ -2407,6 +3686,16 @@ export function OccHealthConsultationScreen({
         </View>
       )}
 
+      {autoRestoreNotice && (
+        <View style={styles.autoRestoreBanner}>
+          <Ionicons name="refresh-circle" size={16} color={colors.infoDark} />
+          <Text style={styles.autoRestoreBannerText}>{autoRestoreNotice}</Text>
+          <TouchableOpacity onPress={() => setAutoRestoreNotice(null)} style={styles.autoRestoreBannerClose}>
+            <Ionicons name="close" size={14} color={colors.infoDark} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Stepper Header */}
       <View style={styles.stepperContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stepperContent}>
@@ -2421,6 +3710,9 @@ export function OccHealthConsultationScreen({
                   // Allow navigating to completed steps or current step
                   if (i <= currentStepIdx || (i === currentStepIdx + 1 && canGoNext())) {
                     setCurrentStep(step.key);
+                    if (selectedWorker) {
+                      persistDraft({ silent: true, status: 'in_progress', step: step.key });
+                    }
                   }
                 }}
                 activeOpacity={0.7}
@@ -2489,50 +3781,6 @@ export function OccHealthConsultationScreen({
         )}
       </View>
 
-      {/* Worker Selection Modal */}
-      <Modal visible={showWorkerModal} transparent animationType="fade" onRequestClose={() => setShowWorkerModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Rechercher un Travailleur</Text>
-              <TouchableOpacity onPress={() => setShowWorkerModal(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.searchBox}>
-              <Ionicons name="search" size={18} color={colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Nom, ID employé, entreprise..."
-                placeholderTextColor={colors.placeholder}
-                autoFocus
-              />
-            </View>
-            <ScrollView style={{ maxHeight: 400 }}>
-              {filteredWorkers.map(w => {
-                const sp = SECTOR_PROFILES[w.sector];
-                return (
-                  <TouchableOpacity key={w.id} style={styles.workerItem} onPress={() => handleSelectWorker(w)} activeOpacity={0.7}>
-                    <View style={[styles.workerItemAvatar, { backgroundColor: sp.color + '14' }]}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: sp.color }}>{w.firstName[0]}{w.lastName[0]}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.workerItemName}>{w.firstName} {w.lastName}</Text>
-                      <Text style={styles.workerItemMeta}>{w.employeeId} · {w.company}</Text>
-                      <Text style={styles.workerItemSector}>
-                        <Ionicons name={sp.icon as any} size={12} color={sp.color} /> {sp.label} · {w.jobTitle}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
         </>
       )}
     </View>
@@ -2731,6 +3979,7 @@ const styles = StyleSheet.create({
   // ── Form ──
   formGroup: { marginTop: 16 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  helperText: { fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
   input: {
     borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md,
     padding: 12, fontSize: 14, color: colors.text, backgroundColor: colors.surface,
@@ -2786,6 +4035,21 @@ const styles = StyleSheet.create({
   testDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
   recBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   recBadgeText: { fontSize: 10, fontWeight: '700' },
+  testActionsRow: { marginTop: 14, gap: 10 },
+  secondaryActionBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 11, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: ACCENT + '50', backgroundColor: colors.surface,
+  },
+  secondaryActionBtnFilled: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
+  },
+  secondaryActionBtnText: {
+    fontSize: 12,
+    color: ACCENT,
+    fontWeight: '700',
+  },
 
   // ── Mental Health / Ergonomic ──
   sectionCard: {
@@ -2882,6 +4146,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: isDesktop ? 32 : 16, paddingVertical: 12,
     backgroundColor: ACCENT + '05', borderBottomWidth: 1, borderBottomColor: ACCENT + '20',
+  },
+  backToQueueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: ACCENT + '40',
+    backgroundColor: colors.surface,
+  },
+  backToQueueBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: ACCENT,
+  },
+  autoRestoreBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: isDesktop ? 32 : 16,
+    paddingVertical: 8,
+    backgroundColor: colors.infoLight,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.info + '30',
+  },
+  autoRestoreBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.infoDark,
+    fontWeight: '600',
+  },
+  autoRestoreBannerClose: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.info + '18',
   },
   draftStatusLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   draftIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -3030,6 +4334,59 @@ const qStyles = StyleSheet.create({
   },
   queueBannerText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
   queueBannerHint: { fontSize: 11, color: colors.textSecondary, marginTop: 3 },
+  existingSection: {
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: ACCENT + '08',
+    borderWidth: 1,
+    borderColor: ACCENT + '25',
+  },
+  existingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  existingTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  existingEmptyText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  existingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  existingName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  existingMeta: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  resumeExistingBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: ACCENT,
+  },
+  resumeExistingBtnText: {
+    fontSize: 12,
+    color: '#FFF',
+    fontWeight: '700',
+  },
   loadingBox: {
     alignItems: 'center', paddingVertical: 60, gap: 14,
   },
@@ -3067,4 +4424,16 @@ const qStyles = StyleSheet.create({
     borderRadius: 10, alignItems: 'center',
   },
   startBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
+  removeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: colors.errorLight,
+    borderWidth: 1,
+    borderColor: colors.error + '35',
+  },
+  removeBtnText: { fontSize: 11, fontWeight: '700', color: colors.errorDark },
 });

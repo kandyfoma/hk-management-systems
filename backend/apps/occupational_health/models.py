@@ -6,11 +6,13 @@ with sector-specific risk profiles, examination requirements, and regulatory com
 
 Standards: ISO 45001:2018, ILO C155/C161/C187, ILO R194, WHO Healthy Workplaces
 """
-from django.db import models
+from django.db import models, IntegrityError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 from decimal import Decimal
+import uuid
 
 User = get_user_model()
 
@@ -472,7 +474,7 @@ class Enterprise(models.Model):
     nif = models.CharField(_("NIF"), max_length=20, unique=True)
     address = models.TextField(_("Adresse"))
     contact_person = models.CharField(_("Personne Contact"), max_length=100)
-    phone = models.CharField(_("Téléphone"), max_length=15)
+    phone = models.CharField(_("Téléphone"), max_length=20)
     email = models.EmailField(_("Email"))
     
     # Contract & Health Service Info
@@ -517,7 +519,7 @@ class WorkSite(models.Model):
     name = models.CharField(_("Nom Site"), max_length=200)
     address = models.TextField(_("Adresse Site"))
     site_manager = models.CharField(_("Responsable Site"), max_length=100)
-    phone = models.CharField(_("Téléphone Site"), max_length=15)
+    phone = models.CharField(_("Téléphone Site"), max_length=20)
     
     # Site characteristics
     worker_count = models.PositiveIntegerField(_("Nombre Travailleurs"), default=0)
@@ -578,11 +580,11 @@ class Worker(models.Model):
     )
     
     # Contact Information  
-    phone = models.CharField(_("Téléphone"), max_length=15)
+    phone = models.CharField(_("Téléphone"), max_length=20)
     email = models.EmailField(_("Email"), blank=True)
     address = models.TextField(_("Adresse"))
     emergency_contact_name = models.CharField(_("Contact Urgence Nom"), max_length=100)
-    emergency_contact_phone = models.CharField(_("Contact Urgence Tél"), max_length=15)
+    emergency_contact_phone = models.CharField(_("Contact Urgence Tél"), max_length=20)
     
     # Médecine du Travail Information
     exposure_risks = models.JSONField(_("Risques Exposition"), default=list, help_text=_("Liste des risques d'exposition"))
@@ -696,14 +698,30 @@ class MedicalExamination(models.Model):
     
     def __str__(self):
         return f"{self.exam_number} - {self.worker.full_name} ({self.get_exam_type_display()})"
+
+    def _build_exam_number(self) -> str:
+        worker_code = ''.join(ch for ch in (self.worker.employee_id or '') if ch.isalnum()).upper()[:12]
+        if not worker_code:
+            worker_code = f"W{self.worker_id}"
+
+        now = timezone.now()
+        random_suffix = uuid.uuid4().hex[:4].upper()
+        return f"EX{now.strftime('%Y%m%d')}{worker_code}{random_suffix}"
     
     def save(self, *args, **kwargs):
-        if not self.exam_number:
-            # Generate unique exam number
-            from django.utils import timezone
-            today = timezone.now()
-            self.exam_number = f"EX{today.strftime('%Y%m%d')}{self.worker.employee_id}{str(self.pk or '').zfill(3)}"
-        super().save(*args, **kwargs)
+        if self.exam_number:
+            return super().save(*args, **kwargs)
+
+        for _ in range(8):
+            self.exam_number = self._build_exam_number()
+            try:
+                return super().save(*args, **kwargs)
+            except IntegrityError as error:
+                # Retry only on exam_number collisions
+                if 'exam_number' not in str(error):
+                    raise
+
+        raise IntegrityError('Unable to generate a unique exam_number after multiple attempts.')
 
 class VitalSigns(models.Model):
     """Vital signs measurement"""

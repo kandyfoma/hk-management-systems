@@ -1,0 +1,44 @@
+# =============================================================================
+# docker-compose.prod.yml — Production override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# =============================================================================
+version: "3.9"
+
+services:
+  db:
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-hk_management}
+      POSTGRES_USER: ${DB_USER:-hk_prod}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+
+  backend:
+    image: ${REGISTRY:-ghcr.io}/hk-management/backend:${IMAGE_TAG:-latest}
+    restart: always
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      DJANGO_ENV: production
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-hk_management}
+      DB_USER: ${DB_USER:-hk_prod}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DEBUG: "False"
+      GUNICORN_WORKERS: 4
+      GUNICORN_TIMEOUT: 120
+      GUNICORN_LOG_LEVEL: warning
+    volumes: []               # no source mount in prod — use image only
+
+  celery:
+    image: ${REGISTRY:-ghcr.io}/hk-management/backend:${IMAGE_TAG:-latest}
+    restart: always
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      DJANGO_ENV: production
+      DB_HOST: db
+
+volumes:
+  postgres_data_prod:

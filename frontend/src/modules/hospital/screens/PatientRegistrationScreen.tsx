@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/theme';
 import HybridDataService from '../../../services/HybridDataService';
 import { PatientCreate, Patient } from '../../../models/Patient';
+import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -278,7 +279,16 @@ export function PatientRegistrationScreen({ onBack, onPatientCreated, editingPat
             </FieldRow>
             <FieldRow>
               <Field label="Post-nom" value={middleName} onChange={setMiddleName} placeholder="(optionnel)" />
-              <Field label="Date de Naissance *" value={dateOfBirth} onChange={setDateOfBirth} error={errors.dateOfBirth} placeholder="JJ/MM/AAAA" />
+              <Field
+                label="Date de Naissance *"
+                value={dateOfBirth}
+                onChange={setDateOfBirth}
+                error={errors.dateOfBirth}
+                placeholder="JJ/MM/AAAA"
+                isDate
+                dateFormat="fr"
+                maximumDate={new Date()}
+              />
             </FieldRow>
             <View style={st.fieldGroup}>
               <Text style={st.fieldLabel}>Sexe *</Text>
@@ -442,25 +452,39 @@ function StepCard({ title, subtitle, children }: { title: string; subtitle: stri
   );
 }
 
-function Field({ label, value, onChange, placeholder, error, icon, multiline, autoFocus, keyboardType }: {
+function Field({ label, value, onChange, placeholder, error, icon, multiline, autoFocus, keyboardType, isDate, dateFormat, maximumDate }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string;
   error?: string; icon?: any; multiline?: boolean; autoFocus?: boolean; keyboardType?: any;
+  isDate?: boolean; dateFormat?: 'iso' | 'fr'; maximumDate?: Date;
 }) {
   return (
     <View style={[st.fieldGroup, { flex: 1 }]}>
       <Text style={st.fieldLabel}>{label}</Text>
       <View style={[st.inputWrap, error && st.inputError, multiline && { minHeight: 72, alignItems: 'flex-start' }]}>
         {icon && <Ionicons name={icon} size={16} color={error ? colors.error : colors.textTertiary} style={{ marginTop: multiline ? 10 : 0 }} />}
-        <TextInput
-          style={[st.input, multiline && { textAlignVertical: 'top', minHeight: 60 }]}
-          value={value}
-          onChangeText={onChange}
-          placeholder={placeholder}
-          placeholderTextColor={colors.placeholder}
-          multiline={multiline}
-          autoFocus={autoFocus}
-          keyboardType={keyboardType}
-        />
+        {isDate ? (
+          <DateInput
+            value={value}
+            onChangeText={onChange}
+            placeholder={placeholder}
+            placeholderTextColor={colors.placeholder}
+            format={dateFormat ?? 'iso'}
+            maximumDate={maximumDate}
+            containerStyle={{ flex: 1 }}
+            inputStyle={st.input}
+          />
+        ) : (
+          <TextInput
+            style={[st.input, multiline && { textAlignVertical: 'top', minHeight: 60 }]}
+            value={value}
+            onChangeText={onChange}
+            placeholder={placeholder}
+            placeholderTextColor={colors.placeholder}
+            multiline={multiline}
+            autoFocus={autoFocus}
+            keyboardType={keyboardType}
+          />
+        )}
       </View>
       {error && <Text style={st.errorMsg}>{error}</Text>}
     </View>

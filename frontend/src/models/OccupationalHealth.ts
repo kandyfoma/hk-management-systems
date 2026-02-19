@@ -852,7 +852,7 @@ export class OccHealthUtils {
   }
 
   static getSectorRiskColor(level: SectorRiskLevel): string {
-    return ({ very_high: '#DC2626', high: '#EF4444', medium: '#F59E0B', low: '#22C55E' } as Record<SectorRiskLevel, string>)[level] || '#94A3B8';
+    return ({ very_high: '#DC2626', high: '#EF4444', medium: '#D97706', low: '#5B65DC' } as Record<SectorRiskLevel, string>)[level] || '#64748B';
   }
 
   // ── Fitness status ──
@@ -861,7 +861,7 @@ export class OccHealthUtils {
   }
 
   static getFitnessStatusColor(status: FitnessStatus): string {
-    return ({ fit: '#22C55E', fit_with_restrictions: '#F59E0B', temporarily_unfit: '#EF4444', permanently_unfit: '#DC2626', pending_evaluation: '#6366F1', expired: '#94A3B8' } as Record<FitnessStatus, string>)[status] || '#94A3B8';
+    return ({ fit: '#5B65DC', fit_with_restrictions: '#D97706', temporarily_unfit: '#EF4444', permanently_unfit: '#DC2626', pending_evaluation: '#122056', expired: '#64748B' } as Record<FitnessStatus, string>)[status] || '#64748B';
   }
 
   // ── Incident ──

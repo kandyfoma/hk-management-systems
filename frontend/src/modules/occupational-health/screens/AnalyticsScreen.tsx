@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions,
@@ -9,7 +9,7 @@ import { SECTOR_PROFILES, OccHealthUtils, type IndustrySector } from '../../../m
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 
 // ─── Mock Trend Data ─────────────────────────────────────────
 const MONTHLY_TRENDS = [

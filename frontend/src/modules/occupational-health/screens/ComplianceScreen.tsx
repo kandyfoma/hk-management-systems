@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions, Modal, Alert,
@@ -10,7 +10,7 @@ import { SECTOR_PROFILES, OccHealthUtils, type IndustrySector } from '../../../m
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = '#D97706';
+const ACCENT = colors.primary;
 const STORAGE_KEY = '@occhealth_compliance';
 
 interface ComplianceItem {
