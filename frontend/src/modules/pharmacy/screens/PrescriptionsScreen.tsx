@@ -18,6 +18,7 @@ import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import DatabaseService from '../../../services/DatabaseService';
 import HybridDataService from '../../../services/HybridDataService';
+import ApiService from '../../../services/ApiService';
 import {
   Prescription,
   PrescriptionItem,
@@ -131,34 +132,176 @@ export function PrescriptionsScreen() {
   // ─── Data loading ────────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
+      const api = ApiService.getInstance();
       const db = DatabaseService.getInstance();
-      const license = await db.getLicenseByKey('TRIAL-HK2024XY-Z9M3');
-      if (!license) return;
-      const org = await db.getOrganization(license.organizationId);
-      if (!org) return;
-      setOrgId(org.id);
 
-      const [rawPrescriptions, rawProducts, rawInventory] = await Promise.all([
-        db.getPrescriptionsByOrganization(org.id),
-        db.getProductsByOrganization(org.id, { activeOnly: true }),
-        db.getInventoryItemsByOrganization(org.id),
+      const fetchAllResults = async (endpoint: string, params: Record<string, any> = {}, maxPages = 12) => {
+        const rows: any[] = [];
+        for (let page = 1; page <= maxPages; page += 1) {
+          const res = await api.get(endpoint, { ...params, page });
+          const payload = res?.data;
+          const pageRows: any[] = Array.isArray(payload) ? payload : (payload?.results ?? []);
+          rows.push(...pageRows);
+          if (Array.isArray(payload) || !payload?.next) break;
+        }
+        return rows;
+      };
+
+      const [prescriptionList, rawProducts, rawInventory] = await Promise.all([
+        fetchAllResults('/prescriptions/', { page_size: 100 }),
+        fetchAllResults('/inventory/products/', { is_active: true, page_size: 300 }),
+        fetchAllResults('/inventory/items/', { facility_id: 'pharmacy-main', page_size: 400 }),
       ]);
 
-      // For demo purposes, we'll use mock patient/doctor names
-      // In a real app, you'd fetch from Patient and User tables
-      const enriched: EnrichedPrescription[] = rawPrescriptions.map(p => ({
-        ...p,
-        patientName: `Patient ${p.patientId.slice(-4).toUpperCase()}`,
-        doctorName: `Dr. ${p.doctorId.slice(-4).toUpperCase()}`,
-        facilityName: p.facilityId === 'pharmacy-main' ? 'Pharmacie Principale' : 'Service Hospitalier',
+      const prescriptionDetails = await Promise.all(
+        prescriptionList.map(async (p: any) => {
+          const detailRes = await api.get(`/prescriptions/${p.id}/`);
+          return detailRes?.data ?? p;
+        })
+      );
+
+      const enriched: EnrichedPrescription[] = prescriptionDetails.map((p: any) => {
+        const mappedItems: PrescriptionItem[] = (p.items ?? []).map((item: any) => ({
+          id: item.id,
+          prescriptionId: p.id,
+          medicationName: item.medication_name ?? item.product_name ?? '',
+          genericName: item.generic_name ?? '',
+          dosage: item.dosage ?? '',
+          strength: item.product_strength ?? '',
+          dosageForm: (item.dosage_form ?? 'other') as any,
+          frequency: item.frequency ?? '',
+          duration: item.duration ?? '',
+          quantity: Number(item.quantity_prescribed ?? 0),
+          route: (item.route ?? 'oral') as any,
+          instructions: item.instructions ?? '',
+          productId: item.product ?? '',
+          quantityDispensed: Number(item.quantity_dispensed ?? 0),
+          quantityRemaining: Number(item.remaining_quantity ?? Math.max(0, Number(item.quantity_prescribed ?? 0) - Number(item.quantity_dispensed ?? 0))),
+          status: item.status,
+          isSubstitutionAllowed: true,
+          isControlled: false,
+          requiresCounseling: false,
+          pharmacistNotes: item.notes ?? '',
+          patientCounseling: '',
+          createdAt: item.created_at ?? p.created_at,
+          updatedAt: item.updated_at ?? item.created_at ?? p.updated_at,
+        }));
+
+        return {
+          id: p.id,
+          encounterId: p.encounter ?? '',
+          patientId: p.patient ?? '',
+          doctorId: p.doctor ?? '',
+          organizationId: p.organization ?? '',
+          facilityId: p.facility_id ?? 'pharmacy-main',
+          prescriptionNumber: p.prescription_number ?? p.id,
+          date: p.date ?? p.created_at,
+          status: p.status,
+          items: mappedItems,
+          instructions: p.instructions ?? '',
+          diagnosis: p.diagnosis ?? '',
+          validUntil: p.valid_until ?? '',
+          totalItems: Number(p.items_count ?? mappedItems.length),
+          itemsDispensed: Number(p.dispensed_items_count ?? mappedItems.filter((it) => it.status === 'fully_dispensed').length),
+          isComplete: !!p.is_complete,
+          allergiesChecked: false,
+          interactionsChecked: false,
+          clinicalNotes: '',
+          createdAt: p.created_at,
+          updatedAt: p.updated_at ?? p.created_at,
+          patientName: p.patient_name ?? '',
+          doctorName: p.doctor_name ?? '',
+          facilityName: p.facility_id ?? 'Pharmacie Principale',
+        };
+      });
+
+      setOrgId(enriched[0]?.organizationId || '');
+      setPrescriptions(enriched);
+
+      const mappedProducts: Product[] = rawProducts.map((item: any) => ({
+        id: item.id,
+        organizationId: item.organization,
+        name: item.name,
+        genericName: item.generic_name ?? '',
+        brandName: item.brand_name ?? '',
+        sku: item.sku,
+        barcode: item.barcode ?? '',
+        description: item.notes ?? '',
+        category: item.category,
+        dosageForm: item.dosage_form,
+        strength: item.strength ?? '',
+        unitOfMeasure: item.unit_of_measure,
+        packSize: Number(item.pack_size ?? 1),
+        manufacturer: item.manufacturer ?? '',
+        requiresPrescription: !!item.requires_prescription,
+        controlledSubstance: !!item.controlled_substance,
+        costPrice: Number(item.cost_price ?? 0),
+        sellingPrice: Number(item.selling_price ?? 0),
+        currency: item.currency ?? 'CDF',
+        taxRate: 0,
+        reorderLevel: Number(item.reorder_level ?? 0),
+        minStockLevel: Number(item.min_stock_level ?? 0),
+        maxStockLevel: Number(item.max_stock_level ?? 0),
+        reorderQuantity: Number(item.reorder_quantity ?? 0),
+        storageConditions: item.storage_condition ?? '',
+        activeIngredients: [],
+        insuranceReimbursable: false,
+        safetyStockDays: 0,
+        isActive: !!item.is_active,
+        isDiscontinued: !!item.is_discontinued,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
       }));
 
-      setPrescriptions(enriched);
-      setProducts(rawProducts);
-      setInventory(rawInventory);
+      const mappedInventory: InventoryItem[] = rawInventory.map((item: any) => ({
+        id: item.id,
+        organizationId: item.organization,
+        productId: item.product,
+        facilityId: item.facility_id,
+        facilityType: 'PHARMACY',
+        quantityOnHand: Number(item.quantity_on_hand ?? 0),
+        quantityReserved: Number(item.quantity_reserved ?? 0),
+        quantityAvailable: Number(item.quantity_available ?? 0),
+        quantityOnOrder: Number(item.quantity_on_order ?? 0),
+        quantityDamaged: 0,
+        quantityExpired: 0,
+        averageCost: Number(item.average_cost ?? 0),
+        totalStockValue: Number(item.total_value ?? 0),
+        lastPurchasePrice: Number(item.average_cost ?? 0),
+        averageDailyUsage: 0,
+        daysOfStockRemaining: 0,
+        status: item.stock_status,
+        isActive: true,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      }));
+
+      setProducts(mappedProducts);
+      setInventory(mappedInventory);
+
+      await db.savePharmacyPrescriptionsCache({
+        prescriptions: enriched,
+        products: mappedProducts,
+        inventory: mappedInventory,
+        orgId: enriched[0]?.organizationId || '',
+      });
     } catch (err) {
       console.error('Prescriptions load error', err);
-      toast.error('Erreur lors du chargement des ordonnances');
+      try {
+        const db = DatabaseService.getInstance();
+        const cached = await db.getPharmacyPrescriptionsCache();
+        if (cached?.payload) {
+          setPrescriptions(cached.payload.prescriptions ?? []);
+          setProducts(cached.payload.products ?? []);
+          setInventory(cached.payload.inventory ?? []);
+          setOrgId(cached.payload.orgId ?? '');
+          toast.warning('Mode hors ligne: données locales chargées');
+        } else {
+          toast.error('Erreur lors du chargement des ordonnances');
+        }
+      } catch {
+        toast.error('Erreur lors du chargement des ordonnances');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -244,8 +387,9 @@ export function PrescriptionsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const db = DatabaseService.getInstance();
-              await db.updatePrescription(prescription.id, { status: 'cancelled' });
+              const api = ApiService.getInstance();
+              const res = await api.post(`/prescriptions/${prescription.id}/cancel/`);
+              if (!res?.success) throw new Error(res?.error?.message || 'Cancel failed');
               toast.success('Ordonnance annulée');
               loadData();
             } catch {
@@ -625,15 +769,17 @@ function DispenseModal({ prescription, item, products, inventory, onClose, onDis
 
     setDispensing(true);
     try {
-      const db = DatabaseService.getInstance();
-      await db.dispensePrescriptionItem(item.id, {
-        productId: selectedProduct.id,
-        quantityToDispense: dispensingQuantity,
-        pharmacistId: 'admin',
-        notes,
-        counselingNotes,
-        substituted: selectedProduct.id !== item.productId,
+      const api = ApiService.getInstance();
+      const res = await api.post(`/prescriptions/${prescription.id}/dispense/`, {
+        items: [
+          {
+            item_id: item.id,
+            quantity_to_dispense: dispensingQuantity,
+          },
+        ],
+        dispenser_notes: [notes, counselingNotes].filter(Boolean).join('\n'),
       });
+      if (!res?.success) throw new Error(res?.error?.message || 'Dispense failed');
       toast.success(`${dispensingQuantity} ${selectedProduct.name} dispensé(s)`);
       onDispensed();
     } catch (err) {

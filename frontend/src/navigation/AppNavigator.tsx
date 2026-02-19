@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, View, StyleSheet, Dimensions, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
@@ -131,7 +131,7 @@ const createDynamicSections = (
   ];
 
   // Add Pharmacy section if user has pharmacy access
-  if (activeModules.includes('PHARMACY') || activeModules.includes('TRIAL')) {
+  if (activeModules.includes('PHARMACY')) {
     const pharmacyItems: SidebarMenuItem[] = [
       { id: 'ph-dashboard', label: 'Vue d\'Ensemble', icon: 'pulse-outline', iconActive: 'pulse' }
     ];
@@ -170,7 +170,7 @@ const createDynamicSections = (
   }
 
   // Add Hospital section if user has hospital access
-  if (activeModules.includes('HOSPITAL') || activeModules.includes('TRIAL')) {
+  if (activeModules.includes('HOSPITAL')) {
     const hospitalItems: SidebarMenuItem[] = [
       { id: 'hp-dashboard', label: 'Vue d\'Ensemble', icon: 'medkit-outline', iconActive: 'medkit' }
     ];
@@ -220,7 +220,7 @@ const createDynamicSections = (
   }
 
   // Add Occupational Health section if user has occ health access
-  if (activeModules.includes('OCCUPATIONAL_HEALTH') || activeModules.includes('TRIAL')) {
+  if (activeModules.includes('OCCUPATIONAL_HEALTH')) {
     // Principal
     sections.push({
       title: 'Méd. du Travail',
@@ -382,7 +382,59 @@ function DesktopApp() {
     setEditingPatient(null);
   };
 
+  const canAccessScreen = useMemo(() => {
+    const screenModuleRequirements: Record<string, ModuleType> = {
+      'ph-dashboard': 'PHARMACY',
+      'ph-pos': 'PHARMACY',
+      'ph-inventory': 'PHARMACY',
+      'ph-suppliers': 'PHARMACY',
+      'ph-stock-alerts': 'PHARMACY',
+      'ph-prescriptions': 'PHARMACY',
+      'ph-reports': 'PHARMACY',
+
+      'hp-dashboard': 'HOSPITAL',
+      'hp-emergency': 'HOSPITAL',
+      'hp-triage': 'HOSPITAL',
+      'hp-appointments': 'HOSPITAL',
+      'hp-wards': 'HOSPITAL',
+      'hp-admissions': 'HOSPITAL',
+      'hp-mar': 'HOSPITAL',
+      'hp-lab-results': 'HOSPITAL',
+      'hp-clinical-notes': 'HOSPITAL',
+      'hp-billing': 'HOSPITAL',
+      'hp-consultation': 'HOSPITAL',
+      'hp-consultation-history': 'HOSPITAL',
+      'hp-patients': 'HOSPITAL',
+
+      'oh-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-patients': 'OCCUPATIONAL_HEALTH',
+      'oh-intake': 'OCCUPATIONAL_HEALTH',
+      'oh-protocol': 'OCCUPATIONAL_HEALTH',
+      'oh-exams': 'OCCUPATIONAL_HEALTH',
+      'oh-previous-visits': 'OCCUPATIONAL_HEALTH',
+      'oh-certificates': 'OCCUPATIONAL_HEALTH',
+      'oh-surveillance': 'OCCUPATIONAL_HEALTH',
+      'oh-diseases': 'OCCUPATIONAL_HEALTH',
+      'oh-incidents': 'OCCUPATIONAL_HEALTH',
+      'oh-risk': 'OCCUPATIONAL_HEALTH',
+      'oh-ppe': 'OCCUPATIONAL_HEALTH',
+      'oh-reports': 'OCCUPATIONAL_HEALTH',
+      'oh-compliance': 'OCCUPATIONAL_HEALTH',
+      'oh-analytics': 'OCCUPATIONAL_HEALTH',
+    };
+
+    return (screen: string) => {
+      const requiredModule = screenModuleRequirements[screen];
+      if (!requiredModule) return true;
+      return activeModules.includes(requiredModule);
+    };
+  }, [activeModules]);
+
   const handleScreenChange = (screen: string) => {
+    if (!canAccessScreen(screen)) {
+      return;
+    }
+
     if (screen === 'oh-exams') {
       // Opening "Visite du Médecin" from menu should always start on waiting-room landing view.
       setDraftToLoad(null);
@@ -424,6 +476,12 @@ function DesktopApp() {
     return sections;
   }, [activeModules, allFeatures]);
 
+  useEffect(() => {
+    if (!canAccessScreen(activeScreen)) {
+      setActiveScreen('dashboard');
+    }
+  }, [activeScreen, canAccessScreen]);
+
   const renderContent = () => {
     // Main screens
     if (activeScreen === 'dashboard') return <DashboardScreen onNavigate={handleScreenChange} />;
@@ -438,7 +496,7 @@ function DesktopApp() {
     if (activeScreen === 'ph-suppliers') return <SuppliersScreen />;
     if (activeScreen === 'ph-stock-alerts') return <StockAlertsScreen />;
     if (activeScreen === 'ph-prescriptions') return <EnhancedPrescriptionsScreen />;
-    if (activeScreen === 'ph-reports') return <SalesReportsScreen />;
+    if (activeScreen === 'ph-reports') return <PharmacyReportsScreen />;
 
     // Hospital screens
     if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent onNavigate={handleScreenChange} />;
@@ -606,9 +664,9 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 
 function MobileApp() {
   const activeModules = useSelector(selectActiveModules);
-  const hasPharmacyAccess = activeModules.includes('PHARMACY') || activeModules.includes('TRIAL');
-  const hasHospitalAccess = activeModules.includes('HOSPITAL') || activeModules.includes('TRIAL');
-  const hasOccHealthAccess = activeModules.includes('OCCUPATIONAL_HEALTH') || activeModules.includes('TRIAL');
+  const hasPharmacyAccess = activeModules.includes('PHARMACY');
+  const hasHospitalAccess = activeModules.includes('HOSPITAL');
+  const hasOccHealthAccess = activeModules.includes('OCCUPATIONAL_HEALTH');
 
   // If no modules are licensed, show locked screen
   if (activeModules.length === 0) {

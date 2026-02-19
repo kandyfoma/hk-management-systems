@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.db import transaction
 from decimal import Decimal
 from .models import Sale, SaleItem, SalePayment, Cart, CartItem
-from apps.inventory.models import Product, InventoryItem
+from apps.inventory.models import Product, InventoryItem, StockMovement
 
 
 class SaleItemSerializer(serializers.ModelSerializer):
@@ -18,7 +18,7 @@ class SaleItemSerializer(serializers.ModelSerializer):
             'discount_amount', 'line_total', 'inventory_batch',
             'is_substitution', 'pharmacist_notes', 'patient_counseling', 'created_at'
         ]
-        read_only_fields = ['id', 'line_total', 'created_at']
+        read_only_fields = ['id', 'sale', 'line_total', 'created_at']
 
 
 class SalePaymentSerializer(serializers.ModelSerializer):
@@ -34,7 +34,7 @@ class SalePaymentSerializer(serializers.ModelSerializer):
             'card_last_four', 'processed_at', 'processed_by', 'processed_by_name',
             'notes'
         ]
-        read_only_fields = ['id', 'processed_at', 'processed_by']
+        read_only_fields = ['id', 'sale', 'processed_at', 'processed_by']
 
 
 class SaleListSerializer(serializers.ModelSerializer):
@@ -89,8 +89,16 @@ class SaleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
+            'id', 'sale_number', 'receipt_number', 'status',
+            'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
+            'item_count', 'created_at',
             'customer', 'customer_name', 'customer_phone', 'type', 'prescription',
             'notes', 'items', 'payments'
+        ]
+        read_only_fields = [
+            'id', 'sale_number', 'receipt_number', 'status',
+            'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
+            'item_count', 'created_at'
         ]
     
     @transaction.atomic
@@ -119,14 +127,48 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
         
-        # Create sale items
+        # Create sale items and deduct inventory
+        organization = sale.organization
+        cashier = self.context['request'].user if 'request' in self.context else None
+
         for item_data in items_data:
             SaleItem.objects.create(sale=sale, **item_data)
-        
+
+            # Deduct stock from InventoryItem
+            product = item_data.get('product')
+            qty_sold = int(item_data.get('quantity', 0))
+            if product and qty_sold > 0:
+                inv_qs = InventoryItem.objects.filter(product=product)
+                if organization:
+                    inv_qs = inv_qs.filter(organization=organization)
+                inv_item = inv_qs.first()
+                if inv_item:
+                    prev_qty = int(inv_item.quantity_on_hand or 0)
+                    new_qty = max(0, prev_qty - qty_sold)
+                    inv_item.quantity_on_hand = new_qty
+                    inv_item.save()  # triggers stock_status recalculation via model.save()
+
+                    # Log stock movement
+                    StockMovement.objects.create(
+                        inventory_item=inv_item,
+                        movement_type='SALE',
+                        direction='OUT',
+                        quantity=qty_sold,
+                        unit_cost=item_data.get('unit_cost'),
+                        total_cost=(
+                            Decimal(str(item_data.get('unit_cost') or 0)) * qty_sold
+                        ),
+                        reference_number=sale.sale_number,
+                        sale_id=str(sale.id),
+                        performed_by=cashier,
+                        created_by=cashier,
+                        reason='Vente POS',
+                    )
+
         # Create payments if provided
         for payment_data in payments_data:
             SalePayment.objects.create(sale=sale, **payment_data)
-        
+
         return sale
 
 

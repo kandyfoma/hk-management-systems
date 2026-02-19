@@ -17,6 +17,7 @@ import { useToast } from '../../../components/GlobalUI';
 import DatabaseService from '../../../services/DatabaseService';
 import ApiService from '../../../services/ApiService';
 import { AnalyticsScreen } from './AnalyticsScreen';
+import DataService from '../../../services/DataService';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const IS_DESKTOP = SCREEN_W >= 1024;
@@ -76,6 +77,15 @@ export function PharmacyReportsScreen() {
   const [generatingReportId, setGeneratingReportId] = useState<string | null>(null);
   
   const toast = useToast();
+
+  const formatCdf = useCallback((amount: number) => {
+    return new Intl.NumberFormat('fr-CD', {
+      style: 'currency',
+      currency: 'CDF',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  }, []);
 
   // ─── Data Loading ───────────────────────────────────────────
   const loadReportsData = useCallback(async () => {
@@ -204,9 +214,24 @@ export function PharmacyReportsScreen() {
 
       setQuickReports(reports);
       setComplianceAlerts(alerts);
+
+      const db = DatabaseService.getInstance();
+      await db.savePharmacyReportsCache({ reports, alerts });
     } catch (error) {
       console.error('Error loading reports data:', error);
-      toast.error('Erreur lors du chargement des rapports');
+      try {
+        const db = DatabaseService.getInstance();
+        const cached = await db.getPharmacyReportsCache();
+        if (cached?.payload) {
+          setQuickReports(cached.payload.reports ?? []);
+          setComplianceAlerts(cached.payload.alerts ?? []);
+          toast.warning('Mode hors ligne: rapports locaux chargés');
+        } else {
+          toast.error('Erreur lors du chargement des rapports');
+        }
+      } catch {
+        toast.error('Erreur lors du chargement des rapports');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -223,11 +248,7 @@ export function PharmacyReportsScreen() {
     
     try {
       toast.info(`Génération du rapport "${report.title}"...`);
-      
-      // Mock report generation process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // In a real implementation, this would call the appropriate API
+
       const reportData = await generateReportData(report);
       
       toast.success(`Rapport "${report.title}" généré avec succès`);
@@ -241,7 +262,6 @@ export function PharmacyReportsScreen() {
         )
       );
       
-      // In a real app, you would navigate to the report or download it
       exportReport(reportData);
       
     } catch (error) {
@@ -252,7 +272,23 @@ export function PharmacyReportsScreen() {
   };
 
   const generateReportData = async (report: QuickReport): Promise<ReportData> => {
-    // Mock data generation based on report type
+    const dataService = DataService.getInstance();
+    const overviewRes = await dataService.getPharmacyReportsOverview();
+    const salesDetailsRes = await dataService.getPharmacySalesReports();
+
+    const overview = overviewRes?.data ?? {};
+    const salesDetails = salesDetailsRes?.data ?? {};
+    const salesStats = overview.sales ?? {};
+    const rxStats = overview.prescriptions ?? {};
+    const inventoryStats = overview.inventory ?? {};
+    const alertsStats = overview.alerts ?? {};
+
+    const lowStockCount = Number(alertsStats.medium ?? 0) + Number(alertsStats.low ?? 0);
+    const expiringCount = Number(rxStats.expired ?? 0);
+    const totalRevenue = Number(salesStats.total_revenue ?? salesStats.today_sales_amount ?? 0);
+    const totalTransactions = Number(salesStats.total_sales ?? salesStats.today_sales_count ?? 0);
+    const averageOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+
     return {
       title: report.title,
       period: getPeriodLabel(report.period),
@@ -262,31 +298,39 @@ export function PharmacyReportsScreen() {
           title: 'Résumé Exécutif',
           type: 'summary',
           data: {
-            totalRevenue: '€45,230',
-            totalTransactions: 342,
-            averageOrderValue: '€132.18',
-            growthRate: '+15.3%',
+            totalRevenue: formatCdf(totalRevenue),
+            totalTransactions,
+            averageOrderValue: formatCdf(averageOrderValue),
+            growthRate: 'N/A',
           },
         },
         {
-          title: 'Tendances',
-          type: 'chart',
+          title: 'Conformité & Stock',
+          type: 'metric',
           data: {
-            chartType: 'line',
-            data: [/* chart data */],
+            lowStockCount,
+            expiringCount,
+            activeAlerts: Number(alertsStats.total ?? 0),
+            outOfStockCount: Number(inventoryStats.out_of_stock ?? inventoryStats.out_of_stock_count ?? 0),
           },
         },
         {
-          title: 'Top Produits',
+          title: 'Ordonnances',
           type: 'table',
           data: {
-            headers: ['Produit', 'Quantité', 'Chiffre d\'affaires'],
+            headers: ['Métrique', 'Valeur'],
             rows: [
-              ['Doliprane 1000mg', '245', '€1,225'],
-              ['Amoxicilline 500mg', '189', '€2,456'],
-              ['Omeprazole 20mg', '156', '€936'],
+              ['Total ordonnances', `${Number(rxStats.total_prescriptions ?? rxStats.total ?? 0)}`],
+              ['En attente', `${Number(rxStats.pending ?? rxStats.pending_count ?? 0)}`],
+              ['Terminées', `${Number(rxStats.completed ?? rxStats.completed_count ?? 0)}`],
+              ['Expirées', `${Number(rxStats.expired ?? rxStats.expired_count ?? 0)}`],
             ],
           },
+        },
+        {
+          title: 'Tendances Journalières',
+          type: 'chart',
+          data: salesDetails.daily_trends ?? [],
         },
       ],
     };
@@ -306,25 +350,15 @@ export function PharmacyReportsScreen() {
   };
 
   const exportToPDF = async (reportData: ReportData) => {
-    toast.info('Export PDF en cours...');
-    // Mock PDF export
-    setTimeout(() => {
-      toast.success('Rapport PDF exporté avec succès');
-    }, 1500);
+    toast.success(`Rapport "${reportData.title}" prêt pour export PDF`);
   };
 
   const exportToExcel = async (reportData: ReportData) => {
-    toast.info('Export Excel en cours...');
-    setTimeout(() => {
-      toast.success('Rapport Excel exporté avec succès');
-    }, 1500);
+    toast.success(`Rapport "${reportData.title}" prêt pour export Excel`);
   };
 
   const printReport = async (reportData: ReportData) => {
-    toast.info('Impression du rapport...');
-    setTimeout(() => {
-      toast.success('Rapport envoyé à l\'imprimante');
-    }, 1000);
+    toast.success(`Rapport "${reportData.title}" prêt pour impression`);
   };
 
   // ─── Utility Functions ──────────────────────────────────────

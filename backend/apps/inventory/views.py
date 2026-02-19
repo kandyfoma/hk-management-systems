@@ -46,7 +46,15 @@ class InventoryItemListAPIView(generics.ListCreateAPIView):
     queryset = InventoryItem.objects.select_related('product', 'organization').order_by('-last_movement', 'id')
     serializer_class = InventoryItemSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['stock_status', 'product']
+    filterset_fields = ['stock_status', 'product', 'facility_id']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(organization=organization)
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(organization=self.request.user.organization)
@@ -55,6 +63,14 @@ class InventoryItemListAPIView(generics.ListCreateAPIView):
 class InventoryItemDetailAPIView(generics.RetrieveUpdateAPIView):
     queryset = InventoryItem.objects.select_related('product', 'organization').order_by('id')
     serializer_class = InventoryItemSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(organization=organization)
+        return queryset
 
 
 class InventoryBatchListAPIView(generics.ListCreateAPIView):

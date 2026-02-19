@@ -3,7 +3,6 @@ import { View, StyleSheet, ScrollView, Alert, TextInput, Text, TouchableOpacity,
 import { Switch } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useToast } from '../components/GlobalUI';
 import { RootState } from '../store/store';
 import { colors, borderRadius, shadows, spacing } from '../theme/theme';
@@ -77,7 +76,22 @@ export function SettingsScreen() {
   const dispatch = useDispatch();
   const settings = useSelector((state: RootState) => state.settings);
   const { user, organization, licenses } = useSelector((state: RootState) => state.auth);
-  const { showToast } = useToast();
+  const toast = useToast();
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    if (type === 'success') {
+      toast.success(message);
+      return;
+    }
+    if (type === 'error') {
+      toast.error(message);
+      return;
+    }
+    if (type === 'warning') {
+      toast.warning(message);
+      return;
+    }
+    toast.info(message);
+  };
 
   // Local inputs for system info (keeps UI responsive while typing)
   const [orgName, setOrgName] = useState(settings.system.organizationName);
@@ -145,15 +159,27 @@ export function SettingsScreen() {
   };
 
   const handleLogout = () => {
+    const message = 'Êtes-vous sûr de vouloir vous déconnecter ? Cela effacera toutes les données locales y compris l\'activation de licence.';
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const confirmed = window.confirm(message);
+      if (confirmed) {
+        void performLogout();
+      }
+      return;
+    }
+
     Alert.alert(
       'Déconnexion',
-      'Êtes-vous sûr de vouloir vous déconnecter ? Cela effacera toutes les données locales y compris l\'activation de licence.',
+      message,
       [
         { text: 'Annuler', style: 'cancel' },
-        { 
-          text: 'Déconnexion', 
+        {
+          text: 'Déconnexion',
           style: 'destructive',
-          onPress: performLogout 
+          onPress: () => {
+            void performLogout();
+          }
         }
       ]
     );
@@ -163,19 +189,8 @@ export function SettingsScreen() {
     try {
       showToast('Déconnexion en cours...', 'info');
       
-      // Clear auth token first
+      // Centralized logout: backend session close + complete local cleanup
       await ApiAuthService.getInstance().logout();
-      
-      // Clear all stored data including sync data
-      await AsyncStorage.multiRemove([
-        'auth_session',
-        'current_user', 
-        'current_organization',
-        'auth_token',
-        'device_activation_info',
-        'sync_queue',
-        'last_sync_timestamp'
-      ]);
       
       // Reset Redux state
       dispatch(logoutAction());
@@ -195,12 +210,13 @@ export function SettingsScreen() {
       }
     } catch (error) {
       console.error('Logout error:', error);
-      showToast('Erreur lors de la déconnexion', 'error');
+      showToast('Erreur lors de la déconnexion, nettoyage local en cours', 'warning');
       
-      // Even if there's an error, try to clear local data and redirect
+      // Even if backend logout fails, still force full local auth cleanup
       try {
-        await AsyncStorage.clear();
+        await ApiAuthService.getInstance().logout();
         dispatch(logoutAction());
+        dispatch(resetSettings());
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.location.reload();
         }

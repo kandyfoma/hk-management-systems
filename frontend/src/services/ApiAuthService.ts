@@ -47,6 +47,29 @@ interface RegistrationData {
 const SESSION_KEY = 'auth_session';
 const USER_KEY = 'current_user';
 const ORG_KEY = 'current_organization';
+const DEVICE_ACTIVATION_KEY = 'device_activation_info';
+
+const LOGOUT_EXACT_STORAGE_KEYS = [
+  SESSION_KEY,
+  USER_KEY,
+  ORG_KEY,
+  'auth_token',
+  DEVICE_ACTIVATION_KEY,
+  'sync_queue',
+  'sync_status',
+  'last_sync_timestamp',
+  'HK_DATABASE_DATA',
+  'HK_PHARMACY_PRESCRIPTIONS_CACHE',
+  'HK_PHARMACY_ANALYTICS_CACHE',
+  'HK_PHARMACY_REPORTS_CACHE',
+  'pharmacy_pos_draft_v1',
+  'pharmacy_pos_queue_v1',
+  '@occ_pending_consultations',
+];
+
+const LOGOUT_KEY_PREFIXES = [
+  'consultation_draft_',
+];
 
 // ═══════════════════════════════════════════════════════════════
 // API AUTH SERVICE
@@ -331,12 +354,23 @@ export class ApiAuthService {
   // ═══════════════════════════════════════════════════════════════
 
   private async clearSessionData(): Promise<void> {
-    await Promise.all([
-      ApiService.getInstance().removeAuthToken(),
-      AsyncStorage.removeItem(SESSION_KEY),
-      AsyncStorage.removeItem(USER_KEY),
-      AsyncStorage.removeItem(ORG_KEY),
-    ]);
+    const allKeys = await AsyncStorage.getAllKeys();
+    const exactKeys = new Set(LOGOUT_EXACT_STORAGE_KEYS);
+
+    const dynamicKeys = allKeys.filter((key) =>
+      LOGOUT_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+    );
+
+    const keysToRemove = Array.from(new Set([
+      ...LOGOUT_EXACT_STORAGE_KEYS,
+      ...dynamicKeys,
+    ])).filter((key) => allKeys.includes(key));
+
+    await ApiService.getInstance().removeAuthToken();
+
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
+    }
   }
 
   async refreshUserData(): Promise<User | null> {

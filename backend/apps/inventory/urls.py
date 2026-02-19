@@ -43,6 +43,7 @@ urlpatterns = [
     path('pharmacy/alerts/active/', pharmacy_views.pharmacy_stock_alerts, name='pharmacy_stock_alerts'),
     path('pharmacy/alerts/<uuid:alert_id>/acknowledge/', pharmacy_views.acknowledge_alert, name='acknowledge_alert'),
     path('pharmacy/reports/sales/', pharmacy_views.pharmacy_sales_reports, name='pharmacy_sales_reports'),
+    path('pharmacy/reports/overview/', pharmacy_views.pharmacy_reports_overview, name='pharmacy_reports_overview'),
     
     # Choices
     path('choices/categories/', views.product_category_choices_view, name='product_categories'),

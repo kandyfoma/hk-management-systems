@@ -15,10 +15,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { useToast } from '../../../components/GlobalUI';
+import ApiService from '../../../services/ApiService';
 import DatabaseService from '../../../services/DatabaseService';
-import { Sale, SaleUtils, PaymentMethod } from '../../../models/Sale';
-import { Product, InventoryItem } from '../../../models/Inventory';
-import { Prescription } from '../../../models/Prescription';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -102,35 +100,99 @@ export function AnalyticsScreen() {
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [prescriptionStats, setPrescriptionStats] = useState<{ total: number; pending: number; completed: number; expired: number }>({ total: 0, pending: 0, completed: 0, expired: 0 });
   const toast = useToast();
 
   // ─── Load Analytics Data ─────────────────────────────────────
   const loadAnalyticsData = useCallback(async () => {
     setLoading(true);
     try {
+      const api = ApiService.getInstance();
+      const db = DatabaseService.getInstance();
       const dateRange = getDateRange();
-      
-      // Load overview analytics
-      const sales = await DatabaseService.getSales(dateRange.start, dateRange.end);
-      const prescriptions = await DatabaseService.getPrescriptions();
-      const inventory = await DatabaseService.getInventory();
-      
-      // Calculate analytics
-      const analytics = calculateAnalytics(sales);
-      const topProductsData = calculateTopProducts(sales);
-      const financial = calculateFinancialSummary(sales);
-      const customers = calculateCustomerMetrics(sales);
-      const products = calculateProductAnalytics(inventory, sales);
+
+      const fetchAllResults = async (endpoint: string, params: Record<string, any> = {}, maxPages = 16) => {
+        const rows: any[] = [];
+        for (let page = 1; page <= maxPages; page += 1) {
+          const res = await api.get(endpoint, { ...params, page });
+          const payload = res?.data;
+          const pageRows: any[] = Array.isArray(payload) ? payload : (payload?.results ?? []);
+          rows.push(...pageRows);
+          if (Array.isArray(payload) || !payload?.next) break;
+        }
+        return rows;
+      };
+
+      const [salesRows, saleItemsRows, productsRows, patientsRows, inventoryStatsRes, prescriptionStatsRes] = await Promise.all([
+        fetchAllResults('/sales/', { page_size: 200, ordering: '-created_at' }),
+        fetchAllResults('/sales/items/', { page_size: 500 }),
+        fetchAllResults('/inventory/products/', { page_size: 500 }),
+        fetchAllResults('/patients/', { page_size: 500 }),
+        api.get('/inventory/reports/stats/'),
+        api.get('/prescriptions/reports/stats/'),
+      ]);
+
+      const inRangeSales = salesRows.filter((sale: any) => {
+        const ts = new Date(sale.created_at).getTime();
+        return !isNaN(ts) && ts >= dateRange.start.getTime() && ts <= dateRange.end.getTime();
+      });
+
+      const saleIdsInRange = new Set(inRangeSales.map((sale: any) => sale.id));
+      const inRangeSaleItems = saleItemsRows.filter((item: any) => saleIdsInRange.has(item.sale));
+
+      const analytics = calculateAnalytics(inRangeSales, salesRows, dateRange);
+      const topProductsData = calculateTopProducts(inRangeSaleItems, productsRows);
+      const financial = calculateFinancialSummary(inRangeSales, inRangeSaleItems);
+      const customers = calculateCustomerMetrics(inRangeSales, patientsRows.length);
+      const products = calculateProductAnalytics(productsRows, inRangeSaleItems, inventoryStatsRes?.data ?? {});
+
+      const ps = prescriptionStatsRes?.data ?? {};
+      setPrescriptionStats({
+        total: Number(ps.total_prescriptions ?? 0),
+        pending: Number(ps.pending_count ?? 0),
+        completed: Number(ps.completed_count ?? 0),
+        expired: Number(ps.expired_count ?? 0),
+      });
       
       setAnalyticsData(analytics);
       setTopProducts(topProductsData);
       setFinancialData(financial);
       setCustomerMetrics(customers);
       setProductAnalytics(products);
+
+      await db.savePharmacyAnalyticsCache({
+        analytics,
+        topProductsData,
+        financial,
+        customers,
+        products,
+        prescriptionStats: {
+          total: Number(ps.total_prescriptions ?? 0),
+          pending: Number(ps.pending_count ?? 0),
+          completed: Number(ps.completed_count ?? 0),
+          expired: Number(ps.expired_count ?? 0),
+        },
+      });
       
     } catch (error) {
       console.error('Error loading analytics:', error);
-      toast.error('Erreur lors du chargement des données');
+      try {
+        const db = DatabaseService.getInstance();
+        const cached = await db.getPharmacyAnalyticsCache();
+        if (cached?.payload) {
+          setAnalyticsData(cached.payload.analytics ?? null);
+          setTopProducts(cached.payload.topProductsData ?? []);
+          setFinancialData(cached.payload.financial ?? null);
+          setCustomerMetrics(cached.payload.customers ?? null);
+          setProductAnalytics(cached.payload.products ?? null);
+          setPrescriptionStats(cached.payload.prescriptionStats ?? { total: 0, pending: 0, completed: 0, expired: 0 });
+          toast.warning('Mode hors ligne: analytiques locales chargées');
+        } else {
+          toast.error('Erreur lors du chargement des données');
+        }
+      } catch {
+        toast.error('Erreur lors du chargement des données');
+      }
     } finally {
       setLoading(false);
     }
@@ -172,16 +234,27 @@ export function AnalyticsScreen() {
     return { start, end };
   };
 
-  const calculateAnalytics = (sales: Sale[]): AnalyticsData => {
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
-    const totalProfit = sales.reduce((sum, sale) => sum + (sale.total - sale.costTotal), 0);
+  const calculateAnalytics = (sales: any[], allSales: any[], dateRange: { start: Date; end: Date }): AnalyticsData => {
+    const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_amount ?? 0), 0);
+    const estimatedCost = totalRevenue * 0.72;
+    const totalProfit = totalRevenue - estimatedCost;
     const totalSales = sales.length;
-    const totalCustomers = new Set(sales.map(s => s.customerId).filter(id => id)).size;
+    const totalCustomers = new Set(sales.map((s) => s.customer).filter(Boolean)).size;
     const avgOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
     const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
-    // Calculate growth rate (mock data for now)
-    const growthRate = 12.5;
+    const periodMs = Math.max(1, dateRange.end.getTime() - dateRange.start.getTime());
+    const prevStart = new Date(dateRange.start.getTime() - periodMs);
+    const prevEnd = new Date(dateRange.start.getTime());
+    const previousRevenue = allSales
+      .filter((sale) => {
+        const ts = new Date(sale.created_at).getTime();
+        return !isNaN(ts) && ts >= prevStart.getTime() && ts < prevEnd.getTime();
+      })
+      .reduce((sum, sale) => sum + Number(sale.total_amount ?? 0), 0);
+    const growthRate = previousRevenue > 0
+      ? ((totalRevenue - previousRevenue) / previousRevenue) * 100
+      : (totalRevenue > 0 ? 100 : 0);
 
     return {
       totalRevenue,
@@ -194,44 +267,54 @@ export function AnalyticsScreen() {
     };
   };
 
-  const calculateTopProducts = (sales: Sale[]): TopProduct[] => {
+  const calculateTopProducts = (saleItems: any[], products: any[]): TopProduct[] => {
+    const productById = new Map<string, any>();
+    products.forEach((p) => productById.set(p.id, p));
     const productMap = new Map<string, TopProduct>();
 
-    sales.forEach(sale => {
-      sale.items.forEach(item => {
-        const existing = productMap.get(item.productId);
-        if (existing) {
-          existing.quantitySold += item.quantity;
-          existing.revenue += item.subtotal;
-          existing.profit += (item.subtotal - (item.costPerUnit * item.quantity));
-        } else {
-          productMap.set(item.productId, {
-            id: item.productId,
-            name: item.productName,
-            category: item.category || 'Général',
-            quantitySold: item.quantity,
-            revenue: item.subtotal,
-            profit: item.subtotal - (item.costPerUnit * item.quantity),
-            margin: 0,
-          });
-        }
-      });
+    saleItems.forEach((item) => {
+      const productId = item.product;
+      const product = productById.get(productId);
+      const quantity = Number(item.quantity ?? 0);
+      const revenue = Number(item.line_total ?? 0);
+      const estimatedCost = Number(item.unit_cost ?? 0) * quantity;
+      const existing = productMap.get(productId);
+
+      if (existing) {
+        existing.quantitySold += quantity;
+        existing.revenue += revenue;
+        existing.profit += (revenue - estimatedCost);
+      } else {
+        productMap.set(productId, {
+          id: productId,
+          name: item.product_name ?? product?.name ?? 'Produit',
+          category: product?.category ?? 'Général',
+          quantitySold: quantity,
+          revenue,
+          profit: revenue - estimatedCost,
+          margin: 0,
+        });
+      }
     });
 
-    const products = Array.from(productMap.values()).map(product => ({
+    const rankedProducts = Array.from(productMap.values()).map(product => ({
       ...product,
       margin: product.revenue > 0 ? (product.profit / product.revenue) * 100 : 0,
     }));
 
-    return products.sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    return rankedProducts.sort((a, b) => b.revenue - a.revenue).slice(0, 10);
   };
 
-  const calculateFinancialSummary = (sales: Sale[]): FinancialSummary => {
-    const grossRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
-    const totalCosts = sales.reduce((sum, sale) => sum + sale.costTotal, 0);
+  const calculateFinancialSummary = (sales: any[], saleItems: any[]): FinancialSummary => {
+    const grossRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_amount ?? 0), 0);
+    const totalCosts = saleItems.reduce((sum, item) => {
+      const qty = Number(item.quantity ?? 0);
+      const unitCost = Number(item.unit_cost ?? 0);
+      return sum + (qty * unitCost);
+    }, 0);
     const netProfit = grossRevenue - totalCosts;
-    const taxAmount = grossRevenue * 0.18; // 18% VAT
-    const expenses = totalCosts * 0.1; // Estimated operational expenses
+    const taxAmount = sales.reduce((sum, sale) => sum + Number(sale.tax_amount ?? 0), 0);
+    const expenses = Math.max(0, netProfit) * 0.1;
     const profitMargin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
 
     return {
@@ -244,50 +327,59 @@ export function AnalyticsScreen() {
     };
   };
 
-  const calculateCustomerMetrics = (sales: Sale[]): CustomerMetrics => {
-    const customerIds = sales.map(s => s.customerId).filter(id => id);
+  const calculateCustomerMetrics = (sales: any[], totalPatients: number): CustomerMetrics => {
+    const customerIds = sales.map((s) => s.customer).filter(Boolean);
+    const counts = new Map<string, number>();
+    customerIds.forEach((id: string) => counts.set(id, (counts.get(id) ?? 0) + 1));
     const totalCustomers = new Set(customerIds).size;
     const avgOrdersPerCustomer = totalCustomers > 0 ? sales.length / totalCustomers : 0;
     const avgSpentPerCustomer = totalCustomers > 0 ? 
-      sales.reduce((sum, sale) => sum + sale.total, 0) / totalCustomers : 0;
+      sales.reduce((sum, sale) => sum + Number(sale.total_amount ?? 0), 0) / totalCustomers : 0;
+
+    const returningCustomers = Array.from(counts.values()).filter((count) => count > 1).length;
+    const newCustomers = Math.max(0, totalCustomers - returningCustomers);
+    const retentionRate = totalCustomers > 0 ? (returningCustomers / totalCustomers) * 100 : 0;
 
     return {
       totalCustomers,
-      newCustomers: Math.floor(totalCustomers * 0.3), // Mock data
-      returningCustomers: Math.floor(totalCustomers * 0.7), // Mock data
+      newCustomers,
+      returningCustomers,
       avgOrdersPerCustomer,
       avgSpentPerCustomer,
-      retentionRate: 68.5, // Mock data
+      retentionRate,
     };
   };
 
-  const calculateProductAnalytics = (inventory: InventoryItem[], sales: Sale[]): ProductAnalytics => {
-    const totalProducts = inventory.length;
-    const activeProducts = inventory.filter(item => item.quantity > 0).length;
-    const lowStockCount = inventory.filter(item => item.quantity <= item.minimumStock).length;
-    const outOfStockCount = inventory.filter(item => item.quantity === 0).length;
+  const calculateProductAnalytics = (products: any[], saleItems: any[], inventoryStats: any): ProductAnalytics => {
+    const totalProducts = Number(inventoryStats.total_products ?? products.length);
+    const activeProducts = Number(inventoryStats.in_stock_count ?? products.filter((p) => p.is_active).length);
+    const lowStockCount = Number(inventoryStats.low_stock_count ?? 0);
+    const outOfStockCount = Number(inventoryStats.out_of_stock_count ?? 0);
 
     // Calculate category performance
     const categoryMap = new Map<string, { revenue: number; profit: number; quantity: number }>();
+    const productById = new Map<string, any>();
+    products.forEach((p) => productById.set(p.id, p));
     
-    sales.forEach(sale => {
-      sale.items.forEach(item => {
-        const category = item.category || 'Général';
-        const existing = categoryMap.get(category);
-        const profit = item.subtotal - (item.costPerUnit * item.quantity);
-        
-        if (existing) {
-          existing.revenue += item.subtotal;
-          existing.profit += profit;
-          existing.quantity += item.quantity;
-        } else {
-          categoryMap.set(category, {
-            revenue: item.subtotal,
-            profit,
-            quantity: item.quantity,
-          });
-        }
-      });
+    saleItems.forEach((item) => {
+      const product = productById.get(item.product);
+      const category = product?.category || 'Général';
+      const existing = categoryMap.get(category);
+      const quantity = Number(item.quantity ?? 0);
+      const revenue = Number(item.line_total ?? 0);
+      const profit = revenue - (Number(item.unit_cost ?? 0) * quantity);
+      
+      if (existing) {
+        existing.revenue += revenue;
+        existing.profit += profit;
+        existing.quantity += quantity;
+      } else {
+        categoryMap.set(category, {
+          revenue,
+          profit,
+          quantity,
+        });
+      }
     });
 
     const totalRevenue = Array.from(categoryMap.values()).reduce((sum, cat) => sum + cat.revenue, 0);
@@ -299,7 +391,7 @@ export function AnalyticsScreen() {
       percentage: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
     }));
 
-    const topProducts = calculateTopProducts(sales);
+    const topProducts = calculateTopProducts(saleItems, products);
     const slowMovers = topProducts.slice(-5).reverse(); // Bottom 5 as slow movers
 
     return {
@@ -324,11 +416,7 @@ export function AnalyticsScreen() {
 
   const exportReport = async () => {
     try {
-      toast.info('Export en cours...');
-      // Mock export functionality
-      setTimeout(() => {
-        toast.success('Rapport exporté avec succès');
-      }, 2000);
+      toast.success('Données analytiques chargées depuis le backend et prêtes pour export');
     } catch (error) {
       toast.error('Erreur lors de l\'export');
     }
@@ -339,12 +427,9 @@ export function AnalyticsScreen() {
     <View style={styles.header}>
       <View style={styles.headerLeft}>
         <View style={styles.headerIcon}>
-          <Ionicons name="analytics" size={24} color={colors.primary} />
+          <Ionicons name="analytics" size={16} color={colors.primary} />
         </View>
-        <View>
-          <Text style={styles.headerTitle}>Rapports & Analytiques</Text>
-          <Text style={styles.headerSubtitle}>Analyse complète de performance</Text>
-        </View>
+        <Text style={styles.headerTitle}>Rapports & Analytiques</Text>
       </View>
       
       <View style={styles.headerRight}>
@@ -357,9 +442,10 @@ export function AnalyticsScreen() {
   );
 
   const renderPeriodSelector = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodSelector}>
+    <View style={styles.periodSelectorWrap}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4, minHeight: '100%' }}>
       {[
-        { key: 'today', label: 'Aujourd\'hui' },
+        { key: 'today', label: "Aujourd'hui" },
         { key: 'week', label: 'Semaine' },
         { key: 'month', label: 'Mois' },
         { key: 'quarter', label: 'Trimestre' },
@@ -377,10 +463,12 @@ export function AnalyticsScreen() {
         </TouchableOpacity>
       ))}
     </ScrollView>
+    </View>
   );
 
   const renderTabSelector = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabSelector}>
+    <View style={styles.tabSelectorWrap}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4, minHeight: '100%' }}>
       {[
         { key: 'overview', label: 'Aperçu', icon: 'bar-chart' },
         { key: 'financial', label: 'Financier', icon: 'wallet' },
@@ -395,7 +483,7 @@ export function AnalyticsScreen() {
         >
           <Ionicons 
             name={icon as any} 
-            size={18} 
+            size={14} 
             color={activeTab === key ? colors.primary : colors.textSecondary} 
           />
           <Text style={[styles.tabText, activeTab === key && styles.tabTextActive]}>
@@ -404,6 +492,7 @@ export function AnalyticsScreen() {
         </TouchableOpacity>
       ))}
     </ScrollView>
+    </View>
   );
 
   const renderOverviewTab = () => {
@@ -454,8 +543,8 @@ export function AnalyticsScreen() {
           {topProducts.slice(0, 5).map((product, index) => (
             <View key={product.id} style={styles.productRow}>
               <View style={styles.productInfo}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.productCategory}>{product.category}</Text>
+                <Text style={styles.productName} numberOfLines={1} ellipsizeMode="tail">{product.name}</Text>
+                <Text style={styles.productCategory} numberOfLines={1} ellipsizeMode="tail">{product.category}</Text>
               </View>
               <View style={styles.productStats}>
                 <Text style={styles.productRevenue}>{formatCurrency(product.revenue)}</Text>
@@ -557,7 +646,7 @@ export function AnalyticsScreen() {
           <Text style={styles.sectionTitle}>Performance par Catégorie</Text>
           {productAnalytics.categoryPerformance.map((category, index) => (
             <View key={category.category} style={styles.categoryRow}>
-              <Text style={styles.categoryName}>{category.category}</Text>
+              <Text style={styles.categoryName} numberOfLines={1} ellipsizeMode="tail">{category.category}</Text>
               <View style={styles.categoryStats}>
                 <Text style={styles.categoryRevenue}>{formatCurrency(category.revenue)}</Text>
                 <Text style={styles.categoryPercentage}>{category.percentage.toFixed(1)}%</Text>
@@ -610,8 +699,24 @@ export function AnalyticsScreen() {
 
   const renderPrescriptionsTab = () => (
     <View style={styles.tabContent}>
-      <Text style={styles.comingSoon}>Rapports d'ordonnances bientôt disponibles</Text>
-      {/* TODO: Implement prescription analytics */}
+      <View style={styles.customerGrid}>
+        <View style={styles.customerCard}>
+          <Text style={styles.customerValue}>{prescriptionStats.total}</Text>
+          <Text style={styles.customerLabel}>Total Ordonnances</Text>
+        </View>
+        <View style={styles.customerCard}>
+          <Text style={styles.customerValue}>{prescriptionStats.pending}</Text>
+          <Text style={styles.customerLabel}>En Attente</Text>
+        </View>
+        <View style={styles.customerCard}>
+          <Text style={styles.customerValue}>{prescriptionStats.completed}</Text>
+          <Text style={styles.customerLabel}>Terminées</Text>
+        </View>
+        <View style={styles.customerCard}>
+          <Text style={styles.customerValue}>{prescriptionStats.expired}</Text>
+          <Text style={styles.customerLabel}>Expirées</Text>
+        </View>
+      </View>
     </View>
   );
 
@@ -654,8 +759,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
@@ -666,23 +771,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: borderRadius.md,
+    width: 30,
+    height: 30,
+    borderRadius: borderRadius.sm,
     backgroundColor: colors.primary + '14',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.text,
   },
   headerSubtitle: {
-    fontSize: 12,
+    display: 'none' as any,
+    fontSize: 11,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 0,
   },
   headerRight: {
     flexDirection: 'row',
@@ -692,36 +798,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
     borderRadius: borderRadius.sm,
-    gap: spacing.xs,
+    gap: 4,
   },
   exportBtnText: {
     color: colors.surface,
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
   },
-  periodSelector: {
+  periodSelectorWrap: {
+    height: 38,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
-    paddingVertical: spacing.sm,
+    overflow: 'hidden',
+  },
+  periodSelector: {
+    flex: 1,
   },
   periodButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginHorizontal: 2,
     borderRadius: borderRadius.full,
     backgroundColor: colors.inputBackground,
-    minWidth: 80,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   periodButtonActive: {
     backgroundColor: colors.primary,
   },
   periodButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '500',
   },
@@ -729,26 +839,31 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontWeight: '600',
   },
-  tabSelector: {
+  tabSelectorWrap: {
+    height: 38,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
-    paddingVertical: spacing.sm,
+    overflow: 'hidden',
+  },
+  tabSelector: {
+    flex: 1,
   },
   tab: {
+    gap: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginHorizontal: 2,
     borderRadius: borderRadius.md,
-    gap: spacing.xs,
+    justifyContent: 'center',
   },
   tabActive: {
     backgroundColor: colors.primary + '14',
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '500',
   },
@@ -832,9 +947,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: borderRadius.sm,
     marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.outline + '40',
+    gap: spacing.md,
   },
   productInfo: {
     flex: 1,
+    paddingRight: spacing.sm,
   },
   productName: {
     fontSize: 14,
@@ -848,6 +967,8 @@ const styles = StyleSheet.create({
   },
   productStats: {
     alignItems: 'flex-end',
+    minWidth: 110,
+    flexShrink: 0,
   },
   productRevenue: {
     fontSize: 14,
@@ -911,15 +1032,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: borderRadius.sm,
     marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.outline + '40',
+    gap: spacing.md,
   },
   categoryName: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
     flex: 1,
+    paddingRight: spacing.sm,
   },
   categoryStats: {
     alignItems: 'flex-end',
+    minWidth: 110,
+    flexShrink: 0,
   },
   categoryRevenue: {
     fontSize: 14,

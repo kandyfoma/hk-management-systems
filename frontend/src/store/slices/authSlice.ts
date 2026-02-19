@@ -8,6 +8,40 @@ const isLicenseExpired = (license: License): boolean => {
   return LicenseUtils.isExpired(license);
 };
 
+const EXPANDED_MODULES: ModuleType[] = ['PHARMACY', 'HOSPITAL', 'OCCUPATIONAL_HEALTH'];
+
+const expandModuleType = (moduleType: ModuleType): ModuleType[] => {
+  if (moduleType === 'COMBINED' || moduleType === 'TRIAL') {
+    return EXPANDED_MODULES;
+  }
+  return [moduleType];
+};
+
+const calculateActiveModules = (licenses: License[], userModuleAccess: UserModuleAccess[]): ModuleType[] => {
+  const activeLicenses = licenses.filter((license) => license.isActive && !isLicenseExpired(license));
+
+  const licensedModules = new Set<ModuleType>();
+  for (const license of activeLicenses) {
+    for (const moduleType of expandModuleType(license.moduleType)) {
+      licensedModules.add(moduleType);
+    }
+  }
+
+  const activeAccessEntries = userModuleAccess.filter((access) => access.isActive !== false);
+  if (activeAccessEntries.length === 0) {
+    return Array.from(licensedModules);
+  }
+
+  const accessibleModules = new Set<ModuleType>();
+  for (const access of activeAccessEntries) {
+    for (const moduleType of expandModuleType(access.moduleType)) {
+      accessibleModules.add(moduleType);
+    }
+  }
+
+  return Array.from(licensedModules).filter((moduleType) => accessibleModules.has(moduleType));
+};
+
 interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
@@ -49,31 +83,7 @@ export const authSlice = createSlice({
       state.organization = action.payload.organization;
       state.licenses = action.payload.licenses;
       state.userModuleAccess = action.payload.userModuleAccess;
-      
-      // Debug logging for licenses
-      console.log('🔍 Auth Debug - Raw licenses:', action.payload.licenses);
-      
-      const activeLicenses = action.payload.licenses.filter(license => {
-        const isActive = license.isActive;
-        const isNotExpired = !isLicenseExpired(license);
-        console.log(`📄 License ${license.moduleType}: isActive=${isActive}, isNotExpired=${isNotExpired}`, license);
-        return isActive && isNotExpired;
-      });
-      
-      // Calculate active modules - for combined licenses, include all modules
-      const activeModules = [];
-      for (const license of activeLicenses) {
-        if (license.moduleType === 'COMBINED') {
-          // Combined license enables all modules
-          activeModules.push('HOSPITAL', 'PHARMACY', 'OCCUPATIONAL_HEALTH');
-        } else {
-          activeModules.push(license.moduleType);
-        }
-      }
-      
-      // Remove duplicates
-      state.activeModules = [...new Set(activeModules)];
-      console.log('🎯 Calculated activeModules:', state.activeModules);
+      state.activeModules = calculateActiveModules(action.payload.licenses, action.payload.userModuleAccess);
       
       state.isLoading = false;
       state.error = null;
@@ -100,25 +110,11 @@ export const authSlice = createSlice({
     },
     updateLicenses: (state, action: PayloadAction<License[]>) => {
       state.licenses = action.payload;
-      
-      const activeLicenses = action.payload.filter(license => license.isActive && !isLicenseExpired(license));
-      
-      // Calculate active modules - for combined licenses, include all modules
-      const activeModules = [];
-      for (const license of activeLicenses) {
-        if (license.moduleType === 'COMBINED') {
-          // Combined license enables all modules
-          activeModules.push('HOSPITAL', 'PHARMACY', 'OCCUPATIONAL_HEALTH');
-        } else {
-          activeModules.push(license.moduleType);
-        }
-      }
-      
-      // Remove duplicates
-      state.activeModules = [...new Set(activeModules)];
+      state.activeModules = calculateActiveModules(state.licenses, state.userModuleAccess);
     },
     updateUserModuleAccess: (state, action: PayloadAction<UserModuleAccess[]>) => {
       state.userModuleAccess = action.payload;
+      state.activeModules = calculateActiveModules(state.licenses, state.userModuleAccess);
     },
     updateOrganization: (state, action: PayloadAction<Organization>) => {
       state.organization = action.payload;

@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import ApiService from '../../../services/ApiService';
 import DatabaseService from '../../../services/DatabaseService';
 import {
   Prescription,
@@ -97,42 +98,141 @@ export function EnhancedPrescriptionsScreen() {
   const loadPrescriptions = useCallback(async () => {
     setLoading(true);
     try {
-      const [prescriptionsData, inventoryData] = await Promise.all([
-        DatabaseService.getPrescriptions(),
-        DatabaseService.getInventory(),
+      const api = ApiService.getInstance();
+      const db = DatabaseService.getInstance();
+
+      const fetchAllResults = async (endpoint: string, params: Record<string, any> = {}, maxPages = 12) => {
+        const rows: any[] = [];
+        for (let page = 1; page <= maxPages; page += 1) {
+          const res = await api.get(endpoint, { ...params, page });
+          const payload = res?.data;
+          const pageRows: any[] = Array.isArray(payload) ? payload : (payload?.results ?? []);
+          rows.push(...pageRows);
+          if (Array.isArray(payload) || !payload?.next) break;
+        }
+        return rows;
+      };
+
+      const [prescriptionList, inventoryData] = await Promise.all([
+        fetchAllResults('/prescriptions/', { page_size: 100 }),
+        fetchAllResults('/inventory/items/', { facility_id: 'pharmacy-main', page_size: 400 }),
       ]);
 
-      // Enrich prescriptions with additional data
-      const enrichedPrescriptions = await Promise.all(
-        prescriptionsData.map(async (prescription) => {
-          const enriched: EnrichedPrescription = {
-            ...prescription,
-            patientName: `Patient ${prescription.patientId?.slice(-6) || 'Unknown'}`,
-            doctorName: `Dr. ${prescription.doctorId?.slice(-6) || 'Unknown'}`,
-            facilityName: prescription.facilityId || 'Hôpital Central',
-          };
-
-          // Calculate progress
-          const totalItems = prescription.items.length;
-          const completedItems = prescription.items.filter(
-            item => item.status === 'COMPLETED' || item.status === 'DISPENSED'
-          ).length;
-          
-          enriched.totalItems = totalItems;
-          enriched.completedItems = completedItems;
-          enriched.progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
-
-          return enriched;
+      const details = await Promise.all(
+        prescriptionList.map(async (row: any) => {
+          const res = await api.get(`/prescriptions/${row.id}/`);
+          return res?.data ?? row;
         })
       );
 
+      const enrichedPrescriptions: EnrichedPrescription[] = details.map((p: any) => {
+        const mappedItems: PrescriptionItem[] = (p.items ?? []).map((item: any) => ({
+          id: item.id,
+          prescriptionId: p.id,
+          medicationName: item.medication_name ?? item.product_name ?? '',
+          genericName: item.generic_name ?? '',
+          dosage: item.dosage ?? '',
+          strength: item.product_strength ?? '',
+          dosageForm: (item.dosage_form ?? 'other') as any,
+          frequency: item.frequency ?? '',
+          duration: item.duration ?? '',
+          quantity: Number(item.quantity_prescribed ?? 0),
+          route: (item.route ?? 'oral') as any,
+          instructions: item.instructions ?? '',
+          productId: item.product ?? '',
+          quantityDispensed: Number(item.quantity_dispensed ?? 0),
+          quantityRemaining: Number(item.remaining_quantity ?? Math.max(0, Number(item.quantity_prescribed ?? 0) - Number(item.quantity_dispensed ?? 0))),
+          status: item.status,
+          isSubstitutionAllowed: true,
+          isControlled: false,
+          requiresCounseling: false,
+          createdAt: item.created_at ?? p.created_at,
+          updatedAt: item.updated_at ?? item.created_at ?? p.updated_at,
+        }));
+
+        const totalItems = Number(p.items_count ?? mappedItems.length);
+        const completedItems = Number(p.dispensed_items_count ?? mappedItems.filter((i) => i.status === 'fully_dispensed').length);
+
+        return {
+          id: p.id,
+          encounterId: p.encounter ?? '',
+          patientId: p.patient ?? '',
+          doctorId: p.doctor ?? '',
+          organizationId: p.organization ?? '',
+          facilityId: p.facility_id ?? 'pharmacy-main',
+          prescriptionNumber: p.prescription_number ?? p.id,
+          date: p.date ?? p.created_at,
+          status: p.status,
+          items: mappedItems,
+          instructions: p.instructions ?? '',
+          diagnosis: p.diagnosis ?? '',
+          validUntil: p.valid_until ?? '',
+          totalItems,
+          itemsDispensed: completedItems,
+          isComplete: !!p.is_complete,
+          allergiesChecked: false,
+          interactionsChecked: false,
+          clinicalNotes: '',
+          createdAt: p.created_at,
+          updatedAt: p.updated_at ?? p.created_at,
+          patientName: p.patient_name ?? '',
+          doctorName: p.doctor_name ?? '',
+          facilityName: p.facility_id ?? 'Pharmacie',
+          completedItems,
+          progress: totalItems > 0 ? (completedItems / totalItems) * 100 : 0,
+        };
+      });
+
+      const mappedInventory: InventoryItem[] = inventoryData.map((item: any) => ({
+        id: item.id,
+        organizationId: item.organization,
+        productId: item.product,
+        facilityId: item.facility_id,
+        facilityType: 'PHARMACY',
+        quantityOnHand: Number(item.quantity_on_hand ?? 0),
+        quantityReserved: Number(item.quantity_reserved ?? 0),
+        quantityAvailable: Number(item.quantity_available ?? 0),
+        quantityOnOrder: Number(item.quantity_on_order ?? 0),
+        quantityDamaged: 0,
+        quantityExpired: 0,
+        averageCost: Number(item.average_cost ?? 0),
+        totalStockValue: Number(item.total_value ?? 0),
+        lastPurchasePrice: Number(item.average_cost ?? 0),
+        averageDailyUsage: 0,
+        daysOfStockRemaining: 0,
+        status: item.stock_status,
+        isActive: true,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      }));
+
       setPrescriptions(enrichedPrescriptions);
-      setInventory(inventoryData);
+      setInventory(mappedInventory);
       calculateStats(enrichedPrescriptions);
+
+      await db.savePharmacyPrescriptionsCache({
+        prescriptions: enrichedPrescriptions,
+        inventory: mappedInventory,
+      });
       
     } catch (error) {
       console.error('Error loading prescriptions:', error);
-      toast.error('Erreur lors du chargement des ordonnances');
+      try {
+        const db = DatabaseService.getInstance();
+        const cached = await db.getPharmacyPrescriptionsCache();
+        if (cached?.payload) {
+          const fallbackPrescriptions = cached.payload.prescriptions ?? [];
+          const fallbackInventory = cached.payload.inventory ?? [];
+          setPrescriptions(fallbackPrescriptions);
+          setInventory(fallbackInventory);
+          calculateStats(fallbackPrescriptions);
+          toast.warning('Mode hors ligne: données locales chargées');
+        } else {
+          toast.error('Erreur lors du chargement des ordonnances');
+        }
+      } catch {
+        toast.error('Erreur lors du chargement des ordonnances');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -159,7 +259,17 @@ export function EnhancedPrescriptionsScreen() {
         updatedDate.setHours(0, 0, 0, 0);
         return updatedDate.getTime() === today.getTime() && p.status === 'fully_dispensed';
       }).length,
-      averageProcessingTime: 45, // Mock data - in minutes
+      averageProcessingTime: (() => {
+        const processed = prescriptions.filter(p => p.status === 'fully_dispensed' || p.status === 'partially_dispensed');
+        if (processed.length === 0) return 0;
+        const totalMinutes = processed.reduce((sum, p) => {
+          const start = new Date(p.createdAt).getTime();
+          const end = new Date(p.updatedAt || p.createdAt).getTime();
+          if (isNaN(start) || isNaN(end) || end < start) return sum;
+          return sum + Math.round((end - start) / 60000);
+        }, 0);
+        return Math.round(totalMinutes / processed.length);
+      })(),
     };
 
     setStats(stats);
@@ -245,9 +355,27 @@ export function EnhancedPrescriptionsScreen() {
 
     try {
       setLoading(true);
-      
-      // Mock processing - in real implementation, this would update the database
-      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const api = ApiService.getInstance();
+      if (action.type === 'reject') {
+        const res = await api.post(`/prescriptions/${selectedPrescription.id}/cancel/`);
+        if (!res?.success) throw new Error(res?.error?.message || 'Cancel failed');
+      } else if (action.type === 'dispense' || action.type === 'partial' || action.type === 'substitute') {
+        const quantityToDispense = Math.max(1, Number(action.quantity ?? 1));
+        const res = await api.post(`/prescriptions/${selectedPrescription.id}/dispense/`, {
+          items: [
+            {
+              item_id: action.itemId,
+              quantity_to_dispense: quantityToDispense,
+            },
+          ],
+          dispenser_notes: action.notes ?? '',
+        });
+        if (!res?.success) throw new Error(res?.error?.message || 'Dispense failed');
+      } else if (action.type === 'hold') {
+        const res = await api.patch(`/prescriptions/${selectedPrescription.id}/`, { status: 'pending' });
+        if (!res?.success) throw new Error(res?.error?.message || 'Update failed');
+      }
       
       toast.success(`Action ${action.type} effectuée avec succès`);
       setShowProcessingModal(false);
@@ -263,11 +391,8 @@ export function EnhancedPrescriptionsScreen() {
 
   const exportPrescriptions = async () => {
     try {
-      toast.info('Export en cours...');
-      // Mock export functionality
-      setTimeout(() => {
-        toast.success('Liste des ordonnances exportée');
-      }, 2000);
+      const count = filteredPrescriptions.length;
+      toast.success(`${count} ordonnance(s) prêtes pour export (vue actuelle)`);
     } catch (error) {
       toast.error('Erreur lors de l\'export');
     }
@@ -275,7 +400,11 @@ export function EnhancedPrescriptionsScreen() {
 
   // ─── Utility Functions ───────────────────────────────────────
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch ((status || '').toLowerCase()) {
+      case 'pending': return colors.warning;
+      case 'partially_dispensed': return colors.info;
+      case 'fully_dispensed': return colors.success;
+      case 'expired': return colors.error;
       case 'PENDING': return colors.warning;
       case 'PARTIAL': return colors.info;
       case 'COMPLETED': return colors.success;
@@ -285,7 +414,12 @@ export function EnhancedPrescriptionsScreen() {
   };
 
   const getStatusLabel = (status: string) => {
-    switch (status) {
+    switch ((status || '').toLowerCase()) {
+      case 'pending': return 'En attente';
+      case 'partially_dispensed': return 'Partielle';
+      case 'fully_dispensed': return 'Terminée';
+      case 'expired': return 'Expirée';
+      case 'cancelled': return 'Annulée';
       case 'PENDING': return 'En attente';
       case 'PARTIAL': return 'Partielle';
       case 'COMPLETED': return 'Terminée';

@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../components/GlobalUI';
+import { useSelector } from 'react-redux';
 import SyncStatusIndicator from '../components/SyncStatusIndicator';
 import HybridDataService from '../services/HybridDataService';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme/theme';
 import { getTextColor, getIconBackgroundColor, getSecondaryTextColor, getTertiaryTextColor, getBadgeBackgroundColor } from '../utils/colorContrast';
+import { selectActiveModules } from '../store/slices/authSlice';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -277,6 +279,36 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { info } = useToast();
+  const activeModules = useSelector(selectActiveModules);
+  const hasPharmacyAccess = activeModules.includes('PHARMACY');
+  const hasHospitalAccess = activeModules.includes('HOSPITAL');
+  const hasOccHealthAccess = activeModules.includes('OCCUPATIONAL_HEALTH');
+
+  const reportTarget = hasPharmacyAccess
+    ? 'ph-reports'
+    : hasHospitalAccess
+      ? 'hp-dashboard'
+      : hasOccHealthAccess
+        ? 'oh-reports'
+        : 'dashboard';
+
+  const operationsTarget = hasPharmacyAccess
+    ? 'ph-pos'
+    : hasHospitalAccess
+      ? 'hp-patients'
+      : hasOccHealthAccess
+        ? 'oh-patients'
+        : 'dashboard';
+
+  const dashboardQuickActions = quickActions.filter((action) => {
+    if (action.id === '1' || action.id === '3' || action.id === '4') {
+      return hasPharmacyAccess;
+    }
+    if (action.id === '2') {
+      return hasHospitalAccess || hasOccHealthAccess;
+    }
+    return true;
+  });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -352,13 +384,13 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
         accentColor={colors.primary}
       />
       <View style={styles.quickActionsRow}>
-        {quickActions.map((action) => {
+        {dashboardQuickActions.map((action) => {
           const getScreenId = () => {
             switch(action.id) {
               case '1': return 'ph-pos'; // Nouvelle Vente
-              case '2': return 'hp-patients'; // Ajouter Patient
+              case '2': return hasHospitalAccess ? 'hp-patients' : hasOccHealthAccess ? 'oh-patients' : null; // Ajouter Patient
               case '3': return 'ph-inventory'; // Réception Stock
-              case '4': return 'ph-reports'; // Rapport
+              case '4': return reportTarget; // Rapport
               default: return null;
             }
           };
@@ -394,7 +426,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
         accentColor={colors.info}
         ctaLabel="Exporter"
         ctaIcon="download-outline"
-        onCtaPress={() => onNavigate?.('ph-reports')}
+        onCtaPress={() => onNavigate?.(reportTarget)}
       />
       <View style={styles.metricsGrid}>
         {metricCards.map((card) => (
@@ -428,7 +460,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
         accentColor={colors.secondary}
         ctaLabel="Rapport Complet"
         ctaIcon="document-text-outline"
-        onCtaPress={() => onNavigate?.('ph-reports')}
+        onCtaPress={() => onNavigate?.(reportTarget)}
       />
       <View style={styles.contentRow}>
         {/* Monthly Revenue Chart */}
@@ -438,7 +470,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
               <Text style={styles.cardTitle}>Revenus Mensuels</Text>
               <Text style={styles.cardSubtitle}>Aperçu des ventes 2025</Text>
             </View>
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-reports')}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.(reportTarget)}>
               <Text style={styles.viewAllText}>Voir Détails</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>
@@ -487,7 +519,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
         accentColor={colors.accent}
         ctaLabel="Nouvelle Commande"
         ctaIcon="add-circle-outline"
-        onCtaPress={() => onNavigate?.('ph-pos')}
+        onCtaPress={() => onNavigate?.(operationsTarget)}
       />
       <View style={styles.contentRow}>
         {/* Recent Orders Table */}
@@ -497,7 +529,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
               <Text style={styles.cardTitle}>Commandes Récentes</Text>
               <Text style={styles.cardSubtitle}>{recentOrders.length} commandes récentes</Text>
             </View>
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-pos')}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.(operationsTarget)}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>

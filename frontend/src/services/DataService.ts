@@ -196,6 +196,10 @@ class DataService {
     return await api().get('/inventory/pharmacy/reports/sales/', params);
   }
 
+  async getPharmacyReportsOverview(): Promise<ApiResponse> {
+    return await api().get('/inventory/pharmacy/reports/overview/');
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // SUPPLIERS API (Enhanced)
   // ═══════════════════════════════════════════════════════════════

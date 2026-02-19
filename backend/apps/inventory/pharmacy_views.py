@@ -25,7 +25,7 @@ def pharmacy_dashboard_metrics(request):
     # Daily sales
     daily_sales = Sale.objects.filter(
         organization=organization,
-        sale_date=today,
+        created_at__date=today,
         status=SaleStatus.COMPLETED
     ).aggregate(
         total_sales=Sum('total_amount'),
@@ -54,7 +54,7 @@ def pharmacy_dashboard_metrics(request):
     yesterday = today - timedelta(days=1)
     yesterday_sales = Sale.objects.filter(
         organization=organization,
-        sale_date=yesterday,
+        created_at__date=yesterday,
         status=SaleStatus.COMPLETED
     ).aggregate(total_sales=Sum('total_amount'))['total_sales'] or 0
     
@@ -99,7 +99,7 @@ def pharmacy_top_products(request):
     
     top_products = SaleItem.objects.filter(
         sale__organization=organization,
-        sale__sale_date__gte=start_date,
+        sale__created_at__date__gte=start_date,
         sale__status=SaleStatus.COMPLETED
     ).values(
         'product__name',
@@ -113,14 +113,10 @@ def pharmacy_top_products(request):
     # Get current stock for each product
     result = []
     for item in top_products:
-        try:
-            inventory_item = InventoryItem.objects.get(
-                product_id=item['product__id'],
-                organization=organization
-            )
-            stock = inventory_item.quantity_on_hand
-        except InventoryItem.DoesNotExist:
-            stock = 0
+        stock = InventoryItem.objects.filter(
+            product_id=item['product__id'],
+            organization=organization
+        ).aggregate(total_stock=Sum('quantity_on_hand'))['total_stock'] or 0
         
         result.append({
             'name': item['product__name'],
@@ -173,25 +169,38 @@ def pharmacy_analytics_overview(request):
     # Sales analytics
     sales_data = Sale.objects.filter(
         organization=organization,
-        sale_date__range=[start_date, end_date],
+        created_at__date__range=[start_date, end_date],
         status=SaleStatus.COMPLETED
     ).aggregate(
         total_revenue=Sum('total_amount'),
-        total_cost=Sum('cost_amount'),
         total_sales=Count('id'),
         avg_sale_value=Avg('total_amount')
     )
+
+    # Sale items aggregation (cost and product performance)
+    sale_items = SaleItem.objects.filter(
+        sale__organization=organization,
+        sale__created_at__date__range=[start_date, end_date],
+        sale__status=SaleStatus.COMPLETED
+    )
+
+    items_agg = sale_items.aggregate(
+        total_cost=Sum(F('quantity') * F('unit_cost')),
+        total_quantity=Sum('quantity')
+    )
+    total_cost = items_agg.get('total_cost') or Decimal('0')
     
     # Calculate profit
-    profit = (sales_data['total_revenue'] or 0) - (sales_data['total_cost'] or 0)
+    total_revenue = sales_data.get('total_revenue') or Decimal('0')
+    profit = total_revenue - total_cost
     profit_margin = 0
-    if sales_data['total_revenue']:
-        profit_margin = (profit / sales_data['total_revenue']) * 100
+    if total_revenue:
+        profit_margin = (profit / total_revenue) * 100
     
     # Customer metrics
     unique_customers = Sale.objects.filter(
         organization=organization,
-        sale_date__range=[start_date, end_date],
+        created_at__date__range=[start_date, end_date],
         status=SaleStatus.COMPLETED,
         customer__isnull=False
     ).values('customer').distinct().count()
@@ -202,34 +211,85 @@ def pharmacy_analytics_overview(request):
         created_at__date__range=[start_date, end_date]
     ).aggregate(
         total_prescriptions=Count('id'),
-        completed_prescriptions=Count('id', filter=Q(status=PrescriptionStatus.DISPENSED)),
+        completed_prescriptions=Count('id', filter=Q(status=PrescriptionStatus.FULLY_DISPENSED)),
         pending_prescriptions=Count('id', filter=Q(status=PrescriptionStatus.PENDING))
     )
+
+    # Top products by revenue for the selected period
+    top_products = sale_items.values(
+        'product_id', 'product_name'
+    ).annotate(
+        quantity_sold=Sum('quantity'),
+        revenue=Sum(F('quantity') * F('unit_price')),
+        cost_total=Sum(F('quantity') * F('unit_cost')),
+    ).order_by('-revenue')[:10]
+
+    top_products_data = []
+    for row in top_products:
+        revenue = row.get('revenue') or Decimal('0')
+        cost_total_row = row.get('cost_total') or Decimal('0')
+        margin = ((revenue - cost_total_row) / revenue * 100) if revenue else Decimal('0')
+        top_products_data.append({
+            'product_id': row.get('product_id'),
+            'product_name': row.get('product_name') or 'Produit',
+            'quantity_sold': row.get('quantity_sold') or 0,
+            'revenue': revenue,
+            'cost_total': cost_total_row,
+            'margin': round(float(margin), 2),
+        })
+
+    # Category performance from sale items joined with products
+    category_performance_qs = sale_items.values(
+        'product__category'
+    ).annotate(
+        revenue=Sum(F('quantity') * F('unit_price')),
+        cost_total=Sum(F('quantity') * F('unit_cost')),
+        quantity=Sum('quantity')
+    ).order_by('-revenue')
+
+    category_performance = []
+    for row in category_performance_qs:
+        revenue = row.get('revenue') or Decimal('0')
+        cost_total_row = row.get('cost_total') or Decimal('0')
+        category_performance.append({
+            'category': row.get('product__category') or 'OTHER',
+            'revenue': revenue,
+            'profit': revenue - cost_total_row,
+            'quantity': row.get('quantity') or 0,
+        })
     
     # Inventory value
     inventory_value = InventoryItem.objects.filter(
         organization=organization
     ).aggregate(
-        total_value=Sum(F('quantity_on_hand') * F('unit_cost'))
+        total_value=Sum('total_value')
     )['total_value'] or 0
     
     return Response({
+        'period': {
+            'start_date': start_date,
+            'end_date': end_date,
+            'days': days,
+        },
         'financial': {
-            'total_revenue': sales_data['total_revenue'] or 0,
-            'total_cost': sales_data['total_cost'] or 0,
+            'total_revenue': total_revenue,
+            'total_cost': total_cost,
             'profit': profit,
             'profit_margin': round(profit_margin, 2)
         },
         'sales': {
             'total_sales': sales_data['total_sales'] or 0,
             'avg_sale_value': sales_data['avg_sale_value'] or 0,
-            'unique_customers': unique_customers
+            'unique_customers': unique_customers,
+            'total_items_sold': items_agg.get('total_quantity') or 0,
         },
         'prescriptions': prescription_stats,
         'inventory': {
             'total_value': inventory_value,
             'total_products': Product.objects.filter(organization=organization, is_active=True).count()
-        }
+        },
+        'top_products': top_products_data,
+        'category_performance': category_performance,
     })
 
 
@@ -254,7 +314,7 @@ def pharmacy_stock_alerts(request):
             'severity': alert.severity,
             'product_name': alert.inventory_item.product.name,
             'current_stock': alert.inventory_item.quantity_on_hand,
-            'minimum_stock': alert.inventory_item.minimum_stock,
+            'minimum_stock': alert.inventory_item.product.min_stock_level,
             'message': alert.message,
             'created_at': alert.created_at,
             'acknowledged': alert.acknowledged,
@@ -301,7 +361,7 @@ def pharmacy_sales_reports(request):
     # Sales by payment method
     payment_methods = Sale.objects.filter(
         organization=organization,
-        sale_date__range=[start_date, end_date],
+        created_at__date__range=[start_date, end_date],
         status=SaleStatus.COMPLETED
     ).values('payments__payment_method').annotate(
         total_amount=Sum('total_amount'),
@@ -311,17 +371,17 @@ def pharmacy_sales_reports(request):
     # Daily sales trend
     daily_sales = Sale.objects.filter(
         organization=organization,
-        sale_date__range=[start_date, end_date],
+        created_at__date__range=[start_date, end_date],
         status=SaleStatus.COMPLETED
-    ).values('sale_date').annotate(
+    ).values('created_at__date').annotate(
         daily_total=Sum('total_amount'),
         daily_count=Count('id')
-    ).order_by('sale_date')
+    ).order_by('created_at__date')
     
     # Top products by revenue
     top_products_revenue = SaleItem.objects.filter(
         sale__organization=organization,
-        sale__sale_date__range=[start_date, end_date],
+        sale__created_at__date__range=[start_date, end_date],
         sale__status=SaleStatus.COMPLETED
     ).values('product__name').annotate(
         revenue=Sum(F('quantity') * F('unit_price')),
@@ -336,4 +396,107 @@ def pharmacy_sales_reports(request):
         'payment_methods': payment_methods,
         'daily_trends': daily_sales,
         'top_products_by_revenue': top_products_revenue
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pharmacy_reports_overview(request):
+    """Unified report snapshot for pharmacy quick reports."""
+    organization = request.user.organization
+    today = timezone.now().date()
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=30)
+
+    sales_stats = Sale.objects.filter(
+        organization=organization,
+        created_at__date__range=[start_date, end_date],
+        status=SaleStatus.COMPLETED
+    ).aggregate(
+        total_sales=Count('id'),
+        total_revenue=Sum('total_amount'),
+        avg_sale_value=Avg('total_amount')
+    )
+
+    today_sales_stats = Sale.objects.filter(
+        organization=organization,
+        created_at__date=today,
+        status=SaleStatus.COMPLETED
+    ).aggregate(
+        today_sales_count=Count('id'),
+        today_sales_amount=Sum('total_amount')
+    )
+
+    pending_sales_count = Sale.objects.filter(
+        organization=organization,
+        status=SaleStatus.ON_HOLD
+    ).count()
+
+    prescriptions_stats = Prescription.objects.filter(
+        organization=organization,
+        created_at__date__range=[start_date, end_date]
+    ).aggregate(
+        total=Count('id'),
+        pending=Count('id', filter=Q(status=PrescriptionStatus.PENDING)),
+        completed=Count('id', filter=Q(status=PrescriptionStatus.FULLY_DISPENSED)),
+        expired=Count('id', filter=Q(status=PrescriptionStatus.EXPIRED)),
+    )
+
+    inventory_stats = InventoryItem.objects.filter(
+        organization=organization
+    ).aggregate(
+        total_products=Count('id'),
+        in_stock=Count('id', filter=Q(quantity_on_hand__gt=0)),
+        low_stock=Count('id', filter=Q(stock_status='LOW_STOCK')),
+        out_of_stock=Count('id', filter=Q(quantity_on_hand__lte=0)),
+        inventory_value=Sum('total_value')
+    )
+
+    alerts_stats = InventoryAlert.objects.filter(
+        inventory_item__organization=organization,
+        is_active=True
+    ).aggregate(
+        total=Count('id'),
+        critical=Count('id', filter=Q(severity='CRITICAL')),
+        high=Count('id', filter=Q(severity='HIGH')),
+        medium=Count('id', filter=Q(severity='MEDIUM')),
+        low=Count('id', filter=Q(severity='LOW')),
+    )
+
+    return Response({
+        'period': {
+            'start_date': start_date,
+            'end_date': end_date,
+        },
+        'sales': {
+            'total_sales': sales_stats.get('total_sales') or 0,
+            'total_revenue': sales_stats.get('total_revenue') or 0,
+            'avg_sale_value': sales_stats.get('avg_sale_value') or 0,
+            'today_sales_count': today_sales_stats.get('today_sales_count') or 0,
+            'today_sales_amount': today_sales_stats.get('today_sales_amount') or 0,
+            'pending_sales': pending_sales_count,
+        },
+        'prescriptions': {
+            'total': prescriptions_stats.get('total') or 0,
+            'pending': prescriptions_stats.get('pending') or 0,
+            'completed': prescriptions_stats.get('completed') or 0,
+            'expired': prescriptions_stats.get('expired') or 0,
+            # Backward-compatible aliases
+            'total_prescriptions': prescriptions_stats.get('total') or 0,
+            'pending_count': prescriptions_stats.get('pending') or 0,
+            'completed_count': prescriptions_stats.get('completed') or 0,
+            'expired_count': prescriptions_stats.get('expired') or 0,
+        },
+        'inventory': {
+            'total_products': inventory_stats.get('total_products') or 0,
+            'in_stock': inventory_stats.get('in_stock') or 0,
+            'low_stock': inventory_stats.get('low_stock') or 0,
+            'out_of_stock': inventory_stats.get('out_of_stock') or 0,
+            'inventory_value': inventory_stats.get('inventory_value') or 0,
+            # Backward-compatible aliases
+            'in_stock_count': inventory_stats.get('in_stock') or 0,
+            'low_stock_count': inventory_stats.get('low_stock') or 0,
+            'out_of_stock_count': inventory_stats.get('out_of_stock') or 0,
+        },
+        'alerts': alerts_stats,
     })

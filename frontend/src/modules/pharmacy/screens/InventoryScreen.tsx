@@ -33,6 +33,8 @@ import DateInput from '../../../components/DateInput';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const IS_DESKTOP = SCREEN_W >= 1024;
+const IS_PHONE = SCREEN_W < 640;
+const IS_SMALL_PHONE = SCREEN_W < 390;
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -49,6 +51,8 @@ type ScreenTab = 'catalog' | 'batches' | 'movements' | 'alerts';
 type CatalogFilter = 'ALL' | 'MEDICATION' | 'OTC' | 'CONSUMABLE' | 'LOW_STOCK' | 'EXPIRING';
 type SortField = 'name' | 'stock' | 'value' | 'expiry' | 'margin';
 type SortDir = 'asc' | 'desc';
+
+const DEFAULT_FACILITY_ID = 'pharmacy-main';
 
 // ═══════════════════════════════════════════════════════════════
 // SELECT OPTIONS
@@ -254,7 +258,7 @@ export function InventoryScreen() {
       // Fetch products, inventory items, batches, movements and alerts in parallel
       const [productsRes, itemsRes, batchesRes, movementsRes, alertsRes, statsRes] = await Promise.all([
         api.get('/inventory/products/', { page_size: 500, ...cacheBuster }),
-        api.get('/inventory/items/', { page_size: 500, facility_id: 'pharmacy-main', ...cacheBuster }),
+        api.get('/inventory/items/', { facility_id: DEFAULT_FACILITY_ID, page_size: 500, ...cacheBuster }),
         api.get('/inventory/batches/', { page_size: 500, ...cacheBuster }),
         api.get('/inventory/movements/', { page_size: 200, ...cacheBuster }),
         api.get('/inventory/alerts/', { is_active: true, page_size: 200, ...cacheBuster }),
@@ -268,9 +272,14 @@ export function InventoryScreen() {
       const rawAlerts: any[] = alertsRes?.data?.results ?? alertsRes?.data ?? [];
       const statsData: any = statsRes?.data ?? {};
 
+      const productCostById = new Map<string, number>();
+      rawProducts.forEach((p: any) => {
+        productCostById.set(String(p.id), parseFloat(p.cost_price ?? '0') || 0);
+      });
+
       // Map backend snake_case → frontend camelCase for Product
       const mapProduct = (p: any): Product => ({
-        id: p.id,
+        id: String(p.id),
         organizationId: p.organization,
         name: p.name,
         genericName: p.generic_name ?? '',
@@ -307,10 +316,10 @@ export function InventoryScreen() {
 
       // Map backend → InventoryItem
       const mapItem = (i: any): InventoryItem => ({
-        id: i.id,
+        id: String(i.id),
         organizationId: i.organization,
-        productId: i.product,
-        facilityId: i.facility_id ?? 'pharmacy-main',
+        productId: String(typeof i.product === 'object' ? i.product?.id : i.product),
+        facilityId: i.facility_id ?? DEFAULT_FACILITY_ID,
         facilityType: 'PHARMACY',
         quantityOnHand: parseFloat(i.quantity_on_hand ?? '0'),
         quantityReserved: parseFloat(i.quantity_reserved ?? '0'),
@@ -318,8 +327,21 @@ export function InventoryScreen() {
         quantityOnOrder: parseFloat(i.quantity_on_order ?? '0'),
         quantityDamaged: 0,
         quantityExpired: 0,
-        averageCost: parseFloat(i.average_cost ?? '0'),
-        totalStockValue: parseFloat(i.total_value ?? '0'),
+        averageCost: (() => {
+          const avg = parseFloat(i.average_cost ?? '0');
+          if (Number.isFinite(avg) && avg > 0) return avg;
+          const productId = String(typeof i.product === 'object' ? i.product?.id : i.product);
+          return productCostById.get(productId) || 0;
+        })(),
+        totalStockValue: (() => {
+          const quantity = parseFloat(i.quantity_on_hand ?? '0') || 0;
+          const rawTotal = parseFloat(i.total_value ?? '0');
+          const avg = parseFloat(i.average_cost ?? '0');
+          const productId = String(typeof i.product === 'object' ? i.product?.id : i.product);
+          const fallbackCost = (Number.isFinite(avg) && avg > 0) ? avg : (productCostById.get(productId) || 0);
+          const computed = quantity * fallbackCost;
+          return (Number.isFinite(rawTotal) && rawTotal > 0) ? rawTotal : computed;
+        })(),
         lastPurchasePrice: parseFloat(i.average_cost ?? '0'),
         averageDailyUsage: 0,
         daysOfStockRemaining: 0,
@@ -331,8 +353,8 @@ export function InventoryScreen() {
 
       // Map backend → InventoryBatch
       const mapBatch = (b: any): InventoryBatch => ({
-        id: b.id,
-        inventoryItemId: b.inventory_item,
+        id: String(b.id),
+        inventoryItemId: String(b.inventory_item),
         batchNumber: b.batch_number ?? '',
         lotNumber: b.batch_number ?? '',
         manufactureDate: b.manufacture_date ?? '',
@@ -349,9 +371,9 @@ export function InventoryScreen() {
 
       // Map backend → StockMovement
       const mapMovement = (m: any): StockMovement => ({
-        id: m.id,
+        id: String(m.id),
         organizationId: '',
-        inventoryItemId: m.inventory_item,
+        inventoryItemId: String(m.inventory_item),
         productId: '',
         movementType: m.movement_type as any,
         direction: m.direction as any,
@@ -369,9 +391,9 @@ export function InventoryScreen() {
 
       // Map backend → InventoryAlert
       const mapAlert = (a: any): InventoryAlert => ({
-        id: a.id,
+        id: String(a.id),
         organizationId: '',
-        productId: a.product,
+        productId: String(a.product),
         inventoryItemId: '',
         alertType: a.alert_type as any,
         priority: a.severity as any,
@@ -387,7 +409,7 @@ export function InventoryScreen() {
 
       const mappedProducts = rawProducts.map(mapProduct);
       const mappedItems = rawItems.map(mapItem);
-      
+
       // Recalculate inventory item statuses based on actual quantities and thresholds
       mappedItems.forEach(item => {
         const qty = item.quantityOnHand || 0;
@@ -418,18 +440,10 @@ export function InventoryScreen() {
           return;
         }
 
-        const existingIsMain = existing.facilityId === 'pharmacy-main';
-        const currentIsMain = i.facilityId === 'pharmacy-main';
-        if (currentIsMain && !existingIsMain) {
+        const existingTs = new Date(existing.updatedAt || 0).getTime();
+        const currentTs = new Date(i.updatedAt || 0).getTime();
+        if (currentTs > existingTs) {
           invByProduct.set(i.productId, i);
-          return;
-        }
-        if (currentIsMain === existingIsMain) {
-          const existingTs = new Date(existing.updatedAt || 0).getTime();
-          const currentTs = new Date(i.updatedAt || 0).getTime();
-          if (currentTs > existingTs) {
-            invByProduct.set(i.productId, i);
-          }
         }
       });
 
@@ -463,7 +477,10 @@ export function InventoryScreen() {
 
       const summaryData = {
         totalProducts: statsData.total_products ?? mappedProducts.length,
-        totalStockValue: statsData.total_value ?? localValue,
+        totalStockValue: (() => {
+          const statsTotal = Number(statsData.total_value);
+          return Number.isFinite(statsTotal) && statsTotal > 0 ? statsTotal : localValue;
+        })(),
         lowStockCount: statsData.low_stock_count ?? localLowStock,
         outOfStockCount: statsData.out_of_stock_count ?? localOutOfStock,
         expiringBatchCount: statsData.expiring_soon_count ?? localExpiring,
@@ -1084,16 +1101,36 @@ export function InventoryScreen() {
             setProducts(prev => {
               const updated = prev.map(p => {
                 if (p.id !== productId) return p;
-                const updatedInv = p.inventoryItem
-                  ? { 
-                      ...p.inventoryItem, 
-                      quantityOnHand: newQty, 
-                      quantityAvailable: Math.max(0, newQty - (p.inventoryItem.quantityReserved || 0)), 
-                      status: newStatus as any,
-                      totalStockValue: newQty * (p.inventoryItem.averageCost || p.costPrice || 0),
-                      updatedAt: new Date().toISOString()
-                    }
-                  : undefined;
+                const baseInv = p.inventoryItem ?? {
+                  id: `temp-${productId}`,
+                  organizationId: p.organizationId,
+                  productId: p.id,
+                  facilityId: prev.find(x => x.inventoryItem?.facilityId)?.inventoryItem?.facilityId || DEFAULT_FACILITY_ID,
+                  facilityType: 'PHARMACY' as const,
+                  quantityOnHand: 0,
+                  quantityReserved: 0,
+                  quantityAvailable: 0,
+                  quantityOnOrder: 0,
+                  quantityDamaged: 0,
+                  quantityExpired: 0,
+                  averageCost: p.costPrice || 0,
+                  totalStockValue: 0,
+                  lastPurchasePrice: p.costPrice || 0,
+                  averageDailyUsage: 0,
+                  daysOfStockRemaining: 0,
+                  status: 'IN_STOCK' as const,
+                  isActive: true,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+                const updatedInv = {
+                  ...baseInv,
+                  quantityOnHand: newQty,
+                  quantityAvailable: Math.max(0, newQty - (baseInv.quantityReserved || 0)),
+                  status: newStatus as any,
+                  totalStockValue: newQty * (baseInv.averageCost || p.costPrice || 0),
+                  updatedAt: new Date().toISOString(),
+                };
                 return { ...p, inventoryItem: updatedInv };
               });
               console.log('📦 Local state updated');
@@ -1474,6 +1511,8 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
   onEdit: () => void; onDelete: () => void; onAdjust: () => void;
 }) {
   const inv = product.inventoryItem;
+  const reservedQty = inv?.quantityReserved ?? 0;
+  const availableQty = inv?.quantityAvailable ?? 0;
   const sc = statusColor(inv?.status);
   const margin = InventoryUtils.calculateMargin(product.costPrice, product.sellingPrice);
   
@@ -1507,6 +1546,11 @@ function ProductCard({ product, expanded, onToggle, onEdit, onDelete, onAdjust }
             {product.genericName ? `${product.genericName} · ` : ''}{product.sku}
             {product.strength ? ` · ${product.strength}` : ''}
           </Text>
+          {inv && inv.quantityOnHand > 0 && availableQty === 0 && reservedQty > 0 && (
+            <Text style={{ fontSize: 11, color: colors.warning, marginTop: 2 }}>
+              ⚠ Disponible = 0 car {reservedQty} réservé(s)
+            </Text>
+          )}
           {(() => {
             // Show product-level expiration date if available
             if (product.expirationDate) {
@@ -2000,9 +2044,10 @@ function ProductFormModal({ product, onClose, onSaved }: {
         const createdId = createRes?.data?.id ?? createRes?.id;
         // Create a matching inventory item with zero stock
         if (createdId) {
+          const inferredFacilityId = products.find(p => p.inventoryItem?.facilityId)?.inventoryItem?.facilityId || DEFAULT_FACILITY_ID;
           await api.post('/inventory/items/', {
             product: createdId,
-            facility_id: 'pharmacy-main',
+            facility_id: inferredFacilityId,
             quantity_on_hand: 0,
             quantity_reserved: 0,
             quantity_on_order: 0,
@@ -2169,8 +2214,11 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
 
   const inv = product.inventoryItem;
   const currentQty = inv?.quantityOnHand || 0;
+  const currentReserved = inv?.quantityReserved || 0;
+  const currentAvailable = inv?.quantityAvailable || 0;
   const qty = Math.max(0, parseInt(adjQty) || 0);
   const newQty = adjType === 'add' ? currentQty + qty : Math.max(0, currentQty - qty);
+  const newAvailableQty = Math.max(0, newQty - currentReserved);
   const willSubtractExcess = adjType === 'subtract' && qty > currentQty;
   const computedStatus = newQty === 0
     ? 'OUT_OF_STOCK'
@@ -2189,26 +2237,42 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
     setSaving(true);
     try {
       const api = ApiService.getInstance();
+      const targetFacilityId = inv?.facilityId || products.find(p => p.inventoryItem?.facilityId)?.inventoryItem?.facilityId || DEFAULT_FACILITY_ID;
 
       // Resolve the inventory item: use cached one, or look it up, or create it
-      let invId = inv?.id;
+      let invId: string | undefined = undefined;
+
+      // Use cached item only if it is already for the target facility
+      if (inv?.id && inv.facilityId === targetFacilityId) {
+        invId = inv.id;
+      }
+
       if (!invId) {
-        // Try fetching an existing item for this product first
-        const fetchRes = await api.get('/inventory/items/', { product: product.id, facility_id: 'pharmacy-main', page_size: 1 });
+        // Fetch existing item specifically for the target facility
+        const fetchRes = await api.get('/inventory/items/', {
+          product: product.id,
+          facility_id: targetFacilityId,
+          page_size: 1,
+        });
         const existing = fetchRes?.data?.results?.[0] ?? fetchRes?.data?.[0];
+
         if (existing?.id) {
           invId = existing.id;
         } else {
-          // Truly no item — create one
+          // Create target-facility item if it doesn't exist yet
           const createRes = await api.post('/inventory/items/', {
             product: product.id,
-            facility_id: 'pharmacy-main',
+            facility_id: targetFacilityId,
             quantity_on_hand: 0,
             quantity_reserved: 0,
             quantity_on_order: 0,
           });
           invId = createRes?.data?.id;
-          if (!invId) { toast.error('Impossible de créer l\'inventaire'); setSaving(false); return; }
+          if (!invId) {
+            toast.error('Impossible de créer l\'inventaire de la pharmacie');
+            setSaving(false);
+            return;
+          }
         }
       }
 
@@ -2240,21 +2304,17 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
         throw new Error(updateResponse.error?.message || 'Update failed');
       }
 
-      const verifyRes = await api.get(`/inventory/items/${invId}/`);
-      if (!verifyRes.success || !verifyRes.data) {
-        throw new Error(verifyRes.error?.message || 'Impossible de vérifier le stock mis à jour');
-      }
-      const confirmedQty = parseFloat(verifyRes.data.quantity_on_hand ?? String(newQty));
-      const confirmedStatus = confirmedQty === 0
+      const persistedQty = parseFloat(updateResponse.data?.quantity_on_hand ?? String(newQty));
+      const persistedStatus = persistedQty === 0
         ? 'OUT_OF_STOCK'
-        : confirmedQty <= product.minStockLevel
+        : persistedQty <= product.minStockLevel
           ? 'LOW_STOCK'
-          : confirmedQty >= product.maxStockLevel
+          : persistedQty >= product.maxStockLevel
             ? 'OVER_STOCK'
             : 'IN_STOCK';
 
-      toast.success(`Stock ajusté: ${product.name} (${currentQty} → ${confirmedQty})`);
-      onSaved(product.id, confirmedQty, confirmedStatus);
+      toast.success(`Stock ajusté: ${product.name} (${currentQty} → ${persistedQty})`);
+      onSaved(product.id, persistedQty, persistedStatus);
     } catch (error) {
       console.error('❌ Stock adjustment error:', error);
       toast.error('Erreur lors de l\'ajustement');
@@ -2286,6 +2346,26 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
               <Text style={styles.adjBoxLbl}>Stock actuel</Text>
               <Text style={styles.adjBoxVal}>{currentQty}</Text>
             </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+              <View style={[styles.adjBox, { flex: 1, marginBottom: 0 }]}>
+                <Text style={styles.adjBoxLbl}>Réservé</Text>
+                <Text style={styles.adjBoxVal}>{currentReserved}</Text>
+              </View>
+              <View style={[styles.adjBox, { flex: 1, marginBottom: 0 }]}>
+                <Text style={styles.adjBoxLbl}>Disponible</Text>
+                <Text style={styles.adjBoxVal}>{currentAvailable}</Text>
+              </View>
+            </View>
+
+            {currentQty > 0 && currentAvailable === 0 && currentReserved > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.warning + '14', padding: 10, borderRadius: 8, marginBottom: 8, gap: 8 }}>
+                <Ionicons name="warning" size={16} color={colors.warning} />
+                <Text style={{ fontSize: 12, color: colors.warning, flex: 1 }}>
+                  Le stock est entièrement réservé ({currentReserved}). "Disponible" restera faible jusqu'à libération des réservations.
+                </Text>
+              </View>
+            )}
 
             {/* Direction */}
             <View style={styles.adjDirRow}>
@@ -2319,6 +2399,13 @@ function StockAdjustModal({ product, products, onSelectProduct, onClose, onSaved
             <View style={styles.adjBox}>
               <Text style={styles.adjBoxLbl}>Nouveau stock</Text>
               <Text style={[styles.adjBoxVal, { color: computedStatus === 'OUT_OF_STOCK' ? colors.error : computedStatus === 'LOW_STOCK' ? colors.warning : computedStatus === 'OVER_STOCK' ? colors.info : '#10B981' }]}>{newQty}</Text>
+            </View>
+
+            <View style={[styles.adjBox, { marginTop: -2 }]}> 
+              <Text style={styles.adjBoxLbl}>Disponible après ajustement</Text>
+              <Text style={[styles.adjBoxVal, { color: newAvailableQty === 0 && newQty > 0 ? colors.warning : colors.text }]}>
+                {newAvailableQty}
+              </Text>
             </View>
             {computedStatus === 'OVER_STOCK' && (
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.info + '14', padding: 10, borderRadius: 8, marginBottom: 8, gap: 8 }}>
@@ -2475,25 +2562,25 @@ function Select({ label, value, options, onChange, flex }: {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   scroll: { flex: 1 },
-  scrollContent: { padding: IS_DESKTOP ? 28 : 16, paddingBottom: 40 },
+  scrollContent: { padding: IS_DESKTOP ? 28 : IS_PHONE ? 12 : 16, paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   loadingText: { marginTop: 12, fontSize: 14, color: colors.textSecondary },
 
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
-  headerSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  headerBtns: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  btnFill: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg, gap: 6, ...shadows.sm },
-  btnFillText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
-  btnOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '0A', borderWidth: 1, borderColor: colors.primary + '30', paddingHorizontal: 14, paddingVertical: 9, borderRadius: borderRadius.lg, gap: 6 },
-  btnOutlineText: { fontSize: 13, fontWeight: '600', color: colors.primary },
-  btnOutlineSuccess: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98108', borderWidth: 1, borderColor: '#10B98130', paddingHorizontal: 14, paddingVertical: 9, borderRadius: borderRadius.lg, gap: 6 },
-  btnOutlineImport: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.info + '08', borderWidth: 1, borderColor: colors.info + '30', paddingHorizontal: 14, paddingVertical: 9, borderRadius: borderRadius.lg, gap: 6 },
+  headerTitle: { fontSize: IS_SMALL_PHONE ? 18 : IS_PHONE ? 20 : 22, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+  headerSub: { fontSize: IS_PHONE ? 12 : 13, color: colors.textSecondary, marginTop: 2 },
+  headerBtns: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', width: IS_PHONE ? '100%' as any : undefined },
+  btnFill: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: IS_PHONE ? 12 : 16, paddingVertical: IS_PHONE ? 9 : 10, borderRadius: borderRadius.lg, gap: 6, ...shadows.sm },
+  btnFillText: { fontSize: IS_PHONE ? 12 : 13, fontWeight: '700', color: '#FFF' },
+  btnOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '0A', borderWidth: 1, borderColor: colors.primary + '30', paddingHorizontal: IS_PHONE ? 10 : 14, paddingVertical: IS_PHONE ? 8 : 9, borderRadius: borderRadius.lg, gap: 6 },
+  btnOutlineText: { fontSize: IS_PHONE ? 12 : 13, fontWeight: '600', color: colors.primary },
+  btnOutlineSuccess: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98108', borderWidth: 1, borderColor: '#10B98130', paddingHorizontal: IS_PHONE ? 10 : 14, paddingVertical: IS_PHONE ? 8 : 9, borderRadius: borderRadius.lg, gap: 6 },
+  btnOutlineImport: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.info + '08', borderWidth: 1, borderColor: colors.info + '30', paddingHorizontal: IS_PHONE ? 10 : 14, paddingVertical: IS_PHONE ? 8 : 9, borderRadius: borderRadius.lg, gap: 6 },
 
   // KPIs
   kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  kpiCard: { flex: IS_DESKTOP ? 1 : undefined, width: IS_DESKTOP ? undefined : '31%' as any, borderRadius: borderRadius.xl, padding: 18, alignItems: 'center', ...shadows.md, minWidth: IS_DESKTOP ? 130 : undefined },
+  kpiCard: { flex: IS_DESKTOP ? 1 : undefined, width: IS_DESKTOP ? undefined : IS_PHONE ? '48%' as any : '31%' as any, borderRadius: borderRadius.xl, padding: IS_PHONE ? 14 : 18, alignItems: 'center', ...shadows.md, minWidth: IS_DESKTOP ? 130 : undefined },
   kpiIcon: { width: 36, height: 36, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   kpiVal: { fontSize: 24, fontWeight: '800', textAlign: 'center' },
   kpiLbl: { fontSize: 12, fontWeight: '600', marginTop: 4, textAlign: 'center' },
@@ -2510,7 +2597,7 @@ const styles = StyleSheet.create({
 
   // Tabs
   tabBar: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 4, marginBottom: 16, borderWidth: 1, borderColor: colors.outline, flexWrap: 'wrap' },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: borderRadius.lg, gap: 6, minWidth: 100 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: borderRadius.lg, gap: 6, minWidth: IS_PHONE ? 82 : 100 },
   tabActive: { backgroundColor: colors.primary + '0C' },
   tabText: { fontSize: 12, fontWeight: '500', color: colors.textTertiary },
   tabTextActive: { color: colors.primary, fontWeight: '700' },
@@ -2521,7 +2608,7 @@ const styles = StyleSheet.create({
   // Search & chips
   searchWrap: { marginBottom: 10 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
-  searchInput: { flex: 1, fontSize: 14, color: colors.text, outlineStyle: 'none' as any },
+  searchInput: { flex: 1, fontSize: IS_PHONE ? 13 : 14, color: colors.text, outlineStyle: 'none' as any },
   chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 7, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.outline, gap: 5 },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: 12, fontWeight: '500', color: colors.textSecondary },
@@ -2546,11 +2633,11 @@ const styles = StyleSheet.create({
 
   // Product card
   card: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, borderWidth: 1, borderColor: colors.outline, ...shadows.sm, overflow: 'hidden' },
-  cardRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', padding: IS_PHONE ? 10 : 12, gap: 10 },
   cardIcon: { width: 44, height: 44, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center' },
   cardInfo: { flex: 1, minWidth: 0 },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  cardName: { fontSize: 13, fontWeight: '600', color: colors.text, flex: 1 },
+  cardName: { fontSize: IS_PHONE ? 12 : 13, fontWeight: '600', color: colors.text, flex: 1 },
   cardSub: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
   cardRight: { alignItems: 'flex-end', marginRight: 6 },
   rxBadge: { backgroundColor: colors.primaryFaded, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
@@ -2566,7 +2653,7 @@ const styles = StyleSheet.create({
   detail: { paddingHorizontal: 12, paddingBottom: 12 },
   divider: { height: 1, backgroundColor: colors.outline, marginBottom: 10 },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  statCell: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 8, paddingVertical: 5, minWidth: IS_DESKTOP ? 110 : '30%' as any },
+  statCell: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 8, paddingVertical: 5, minWidth: IS_DESKTOP ? 110 : IS_PHONE ? '47%' as any : '30%' as any },
   statLbl: { fontSize: 9, fontWeight: '600', color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5 },
   statVal: { fontSize: 13, fontWeight: '700', color: colors.text, marginTop: 1 },
   thresholdRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
@@ -2590,12 +2677,12 @@ const styles = StyleSheet.create({
   mvtMiniQty: { fontSize: 12, fontWeight: '700', minWidth: 40, textAlign: 'right' },
   mvtMiniDate: { fontSize: 10, color: colors.textTertiary, minWidth: 60, textAlign: 'right' },
   metaText: { fontSize: 10, color: colors.textTertiary, fontStyle: 'italic', marginBottom: 10 },
-  actionRow: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: 10 },
+  actionRow: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: 10, flexWrap: IS_PHONE ? 'wrap' : 'nowrap' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: borderRadius.md, backgroundColor: colors.surfaceVariant },
   actionText: { fontSize: 11, fontWeight: '600' },
 
   // Batches tab
-  batchSummary: { flexDirection: 'row', gap: 10 },
+  batchSummary: { flexDirection: 'row', gap: 10, flexWrap: IS_PHONE ? 'wrap' : 'nowrap' },
   batchSumCard: { flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: 12, borderLeftWidth: 3, ...shadows.sm, alignItems: 'center' },
   batchSumVal: { fontSize: 20, fontWeight: '800', color: colors.text },
   batchSumLbl: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
@@ -2632,7 +2719,7 @@ const styles = StyleSheet.create({
   // Stock adjust modal extras
   adjBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceVariant, padding: 14, borderRadius: borderRadius.lg, marginBottom: 12 },
   adjBoxLbl: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  adjBoxVal: { fontSize: 24, fontWeight: '800', color: colors.text },
+  adjBoxVal: { fontSize: IS_PHONE ? 20 : 24, fontWeight: '800', color: colors.text },
   adjDirRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   adjDir: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: borderRadius.lg, borderWidth: 1.5, borderColor: colors.outline },
   adjDirText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
@@ -2640,19 +2727,19 @@ const styles = StyleSheet.create({
 
 // ─── Modal Styles ──────────────────────────────────────────
 const modalS = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  wrapper: { width: '100%', maxWidth: 640, maxHeight: '90%' },
-  container: { backgroundColor: colors.surface, borderRadius: borderRadius.xxl, overflow: 'hidden', maxHeight: '90%', width: '100%', maxWidth: 640, ...shadows.xl },
-  hdr: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  hdrTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  body: { padding: 20, maxHeight: 500 },
-  footer: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: colors.outline },
+  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'center', alignItems: 'center', padding: IS_PHONE ? 10 : 20 },
+  wrapper: { width: '100%', maxWidth: IS_PHONE ? 420 : 640, maxHeight: '92%' },
+  container: { backgroundColor: colors.surface, borderRadius: borderRadius.xxl, overflow: 'hidden', maxHeight: '92%', width: '100%', maxWidth: IS_PHONE ? 420 : 640, ...shadows.xl },
+  hdr: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: IS_PHONE ? 14 : 20, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  hdrTitle: { fontSize: IS_PHONE ? 16 : 18, fontWeight: '700', color: colors.text },
+  body: { padding: IS_PHONE ? 14 : 20, maxHeight: IS_PHONE ? 560 : 500 },
+  footer: { flexDirection: IS_PHONE ? 'column' : 'row', justifyContent: 'flex-end', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: colors.outline },
   cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline },
   cancelText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: borderRadius.lg },
   saveText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
   sec: { fontSize: 13, fontWeight: '700', color: colors.primary, marginBottom: 8, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
-  row: { flexDirection: 'row', gap: 10 },
+  row: { flexDirection: IS_PHONE ? 'column' : 'row', gap: 10 },
   field: { marginBottom: 10 },
   fieldLbl: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, marginBottom: 4 },
   fieldInput: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: colors.text, borderWidth: 1, borderColor: colors.outline },
@@ -2662,7 +2749,7 @@ const modalS = StyleSheet.create({
   ddItem: { paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.outline },
   ddItemActive: { backgroundColor: colors.primary + '0A' },
   ddText: { fontSize: 12, color: colors.text },
-  toggleRow: { flexDirection: 'row', gap: 12, marginVertical: 8 },
+  toggleRow: { flexDirection: 'row', gap: 12, marginVertical: 8, flexWrap: 'wrap' },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: borderRadius.md, backgroundColor: colors.surfaceVariant },
   toggleOn: { backgroundColor: colors.primary + '0A' },
   toggleText: { fontSize: 12, fontWeight: '500', color: colors.text },

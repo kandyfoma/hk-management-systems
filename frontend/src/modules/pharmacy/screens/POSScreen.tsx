@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,12 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useToast } from '../../../components/GlobalUI';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import DatabaseService from '../../../services/DatabaseService';
 import ApiService from '../../../services/ApiService';
+import SyncService from '../../../services/SyncService';
 import {
   Product,
   InventoryItem,
@@ -30,9 +32,13 @@ import {
   SaleUtils,
 } from '../../../models/Sale';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 const isDesktop = SCREEN_W >= 1024;
+const isPhone = SCREEN_W < 640;
+const isSmallPhone = SCREEN_W < 390;
 const CART_WIDTH = isDesktop ? 380 : SCREEN_W;
+const POS_DRAFT_KEY = 'pharmacy_pos_draft_v1';
+const AUTH_SESSION_KEY = 'auth_session';
 
 // ═══════════════════════════════════════════════════════════════
 //  ENRICHED PRODUCT (product + live stock data)
@@ -49,14 +55,6 @@ interface ShopProduct extends Product {
 
 const fmt = (n: number, c = 'CDF') => SaleUtils.formatCurrency(n, c);
 
-function getCategoryIcon(cat: string): keyof typeof Ionicons.glyphMap {
-  const m: Record<string, keyof typeof Ionicons.glyphMap> = {
-    MEDICATION: 'medkit', OTC: 'medical', SUPPLEMENT: 'nutrition',
-    CONSUMABLE: 'bandage', MEDICAL_DEVICE: 'hardware-chip',
-  };
-  return m[cat] || 'cube';
-}
-
 function getCatLabel(cat: string): string {
   const m: Record<string, string> = {
     MEDICATION: 'Médicament', OTC: 'Sans ordonnance', SUPPLEMENT: 'Complément',
@@ -71,12 +69,19 @@ function getCatLabel(cat: string): string {
 
 export function POSScreen() {
   const toast = useToast();
+  const toastRef = useRef(toast);
+  const PRODUCTS_PER_PAGE = isDesktop ? 24 : isPhone ? 8 : 12;
+
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
 
   // ─── State ──────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [catalogPage, setCatalogPage] = useState(1);
   const [cart, setCart] = useState<CartState>(SaleUtils.createEmptyCart());
   const [cartTotals, setCartTotals] = useState<CartTotals>({ itemCount: 0, totalQuantity: 0, subtotal: 0, lineDiscounts: 0, globalDiscount: 0, totalDiscount: 0, taxTotal: 0, grandTotal: 0 });
 
@@ -90,18 +95,152 @@ export function POSScreen() {
   // Org context
   const [orgId, setOrgId] = useState('');
   const facilityId = 'pharmacy-main';
+  const [pendingSalesCount, setPendingSalesCount] = useState(0);
+  const [syncInProgress, setSyncInProgress] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  const [cashierId, setCashierId] = useState('');
+  const [cashierName, setCashierName] = useState('Admin');
+  const syncServiceRef = useRef(SyncService.getInstance());
+  const syncLockRef = useRef(false);
+
+  const isCartDraftEmpty = useCallback((value: CartState) => (
+    value.items.length === 0
+    && !value.customerId
+    && !value.customerName
+    && !value.customerPhone
+    && !value.prescriptionId
+    && value.globalDiscountType === 'NONE'
+    && value.globalDiscountValue === 0
+  ), []);
+
+  const adjustLocalStockForSale = useCallback((soldItems: CartItem[]) => {
+    const soldByProduct = new Map<string, number>();
+    soldItems.forEach((item) => {
+      soldByProduct.set(item.productId, (soldByProduct.get(item.productId) ?? 0) + item.quantity);
+    });
+
+    setProducts((prev) => prev.map((product) => {
+      const soldQty = soldByProduct.get(product.id) ?? 0;
+      if (!soldQty) return product;
+      return {
+        ...product,
+        availableQty: Math.max(0, product.availableQty - soldQty),
+      };
+    }));
+  }, []);
+
+  const refreshSyncStatus = useCallback(() => {
+    const status = syncServiceRef.current.getSyncStatus();
+    setPendingSalesCount(status.pendingItems);
+    setSyncInProgress(status.syncInProgress);
+  }, []);
+
+  const hydrateSessionContext = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(AUTH_SESSION_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      const sessionOrgId: string = parsed?.organization?.id ?? '';
+      const sessionUser: any = parsed?.user ?? null;
+
+      if (sessionOrgId) {
+        setOrgId((prev) => prev || sessionOrgId);
+      }
+
+      const derivedCashierName =
+        sessionUser?.fullName
+        || [sessionUser?.firstName, sessionUser?.lastName].filter(Boolean).join(' ').trim()
+        || sessionUser?.phone
+        || 'Admin';
+
+      setCashierId(sessionUser?.id ?? '');
+      setCashierName(derivedCashierName);
+    } catch {
+      // Ignore malformed session
+    }
+  }, []);
+
+  const queueLocalSaleForSync = useCallback(async (localSaleId: string, payload: any) => {
+    await syncServiceRef.current.queueForSync('sales', 'CREATE', payload, localSaleId);
+    refreshSyncStatus();
+  }, [refreshSyncStatus]);
+
+  const syncPendingSales = useCallback(async (silent = false) => {
+    try {
+      if (syncLockRef.current) return;
+
+      syncLockRef.current = true;
+      setSyncInProgress(true);
+      const api = ApiService.getInstance();
+      const isOnline = await api.checkConnection();
+      if (!isOnline) {
+        refreshSyncStatus();
+        if (!silent) toastRef.current.info('Hors ligne: synchronisation différée');
+        return;
+      }
+
+      const beforePending = syncServiceRef.current.getSyncStatus().pendingItems;
+      await syncServiceRef.current.forceSync();
+      const afterPending = syncServiceRef.current.getSyncStatus().pendingItems;
+      refreshSyncStatus();
+
+      if (!silent) {
+        const synced = Math.max(0, beforePending - afterPending);
+        if (synced > 0) {
+          toastRef.current.success(`${synced} vente(s) synchronisée(s)`);
+        } else if (afterPending > 0) {
+          toastRef.current.warning('Certaines ventes restent en attente de synchronisation');
+        }
+      }
+    } catch {
+      if (!silent) toastRef.current.warning('Synchronisation reportée');
+    } finally {
+      syncLockRef.current = false;
+      refreshSyncStatus();
+    }
+  }, [refreshSyncStatus]);
+
+  const saveDraft = useCallback(async (value: CartState, silent = true) => {
+    if (isCartDraftEmpty(value)) {
+      await AsyncStorage.removeItem(POS_DRAFT_KEY);
+      if (!silent) toastRef.current.info('Brouillon supprimé');
+      return;
+    }
+
+    await AsyncStorage.setItem(POS_DRAFT_KEY, JSON.stringify({ cart: value, savedAt: new Date().toISOString() }));
+    if (!silent) toastRef.current.success('Brouillon sauvegardé');
+  }, [isCartDraftEmpty]);
 
   // ─── Load Products ─────────────────────────────────────
   const loadProducts = useCallback(async () => {
     try {
       const api = ApiService.getInstance();
+
+      const fetchAllResults = async (endpoint: string, params: Record<string, any> = {}, maxPages = 8) => {
+        const allRows: any[] = [];
+        for (let page = 1; page <= maxPages; page += 1) {
+          const res = await api.get(endpoint, { ...params, page });
+          const payload = res?.data;
+          const rows: any[] = Array.isArray(payload) ? payload : (payload?.results ?? []);
+          allRows.push(...rows);
+
+          if (Array.isArray(payload) || !payload?.next) break;
+        }
+        return allRows;
+      };
+
       const [productsRes, itemsRes] = await Promise.all([
-        api.get('/inventory/products/', { is_active: true, page_size: 500 }),
-        api.get('/inventory/items/', { page_size: 500 }),
+        fetchAllResults('/inventory/products/', { is_active: true, page_size: 200 }),
+        fetchAllResults('/inventory/items/', { facility_id: facilityId, page_size: 300 }),
       ]);
 
-      const rawProducts: any[] = productsRes?.data?.results ?? productsRes?.data ?? [];
-      const rawItems: any[] = itemsRes?.data?.results ?? itemsRes?.data ?? [];
+      const rawProducts: any[] = productsRes ?? [];
+      const rawItems: any[] = itemsRes ?? [];
+      const resolvedOrgId = orgId || rawProducts[0]?.organization || rawItems[0]?.organization || '';
+      if (resolvedOrgId) {
+        setOrgId((prev) => prev || resolvedOrgId);
+      }
 
       // Build inventory map: productId → inventory item
       const invMap = new Map<string, InventoryItem>();
@@ -173,13 +312,95 @@ export function POSScreen() {
       setProducts(enriched);
     } catch (err) {
       console.error('POS load error', err);
-      toast.error('Erreur lors du chargement des produits');
+      try {
+        const db = DatabaseService.getInstance();
+        const fallbackOrgId = orgId;
+        if (!fallbackOrgId) {
+          throw err;
+        }
+
+        const [localInventory, localProductMap] = await Promise.all([
+          db.getInventoryItemsByOrganization(fallbackOrgId),
+          db.getProductsMap(fallbackOrgId),
+        ]);
+
+        const invByProductId = new Map<string, InventoryItem>();
+        localInventory.forEach((inv) => {
+          invByProductId.set(inv.productId, inv);
+        });
+
+        const fallbackProducts: ShopProduct[] = Array.from(localProductMap.values()).map((product) => {
+          const inv = invByProductId.get(product.id);
+          return {
+            ...product,
+            inventoryItem: inv,
+            availableQty: Math.max(0, inv?.quantityAvailable ?? inv?.quantityOnHand ?? 0),
+          };
+        });
+
+        setProducts(fallbackProducts);
+        toastRef.current.warning('Mode hors ligne: catalogue local chargé');
+      } catch {
+        toastRef.current.error('Erreur lors du chargement des produits');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [facilityId, orgId]);
 
-  useEffect(() => { loadProducts(); }, [loadProducts]);
+  useEffect(() => {
+    (async () => {
+      await hydrateSessionContext();
+      await loadProducts();
+      refreshSyncStatus();
+    })();
+  }, [hydrateSessionContext, loadProducts, refreshSyncStatus]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const draftRaw = await AsyncStorage.getItem(POS_DRAFT_KEY);
+        if (draftRaw) {
+          const parsed = JSON.parse(draftRaw);
+          if (parsed?.cart?.items && Array.isArray(parsed.cart.items)) {
+            setCart(parsed.cart as CartState);
+            toastRef.current.info('Brouillon POS restauré');
+          }
+        }
+      } catch {
+        // Ignore malformed draft storage
+      } finally {
+        setDraftHydrated(true);
+      }
+
+      await hydrateSessionContext();
+      refreshSyncStatus();
+      await syncPendingSales(true);
+    })();
+  }, [hydrateSessionContext, refreshSyncStatus, syncPendingSales]);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    const timer = setTimeout(() => {
+      saveDraft(cart, true).catch(() => undefined);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [cart, draftHydrated, saveDraft]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncPendingSales(true).catch(() => undefined);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [syncPendingSales]);
+
+  useEffect(() => {
+    const statusPoll = setInterval(() => {
+      refreshSyncStatus();
+    }, 2500);
+    return () => clearInterval(statusPoll);
+  }, [refreshSyncStatus]);
 
   // ─── Recompute cart totals ─────────────────────────────
   useEffect(() => {
@@ -201,6 +422,29 @@ export function POSScreen() {
     }
     return r;
   }, [products, selectedCategory, searchQuery]);
+
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [searchQuery, selectedCategory]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE)), [filteredProducts.length, PRODUCTS_PER_PAGE]);
+
+  useEffect(() => {
+    if (catalogPage > totalPages) {
+      setCatalogPage(totalPages);
+    }
+  }, [catalogPage, totalPages]);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (catalogPage - 1) * PRODUCTS_PER_PAGE;
+    return filteredProducts.slice(start, start + PRODUCTS_PER_PAGE);
+  }, [catalogPage, filteredProducts, PRODUCTS_PER_PAGE]);
+
+  const cartQtyByProduct = useMemo(() => {
+    const qtyMap = new Map<string, number>();
+    cart.items.forEach((item) => qtyMap.set(item.productId, item.quantity));
+    return qtyMap;
+  }, [cart.items]);
 
   // ─── Categories from live data ─────────────────────────
   const categories = useMemo(() => {
@@ -304,6 +548,42 @@ export function POSScreen() {
 
   const [checkoutInProgress, setCheckoutInProgress] = useState(false);
 
+  const buildSalePayload = useCallback((sourceCart: CartState, payments: SalePayment[]) => {
+    const items = sourceCart.items.map((item) => ({
+      product: item.productId,
+      product_name: item.product.name,
+      product_sku: item.product.sku ?? '',
+      unit_of_measure: item.product.dosageForm ?? 'UNIT',
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      unit_cost: item.product.costPrice ?? 0,
+      discount_type: item.discountPercent > 0 ? 'PERCENTAGE' : item.discountAmount > 0 ? 'FIXED' : 'NONE',
+      discount_value: item.discountPercent > 0 ? item.discountPercent : item.discountAmount ?? 0,
+      discount_amount: item.discountAmount ?? 0,
+    }));
+
+    const backendPayments = payments.map((payment) => ({
+      payment_method: payment.method,
+      amount: payment.amount,
+      currency: payment.currency ?? 'CDF',
+      reference_number: payment.reference ?? '',
+    }));
+
+    const payload: any = {
+      type: sourceCart.prescriptionId ? 'PRESCRIPTION' : 'COUNTER',
+      notes: (sourceCart as any).notes ?? '',
+      items,
+      payments: backendPayments,
+    };
+
+    if (sourceCart.customerId) payload.customer = sourceCart.customerId;
+    if (sourceCart.customerName) payload.customer_name = sourceCart.customerName;
+    if (sourceCart.customerPhone) payload.customer_phone = sourceCart.customerPhone;
+    if (sourceCart.prescriptionId) payload.prescription = sourceCart.prescriptionId;
+
+    return payload;
+  }, []);
+
   const handleCheckout = useCallback(async (payments: SalePayment[]) => {
     if (cart.items.length === 0) return;
     if (checkoutInProgress) return;
@@ -313,84 +593,89 @@ export function POSScreen() {
     }
     setCheckoutInProgress(true);
     try {
+      const db = DatabaseService.getInstance();
       const api = ApiService.getInstance();
-
-      // Map cart items → backend SaleItem shape
-      const items = cart.items.map((item) => ({
-        product: item.productId,
-        product_name: item.product.name,
-        product_sku: item.product.sku ?? '',
-        unit_of_measure: item.product.unitOfMeasure ?? 'UNIT',
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        unit_cost: item.product.costPrice ?? 0,
-        discount_amount: item.discountAmount ?? 0,
-        discount_value: item.discountPercent ?? 0,
-      }));
-
-      // Map payments → backend SalePayment shape
-      const backendPayments = payments.map((p) => ({
-        payment_method: p.method,
-        amount: p.amount,
-        currency: p.currency ?? 'CDF',
-        reference_number: p.reference ?? '',
-      }));
-
-      const payload: any = {
-        type: cart.prescriptionId ? 'PRESCRIPTION' : 'REGULAR',
-        notes: cart.notes ?? '',
-        items,
-        payments: backendPayments,
+      const checkoutCart: CartState = {
+        ...cart,
+        items: cart.items.map((item) => ({ ...item })),
       };
-      if (cart.customerId) payload.customer = cart.customerId;
-      if (cart.customerName) payload.customer_name = cart.customerName;
+      const checkoutPayments = payments.map((payment) => ({ ...payment }));
+      const soldItems = [...checkoutCart.items];
 
-      const res = await api.post('/sales/', payload);
-      if (!res?.data?.id) throw new Error('Invalid response from server');
+      const stockConflict = soldItems.find((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        return !!product && item.quantity > product.availableQty;
+      });
+      if (stockConflict) {
+        throw new Error(`Stock insuffisant pour ${stockConflict.product.name}`);
+      }
 
-      const backendSale = res.data;
-      // Map backend response to frontend Sale shape for receipt
-      const sale: Sale = {
-        id: backendSale.id,
-        saleNumber: backendSale.sale_number ?? backendSale.id,
-        receiptNumber: backendSale.receipt_number ?? '',
-        organizationId: orgId,
+      const effectiveOrgId = orgId || '';
+      const localSale = await db.processSale(
+        checkoutCart,
+        checkoutPayments,
+        cashierId,
+        cashierName,
+        effectiveOrgId,
         facilityId,
-        cashierId: '',
-        cashierName: backendSale.cashier_name ?? 'Admin',
-        status: backendSale.status ?? 'COMPLETED',
-        type: backendSale.type ?? 'REGULAR',
-        customerId: backendSale.customer ?? '',
-        customerName: backendSale.customer_name ?? '',
-        customerPhone: backendSale.customer_phone ?? '',
-        prescriptionId: backendSale.prescription ?? '',
-        items: cart.items,
-        payments,
-        subtotal: cartTotals.subtotal,
-        taxTotal: cartTotals.taxTotal,
-        discountTotal: cartTotals.totalDiscount,
-        grandTotal: cartTotals.grandTotal,
-        totalAmount: cartTotals.grandTotal,
-        currency: cart.items[0]?.product?.currency ?? 'CDF',
-        itemCount: cart.items.length,
-        notes: cart.notes ?? '',
-        createdAt: backendSale.created_at ?? new Date().toISOString(),
-        updatedAt: backendSale.updated_at ?? new Date().toISOString(),
-      };
+      );
 
-      setLastSale(sale);
+      const payload = buildSalePayload(checkoutCart, checkoutPayments);
+      let queuedForSync = false;
+      try {
+        await queueLocalSaleForSync(localSale.id, payload);
+        queuedForSync = true;
+      } catch {
+        queuedForSync = false;
+      }
+
+      setLastSale(localSale);
       setShowPayment(false);
       setShowReceipt(true);
       clearCart();
-      loadProducts(); // Refresh stock
-      toast.success(`Vente ${sale.saleNumber} enregistrée!`);
+      adjustLocalStockForSale(soldItems);
+      await AsyncStorage.removeItem(POS_DRAFT_KEY);
+
+      if (!queuedForSync) {
+        toast.warning(`Vente ${localSale.saleNumber} enregistrée localement (sync en attente manuelle)`);
+        return;
+      }
+
+      const isOnline = await api.checkConnection();
+      if (!isOnline) {
+        toast.info(`Vente ${localSale.saleNumber} enregistrée hors ligne et en attente de sync`);
+        return;
+      }
+
+      await syncPendingSales(true);
+      const pending = syncServiceRef.current.getSyncStatus().pendingItems;
+      if (pending > 0) {
+        toast.warning(`Vente ${localSale.saleNumber} enregistrée localement; synchronisation en arrière-plan`);
+      } else {
+        toast.success(`Vente ${localSale.saleNumber} enregistrée et synchronisée`);
+      }
     } catch (err) {
       console.error('Checkout error', err);
-      toast.error('Erreur lors de l\'enregistrement de la vente');
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement de la vente');
     } finally {
       setCheckoutInProgress(false);
     }
-  }, [cart, cartTotals, orgId, facilityId, clearCart, loadProducts, toast, checkoutInProgress]);
+  }, [
+    cart,
+    cartTotals,
+    products,
+    orgId,
+    facilityId,
+    cashierId,
+    cashierName,
+    clearCart,
+    toast,
+    checkoutInProgress,
+    buildSalePayload,
+    queueLocalSaleForSync,
+    syncPendingSales,
+    adjustLocalStockForSale,
+  ]);
 
   // ═══════════════════════════════════════════════════════
   //  RENDER
@@ -416,9 +701,26 @@ export function POSScreen() {
             <Text style={s.topBarTitle}>Point de Vente</Text>
           </View>
           <View style={s.topBarRight}>
+            <TouchableOpacity
+              style={s.historyBtn}
+              onPress={() => saveDraft(cart, false)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="save-outline" size={18} color={colors.primary} />
+              {!isSmallPhone && <Text style={s.historyBtnText}>Brouillon</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.historyBtn}
+              onPress={() => syncPendingSales(false)}
+              activeOpacity={0.7}
+              disabled={syncInProgress}
+            >
+              <Ionicons name={syncInProgress ? 'sync' : 'cloud-upload-outline'} size={18} color={colors.primary} />
+              {!isSmallPhone && <Text style={s.historyBtnText}>{pendingSalesCount > 0 ? `Sync (${pendingSalesCount})` : 'Sync'}</Text>}
+            </TouchableOpacity>
             <TouchableOpacity style={s.historyBtn} onPress={() => setShowHistory(true)} activeOpacity={0.7}>
               <Ionicons name="time-outline" size={18} color={colors.primary} />
-              <Text style={s.historyBtnText}>Historique</Text>
+              {!isSmallPhone && <Text style={s.historyBtnText}>Historique</Text>}
             </TouchableOpacity>
             {!isDesktop && cart.items.length > 0 && (
               <TouchableOpacity style={s.mobileCartBtn} onPress={() => setShowMobileCart(true)} activeOpacity={0.7}>
@@ -472,17 +774,42 @@ export function POSScreen() {
               <Text style={s.emptyTitle}>Aucun produit trouvé</Text>
             </View>
           ) : (
-            filteredProducts.map((product) => (
+            paginatedProducts.map((product) => (
               <ProductTile
                 key={product.id}
                 product={product}
-                inCart={cart.items.some((i) => i.productId === product.id)}
-                cartQty={cart.items.find((i) => i.productId === product.id)?.quantity ?? 0}
+                inCart={cartQtyByProduct.has(product.id)}
+                cartQty={cartQtyByProduct.get(product.id) ?? 0}
                 onAdd={() => addToCart(product)}
               />
             ))
           )}
         </ScrollView>
+
+        {filteredProducts.length > 0 && (
+          <View style={[s.paginationWrap, isPhone && s.paginationWrapMobile]}>
+            <Text style={s.paginationInfo}>
+              {(catalogPage - 1) * PRODUCTS_PER_PAGE + 1}–{Math.min(catalogPage * PRODUCTS_PER_PAGE, filteredProducts.length)} sur {filteredProducts.length}
+            </Text>
+            <View style={s.paginationCtrls}>
+              <TouchableOpacity
+                style={[s.pageBtn, catalogPage <= 1 && s.pageBtnDisabled]}
+                onPress={() => setCatalogPage((p) => Math.max(1, p - 1))}
+                disabled={catalogPage <= 1}
+              >
+                <Ionicons name="chevron-back" size={16} color={catalogPage <= 1 ? colors.textTertiary : colors.primary} />
+              </TouchableOpacity>
+              <Text style={s.pageLabel}>Page {catalogPage}/{totalPages}</Text>
+              <TouchableOpacity
+                style={[s.pageBtn, catalogPage >= totalPages && s.pageBtnDisabled]}
+                onPress={() => setCatalogPage((p) => Math.min(totalPages, p + 1))}
+                disabled={catalogPage >= totalPages}
+              >
+                <Ionicons name="chevron-forward" size={16} color={catalogPage >= totalPages ? colors.textTertiary : colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* ════════════ RIGHT: Cart Panel (desktop) ════════════ */}
@@ -527,6 +854,7 @@ export function POSScreen() {
         visible={showPayment}
         totals={cartTotals}
         currency={cart.items[0]?.product.currency || 'CDF'}
+        isProcessing={checkoutInProgress}
         onClose={() => setShowPayment(false)}
         onConfirm={handleCheckout}
       />
@@ -553,7 +881,7 @@ export function POSScreen() {
 //  PRODUCT TILE
 // ═══════════════════════════════════════════════════════════════
 
-function ProductTile({ product, inCart, cartQty, onAdd }: { product: ShopProduct; inCart: boolean; cartQty: number; onAdd: () => void }) {
+const ProductTile = React.memo(function ProductTile({ product, inCart, cartQty, onAdd }: { product: ShopProduct; inCart: boolean; cartQty: number; onAdd: () => void }) {
   const outOfStock = product.availableQty <= 0;
   const lowStock = product.availableQty > 0 && product.availableQty <= (product.minStockLevel || 10);
 
@@ -564,11 +892,6 @@ function ProductTile({ product, inCart, cartQty, onAdd }: { product: ShopProduct
       activeOpacity={outOfStock ? 1 : 0.7}
       disabled={outOfStock}
     >
-      {/* Icon */}
-      <View style={[s.tileIcon, { backgroundColor: outOfStock ? colors.surfaceVariant : colors.primaryFaded }]}>
-        <Ionicons name={getCategoryIcon(product.category)} size={26} color={outOfStock ? colors.textTertiary : colors.primary} />
-      </View>
-
       {/* Name */}
       <Text style={s.tileName} numberOfLines={2}>{product.name}</Text>
       <Text style={s.tileSub} numberOfLines={1}>
@@ -601,7 +924,7 @@ function ProductTile({ product, inCart, cartQty, onAdd }: { product: ShopProduct
       )}
     </TouchableOpacity>
   );
-}
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  CART PANEL
@@ -771,13 +1094,14 @@ function TotalRow({ label, value, color }: { label: string; value: string; color
 // ═══════════════════════════════════════════════════════════════
 
 function PaymentModal({
-  visible, totals, currency, onClose, onConfirm,
+  visible, totals, currency, isProcessing, onClose, onConfirm,
 }: {
   visible: boolean;
   totals: CartTotals;
   currency: string;
+  isProcessing: boolean;
   onClose: () => void;
-  onConfirm: (payments: SalePayment[]) => void;
+  onConfirm: (payments: SalePayment[]) => Promise<void> | void;
 }) {
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [amountInput, setAmountInput] = useState('');
@@ -812,18 +1136,10 @@ function PaymentModal({
       ].filter((v, i, arr) => arr.indexOf(v) === i && v >= totals.grandTotal).slice(0, 4)
     : [];
 
-  const [confirming, setConfirming] = useState(false);
-
-  // Reset confirming flag when modal opens
-  useEffect(() => {
-    if (visible) setConfirming(false);
-  }, [visible]);
-
-  const handleConfirm = () => {
-    if (confirming) return; // Prevent double-tap
+  const handleConfirm = async () => {
+    if (isProcessing) return;
     if (totals.grandTotal <= 0) return; // Zero-total guard
     if (amount < totals.grandTotal && method !== 'CREDIT') return;
-    setConfirming(true);
     const payment: SalePayment = {
       id: Date.now().toString(36),
       saleId: '',
@@ -832,7 +1148,7 @@ function PaymentModal({
       reference: reference || undefined,
       receivedAt: new Date().toISOString(),
     };
-    onConfirm([payment]);
+    await onConfirm([payment]);
   };
 
   return (
@@ -911,10 +1227,10 @@ function PaymentModal({
 
           {/* Confirm */}
           <TouchableOpacity
-            style={[s.pmConfirmBtn, (confirming || (amount < totals.grandTotal && method !== 'CREDIT')) && { opacity: 0.5 }]}
+            style={[s.pmConfirmBtn, (isProcessing || (amount < totals.grandTotal && method !== 'CREDIT')) && { opacity: 0.5 }]}
             onPress={handleConfirm}
             activeOpacity={0.8}
-            disabled={confirming || (amount < totals.grandTotal && method !== 'CREDIT')}
+            disabled={isProcessing || (amount < totals.grandTotal && method !== 'CREDIT')}
           >
             <Ionicons name="checkmark-circle" size={22} color="#FFF" />
             <Text style={s.pmConfirmText}>Valider le paiement</Text>
@@ -1051,7 +1367,7 @@ function SalesHistoryModal({ visible, orgId, onClose, onViewReceipt }: {
           cashierId: '',
           cashierName: s.cashier_name ?? '',
           status: s.status ?? 'COMPLETED',
-          type: s.type ?? 'REGULAR',
+          type: s.type ?? 'COUNTER',
           customerId: s.customer ?? '',
           customerName: s.customer_name ?? '',
           customerPhone: s.customer_phone ?? '',
@@ -1110,7 +1426,7 @@ function SalesHistoryModal({ visible, orgId, onClose, onViewReceipt }: {
       setSales(rawSales.map((s: any) => ({
         id: s.id, saleNumber: s.sale_number ?? s.id, receiptNumber: s.receipt_number ?? '',
         organizationId: '', facilityId: '', cashierId: '', cashierName: s.cashier_name ?? '',
-        status: s.status ?? 'COMPLETED', type: s.type ?? 'REGULAR',
+        status: s.status ?? 'COMPLETED', type: s.type ?? 'COUNTER',
         customerId: s.customer ?? '', customerName: s.customer_name ?? '', customerPhone: '',
         prescriptionId: '', items: [],
         payments: (s.payments ?? []).map((p: any) => ({ id: p.id, method: p.payment_method, amount: parseFloat(p.amount ?? '0'), currency: p.currency ?? 'CDF', reference: p.reference_number ?? '', status: p.status ?? 'COMPLETED', processedAt: p.processed_at })),
@@ -1213,18 +1529,18 @@ const s = StyleSheet.create({
   catalogSide: { flex: 1, borderRightWidth: isDesktop ? 1 : 0, borderRightColor: colors.outline },
 
   // Top bar
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.outline, backgroundColor: colors.surface },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: isPhone ? 12 : 16, paddingVertical: isPhone ? 10 : 12, borderBottomWidth: 1, borderBottomColor: colors.outline, backgroundColor: colors.surface },
   topBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  topBarTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  topBarTitle: { fontSize: isSmallPhone ? 16 : 18, fontWeight: '700', color: colors.text },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary },
+  historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: isSmallPhone ? 9 : 12, paddingVertical: 6, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary },
   historyBtnText: { fontSize: 12, fontWeight: '600', color: colors.primary },
   mobileCartBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.full, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   mobileCartBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.error, borderRadius: borderRadius.full, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   mobileCartBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
 
   // Search
-  searchRow: { padding: 12, paddingBottom: 0 },
+  searchRow: { padding: isPhone ? 10 : 12, paddingBottom: 0 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: colors.text, outlineStyle: 'none' as any },
 
@@ -1238,7 +1554,36 @@ const s = StyleSheet.create({
 
   // Product grid
   productScroll: { flex: 1 },
-  productGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 10 },
+  productGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: isPhone ? 10 : 12, gap: isPhone ? 8 : 10 },
+  paginationWrap: {
+    borderTopWidth: 1,
+    borderTopColor: colors.outline,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  paginationWrapMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  paginationInfo: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+  paginationCtrls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pageBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  pageBtnDisabled: { backgroundColor: colors.surfaceVariant },
+  pageLabel: { fontSize: 12, color: colors.text, fontWeight: '600' },
 
   // Empty
   emptyState: { alignItems: 'center', paddingVertical: 40, width: '100%' },
@@ -1246,17 +1591,16 @@ const s = StyleSheet.create({
 
   // ─── PRODUCT TILE ────────────────────────────────────────
   tile: {
-    width: isDesktop ? 'calc(25% - 8px)' as any : '48%' as any,
+    width: isDesktop ? 'calc(25% - 8px)' as any : isPhone ? '100%' as any : '48%' as any,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.xl,
     borderWidth: 1,
     borderColor: colors.outline,
-    padding: 12,
+    padding: isPhone ? 10 : 12,
     ...shadows.xs,
   },
   tileDisabled: { opacity: 0.5 },
   tileInCart: { borderColor: colors.primary, borderWidth: 2 },
-  tileIcon: { width: 44, height: 44, borderRadius: borderRadius.lg, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   tileName: { fontSize: 13, fontWeight: '600', color: colors.text, lineHeight: 18 },
   tileSub: { fontSize: 11, color: colors.textTertiary, marginTop: 2 },
   tilePriceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },

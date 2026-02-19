@@ -127,6 +127,9 @@ export class DatabaseService {
   // ── Data Persistence Methods ──────────────────────────────────
 
   private readonly STORAGE_KEY = 'HK_DATABASE_DATA';
+  private readonly PHARMACY_PRESCRIPTIONS_CACHE_KEY = 'HK_PHARMACY_PRESCRIPTIONS_CACHE';
+  private readonly PHARMACY_ANALYTICS_CACHE_KEY = 'HK_PHARMACY_ANALYTICS_CACHE';
+  private readonly PHARMACY_REPORTS_CACHE_KEY = 'HK_PHARMACY_REPORTS_CACHE';
 
   async saveDataToPersistentStorage(): Promise<void> {
     try {
@@ -378,6 +381,63 @@ export class DatabaseService {
   private async autoSave(): Promise<void> {
     // Auto-save data after any modification
     await this.saveDataToPersistentStorage();
+  }
+
+  private async persistData(): Promise<void> {
+    await this.saveDataToPersistentStorage();
+  }
+
+  // ── Pharmacy API Cache Methods ─────────────────────────────────
+
+  async savePharmacyPrescriptionsCache(payload: any): Promise<void> {
+    await AsyncStorage.setItem(
+      this.PHARMACY_PRESCRIPTIONS_CACHE_KEY,
+      JSON.stringify({ payload, savedAt: new Date().toISOString() })
+    );
+  }
+
+  async getPharmacyPrescriptionsCache(): Promise<{ payload: any; savedAt: string } | null> {
+    const raw = await AsyncStorage.getItem(this.PHARMACY_PRESCRIPTIONS_CACHE_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  async savePharmacyAnalyticsCache(payload: any): Promise<void> {
+    await AsyncStorage.setItem(
+      this.PHARMACY_ANALYTICS_CACHE_KEY,
+      JSON.stringify({ payload, savedAt: new Date().toISOString() })
+    );
+  }
+
+  async getPharmacyAnalyticsCache(): Promise<{ payload: any; savedAt: string } | null> {
+    const raw = await AsyncStorage.getItem(this.PHARMACY_ANALYTICS_CACHE_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  async savePharmacyReportsCache(payload: any): Promise<void> {
+    await AsyncStorage.setItem(
+      this.PHARMACY_REPORTS_CACHE_KEY,
+      JSON.stringify({ payload, savedAt: new Date().toISOString() })
+    );
+  }
+
+  async getPharmacyReportsCache(): Promise<{ payload: any; savedAt: string } | null> {
+    const raw = await AsyncStorage.getItem(this.PHARMACY_REPORTS_CACHE_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
 
   // ── Audit Logging Methods ─────────────────────────────────
@@ -1795,14 +1855,23 @@ export class DatabaseService {
       receiptPrinted: false,
       printCount: 0,
       createdAt: now,
+      synced: false,
     };
 
     this.tables.sales.push(sale);
+    this.sales.set(sale.id, sale);
 
     // ── Deduct stock & log movements ───────────────────────
     for (const item of cart.items) {
-      if (!item.inventoryItemId) continue;
-      const invItem = this.tables.inventory_items.find((i) => i.id === item.inventoryItemId);
+      const invItem = this.tables.inventory_items.find((i) => {
+        if (item.inventoryItemId && (i.id === item.inventoryItemId || i.cloudId === item.inventoryItemId)) {
+          return true;
+        }
+        return i.productId === item.productId
+          && (!organizationId || i.organizationId === organizationId)
+          && (!facilityId || i.facilityId === facilityId)
+          && i.isActive;
+      });
       if (!invItem) continue;
 
       const prevBalance = invItem.quantityOnHand;
@@ -1849,6 +1918,8 @@ export class DatabaseService {
         reason: 'POS Sale',
       });
     }
+
+    await this.autoSave();
 
     return sale;
   }

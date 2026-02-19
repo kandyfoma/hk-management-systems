@@ -204,7 +204,18 @@ export class SyncService {
   // ═══════════════════════════════════════════════════════════════
 
   async performSync(): Promise<void> {
-    if (this.syncStatus.syncInProgress || !this.syncStatus.isOnline) {
+    if (this.syncStatus.syncInProgress) {
+      return;
+    }
+
+    try {
+      const netState = await NetInfo.fetch();
+      this.syncStatus.isOnline = netState.isConnected || false;
+    } catch {
+      this.syncStatus.isOnline = false;
+    }
+
+    if (!this.syncStatus.isOnline) {
       return;
     }
 
@@ -244,11 +255,24 @@ export class SyncService {
         item.synced = true;
         console.log(`✅ Synced ${item.tableName} ${item.action} ${item.localId}`);
       } catch (error) {
+        const errorMessage = String(error || 'Unknown sync error');
+        if (errorMessage.startsWith('NON_RETRIABLE_4XX')) {
+          item.synced = true;
+          this.syncStatus.syncErrors.push({
+            itemId: item.id,
+            error: errorMessage,
+            timestamp: Date.now(),
+            retryCount: item.retryCount,
+          });
+          console.warn(`⚠️ Dropping non-retriable sync item ${item.tableName} ${item.localId}:`, errorMessage);
+          continue;
+        }
+
         item.retryCount++;
         item.lastSyncAttempt = Date.now();
         this.syncStatus.syncErrors.push({
           itemId: item.id,
-          error: String(error),
+          error: errorMessage,
           timestamp: Date.now(),
           retryCount: item.retryCount,
         });
@@ -267,10 +291,23 @@ export class SyncService {
       case 'CREATE':
         const createResponse = await api.post(endpoint, item.data);
         if (createResponse.success && createResponse.data) {
+          const createdData: any = createResponse.data;
+          const createdId =
+            createdData?.id
+            ?? createdData?.sale?.id
+            ?? createdData?.data?.id;
+          if (!createdId) {
+            throw new Error('Create succeeded but missing cloud id in response');
+          }
+
           // Update local record with cloud ID
-          await this.updateLocalRecordWithCloudId(item.tableName, item.localId, createResponse.data.id);
-          item.cloudId = createResponse.data.id;
+          await this.updateLocalRecordWithCloudId(item.tableName, item.localId, createdId);
+          item.cloudId = createdId;
         } else {
+          const status = createResponse.error?.status;
+          if (status && status >= 400 && status < 500) {
+            throw new Error(`NON_RETRIABLE_4XX ${status}: ${createResponse.error?.message || 'Create failed'}`);
+          }
           throw new Error(createResponse.error?.message || 'Create failed');
         }
         break;
@@ -281,6 +318,10 @@ export class SyncService {
         }
         const updateResponse = await api.patch(`${endpoint}${item.cloudId}/`, item.data);
         if (!updateResponse.success) {
+          const status = updateResponse.error?.status;
+          if (status && status >= 400 && status < 500) {
+            throw new Error(`NON_RETRIABLE_4XX ${status}: ${updateResponse.error?.message || 'Update failed'}`);
+          }
           throw new Error(updateResponse.error?.message || 'Update failed');
         }
         break;
@@ -291,6 +332,10 @@ export class SyncService {
         }
         const deleteResponse = await api.delete(`${endpoint}${item.cloudId}/`);
         if (!deleteResponse.success) {
+          const status = deleteResponse.error?.status;
+          if (status && status >= 400 && status < 500) {
+            throw new Error(`NON_RETRIABLE_4XX ${status}: ${deleteResponse.error?.message || 'Delete failed'}`);
+          }
           throw new Error(deleteResponse.error?.message || 'Delete failed');
         }
         break;

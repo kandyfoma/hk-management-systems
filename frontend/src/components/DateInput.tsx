@@ -11,7 +11,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import { colors } from '../theme/theme';
 
 type DateFormat = 'iso' | 'fr';
@@ -82,7 +85,25 @@ export default function DateInput({
 
   const openPicker = () => {
     if (disabled) return;
-    setIosTempDate(parsedDate || new Date());
+    const initialDate = parsedDate || new Date();
+
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: initialDate,
+        mode: 'date',
+        display: 'default',
+        onChange: (event, selectedDate) => {
+          if (event.type === 'set' && selectedDate) {
+            onChangeText(formatDateValue(selectedDate, format));
+          }
+        },
+        minimumDate,
+        maximumDate,
+      });
+      return;
+    }
+
+    setIosTempDate(initialDate);
     setShowPicker(true);
   };
 
@@ -112,17 +133,6 @@ export default function DateInput({
       <TouchableOpacity style={[styles.button, buttonStyle]} onPress={openPicker} disabled={disabled}>
         <Ionicons name="calendar-outline" size={18} color={disabled ? colors.textTertiary : colors.textSecondary} />
       </TouchableOpacity>
-
-      {showPicker && Platform.OS === 'android' && (
-        <DateTimePicker
-          value={parsedDate || new Date()}
-          mode="date"
-          display="default"
-          onChange={onNativeChange}
-          minimumDate={minimumDate}
-          maximumDate={maximumDate}
-        />
-      )}
 
       {showPicker && Platform.OS === 'ios' && (
         <Modal visible transparent animationType="slide" onRequestClose={() => setShowPicker(false)}>
