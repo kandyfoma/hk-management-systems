@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -10,10 +10,67 @@ import { loginSuccess } from './src/store/slices/authSlice';
 import { AuthNavigator } from './src/navigation/AuthNavigator';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import ApiAuthService from './src/services/ApiAuthService';
+import HybridDataService from './src/services/HybridDataService';
+import SyncService from './src/services/SyncService';
 import { theme, colors } from './src/theme/theme';
-import { GlobalUIProvider } from './src/components/GlobalUI';
+import { GlobalUIProvider, useToast } from './src/components/GlobalUI';
 
 type AppState = 'loading' | 'authenticated' | 'unauthenticated';
+
+function scopeLicensesToOrganization(licenses: any[], organization: any): any[] {
+  const currentLicenseKey = organization?.license_key;
+  if (!currentLicenseKey) return licenses;
+
+  const scoped = licenses.filter((license) => license?.licenseKey === currentLicenseKey);
+  return scoped.length > 0 ? scoped : licenses;
+}
+
+function SyncReconnectNotifier({ enabled }: { enabled: boolean }) {
+  const toast = useToast();
+  const previousOnlineRef = useRef<boolean | null>(null);
+  const reconnectSyncActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      previousOnlineRef.current = null;
+      reconnectSyncActiveRef.current = false;
+      return;
+    }
+
+    const sync = SyncService.getInstance();
+    const tick = () => {
+      const status = sync.getSyncStatus();
+      const wasOnline = previousOnlineRef.current;
+      const cameBackOnline = wasOnline === false && status.isOnline;
+
+      if (cameBackOnline) {
+        if (status.pendingItems > 0) {
+          toast.info('Connexion rétablie — synchronisation en cours');
+          reconnectSyncActiveRef.current = true;
+        } else {
+          toast.success('Connexion rétablie');
+        }
+      }
+
+      if (
+        reconnectSyncActiveRef.current
+        && status.pendingItems === 0
+        && !status.syncInProgress
+      ) {
+        toast.success('Synchronisation terminée');
+        reconnectSyncActiveRef.current = false;
+      }
+
+      previousOnlineRef.current = status.isOnline;
+    };
+
+    tick();
+    const timer = setInterval(tick, 1500);
+    return () => clearInterval(timer);
+  }, [enabled, toast]);
+
+  return null;
+}
 
 // Inner app component — inside ReduxProvider so it can dispatch
 function AppContent() {
@@ -38,6 +95,16 @@ function AppContent() {
   useEffect(() => {
     initializeApp();
   }, []);
+
+  useEffect(() => {
+    if (appState !== 'authenticated' || !isLicenseValid) return;
+
+    // Ensure sync engine is started app-wide (not only on POS screen)
+    HybridDataService.getInstance();
+    SyncService.getInstance().forceSync().catch((error) => {
+      console.log('Initial background sync deferred:', error);
+    });
+  }, [appState, isLicenseValid]);
 
   useEffect(() => {
     // Set document title for web with multiple fallbacks
@@ -117,6 +184,8 @@ function AppContent() {
               ApiAuthService.getInstance().getOrganizationLicenses(),
               ApiAuthService.getInstance().getUserModuleAccess()
             ]);
+
+            const scopedLicenses = scopeLicensesToOrganization(licenses, organization);
             
             console.log('📋 Loaded licenses:', licenses);
             console.log('🔐 Loaded module access:', userModuleAccess);
@@ -125,7 +194,7 @@ function AppContent() {
             dispatch(loginSuccess({
               user,
               organization,
-              licenses,
+              licenses: scopedLicenses,
               userModuleAccess,
             }));
             console.log('📦 Redux store populated with restored session data');
@@ -172,11 +241,12 @@ function AppContent() {
           console.log('🔄 Loading fresh user data from backend...');
           const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
           const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
+          const scopedLicenses = scopeLicensesToOrganization(licenses, organization);
           
           dispatch(loginSuccess({
             user,
             organization,
-            licenses,
+            licenses: scopedLicenses,
             userModuleAccess,
           }));
           setIsLicenseValid(true);
@@ -220,6 +290,7 @@ function AppContent() {
       console.log('📄 Loading organization licenses after login...');
       const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
       const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
+      const scopedLicenses = scopeLicensesToOrganization(licenses, authResult.organization);
       
       console.log('📋 Loaded licenses after login:', licenses);
       console.log('🔐 Loaded module access after login:', userModuleAccess);
@@ -228,7 +299,7 @@ function AppContent() {
       dispatch(loginSuccess({
         user: authResult.user,
         organization: authResult.organization,
-        licenses,
+        licenses: scopedLicenses,
         userModuleAccess,
       }));
       console.log('📦 Redux store populated after login');
@@ -257,6 +328,7 @@ function AppContent() {
     <PaperProvider theme={theme}>
       <NavigationContainer>
         <GlobalUIProvider>
+          <SyncReconnectNotifier enabled={appState === 'authenticated' && isLicenseValid} />
           {appState === 'authenticated' && isLicenseValid ? (
             <AppNavigator />
           ) : (

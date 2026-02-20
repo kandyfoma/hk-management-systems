@@ -20,6 +20,7 @@ import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import HybridDataService from '../../../services/HybridDataService';
 import ApiService from '../../../services/ApiService';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
@@ -102,7 +103,7 @@ const ADJUST_REASONS = [
 // UTILITY HELPERS
 // ═══════════════════════════════════════════════════════════════
 
-function fmtCurrency(amount: number | null | undefined, currency = 'USD'): string {
+function fmtCurrency(amount: number | null | undefined, currency = 'CDF'): string {
   const v = Number(amount) || 0;
   if (currency === 'CDF') return `${v.toLocaleString()} FC`;
   return `$${v.toFixed(2)}`;
@@ -304,12 +305,14 @@ export function InventoryScreen() {
         maxStockLevel: p.max_stock_level ?? 500,
         reorderQuantity: p.reorder_quantity ?? 50,
         storageConditions: p.storage_condition ?? 'ROOM_TEMPERATURE',
+        trackExpiry: p.track_expiry ?? true,
         activeIngredients: [],
         insuranceReimbursable: false,
         safetyStockDays: 7,
         isActive: p.is_active ?? true,
         isDiscontinued: false,
         expirationDate: p.expiration_date ?? undefined,
+        notes: p.notes ?? '',
         createdAt: p.created_at,
         updatedAt: p.updated_at,
       });
@@ -1939,6 +1942,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
   const [form, setForm] = useState({
     name: product?.name || '',
     genericName: product?.genericName || '',
@@ -1956,7 +1960,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
     currency: product?.currency || 'CDF',
     requiresPrescription: product?.requiresPrescription ?? false,
     controlledSubstance: product?.controlledSubstance ?? false,
-    trackExpiry: true,
+    trackExpiry: (product as any)?.trackExpiry ?? true,
     reorderLevel: String(product?.reorderLevel || 10),
     reorderQuantity: String(product?.reorderQuantity || 50),
     minStockLevel: String(product?.minStockLevel || 5),
@@ -1964,10 +1968,132 @@ function ProductFormModal({ product, onClose, onSaved }: {
     indication: product?.indication || '',
     storageCondition: product?.storageConditions || 'ROOM_TEMPERATURE',
     expirationDate: product?.expirationDate || '',
-    notes: '',
+    notes: product?.notes || '',
   });
 
   const upd = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
+
+  const normalizeDateInput = useCallback((value?: string | null) => {
+    if (!value) return '';
+    const raw = value.trim();
+    if (!raw) return '';
+
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return raw;
+
+    const fr = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (fr) {
+      const [, dd, mm, yyyy] = fr;
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    const dashFr = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (dashFr) {
+      const [, dd, mm, yyyy] = dashFr;
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    return '';
+  }, []);
+
+  const applyAiExtraction = useCallback((extracted: any) => {
+    setForm((prev) => ({
+      ...prev,
+      name: prev.name.trim() || extracted?.name || prev.name,
+      genericName: prev.genericName.trim() || extracted?.generic_name || prev.genericName,
+      brandName: prev.brandName.trim() || extracted?.brand_name || prev.brandName,
+      barcode: prev.barcode.trim() || extracted?.barcode || prev.barcode,
+      category: (extracted?.category || prev.category) as ProductCategory,
+      dosageForm: (extracted?.dosage_form || prev.dosageForm) as DosageForm,
+      strength: prev.strength.trim() || extracted?.strength || prev.strength,
+      unitOfMeasure: (extracted?.unit_of_measure || prev.unitOfMeasure) as UnitOfMeasure,
+      packSize: extracted?.pack_size ? String(extracted.pack_size) : prev.packSize,
+      manufacturer: prev.manufacturer.trim() || extracted?.manufacturer || prev.manufacturer,
+      requiresPrescription:
+        typeof extracted?.requires_prescription === 'boolean'
+          ? extracted.requires_prescription
+          : prev.requiresPrescription,
+      controlledSubstance:
+        typeof extracted?.controlled_substance === 'boolean'
+          ? extracted.controlled_substance
+          : prev.controlledSubstance,
+      indication: prev.indication.trim() || extracted?.indication || prev.indication,
+      storageCondition: (extracted?.storage_condition || prev.storageCondition) as any,
+      expirationDate: prev.expirationDate.trim() || normalizeDateInput(extracted?.expiration_date) || prev.expirationDate,
+      notes: prev.notes.trim() || extracted?.notes || prev.notes,
+    }));
+  }, [normalizeDateInput]);
+
+  const handleAiScan = useCallback(async () => {
+    setScanLoading(true);
+    try {
+      let imageAsset: ImagePicker.ImagePickerAsset | null = null;
+
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          toast.warning('Permission caméra refusée. Veuillez l\'autoriser pour scanner.');
+          setScanLoading(false);
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.6,
+          base64: true,
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        });
+
+        if (result.canceled || !result.assets?.length) {
+          setScanLoading(false);
+          return;
+        }
+        imageAsset = result.assets[0];
+      } else {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          allowsEditing: false,
+          quality: 0.6,
+          base64: true,
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        });
+        if (result.canceled || !result.assets?.length) {
+          setScanLoading(false);
+          return;
+        }
+        imageAsset = result.assets[0];
+      }
+
+      const imageBase64 = imageAsset?.base64;
+      if (!imageBase64) {
+        toast.error('Impossible de lire l\'image capturée');
+        setScanLoading(false);
+        return;
+      }
+
+      const api = ApiService.getInstance();
+      const scanRes = await api.post('/inventory/products/ai-extract/', {
+        image_base64: imageBase64,
+        mime_type: imageAsset?.mimeType || 'image/jpeg',
+      });
+
+      if (!scanRes?.success) {
+        throw new Error(scanRes?.error?.message || 'Échec analyse IA');
+      }
+
+      const extracted = (scanRes.data as any)?.extracted;
+      if (!extracted) {
+        throw new Error('Réponse IA vide');
+      }
+
+      applyAiExtraction(extracted);
+      toast.success('Informations produit détectées et ajoutées au formulaire');
+    } catch (err) {
+      console.error('AI scan error:', err);
+      toast.error('Erreur pendant le scan IA');
+    } finally {
+      setScanLoading(false);
+    }
+  }, [applyAiExtraction, toast]);
 
   const computedMargin = useMemo(() => {
     const cost = parseFloat(form.costPrice) || 0;
@@ -2001,6 +2127,11 @@ function ProductFormModal({ product, onClose, onSaved }: {
       toast.warning('Niveaux de stock incohérents: min ≤ réappro ≤ max');
       return;
     }
+    const normalizedExpirationDate = normalizeDateInput(form.expirationDate);
+    if (form.trackExpiry && !normalizedExpirationDate) {
+      toast.warning('La date d\'expiration est requise (YYYY-MM-DD)');
+      return;
+    }
     setSaving(true);
     try {
       const api = ApiService.getInstance();
@@ -2030,7 +2161,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
         max_stock_level: parseInt(form.maxStockLevel) || 500,
         storage_condition: form.storageCondition,
         indication: form.indication.trim() || undefined,
-        expiration_date: form.expirationDate.trim() || undefined,
+        expiration_date: normalizedExpirationDate || undefined,
         notes: form.notes.trim() || undefined,
         is_active: true,
       };
@@ -2072,9 +2203,27 @@ function ProductFormModal({ product, onClose, onSaved }: {
             {/* Header */}
             <View style={modalS.hdr}>
               <Text style={modalS.hdrTitle}>{product ? 'Modifier le Produit' : 'Nouveau Produit'}</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
+              <View style={modalS.hdrActions}>
+                <TouchableOpacity
+                  style={[modalS.hdrIconBtn, modalS.hdrScanBtn, scanLoading && { opacity: 0.6 }]}
+                  onPress={handleAiScan}
+                  disabled={scanLoading}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  {scanLoading ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Ionicons name="camera-outline" size={18} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={modalS.hdrIconBtn}
+                  onPress={onClose}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView style={modalS.body} showsVerticalScrollIndicator={false}>
@@ -2141,7 +2290,7 @@ function ProductFormModal({ product, onClose, onSaved }: {
                 ]} onChange={v => upd('storageCondition', v)} flex />
               </View>
               <Field 
-                label="Date d'expiration générale" 
+                label={`Date d'expiration générale${form.trackExpiry ? ' *' : ''}`} 
                 value={form.expirationDate} 
                 onChange={v => upd('expirationDate', v)}
                 placeholder="YYYY-MM-DD ou JJ/MM/AAAA"
@@ -2731,6 +2880,21 @@ const modalS = StyleSheet.create({
   wrapper: { width: '100%', maxWidth: IS_PHONE ? 420 : 640, maxHeight: '92%' },
   container: { backgroundColor: colors.surface, borderRadius: borderRadius.xxl, overflow: 'hidden', maxHeight: '92%', width: '100%', maxWidth: IS_PHONE ? 420 : 640, ...shadows.xl },
   hdr: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: IS_PHONE ? 14 : 20, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  hdrActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  hdrIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.surfaceVariant,
+  },
+  hdrScanBtn: {
+    borderColor: colors.primary + '44',
+    backgroundColor: colors.primary + '14',
+  },
   hdrTitle: { fontSize: IS_PHONE ? 16 : 18, fontWeight: '700', color: colors.text },
   body: { padding: IS_PHONE ? 14 : 20, maxHeight: IS_PHONE ? 560 : 500 },
   footer: { flexDirection: IS_PHONE ? 'column' : 'row', justifyContent: 'flex-end', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: colors.outline },

@@ -87,6 +87,52 @@ export default function DateInput({
     if (disabled) return;
     const initialDate = parsedDate || new Date();
 
+    if (Platform.OS === 'web') {
+      if (typeof document === 'undefined') return;
+
+      const input = document.createElement('input');
+      input.type = 'date';
+      input.value = formatDateValue(initialDate, 'iso');
+
+      if (minimumDate) {
+        input.min = formatDateValue(minimumDate, 'iso');
+      }
+      if (maximumDate) {
+        input.max = formatDateValue(maximumDate, 'iso');
+      }
+
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      input.style.pointerEvents = 'none';
+      input.style.width = '0';
+      input.style.height = '0';
+
+      const cleanup = () => {
+        if (input.parentNode) {
+          input.parentNode.removeChild(input);
+        }
+      };
+
+      input.addEventListener('change', () => {
+        if (input.value) {
+          onChangeText(input.value);
+        }
+        cleanup();
+      });
+
+      input.addEventListener('blur', cleanup);
+
+      document.body.appendChild(input);
+      input.focus();
+      if (typeof input.showPicker === 'function') {
+        input.showPicker();
+      } else {
+        input.click();
+      }
+
+      return;
+    }
+
     if (Platform.OS === 'android') {
       DateTimePickerAndroid.open({
         value: initialDate,

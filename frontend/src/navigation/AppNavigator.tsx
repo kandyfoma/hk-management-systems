@@ -33,9 +33,11 @@ import { POSScreen } from '../modules/pharmacy/screens/POSScreen';
 import { InventoryScreen } from '../modules/pharmacy/screens/InventoryScreen';
 import { SuppliersScreen } from '../modules/pharmacy/screens/SuppliersScreen';
 import { StockAlertsScreen } from '../modules/pharmacy/screens/StockAlertsScreen';
+import { ExpirationReportScreen } from '../modules/pharmacy/screens/ExpirationReportScreen';
 import { EnhancedPrescriptionsScreen } from '../modules/pharmacy/screens/EnhancedOrdonnancesScreen';
 import { SalesReportsScreen } from '../modules/pharmacy/screens/SalesReportsScreen';
 import { PharmacyReportsScreen } from '../modules/pharmacy/screens/PharmacyReportsScreen';
+import { SalesReceiptsScreen } from '../modules/pharmacy/screens/SalesReceiptsScreen';
 import { ConnectivityScreen } from '../screens/ConnectivityScreen';
 import { PatientListScreen } from '../modules/hospital/screens/PatientListScreen';
 import { PatientDetailScreen } from '../modules/hospital/screens/PatientDetailScreen';
@@ -54,6 +56,7 @@ import { HospitalConsultationScreen } from '../modules/hospital/screens/Hospital
 import { ConsultationHistoryScreen } from '../modules/hospital/screens/ConsultationHistoryScreen';
 import { SidebarLayout, SidebarSection, SidebarMenuItem } from '../components/SidebarLayout';
 import { colors, borderRadius } from '../theme/theme';
+import ApiService from '../services/ApiService';
 import { Patient } from '../models/Patient';
 import { selectActiveModules, selectAllFeatures, logout as logoutAction } from '../store/slices/authSlice';
 import { RootState } from '../store/store';
@@ -155,10 +158,12 @@ const createDynamicSections = (
     
     if (hasFeature('stock_alerts')) {
       pharmacyItems.push({ id: 'ph-stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle', badge: 3 });
+      pharmacyItems.push({ id: 'ph-expiration-report', label: 'Rapport Expiration', icon: 'time-outline', iconActive: 'time' });
     }
     
     if (hasFeature('basic_reporting') || hasFeature('advanced_reporting')) {
       pharmacyItems.push({ id: 'ph-reports', label: 'Rapports Ventes', icon: 'bar-chart-outline', iconActive: 'bar-chart' });
+      pharmacyItems.push({ id: 'ph-sales-history', label: 'Toutes les Ventes', icon: 'receipt-outline', iconActive: 'receipt' });
     }
 
     sections.push({
@@ -327,6 +332,7 @@ function DesktopApp() {
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
   const [pendingConsultationToLoad, setPendingConsultationToLoad] = useState<string | null>(null);
   const [ohExamsScreenKey, setOhExamsScreenKey] = useState(0);
+  const [expirationSoonCount, setExpirationSoonCount] = useState<number>(0);
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatientId(patient.id);
@@ -389,8 +395,10 @@ function DesktopApp() {
       'ph-inventory': 'PHARMACY',
       'ph-suppliers': 'PHARMACY',
       'ph-stock-alerts': 'PHARMACY',
+      'ph-expiration-report': 'PHARMACY',
       'ph-prescriptions': 'PHARMACY',
       'ph-reports': 'PHARMACY',
+      'ph-sales-history': 'PHARMACY',
 
       'hp-dashboard': 'HOSPITAL',
       'hp-emergency': 'HOSPITAL',
@@ -463,6 +471,12 @@ function DesktopApp() {
     console.log('🏢 Organization:', organization);
     
     const sections = createDynamicSections(activeModules, hasFeature);
+
+    const pharmacySection = sections.find((section) => section.title === 'Pharmacie');
+    const expirationItem = pharmacySection?.items?.find((item) => item.id === 'ph-expiration-report');
+    if (expirationItem) {
+      expirationItem.badge = expirationSoonCount > 0 ? expirationSoonCount : undefined;
+    }
     
     // Always add settings section
     sections.push({
@@ -474,7 +488,42 @@ function DesktopApp() {
     });
     
     return sections;
-  }, [activeModules, allFeatures]);
+  }, [activeModules, allFeatures, expirationSoonCount]);
+
+  useEffect(() => {
+    const hasPharmacy = activeModules.includes('PHARMACY');
+    const hasStockAlerts = allFeatures.includes('stock_alerts');
+    if (!hasPharmacy || !hasStockAlerts) {
+      setExpirationSoonCount(0);
+      return;
+    }
+
+    let isMounted = true;
+    const loadExpirationSoonCount = async () => {
+      try {
+        const api = ApiService.getInstance();
+        const res = await api.get('/inventory/reports/expiring/', { scope: 'window', days: 90 });
+        if (!isMounted || !res.success) return;
+
+        const payload = res.data as any;
+        const rows: any[] = Array.isArray(payload?.results) ? payload.results : [];
+        const count = rows.filter((row) => {
+          const days = Number(row?.days_to_expiry);
+          return Number.isFinite(days) && days >= 0 && days < 90;
+        }).length;
+
+        setExpirationSoonCount(count);
+      } catch {
+        if (isMounted) setExpirationSoonCount(0);
+      }
+    };
+
+    loadExpirationSoonCount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeModules, allFeatures, activeScreen]);
 
   useEffect(() => {
     if (!canAccessScreen(activeScreen)) {
@@ -494,9 +543,11 @@ function DesktopApp() {
     if (activeScreen === 'ph-pos') return <POSScreen />;
     if (activeScreen === 'ph-inventory') return <InventoryScreen />;
     if (activeScreen === 'ph-suppliers') return <SuppliersScreen />;
-    if (activeScreen === 'ph-stock-alerts') return <StockAlertsScreen />;
+    if (activeScreen === 'ph-stock-alerts') return <StockAlertsScreen onOpenExpirationReport={() => handleScreenChange('ph-expiration-report')} />;
+    if (activeScreen === 'ph-expiration-report') return <ExpirationReportScreen />;
     if (activeScreen === 'ph-prescriptions') return <EnhancedPrescriptionsScreen />;
     if (activeScreen === 'ph-reports') return <PharmacyReportsScreen />;
+    if (activeScreen === 'ph-sales-history') return <SalesReceiptsScreen />;
 
     // Hospital screens
     if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent onNavigate={handleScreenChange} />;

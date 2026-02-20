@@ -30,6 +30,7 @@ export interface Sale {
   customerId?: string;           // FK → Patient (optional)
   customerName?: string;         // Walk-in customer name
   customerPhone?: string;
+  customerEmail?: string;
   prescriptionId?: string;       // FK → Prescription (if Rx sale)
 
   // ─── Line Items ─────────────────────────────────────────
@@ -201,6 +202,7 @@ export interface CartState {
   customerId?: string;
   customerName?: string;
   customerPhone?: string;
+  customerEmail?: string;
   prescriptionId?: string;
   saleType: SaleType;
   globalDiscountType: 'PERCENTAGE' | 'FIXED' | 'NONE';

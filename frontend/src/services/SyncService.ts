@@ -110,8 +110,8 @@ export class SyncService {
       this.startPeriodicSync();
       
       // Sync on startup if online
-      const netState = await NetInfo.fetch();
-      if (netState.isConnected) {
+      this.syncStatus.isOnline = await this.checkConnectivity();
+      if (this.syncStatus.isOnline) {
         this.performSync();
       }
     } catch (error) {
@@ -120,9 +120,13 @@ export class SyncService {
   }
 
   private setupNetworkMonitoring(): void {
-    this.netInfoUnsubscribe = NetInfo.addEventListener(state => {
+    this.netInfoUnsubscribe = NetInfo.addEventListener(async state => {
       const wasOnline = this.syncStatus.isOnline;
       this.syncStatus.isOnline = state.isConnected || false;
+
+      if (!this.syncStatus.isOnline && Platform.OS === 'web') {
+        this.syncStatus.isOnline = await this.checkConnectivity();
+      }
       
       // If we just came online, trigger sync
       if (!wasOnline && this.syncStatus.isOnline) {
@@ -138,10 +142,27 @@ export class SyncService {
     }
     
     this.syncTimer = setInterval(() => {
-      if (this.syncStatus.isOnline && !this.syncStatus.syncInProgress) {
+      if (!this.syncStatus.syncInProgress) {
         this.performSync();
       }
     }, SYNC_INTERVAL);
+  }
+
+  private async checkConnectivity(): Promise<boolean> {
+    try {
+      const netState = await NetInfo.fetch();
+      if (netState.isConnected) {
+        return true;
+      }
+    } catch {
+      // Ignore and fallback to backend probe
+    }
+
+    try {
+      return await ApiService.getInstance().checkConnection();
+    } catch {
+      return false;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -173,8 +194,8 @@ export class SyncService {
     
     await this.saveSyncQueue();
     
-    // Try immediate sync if online
-    if (this.syncStatus.isOnline && !this.syncStatus.syncInProgress) {
+    // Try immediate sync (performSync will do its own connectivity checks)
+    if (!this.syncStatus.syncInProgress) {
       this.performSync();
     }
   }
@@ -209,8 +230,7 @@ export class SyncService {
     }
 
     try {
-      const netState = await NetInfo.fetch();
-      this.syncStatus.isOnline = netState.isConnected || false;
+      this.syncStatus.isOnline = await this.checkConnectivity();
     } catch {
       this.syncStatus.isOnline = false;
     }
@@ -246,7 +266,7 @@ export class SyncService {
 
   private async pushChangesToCloud(): Promise<void> {
     const pendingItems = this.syncQueue
-      .filter(item => !item.synced && item.retryCount < MAX_RETRY_COUNT)
+      .filter(item => !item.synced)
       .slice(0, BATCH_SIZE);
 
     for (const item of pendingItems) {
@@ -505,6 +525,16 @@ export class SyncService {
   }
 
   async forceSync(): Promise<void> {
+    // Manual sync should retry previously exhausted items.
+    this.syncQueue = this.syncQueue.map((item) => (
+      item.synced
+        ? item
+        : {
+            ...item,
+            retryCount: 0,
+          }
+    ));
+    await this.saveSyncQueue();
     await this.performSync();
   }
 

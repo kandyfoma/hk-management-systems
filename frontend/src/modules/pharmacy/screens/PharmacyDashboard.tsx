@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   Dimensions,
   ActivityIndicator,
   RefreshControl,
@@ -44,6 +45,213 @@ interface RecentSale {
   payment_status: string;
 }
 
+interface MonthlySalesPoint {
+  label: string;
+  value: number;
+  salesCount?: number;
+}
+
+interface MonthlySalesSummary {
+  totalYear: number;
+  currentMonth: number;
+  monthVariation: number;
+  yearVariation: number;
+}
+
+type SalesChartMode = 'year' | 'month';
+
+function parseTrendDate(value: unknown): Date | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+
+  const ymdMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymdMatch) {
+    const y = Number(ymdMatch[1]);
+    const m = Number(ymdMatch[2]) - 1;
+    const d = Number(ymdMatch[3]);
+    return new Date(y, m, d);
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function getTrendAmount(entry: any): number {
+  const amount = Number(
+    entry?.revenue ??
+    entry?.amount ??
+    entry?.total ??
+    entry?.daily_total ??
+    0
+  );
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function getTrendCount(entry: any): number {
+  const count = Number(
+    entry?.sales_count ??
+    entry?.count ??
+    entry?.daily_count ??
+    0
+  );
+  return Number.isFinite(count) ? count : 0;
+}
+
+function formatCompactFc(amount: number): string {
+  const safe = Number.isFinite(amount) ? amount : 0;
+  if (Math.abs(safe) < 1000) {
+    return `${Math.round(safe).toLocaleString('fr-FR')} FC`;
+  }
+  return `${(safe / 1000).toFixed(1)}k FC`;
+}
+
+function buildMonthlySalesFromDailyTrends(dailyTrends: any[]): {
+  chart: MonthlySalesPoint[];
+  summary: MonthlySalesSummary;
+} {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const previousYear = currentYear - 1;
+  const currentMonth = now.getMonth();
+  const currentDay = now.getDate();
+
+  const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const totalsCurrentYear = new Array(12).fill(0);
+  const totalsPreviousYear = new Array(12).fill(0);
+  const countsCurrentYear = new Array(12).fill(0);
+
+  dailyTrends.forEach((entry: any) => {
+    const parsed = parseTrendDate(entry?.date ?? entry?.created_at__date ?? entry?.label);
+    if (!parsed) return;
+
+    const year = parsed.getFullYear();
+    const month = parsed.getMonth();
+    const value = getTrendAmount(entry);
+    const count = getTrendCount(entry);
+
+    if (year === currentYear) {
+      totalsCurrentYear[month] += value;
+      countsCurrentYear[month] += count;
+    } else if (year === previousYear) {
+      totalsPreviousYear[month] += value;
+    }
+  });
+
+  const chart = months.map((label, monthIndex) => {
+    return {
+      label,
+      value: totalsCurrentYear[monthIndex] ?? 0,
+      salesCount: countsCurrentYear[monthIndex] ?? 0,
+    };
+  });
+
+  const values = chart.map((c) => c.value);
+  const currentMonthValue = values[currentMonth] ?? 0;
+
+  const previousMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1;
+  const previousMonthValue = currentMonth === 0
+    ? (totalsPreviousYear[11] ?? 0)
+    : (values[previousMonthIndex] ?? 0);
+
+  const monthVariation = previousMonthValue > 0
+    ? ((currentMonthValue - previousMonthValue) / previousMonthValue) * 100
+    : (currentMonthValue > 0 ? 100 : 0);
+
+  const previousYearYtd = totalsPreviousYear
+    .slice(0, currentMonth + 1)
+    .reduce((sum, value) => sum + value, 0);
+  const currentYearYtd = values
+    .slice(0, currentMonth + 1)
+    .reduce((sum, value) => sum + value, 0);
+
+  const yearVariation = previousYearYtd > 0
+    ? ((currentYearYtd - previousYearYtd) / previousYearYtd) * 100
+    : (currentYearYtd > 0 ? 100 : 0);
+
+  return {
+    chart,
+    summary: {
+      totalYear: values.reduce((sum, v) => sum + v, 0),
+      currentMonth: currentMonthValue,
+      monthVariation,
+      yearVariation,
+    },
+  };
+}
+
+function buildCurrentMonthDailySalesFromTrends(dailyTrends: any[]): MonthlySalesPoint[] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const totals = new Array(daysInMonth).fill(0);
+  const counts = new Array(daysInMonth).fill(0);
+
+  dailyTrends.forEach((entry: any) => {
+    const parsed = parseTrendDate(entry?.date ?? entry?.created_at__date ?? entry?.label);
+    if (!parsed) return;
+    if (parsed.getFullYear() !== year || parsed.getMonth() !== month) return;
+    const dayIndex = parsed.getDate() - 1;
+    totals[dayIndex] += getTrendAmount(entry);
+    counts[dayIndex] += getTrendCount(entry);
+  });
+
+  return totals.map((value, i) => ({
+    label: `${i + 1}`,
+    value,
+    salesCount: counts[i] ?? 0,
+  }));
+}
+
+function MiniMonthlySalesChart({ data, mode }: { data: MonthlySalesPoint[]; mode: SalesChartMode }) {
+  const maxVal = Math.max(...data.map((d) => d.value), 1);
+  const barAreaHeight = 90;
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const showLabel = (index: number) => {
+    if (mode === 'year') return true;
+    const day = index + 1;
+    const isFirst = index === 0;
+    const isLast = index === data.length - 1;
+    return isFirst || isLast || day % 5 === 0;
+  };
+  const barWidth = mode === 'month' ? 6 : 12;
+
+  return (
+    <View style={styles.chartContainer}>
+      <View style={styles.chartBars}>
+        {data.map((point, i) => (
+          <Pressable
+            key={`${point.label}-${i}`}
+            style={styles.chartBarWrapper}
+            onHoverIn={() => setHoveredIndex(i)}
+            onHoverOut={() => setHoveredIndex((prev) => (prev === i ? null : prev))}
+          >
+            {hoveredIndex === i && (
+              <View style={styles.chartTooltip}>
+                <Text style={styles.chartTooltipValue}>{formatCompactFc(point.value)}</Text>
+                <Text style={styles.chartTooltipMeta}>{point.salesCount ?? 0} vente(s)</Text>
+              </View>
+            )}
+                <View
+                  style={[
+                    styles.chartBar,
+                    {
+                      height: Math.max(4, Math.round((point.value / maxVal) * barAreaHeight)),
+                      backgroundColor: i === data.length - 1 ? colors.primary : colors.primaryDark,
+                      width: barWidth,
+                      borderRadius: 4,
+                    },
+                  ]}
+                />
+            {showLabel(i) ? <Text style={styles.chartLabel}>{point.label}</Text> : <Text style={styles.chartLabelMuted}>·</Text>}
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 // ─── Dashboard Hook for Data Management ──────────────────────
 function usePharmacyDashboardData() {
   const toast = useToast();
@@ -52,6 +260,14 @@ function usePharmacyDashboardData() {
   const [metrics, setMetrics] = useState<MetricCard[]>([]);
   const [topProducts, setTopProducts] = useState<TopDrug[]>([]);
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
+  const [monthlySalesChart, setMonthlySalesChart] = useState<MonthlySalesPoint[]>([]);
+  const [currentMonthDailyChart, setCurrentMonthDailyChart] = useState<MonthlySalesPoint[]>([]);
+  const [monthlySalesSummary, setMonthlySalesSummary] = useState<MonthlySalesSummary>({
+    totalYear: 0,
+    currentMonth: 0,
+    monthVariation: 0,
+    yearVariation: 0,
+  });
 
   const loadDashboardData = async (isRefresh = false) => {
     try {
@@ -62,10 +278,15 @@ function usePharmacyDashboardData() {
       }
 
       // Load all dashboard data in parallel
-      const [metricsResponse, topProductsResponse, recentSalesResponse] = await Promise.all([
+      const now = new Date();
+      const startDate = new Date(now.getFullYear() - 1, 0, 1).toISOString().slice(0, 10);
+      const endDate = new Date(now.getFullYear(), 11, 31).toISOString().slice(0, 10);
+
+      const [metricsResponse, topProductsResponse, recentSalesResponse, salesReportResponse] = await Promise.all([
         DataService.getPharmacyDashboardMetrics(),
         DataService.getPharmacyTopProducts({ days: 30, limit: 5 }),
-        DataService.getPharmacyRecentSales({ limit: 10 })
+        DataService.getPharmacyRecentSales({ limit: 10 }),
+        DataService.getPharmacySalesReports({ start_date: startDate, end_date: endDate }),
       ]);
 
       // Process metrics
@@ -124,6 +345,51 @@ function usePharmacyDashboardData() {
         setRecentSales(recentSalesResponse.data);
       }
 
+      if (salesReportResponse.success && salesReportResponse.data) {
+        let dailyTrends = Array.isArray(salesReportResponse.data?.daily_trends)
+          ? salesReportResponse.data.daily_trends
+          : [];
+
+        if (dailyTrends.length === 0 && recentSalesResponse.success && Array.isArray(recentSalesResponse.data)) {
+          dailyTrends = recentSalesResponse.data.map((sale: any) => ({
+            date: sale?.created_at ?? sale?.createdAt,
+            revenue: Number(sale?.total_amount ?? sale?.totalAmount ?? 0),
+          }));
+        }
+
+        const monthly = buildMonthlySalesFromDailyTrends(dailyTrends);
+        const currentMonthDaily = buildCurrentMonthDailySalesFromTrends(dailyTrends);
+        const currentMonthIndex = new Date().getMonth();
+
+        if (monthly.summary.totalYear === 0 && metricsResponse.success && metricsResponse.data?.daily_sales?.value) {
+          const fallbackCurrent = Number(metricsResponse.data.daily_sales.value ?? 0);
+          const patchedChart = [...monthly.chart];
+          if (patchedChart[currentMonthIndex]) {
+            patchedChart[currentMonthIndex] = {
+              ...patchedChart[currentMonthIndex],
+              value: fallbackCurrent,
+            };
+          }
+          setMonthlySalesChart(patchedChart);
+          const patchedDaily = [...currentMonthDaily];
+          const todayIndex = Math.max(0, Math.min(patchedDaily.length - 1, new Date().getDate() - 1));
+          if (patchedDaily[todayIndex]) {
+            patchedDaily[todayIndex] = { ...patchedDaily[todayIndex], value: fallbackCurrent, salesCount: 1 };
+          }
+          setCurrentMonthDailyChart(patchedDaily);
+          setMonthlySalesSummary({
+            totalYear: fallbackCurrent,
+            currentMonth: fallbackCurrent,
+            monthVariation: 0,
+            yearVariation: 0,
+          });
+        } else {
+          setMonthlySalesChart(monthly.chart);
+          setCurrentMonthDailyChart(currentMonthDaily);
+          setMonthlySalesSummary(monthly.summary);
+        }
+      }
+
     } catch (error) {
       console.error('Dashboard data loading error:', error);
       toast.error('Erreur lors du chargement des données');
@@ -147,6 +413,9 @@ function usePharmacyDashboardData() {
     metrics,
     topProducts,
     recentSales,
+    monthlySalesChart,
+    currentMonthDailyChart,
+    monthlySalesSummary,
     handleRefresh
   };
 }
@@ -230,8 +499,12 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
     metrics,
     topProducts: topDrugs,
     recentSales,
+    monthlySalesChart,
+    currentMonthDailyChart,
+    monthlySalesSummary,
     handleRefresh
   } = usePharmacyDashboardData();
+  const [salesChartMode, setSalesChartMode] = useState<SalesChartMode>('year');
 
   if (loading) {
     return (
@@ -261,10 +534,20 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
           <Text style={styles.headerTitle}>Tableau de Bord Pharmacie</Text>
           <Text style={styles.headerSubtitle}>Aperçu de l'activité pharmaceutique</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('ph-pos')}>
-          <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.addBtnText}>Nouvelle Vente</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.noticeBtn} activeOpacity={0.7} onPress={() => onNavigate?.('ph-stock-alerts')}>
+            <Ionicons name="time-outline" size={18} color={colors.warning} />
+            <Text style={styles.noticeBtnText}>Avis expiration</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.noticeBtn} activeOpacity={0.7} onPress={() => onNavigate?.('ph-expiration-report')}>
+            <Ionicons name="calendar-outline" size={18} color={colors.warning} />
+            <Text style={styles.noticeBtnText}>Rapport expiration</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('ph-pos')}>
+            <Ionicons name="add" size={20} color="#FFF" />
+            <Text style={styles.addBtnText}>Nouvelle Vente</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ══════ SECTION: Indicateurs Pharmacie ══════ */}
@@ -291,6 +574,66 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
             </View>
           </View>
         ))}
+      </View>
+
+      {/* ══════ SECTION: Rapport Mensuel ══════ */}
+      <SectionHeader
+        title="Rapport Mensuel"
+        subtitle="Tendance des ventes pharmacie (Janvier → Décembre)"
+        icon="bar-chart"
+        accentColor={colors.secondary}
+        ctaLabel="Voir rapports"
+        ctaIcon="chevron-forward"
+        onCtaPress={() => onNavigate?.('ph-reports')}
+      />
+      <View style={styles.chartCard}>
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={styles.cardTitle}>Ventes Mensuelles</Text>
+            <Text style={styles.cardSubtitle}>
+              {salesChartMode === 'year'
+                ? 'Vue annuelle du mois 1 au mois 12'
+                : 'Vue mensuelle du jour 1 au dernier jour du mois'}
+            </Text>
+          </View>
+          <View style={styles.chartModeToggle}>
+            <TouchableOpacity
+              style={[styles.chartModeBtn, salesChartMode === 'year' && styles.chartModeBtnActive]}
+              onPress={() => setSalesChartMode('year')}
+            >
+              <Text style={[styles.chartModeText, salesChartMode === 'year' && styles.chartModeTextActive]}>Année</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chartModeBtn, salesChartMode === 'month' && styles.chartModeBtnActive]}
+              onPress={() => setSalesChartMode('month')}
+            >
+              <Text style={[styles.chartModeText, salesChartMode === 'month' && styles.chartModeTextActive]}>Mois</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.chartStats}>
+          <View style={styles.chartStatItem}>
+            <Text style={styles.chartStatValue}>{formatCompactFc(monthlySalesSummary.totalYear)}</Text>
+            <Text style={styles.chartStatLabel}>Total 12 mois</Text>
+          </View>
+          <View style={styles.chartStatItem}>
+            <Text style={styles.chartStatValue}>{formatCompactFc(monthlySalesSummary.currentMonth)}</Text>
+            <Text style={styles.chartStatLabel}>Mois en cours</Text>
+          </View>
+          <View style={styles.chartStatItem}>
+            <Text style={[styles.chartStatValue, { color: monthlySalesSummary.monthVariation >= 0 ? colors.success : colors.error }]}> 
+              {`${monthlySalesSummary.monthVariation >= 0 ? '+' : ''}${monthlySalesSummary.monthVariation.toFixed(1)}%`}
+            </Text>
+            <Text style={styles.chartStatLabel}>Variation mensuelle</Text>
+          </View>
+          <View style={styles.chartStatItem}>
+            <Text style={[styles.chartStatValue, { color: monthlySalesSummary.yearVariation >= 0 ? colors.success : colors.error }]}> 
+              {`${monthlySalesSummary.yearVariation >= 0 ? '+' : ''}${monthlySalesSummary.yearVariation.toFixed(1)}%`}
+            </Text>
+            <Text style={styles.chartStatLabel}>Variation annuelle</Text>
+          </View>
+        </View>
+        <MiniMonthlySalesChart data={salesChartMode === 'year' ? monthlySalesChart : currentMonthDailyChart} mode={salesChartMode} />
       </View>
 
       {/* ══════ SECTION: Produits & Ventes ══════ */}
@@ -353,13 +696,13 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
                   <Ionicons name="receipt-outline" size={18} color={colors.primary} />
                 </View>
                 <View>
-                  <Text style={styles.saleClient}>{sale.client}</Text>
-                  <Text style={styles.saleId}>{sale.id} · {sale.items} articles</Text>
+                  <Text style={styles.saleClient}>{sale.customer_name || 'Client anonyme'}</Text>
+                  <Text style={styles.saleId}>{sale.sale_number} · {sale.item_count} articles</Text>
                 </View>
               </View>
               <View style={styles.saleRight}>
-                <Text style={styles.saleTotal}>{sale.total}</Text>
-                <Text style={styles.saleTime}>{sale.time}</Text>
+                <Text style={styles.saleTotal}>{`${Number(sale.total_amount || 0).toLocaleString()} FC`}</Text>
+                <Text style={styles.saleTime}>{new Date(sale.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
               </View>
             </View>
           ))}
@@ -390,10 +733,13 @@ const styles = StyleSheet.create({
   content: { padding: isDesktop ? 28 : 16, paddingBottom: 40 },
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   headerTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
   headerSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
   addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg, gap: 8, ...shadows.sm },
   addBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
+  noticeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.warning + '14', borderColor: colors.warning, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: borderRadius.lg, gap: 6 },
+  noticeBtnText: { fontSize: 13, fontWeight: '700', color: colors.warning },
 
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 24 },
   metricCard: { flex: isDesktop ? 1 : undefined, width: isDesktop ? undefined : '47%' as any, borderRadius: borderRadius.xl, padding: 18, alignItems: 'center', minWidth: isDesktop ? 200 : undefined, ...shadows.md },
@@ -403,6 +749,112 @@ const styles = StyleSheet.create({
   changeText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
   metricValue: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginBottom: 4, textAlign: 'center' },
   metricLabel: { fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: '600', textAlign: 'center' },
+
+  chartCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    ...shadows.sm,
+    marginBottom: 24,
+  },
+  cardSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  chartModeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.full,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  chartModeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+  },
+  chartModeBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  chartModeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  chartModeTextActive: {
+    color: colors.surface,
+  },
+  chartStats: {
+    flexDirection: isDesktop ? 'row' : 'column',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+  },
+  chartStatItem: {},
+  chartStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  chartStatLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  chartContainer: {
+    width: '100%',
+    height: 140,
+  },
+  chartBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 120,
+  },
+  chartBarWrapper: {
+    flex: 1,
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  chartBar: {
+    width: 12,
+    minHeight: 3,
+  },
+  chartLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  chartLabelMuted: {
+    fontSize: 10,
+    color: colors.outline,
+    fontWeight: '600',
+  },
+  chartTooltip: {
+    position: 'absolute',
+    top: -38,
+    zIndex: 5,
+    backgroundColor: colors.text,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    minWidth: 88,
+  },
+  chartTooltipValue: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.surface,
+  },
+  chartTooltipMeta: {
+    fontSize: 9,
+    color: colors.surface,
+    opacity: 0.9,
+    marginTop: 1,
+  },
 
   row: { flexDirection: isDesktop ? 'row' : 'column', gap: 16 },
   card: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 20, borderWidth: 1, borderColor: colors.outline, ...shadows.sm },

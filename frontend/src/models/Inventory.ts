@@ -150,6 +150,7 @@ export interface Product {
   tags?: string[];
   notes?: string;
   expirationDate?: string;         // General product expiration/shelf life date
+  trackExpiry?: boolean;
   createdAt: string;
   updatedAt?: string;
   metadata?: Record<string, any>;

@@ -29,7 +29,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'storage_condition', 'track_expiry', 'track_batches', 'is_serialized',
             'allow_negative_stock', 'indication', 'contraindications', 'side_effects',
             'drug_interactions', 'dosage_instructions', 'registration_number', 'approval_date',
-            'is_active', 'is_discontinued', 'notes',
+            'is_active', 'is_discontinued', 'expiration_date', 'notes',
             'created_at', 'updated_at', 'created_by', 'created_by_name',
             'updated_by', 'updated_by_name'
         ]

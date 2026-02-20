@@ -27,8 +27,14 @@ class SaleListCreateAPIView(generics.ListCreateAPIView):
         return SaleListSerializer
 
     def perform_create(self, serializer):
+        facility_id = (
+            self.request.data.get('facility_id')
+            or self.request.query_params.get('facility_id')
+            or 'pharmacy-main'
+        )
         serializer.save(
             organization=self.request.user.organization,
+            facility_id=facility_id,
             cashier=self.request.user,
             cashier_name=self.request.user.full_name,
             created_by=self.request.user

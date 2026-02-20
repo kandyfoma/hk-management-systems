@@ -317,7 +317,7 @@ def pharmacy_stock_alerts(request):
             'minimum_stock': alert.inventory_item.product.min_stock_level,
             'message': alert.message,
             'created_at': alert.created_at,
-            'acknowledged': alert.acknowledged,
+            'acknowledged': bool(alert.acknowledged_at),
             'acknowledged_at': alert.acknowledged_at
         })
     
@@ -333,10 +333,9 @@ def acknowledge_alert(request, alert_id):
             id=alert_id,
             inventory_item__organization=request.user.organization
         )
-        alert.acknowledged = True
         alert.acknowledged_by = request.user
         alert.acknowledged_at = timezone.now()
-        alert.save()
+        alert.save(update_fields=['acknowledged_by', 'acknowledged_at'])
         
         return Response({'message': 'Alert acknowledged successfully'})
     except InventoryAlert.DoesNotExist:
@@ -369,7 +368,7 @@ def pharmacy_sales_reports(request):
     )
     
     # Daily sales trend
-    daily_sales = Sale.objects.filter(
+    daily_sales_qs = Sale.objects.filter(
         organization=organization,
         created_at__date__range=[start_date, end_date],
         status=SaleStatus.COMPLETED
@@ -377,6 +376,28 @@ def pharmacy_sales_reports(request):
         daily_total=Sum('total_amount'),
         daily_count=Count('id')
     ).order_by('created_at__date')
+
+    daily_sales = [
+        {
+            'date': row['created_at__date'],
+            'revenue': row['daily_total'] or 0,
+            'sales_count': row['daily_count'] or 0,
+            # Legacy keys kept for backward compatibility
+            'created_at__date': row['created_at__date'],
+            'daily_total': row['daily_total'] or 0,
+            'daily_count': row['daily_count'] or 0,
+        }
+        for row in daily_sales_qs
+    ]
+
+    totals = Sale.objects.filter(
+        organization=organization,
+        created_at__date__range=[start_date, end_date],
+        status=SaleStatus.COMPLETED
+    ).aggregate(
+        total_revenue=Sum('total_amount'),
+        total_sales=Count('id')
+    )
     
     # Top products by revenue
     top_products_revenue = SaleItem.objects.filter(
@@ -393,6 +414,8 @@ def pharmacy_sales_reports(request):
             'start_date': start_date,
             'end_date': end_date
         },
+        'total_revenue': totals['total_revenue'] or 0,
+        'total_sales': totals['total_sales'] or 0,
         'payment_methods': payment_methods,
         'daily_trends': daily_sales,
         'top_products_by_revenue': top_products_revenue

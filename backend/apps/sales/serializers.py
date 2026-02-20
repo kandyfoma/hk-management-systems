@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.db import transaction
+from django.utils import timezone
 from decimal import Decimal
 from .models import Sale, SaleItem, SalePayment, Cart, CartItem
 from apps.inventory.models import Product, InventoryItem, StockMovement
@@ -39,6 +40,8 @@ class SalePaymentSerializer(serializers.ModelSerializer):
 
 class SaleListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(read_only=True)
+    customer_phone = serializers.CharField(read_only=True)
+    customer_email = serializers.CharField(read_only=True)
     cashier_name = serializers.CharField(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     type_display = serializers.CharField(source='get_type_display', read_only=True)
@@ -49,6 +52,7 @@ class SaleListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sale_number', 'receipt_number', 'status', 'status_display',
             'type', 'type_display', 'customer', 'customer_name', 'cashier',
+            'customer_phone', 'customer_email',
             'cashier_name', 'total_amount', 'payment_status', 'payment_status_display',
             'item_count', 'created_at'
         ]
@@ -69,7 +73,7 @@ class SaleDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'organization', 'organization_name', 'sale_number', 'receipt_number',
             'status', 'status_display', 'type', 'type_display', 'customer',
-            'customer_name', 'customer_phone', 'cashier', 'cashier_name',
+            'customer_name', 'customer_phone', 'customer_email', 'cashier', 'cashier_name',
             'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
             'payment_status', 'payment_status_display', 'item_count',
             'prescription', 'void_reason',
@@ -83,6 +87,7 @@ class SaleDetailSerializer(serializers.ModelSerializer):
 
 
 class SaleCreateSerializer(serializers.ModelSerializer):
+    facility_id = serializers.CharField(required=False, allow_blank=True)
     items = SaleItemSerializer(many=True)
     payments = SalePaymentSerializer(many=True, required=False)
     
@@ -92,7 +97,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             'id', 'sale_number', 'receipt_number', 'status',
             'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
             'item_count', 'created_at',
-            'customer', 'customer_name', 'customer_phone', 'type', 'prescription',
+            'customer', 'customer_name', 'customer_phone', 'customer_email', 'type', 'prescription', 'facility_id',
             'notes', 'items', 'payments'
         ]
         read_only_fields = [
@@ -141,6 +146,8 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 inv_qs = InventoryItem.objects.filter(product=product)
                 if organization:
                     inv_qs = inv_qs.filter(organization=organization)
+                if sale.facility_id:
+                    inv_qs = inv_qs.filter(facility_id=sale.facility_id)
                 inv_item = inv_qs.first()
                 if inv_item:
                     prev_qty = int(inv_item.quantity_on_hand or 0)
@@ -160,6 +167,9 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                         ),
                         reference_number=sale.sale_number,
                         sale_id=str(sale.id),
+                        movement_date=timezone.now(),
+                        balance_before=prev_qty,
+                        balance_after=new_qty,
                         performed_by=cashier,
                         created_by=cashier,
                         reason='Vente POS',

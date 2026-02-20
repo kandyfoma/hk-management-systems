@@ -7,16 +7,13 @@ import {
   StyleSheet,
   Dimensions,
   ActivityIndicator,
-  TextInput,
-  Modal,
-  Platform,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { useToast } from '../../../components/GlobalUI';
 import ApiService from '../../../services/ApiService';
 import DatabaseService from '../../../services/DatabaseService';
+import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -99,9 +96,15 @@ export function AnalyticsScreen() {
   const [productAnalytics, setProductAnalytics] = useState<ProductAnalytics | null>(null);
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [prescriptionStats, setPrescriptionStats] = useState<{ total: number; pending: number; completed: number; expired: number }>({ total: 0, pending: 0, completed: 0, expired: 0 });
   const toast = useToast();
+
+  const parseInputDate = (value: string): Date | null => {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  };
 
   // ─── Load Analytics Data ─────────────────────────────────────
   const loadAnalyticsData = useCallback(async () => {
@@ -226,9 +229,17 @@ export function AnalyticsScreen() {
         start.setFullYear(now.getFullYear() - 1);
         break;
       case 'custom':
-        start = customDateFrom ? new Date(customDateFrom) : new Date();
-        end = customDateTo ? new Date(customDateTo) : new Date();
+        start = parseInputDate(customDateFrom) ?? new Date();
+        end = parseInputDate(customDateTo) ?? new Date();
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
         break;
+    }
+
+    if (start.getTime() > end.getTime()) {
+      const previousStart = start;
+      start = end;
+      end = previousStart;
     }
 
     return { start, end };
@@ -495,6 +506,47 @@ export function AnalyticsScreen() {
     </View>
   );
 
+  const renderCustomDateRange = () => {
+    if (period !== 'custom') return null;
+
+    return (
+      <View style={styles.customDateWrap}>
+        <Text style={styles.customDateTitle}>Personnaliser</Text>
+        <View style={styles.customDateRow}>
+          <View style={styles.customDateField}>
+            <Text style={styles.customDateLabel}>Du</Text>
+            <DateInput
+              containerStyle={styles.customDateInputContainer}
+              inputStyle={styles.customDateInput}
+              value={customDateFrom}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textSecondary}
+              onChangeText={setCustomDateFrom}
+              format="iso"
+              maximumDate={parseInputDate(customDateTo) ?? undefined}
+            />
+          </View>
+          <View style={styles.customDateField}>
+            <Text style={styles.customDateLabel}>Au</Text>
+            <DateInput
+              containerStyle={styles.customDateInputContainer}
+              inputStyle={styles.customDateInput}
+              value={customDateTo}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textSecondary}
+              onChangeText={setCustomDateTo}
+              format="iso"
+              minimumDate={parseInputDate(customDateFrom) ?? undefined}
+            />
+          </View>
+        </View>
+        <Text style={styles.customDateHint}>
+          Format: YYYY-MM-DD (ex: 2026-02-20)
+        </Text>
+      </View>
+    );
+  };
+
   const renderOverviewTab = () => {
     if (!analyticsData) return null;
 
@@ -724,6 +776,7 @@ export function AnalyticsScreen() {
     <View style={styles.container}>
       {renderHeader()}
       {renderPeriodSelector()}
+      {renderCustomDateRange()}
       {renderTabSelector()}
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -845,6 +898,50 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
     overflow: 'hidden',
+  },
+  customDateWrap: {
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  customDateTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  customDateRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  customDateField: {
+    flex: 1,
+    gap: 4,
+  },
+  customDateLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  customDateInputContainer: {
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.inputBackground,
+    paddingHorizontal: spacing.sm,
+    minHeight: 36,
+    alignItems: 'center',
+  },
+  customDateInput: {
+    color: colors.text,
+    fontSize: 13,
+    paddingVertical: 6,
+  },
+  customDateHint: {
+    fontSize: 11,
+    color: colors.textSecondary,
   },
   tabSelector: {
     flex: 1,

@@ -4,20 +4,52 @@
 
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
 
 // Backend API URL - adjust based on your backend setup
-const getBaseURL = () => {
-  if (Platform.OS === 'web') {
-    return 'http://127.0.0.1:8000/api/v1';
+const extractDevHost = (): string | null => {
+  try {
+    const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
+    if (!scriptURL) return null;
+
+    const match = scriptURL.match(/^[a-zA-Z]+:\/\/([^/:]+)/);
+    const host = match?.[1] ?? null;
+    if (!host) return null;
+    if (host === 'localhost' || host === '127.0.0.1') return null;
+    return host;
+  } catch {
+    return null;
   }
-  // For mobile emulator/device
-  return 'http://10.0.2.2:8000/api/v1'; // Android emulator
-  // Use 'http://127.0.0.1:8000/api/v1' for iOS simulator
+};
+
+const getBaseURL = () => {
+  const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.API_BASE_URL;
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, '');
+  }
+
+  if (Platform.OS === 'web') {
+    const webHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+    const host = webHost === 'localhost' ? '127.0.0.1' : webHost;
+    return `http://${host}:8000/api/v1`;
+  }
+
+  // Physical device on same Wi-Fi as dev machine
+  const devHost = extractDevHost();
+  if (devHost) {
+    return `http://${devHost}:8000/api/v1`;
+  }
+
+  // Emulators/simulators fallback
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000/api/v1';
+  }
+
+  return 'http://127.0.0.1:8000/api/v1';
 };
 
 const API_BASE_URL = getBaseURL();

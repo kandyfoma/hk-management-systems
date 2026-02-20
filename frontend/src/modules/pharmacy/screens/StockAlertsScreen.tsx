@@ -24,6 +24,15 @@ const isDesktop = width >= 1024;
 
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
+type ExpiryReportItem = {
+  id: string;
+  productName: string;
+  batchNumber: string;
+  expiryDate: string;
+  daysRemaining: number;
+  quantity: number;
+};
+
 function getSeverityConfig(severity: Severity) {
   switch (severity) {
     case 'CRITICAL': return { color: colors.error, bg: colors.error + '14', icon: 'alert-circle' as const, label: 'Critique' };
@@ -75,57 +84,129 @@ function timeAgo(dateStr: string): string {
   return `Il y a ${Math.floor(seconds / 86400)}j`;
 }
 
+function daysUntil(dateStr: string): number {
+  const target = new Date(dateStr);
+  if (Number.isNaN(target.getTime())) return Number.MAX_SAFE_INTEGER;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.floor((target.getTime() - today.getTime()) / 86400000);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export function StockAlertsScreen() {
+export function StockAlertsScreen({ onOpenExpirationReport }: { onOpenExpirationReport?: () => void } = {}) {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [alerts, setAlerts] = useState<(InventoryAlert & { product?: Product })[]>([]);
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'medium'>('all');
+  const [expiryReport, setExpiryReport] = useState<{
+    expired: number;
+    in7Days: number;
+    in30Days: number;
+    items: ExpiryReportItem[];
+  }>({ expired: 0, in7Days: 0, in30Days: 0, items: [] });
 
   const loadData = useCallback(async () => {
     try {
       const api = ApiService.getInstance();
-      const [alertsRes, productsRes] = await Promise.all([
+      const [alertsRes, productsRes, itemsRes, batchesRes] = await Promise.all([
         api.get('/inventory/alerts/', { is_active: true, page_size: 500 }),
         api.get('/inventory/products/', { page_size: 500 }),
+        api.get('/inventory/items/', { page_size: 1000 }),
+        api.get('/inventory/batches/', { page_size: 1000 }),
       ]);
 
       const rawAlerts: any[] = alertsRes?.data?.results ?? alertsRes?.data ?? [];
       const rawProducts: any[] = productsRes?.data?.results ?? productsRes?.data ?? [];
+      const rawItems: any[] = itemsRes?.data?.results ?? itemsRes?.data ?? [];
+      const rawBatches: any[] = batchesRes?.data?.results ?? batchesRes?.data ?? [];
 
       // Build products map by id
       const productsMap = new Map<string, any>();
       rawProducts.forEach((p: any) => productsMap.set(p.id, p));
 
+      // Build inventory items map by id
+      const itemsMap = new Map<string, any>();
+      rawItems.forEach((item: any) => itemsMap.set(item.id, item));
+
+      // Build expiry report (expired + expiring in 7/30 days)
+      let expired = 0;
+      let in7Days = 0;
+      let in30Days = 0;
+      const expiryItems: ExpiryReportItem[] = [];
+
+      rawBatches.forEach((batch: any) => {
+        const expiryDate = batch?.expiry_date;
+        const quantity = Number(batch?.current_quantity ?? 0);
+        if (!expiryDate || quantity <= 0) return;
+
+        const inventoryItem = itemsMap.get(batch.inventory_item);
+        const product = inventoryItem ? productsMap.get(inventoryItem.product) : undefined;
+        const productName = product?.name ?? batch?.product_name ?? 'Produit';
+
+        const daysRemaining = daysUntil(expiryDate);
+        if (daysRemaining < 0) expired += 1;
+        if (daysRemaining >= 0 && daysRemaining <= 7) in7Days += 1;
+        if (daysRemaining >= 0 && daysRemaining <= 30) in30Days += 1;
+
+        if (daysRemaining <= 30) {
+          expiryItems.push({
+            id: String(batch.id),
+            productName,
+            batchNumber: batch.batch_number ?? '-',
+            expiryDate,
+            daysRemaining,
+            quantity,
+          });
+        }
+      });
+
+      expiryItems.sort((a, b) => a.daysRemaining - b.daysRemaining);
+      setExpiryReport({ expired, in7Days, in30Days, items: expiryItems.slice(0, 10) });
+
       // Map to InventoryAlert shape and enrich with product
-      const enriched = rawAlerts.map((a: any) => ({
-        id: a.id,
-        organizationId: '',
-        productId: a.product,
-        inventoryItemId: a.inventory_item ?? '',
-        batchId: a.batch ?? '',
-        alertType: a.alert_type as any,
-        severity: a.severity as any,
-        message: a.message ?? a.title ?? '',
-        isActive: a.is_active ?? true,
-        isAcknowledged: !!a.acknowledged_at,
-        isResolved: !!a.resolved_at,
-        thresholdValue: 0,
-        currentValue: 0,
-        createdAt: a.created_at,
-        updatedAt: a.created_at,
-        // keep raw fields for UI
-        status: a.acknowledged_at ? 'ACKNOWLEDGED' : 'ACTIVE',
-        product: productsMap.get(a.product) ? {
-          id: productsMap.get(a.product).id,
-          name: productsMap.get(a.product).name,
-          strength: productsMap.get(a.product).strength,
-        } as any : undefined,
-      }));
+      const enriched = rawAlerts.map((a: any) => {
+        const product = productsMap.get(a.product);
+        const inventoryItem = a.inventory_item ? itemsMap.get(a.inventory_item) : undefined;
+
+        const currentValue =
+          inventoryItem?.quantity_on_hand ??
+          undefined;
+
+        const thresholdValue =
+          inventoryItem?.product_details?.min_stock_level ??
+          product?.min_stock_level ??
+          undefined;
+
+        return {
+          id: a.id,
+          organizationId: '',
+          productId: a.product,
+          inventoryItemId: a.inventory_item ?? '',
+          batchId: a.batch ?? '',
+          alertType: a.alert_type as any,
+          severity: a.severity as any,
+          message: a.message ?? a.title ?? '',
+          isActive: a.is_active ?? true,
+          isAcknowledged: !!a.acknowledged_at,
+          isResolved: !!a.resolved_at,
+          thresholdValue,
+          currentValue,
+          createdAt: a.created_at,
+          updatedAt: a.created_at,
+          // keep raw fields for UI
+          status: a.acknowledged_at ? 'ACKNOWLEDGED' : 'ACTIVE',
+          product: product ? {
+            id: product.id,
+            name: product.name,
+            strength: product.strength,
+          } as any : undefined,
+        };
+      });
 
       // Sort: CRITICAL first, then by createdAt descending
       const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
@@ -225,6 +306,63 @@ export function StockAlertsScreen() {
           <Ionicons name="list" size={18} color={filter === 'all' ? '#FFF' : colors.textSecondary} />
           <Text style={[s.filterAllText, filter === 'all' && s.filterAllTextActive]}>Tous ({alerts.length})</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* ─── Expiration Reporting ───────────────────────────── */}
+      <View style={s.expirySection}>
+        <View style={s.expiryHeader}>
+          <View style={s.expiryHeaderTop}>
+            <Text style={s.expiryTitle}>Rapport d&apos;expiration</Text>
+            {onOpenExpirationReport && (
+              <TouchableOpacity style={s.expiryActionBtn} onPress={onOpenExpirationReport}>
+                <Ionicons name="open-outline" size={13} color={colors.primary} />
+                <Text style={s.expiryActionText}>Rapport complet</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={s.expirySubtitle}>{expiryReport.items.length} lot(s) à surveiller (≤ 30 jours)</Text>
+        </View>
+
+        <View style={s.expiryKpiRow}>
+          <View style={s.expiryKpiCard}>
+            <Text style={s.expiryKpiLabel}>Expirés</Text>
+            <Text style={[s.expiryKpiValue, { color: colors.error }]}>{expiryReport.expired}</Text>
+          </View>
+          <View style={s.expiryKpiCard}>
+            <Text style={s.expiryKpiLabel}>≤ 7 jours</Text>
+            <Text style={[s.expiryKpiValue, { color: '#E65100' }]}>{expiryReport.in7Days}</Text>
+          </View>
+          <View style={s.expiryKpiCard}>
+            <Text style={s.expiryKpiLabel}>≤ 30 jours</Text>
+            <Text style={[s.expiryKpiValue, { color: colors.warning }]}>{expiryReport.in30Days}</Text>
+          </View>
+        </View>
+
+        {expiryReport.items.length === 0 ? (
+          <Text style={s.expiryEmpty}>Aucun lot proche d&apos;expiration</Text>
+        ) : (
+          <View style={s.expiryList}>
+            {expiryReport.items.map((item) => (
+              <View key={item.id} style={s.expiryRow}>
+                <View style={s.expiryInfo}>
+                  <Text style={s.expiryProduct} numberOfLines={1}>{item.productName}</Text>
+                  <Text style={s.expiryMeta}>Lot {item.batchNumber} · Exp. {new Date(item.expiryDate).toLocaleDateString('fr-FR')} · Qté {item.quantity}</Text>
+                </View>
+                <View style={[
+                  s.expiryBadge,
+                  item.daysRemaining < 0 ? s.expiryBadgeCritical : item.daysRemaining <= 7 ? s.expiryBadgeHigh : s.expiryBadgeMedium,
+                ]}>
+                  <Text style={[
+                    s.expiryBadgeText,
+                    item.daysRemaining < 0 ? { color: colors.error } : item.daysRemaining <= 7 ? { color: '#E65100' } : { color: colors.warning },
+                  ]}>
+                    {item.daysRemaining < 0 ? 'Expiré' : `J-${item.daysRemaining}`}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* ─── Alerts List ────────────────────────────────────── */}
@@ -403,6 +541,30 @@ const s = StyleSheet.create({
   filterAllBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterAllText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
   filterAllTextActive: { color: '#FFF' },
+
+  // Expiry report
+  expirySection: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, borderWidth: 1, borderColor: colors.outline, padding: 14, marginBottom: 16, ...shadows.sm },
+  expiryHeader: { marginBottom: 10 },
+  expiryHeaderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  expiryTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  expiryActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: colors.primary, borderRadius: borderRadius.full, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.primary + '10' },
+  expiryActionText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  expirySubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  expiryKpiRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  expiryKpiCard: { flex: 1, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, paddingVertical: 8, paddingHorizontal: 10 },
+  expiryKpiLabel: { fontSize: 11, fontWeight: '600', color: colors.textTertiary },
+  expiryKpiValue: { fontSize: 18, fontWeight: '700', marginTop: 2 },
+  expiryEmpty: { fontSize: 13, color: colors.success, fontWeight: '600' },
+  expiryList: { gap: 8 },
+  expiryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 10, paddingVertical: 8 },
+  expiryInfo: { flex: 1 },
+  expiryProduct: { fontSize: 13, fontWeight: '600', color: colors.text },
+  expiryMeta: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  expiryBadge: { borderRadius: borderRadius.full, paddingHorizontal: 10, paddingVertical: 4 },
+  expiryBadgeCritical: { backgroundColor: colors.error + '14' },
+  expiryBadgeHigh: { backgroundColor: '#E6510014' },
+  expiryBadgeMedium: { backgroundColor: colors.warning + '14' },
+  expiryBadgeText: { fontSize: 11, fontWeight: '700' },
 
   // Empty
   emptyState: { alignItems: 'center', paddingVertical: 60 },

@@ -38,7 +38,6 @@ export type ConnectivityListener = (event: ConnectivityEvent) => void;
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════
 
-const PING_URL = 'https://clients3.google.com/generate_204';
 const PING_TIMEOUT_MS = 8000;
 const MAX_HISTORY = 50;
 
@@ -66,6 +65,12 @@ class _ConnectivityService {
   // ── lifecycle ────────────────────────────────────────────────
 
   start() {
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      NetInfo.configure({
+        reachabilityShouldRun: () => false,
+      });
+    }
+
     this.unsubNetInfo = NetInfo.addEventListener((state) => {
       this.handleStateChange(state);
     });
@@ -113,11 +118,27 @@ class _ConnectivityService {
   }
 
   async measureLatency(): Promise<number | null> {
+    if (!this.current.isConnected) {
+      this.current = {
+        ...this.current,
+        latencyMs: null,
+        quality: 'offline',
+        timestamp: Date.now(),
+      };
+      return null;
+    }
+
+    // Browser environments often block external probe URLs and flood the console
+    // with ERR_CONNECTION_CLOSED; rely on NetInfo status there instead.
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      return this.current.latencyMs;
+    }
+
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
       const start = Date.now();
-      await fetch(PING_URL, {
+      await fetch('https://www.google.com/generate_204', {
         method: 'HEAD',
         mode: 'no-cors',
         cache: 'no-store',

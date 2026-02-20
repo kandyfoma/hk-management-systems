@@ -108,6 +108,7 @@ export function POSScreen() {
     && !value.customerId
     && !value.customerName
     && !value.customerPhone
+    && !value.customerEmail
     && !value.prescriptionId
     && value.globalDiscountType === 'NONE'
     && value.globalDiscountValue === 0
@@ -134,6 +135,8 @@ export function POSScreen() {
     setPendingSalesCount(status.pendingItems);
     setSyncInProgress(status.syncInProgress);
   }, []);
+
+  const isFullySynced = pendingSalesCount === 0 && !syncInProgress;
 
   const hydrateSessionContext = useCallback(async () => {
     try {
@@ -172,13 +175,6 @@ export function POSScreen() {
 
       syncLockRef.current = true;
       setSyncInProgress(true);
-      const api = ApiService.getInstance();
-      const isOnline = await api.checkConnection();
-      if (!isOnline) {
-        refreshSyncStatus();
-        if (!silent) toastRef.current.info('Hors ligne: synchronisation différée');
-        return;
-      }
 
       const beforePending = syncServiceRef.current.getSyncStatus().pendingItems;
       await syncServiceRef.current.forceSync();
@@ -190,7 +186,13 @@ export function POSScreen() {
         if (synced > 0) {
           toastRef.current.success(`${synced} vente(s) synchronisée(s)`);
         } else if (afterPending > 0) {
-          toastRef.current.warning('Certaines ventes restent en attente de synchronisation');
+          const lastError = syncServiceRef.current.getSyncStatus().syncErrors.slice(-1)[0];
+          if (lastError?.error) {
+            const friendly = String(lastError.error).replace(/^NON_RETRIABLE_4XX\s*\d+\s*:\s*/i, '');
+            toastRef.current.warning(`Sync échouée: ${friendly}`);
+          } else {
+            toastRef.current.warning('Certaines ventes restent en attente de synchronisation');
+          }
         }
       }
     } catch {
@@ -571,6 +573,7 @@ export function POSScreen() {
 
     const payload: any = {
       type: sourceCart.prescriptionId ? 'PRESCRIPTION' : 'COUNTER',
+      facility_id: facilityId,
       notes: (sourceCart as any).notes ?? '',
       items,
       payments: backendPayments,
@@ -579,12 +582,13 @@ export function POSScreen() {
     if (sourceCart.customerId) payload.customer = sourceCart.customerId;
     if (sourceCart.customerName) payload.customer_name = sourceCart.customerName;
     if (sourceCart.customerPhone) payload.customer_phone = sourceCart.customerPhone;
+    if (sourceCart.customerEmail) payload.customer_email = sourceCart.customerEmail;
     if (sourceCart.prescriptionId) payload.prescription = sourceCart.prescriptionId;
 
     return payload;
-  }, []);
+  }, [facilityId]);
 
-  const handleCheckout = useCallback(async (payments: SalePayment[]) => {
+  const handleCheckout = useCallback(async (payments: SalePayment[], customerDetails?: { name?: string; phone?: string; email?: string }) => {
     if (cart.items.length === 0) return;
     if (checkoutInProgress) return;
     if (cartTotals.grandTotal <= 0) {
@@ -597,6 +601,9 @@ export function POSScreen() {
       const api = ApiService.getInstance();
       const checkoutCart: CartState = {
         ...cart,
+        customerName: customerDetails?.name?.trim() || cart.customerName,
+        customerPhone: customerDetails?.phone?.trim() || cart.customerPhone,
+        customerEmail: customerDetails?.email?.trim() || cart.customerEmail,
         items: cart.items.map((item) => ({ ...item })),
       };
       const checkoutPayments = payments.map((payment) => ({ ...payment }));
@@ -641,16 +648,10 @@ export function POSScreen() {
         return;
       }
 
-      const isOnline = await api.checkConnection();
-      if (!isOnline) {
-        toast.info(`Vente ${localSale.saleNumber} enregistrée hors ligne et en attente de sync`);
-        return;
-      }
-
       await syncPendingSales(true);
       const pending = syncServiceRef.current.getSyncStatus().pendingItems;
       if (pending > 0) {
-        toast.warning(`Vente ${localSale.saleNumber} enregistrée localement; synchronisation en arrière-plan`);
+        toast.info(`Vente ${localSale.saleNumber} enregistrée. Sync en attente (hors ligne ou temporairement indisponible)`);
       } else {
         toast.success(`Vente ${localSale.saleNumber} enregistrée et synchronisée`);
       }
@@ -710,13 +711,13 @@ export function POSScreen() {
               {!isSmallPhone && <Text style={s.historyBtnText}>Brouillon</Text>}
             </TouchableOpacity>
             <TouchableOpacity
-              style={s.historyBtn}
+              style={[s.historyBtn, isFullySynced && s.syncBtnSynced]}
               onPress={() => syncPendingSales(false)}
               activeOpacity={0.7}
               disabled={syncInProgress}
             >
-              <Ionicons name={syncInProgress ? 'sync' : 'cloud-upload-outline'} size={18} color={colors.primary} />
-              {!isSmallPhone && <Text style={s.historyBtnText}>{pendingSalesCount > 0 ? `Sync (${pendingSalesCount})` : 'Sync'}</Text>}
+              <Ionicons name={syncInProgress ? 'sync' : isFullySynced ? 'cloud-done' : 'cloud-upload-outline'} size={18} color={isFullySynced ? '#FFF' : colors.primary} />
+              {!isSmallPhone && <Text style={[s.historyBtnText, isFullySynced && s.historyBtnTextSynced]}>{pendingSalesCount > 0 ? `Sync (${pendingSalesCount})` : 'Synced'}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={s.historyBtn} onPress={() => setShowHistory(true)} activeOpacity={0.7}>
               <Ionicons name="time-outline" size={18} color={colors.primary} />
@@ -854,9 +855,20 @@ export function POSScreen() {
         visible={showPayment}
         totals={cartTotals}
         currency={cart.items[0]?.product.currency || 'CDF'}
+        customerName={cart.customerName}
+        customerPhone={cart.customerPhone}
+        customerEmail={cart.customerEmail}
         isProcessing={checkoutInProgress}
         onClose={() => setShowPayment(false)}
-        onConfirm={handleCheckout}
+        onConfirm={(payments, customerDetails) => {
+          setCart((prev) => ({
+            ...prev,
+            customerName: customerDetails.name?.trim() || undefined,
+            customerPhone: customerDetails.phone?.trim() || undefined,
+            customerEmail: customerDetails.email?.trim() || undefined,
+          }));
+          return handleCheckout(payments, customerDetails);
+        }}
       />
 
       {/* ════════════ RECEIPT MODAL ════════════════════════ */}
@@ -1094,26 +1106,35 @@ function TotalRow({ label, value, color }: { label: string; value: string; color
 // ═══════════════════════════════════════════════════════════════
 
 function PaymentModal({
-  visible, totals, currency, isProcessing, onClose, onConfirm,
+  visible, totals, currency, customerName, customerPhone, customerEmail, isProcessing, onClose, onConfirm,
 }: {
   visible: boolean;
   totals: CartTotals;
   currency: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
   isProcessing: boolean;
   onClose: () => void;
-  onConfirm: (payments: SalePayment[]) => Promise<void> | void;
+  onConfirm: (payments: SalePayment[], customerDetails: { name?: string; phone?: string; email?: string }) => Promise<void> | void;
 }) {
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [amountInput, setAmountInput] = useState('');
   const [reference, setReference] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
 
   useEffect(() => {
     if (visible) {
       setAmountInput(totals.grandTotal.toFixed(2));
       setMethod('CASH');
       setReference('');
+      setClientName(customerName ?? '');
+      setClientPhone(customerPhone ?? '');
+      setClientEmail(customerEmail ?? '');
     }
-  }, [visible, totals.grandTotal]);
+  }, [visible, totals.grandTotal, customerName, customerPhone, customerEmail]);
 
   const amount = parseFloat(amountInput) || 0;
   const change = Math.max(0, amount - totals.grandTotal);
@@ -1148,7 +1169,11 @@ function PaymentModal({
       reference: reference || undefined,
       receivedAt: new Date().toISOString(),
     };
-    await onConfirm([payment]);
+    await onConfirm([payment], {
+      name: clientName,
+      phone: clientPhone,
+      email: clientEmail,
+    });
   };
 
   return (
@@ -1223,6 +1248,31 @@ function PaymentModal({
                 <Text style={s.pmChangeValue}>{fmt(change, currency)}</Text>
               </View>
             )}
+
+            <Text style={s.pmSectionTitle}>Informations client (optionnel)</Text>
+            <TextInput
+              style={s.pmReferenceInput}
+              placeholder="Nom du client"
+              placeholderTextColor={colors.placeholder}
+              value={clientName}
+              onChangeText={setClientName}
+            />
+            <TextInput
+              style={s.pmReferenceInput}
+              placeholder="Téléphone"
+              placeholderTextColor={colors.placeholder}
+              value={clientPhone}
+              onChangeText={setClientPhone}
+            />
+            <TextInput
+              style={s.pmReferenceInput}
+              placeholder="Email"
+              placeholderTextColor={colors.placeholder}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={clientEmail}
+              onChangeText={setClientEmail}
+            />
           </ScrollView>
 
           {/* Confirm */}
@@ -1268,6 +1318,8 @@ function ReceiptModal({ visible, sale, onClose }: { visible: boolean; sale: Sale
               <RcRow label="Date" value={SaleUtils.formatDateTime(sale.createdAt)} />
               <RcRow label="Caissier" value={sale.cashierName} />
               {sale.customerName && <RcRow label="Client" value={sale.customerName} />}
+              {sale.customerPhone && <RcRow label="Téléphone" value={sale.customerPhone} />}
+              {sale.customerEmail && <RcRow label="Email" value={sale.customerEmail} />}
             </View>
 
             {/* Items */}
@@ -1371,6 +1423,7 @@ function SalesHistoryModal({ visible, orgId, onClose, onViewReceipt }: {
           customerId: s.customer ?? '',
           customerName: s.customer_name ?? '',
           customerPhone: s.customer_phone ?? '',
+          customerEmail: s.customer_email ?? '',
           prescriptionId: '',
           items: [],
           payments: (s.payments ?? []).map((p: any) => ({
@@ -1428,6 +1481,7 @@ function SalesHistoryModal({ visible, orgId, onClose, onViewReceipt }: {
         organizationId: '', facilityId: '', cashierId: '', cashierName: s.cashier_name ?? '',
         status: s.status ?? 'COMPLETED', type: s.type ?? 'COUNTER',
         customerId: s.customer ?? '', customerName: s.customer_name ?? '', customerPhone: '',
+        customerEmail: s.customer_email ?? '',
         prescriptionId: '', items: [],
         payments: (s.payments ?? []).map((p: any) => ({ id: p.id, method: p.payment_method, amount: parseFloat(p.amount ?? '0'), currency: p.currency ?? 'CDF', reference: p.reference_number ?? '', status: p.status ?? 'COMPLETED', processedAt: p.processed_at })),
         subtotal: parseFloat(s.subtotal ?? s.total_amount ?? '0'),
@@ -1535,6 +1589,8 @@ const s = StyleSheet.create({
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: isSmallPhone ? 9 : 12, paddingVertical: 6, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary },
   historyBtnText: { fontSize: 12, fontWeight: '600', color: colors.primary },
+  syncBtnSynced: { backgroundColor: colors.success, borderColor: colors.success },
+  historyBtnTextSynced: { color: '#FFF' },
   mobileCartBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.full, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   mobileCartBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.error, borderRadius: borderRadius.full, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   mobileCartBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFF' },

@@ -8,8 +8,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
-  Alert,
-  Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -41,6 +40,7 @@ interface QuickReport {
 }
 
 interface ReportData {
+  reportType: ReportType;
   title: string;
   period: string;
   generatedAt: string;
@@ -75,6 +75,8 @@ export function PharmacyReportsScreen() {
   const [quickReports, setQuickReports] = useState<QuickReport[]>([]);
   const [complianceAlerts, setComplianceAlerts] = useState<ComplianceAlert[]>([]);
   const [generatingReportId, setGeneratingReportId] = useState<string | null>(null);
+  const [reportPreview, setReportPreview] = useState<ReportData | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
   
   const toast = useToast();
 
@@ -87,16 +89,63 @@ export function PharmacyReportsScreen() {
     }).format(amount);
   }, []);
 
+  const getDateRangeForPeriod = (period: QuickReport['period']) => {
+    const end = new Date();
+    const start = new Date(end);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    switch (period) {
+      case 'today':
+        break;
+      case 'week':
+        start.setDate(end.getDate() - 6);
+        break;
+      case 'month':
+        start.setMonth(end.getMonth() - 1);
+        break;
+      case 'quarter':
+        start.setMonth(end.getMonth() - 3);
+        break;
+      case 'year':
+        start.setFullYear(end.getFullYear() - 1);
+        break;
+      default:
+        break;
+    }
+
+    return {
+      start,
+      end,
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+    };
+  };
+
   // ─── Data Loading ───────────────────────────────────────────
   const loadReportsData = useCallback(async () => {
     setLoading(true);
     try {
       // Load quick reports templates
+      const dataService = DataService;
+      const overviewRes = await dataService.getPharmacyReportsOverview();
+      const overview = overviewRes?.data ?? {};
+      const salesStats = overview.sales ?? {};
+      const rxStats = overview.prescriptions ?? {};
+      const inventoryStats = overview.inventory ?? {};
+      const alertsStats = overview.alerts ?? {};
+
+      const todaySalesCount = Number(salesStats.today_sales_count ?? 0);
+      const inventoryTotalProducts = Number(inventoryStats.total_products ?? 0);
+      const monthlyRxCount = Number(rxStats.total_prescriptions ?? rxStats.total ?? 0);
+      const quarterlyRevenue = Number(salesStats.total_revenue ?? 0);
+      const yearlyAlerts = Number(alertsStats.total ?? 0);
+
       const reports: QuickReport[] = [
         {
           id: 'daily-sales',
           title: 'Ventes Journalières',
-          subtitle: 'Résumé des ventes d\'aujourd\'hui',
+          subtitle: `${todaySalesCount} vente${todaySalesCount !== 1 ? 's' : ''} aujourd\'hui`,
           type: 'sales',
           icon: 'trending-up',
           color: colors.success,
@@ -106,39 +155,37 @@ export function PharmacyReportsScreen() {
         {
           id: 'weekly-inventory',
           title: 'État Stock Hebdomadaire',
-          subtitle: 'Suivi des stocks cette semaine',
+          subtitle: `${inventoryTotalProducts} produit${inventoryTotalProducts !== 1 ? 's' : ''} suivis`,
           type: 'inventory',
           icon: 'cube',
           color: colors.primary,
           period: 'week',
           isReady: true,
-          lastGenerated: '2024-01-15 09:30',
         },
         {
           id: 'monthly-prescriptions',
           title: 'Ordonnances Mensuelles',
-          subtitle: 'Rapport mensuel des ordonnances',
+          subtitle: `${monthlyRxCount} ordonnance${monthlyRxCount !== 1 ? 's' : ''} enregistrée${monthlyRxCount !== 1 ? 's' : ''}`,
           type: 'prescriptions',
           icon: 'document-text',
           color: colors.info,
           period: 'month',
           isReady: true,
-          lastGenerated: '2024-01-10 14:20',
         },
         {
           id: 'quarterly-financial',
           title: 'Rapport Financier Trimestriel',
-          subtitle: 'Performance financière Q1 2024',
+          subtitle: `CA cumulé: ${formatCdf(quarterlyRevenue)}`,
           type: 'financial',
           icon: 'bar-chart',
           color: colors.warning,
           period: 'quarter',
-          isReady: false,
+          isReady: true,
         },
         {
           id: 'annual-compliance',
           title: 'Conformité Annuelle',
-          subtitle: 'Rapport de conformité 2024',
+          subtitle: `${yearlyAlerts} alerte${yearlyAlerts !== 1 ? 's' : ''} active${yearlyAlerts !== 1 ? 's' : ''}`,
           type: 'compliance',
           icon: 'shield-checkmark',
           color: colors.error,
@@ -251,7 +298,7 @@ export function PharmacyReportsScreen() {
 
       const reportData = await generateReportData(report);
       
-      toast.success(`Rapport "${report.title}" généré avec succès`);
+      toast.success(`Rapport "${report.title}" prêt à consulter`);
       
       // Update last generated time
       setQuickReports(prev => 
@@ -262,7 +309,8 @@ export function PharmacyReportsScreen() {
         )
       );
       
-      exportReport(reportData);
+      setReportPreview(reportData);
+      setPreviewVisible(true);
       
     } catch (error) {
       toast.error('Erreur lors de la génération du rapport');
@@ -272,48 +320,75 @@ export function PharmacyReportsScreen() {
   };
 
   const generateReportData = async (report: QuickReport): Promise<ReportData> => {
-    const dataService = DataService.getInstance();
-    const overviewRes = await dataService.getPharmacyReportsOverview();
-    const salesDetailsRes = await dataService.getPharmacySalesReports();
+    const dataService = DataService;
+    const dateRange = getDateRangeForPeriod(report.period);
+    const [overviewRes, salesDetailsRes, inventoryStatsRes, prescriptionStatsRes, expiringRes, lowStockRes] = await Promise.all([
+      dataService.getPharmacyReportsOverview(),
+      dataService.getPharmacySalesReports({
+        start_date: dateRange.startDate,
+        end_date: dateRange.endDate,
+      }),
+      dataService.getInventoryStats(),
+      dataService.getPrescriptionStats(),
+      dataService.getExpiringProducts({ days: 30 }),
+      dataService.getLowStockProducts(),
+    ]);
 
     const overview = overviewRes?.data ?? {};
     const salesDetails = salesDetailsRes?.data ?? {};
     const salesStats = overview.sales ?? {};
-    const rxStats = overview.prescriptions ?? {};
-    const inventoryStats = overview.inventory ?? {};
+    const rxStats = prescriptionStatsRes?.data ?? overview.prescriptions ?? {};
+    const inventoryStats = inventoryStatsRes?.data ?? overview.inventory ?? {};
     const alertsStats = overview.alerts ?? {};
 
-    const lowStockCount = Number(alertsStats.medium ?? 0) + Number(alertsStats.low ?? 0);
-    const expiringCount = Number(rxStats.expired ?? 0);
-    const totalRevenue = Number(salesStats.total_revenue ?? salesStats.today_sales_amount ?? 0);
-    const totalTransactions = Number(salesStats.total_sales ?? salesStats.today_sales_count ?? 0);
+    const lowStockCount = Number(lowStockRes?.data?.count ?? (alertsStats.medium ?? 0) + Number(alertsStats.low ?? 0));
+    const expiringCount = Number(expiringRes?.data?.count ?? 0);
+    const periodRevenue = Number(salesDetails.total_revenue ?? 0);
+    const periodSalesCount = Number(salesDetails.total_sales ?? 0);
+    const totalRevenue = periodRevenue || Number(salesStats.total_revenue ?? salesStats.today_sales_amount ?? 0);
+    const totalTransactions = periodSalesCount || Number(salesStats.total_sales ?? salesStats.today_sales_count ?? 0);
     const averageOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+    const outOfStockCount = Number(inventoryStats.out_of_stock_count ?? inventoryStats.out_of_stock ?? 0);
 
-    return {
-      title: report.title,
-      period: getPeriodLabel(report.period),
-      generatedAt: new Date().toLocaleString('fr-FR'),
-      sections: [
-        {
-          title: 'Résumé Exécutif',
-          type: 'summary',
-          data: {
-            totalRevenue: formatCdf(totalRevenue),
-            totalTransactions,
-            averageOrderValue: formatCdf(averageOrderValue),
-            growthRate: 'N/A',
-          },
+    const commonSections: ReportSection[] = [
+      {
+        title: 'Résumé Exécutif',
+        type: 'summary',
+        data: {
+          totalRevenue: formatCdf(totalRevenue),
+          totalTransactions,
+          averageOrderValue: formatCdf(averageOrderValue),
+          growthRate: `${Number(salesDetails.growth_rate ?? 0).toFixed(1)}%`,
         },
-        {
-          title: 'Conformité & Stock',
-          type: 'metric',
-          data: {
-            lowStockCount,
-            expiringCount,
-            activeAlerts: Number(alertsStats.total ?? 0),
-            outOfStockCount: Number(inventoryStats.out_of_stock ?? inventoryStats.out_of_stock_count ?? 0),
-          },
+      },
+      {
+        title: 'Conformité & Stock',
+        type: 'metric',
+        data: {
+          lowStockCount,
+          expiringCount,
+          activeAlerts: Number(alertsStats.total ?? 0),
+          outOfStockCount,
         },
+      },
+    ];
+
+    let sections: ReportSection[] = commonSections;
+
+    if (report.type === 'sales' || report.type === 'financial' || report.type === 'analytics') {
+      sections = [
+        ...commonSections,
+        {
+          title: 'Tendances Journalières',
+          type: 'chart',
+          data: salesDetails.daily_trends ?? [],
+        },
+      ];
+    }
+
+    if (report.type === 'prescriptions') {
+      sections = [
+        ...commonSections,
         {
           title: 'Ordonnances',
           type: 'table',
@@ -327,38 +402,35 @@ export function PharmacyReportsScreen() {
             ],
           },
         },
+      ];
+    }
+
+    if (report.type === 'inventory' || report.type === 'compliance') {
+      sections = [
+        ...commonSections,
         {
-          title: 'Tendances Journalières',
-          type: 'chart',
-          data: salesDetails.daily_trends ?? [],
+          title: 'État du Stock',
+          type: 'table',
+          data: {
+            headers: ['Métrique', 'Valeur'],
+            rows: [
+              ['Total produits', `${Number(inventoryStats.total_products ?? 0)}`],
+              ['En stock', `${Number(inventoryStats.in_stock_count ?? 0)}`],
+              ['Stock bas', `${lowStockCount}`],
+              ['Rupture', `${outOfStockCount}`],
+            ],
+          },
         },
-      ],
+      ];
+    }
+
+    return {
+      reportType: report.type,
+      title: report.title,
+      period: getPeriodLabel(report.period),
+      generatedAt: new Date().toLocaleString('fr-FR'),
+      sections,
     };
-  };
-
-  const exportReport = async (reportData: ReportData) => {
-    Alert.alert(
-      'Export Rapport',
-      'Dans quel format souhaitez-vous exporter ce rapport ?',
-      [
-        { text: 'PDF', onPress: () => exportToPDF(reportData) },
-        { text: 'Excel', onPress: () => exportToExcel(reportData) },
-        { text: 'Imprimer', onPress: () => printReport(reportData) },
-        { text: 'Annuler', style: 'cancel' },
-      ]
-    );
-  };
-
-  const exportToPDF = async (reportData: ReportData) => {
-    toast.success(`Rapport "${reportData.title}" prêt pour export PDF`);
-  };
-
-  const exportToExcel = async (reportData: ReportData) => {
-    toast.success(`Rapport "${reportData.title}" prêt pour export Excel`);
-  };
-
-  const printReport = async (reportData: ReportData) => {
-    toast.success(`Rapport "${reportData.title}" prêt pour impression`);
   };
 
   // ─── Utility Functions ──────────────────────────────────────
@@ -508,8 +580,8 @@ export function PharmacyReportsScreen() {
                 </View>
               ) : (
                 <View style={styles.generateButton}>
-                  <Ionicons name="download" size={16} color={colors.textSecondary} />
-                  <Text style={styles.generateButtonText}>Générer</Text>
+                  <Ionicons name="eye" size={16} color={colors.textSecondary} />
+                  <Text style={styles.generateButtonText}>Voir maintenant</Text>
                 </View>
               )}
             </View>
@@ -517,6 +589,85 @@ export function PharmacyReportsScreen() {
         ))}
       </View>
     </ScrollView>
+  );
+
+  const renderReportSection = (section: ReportSection, index: number) => {
+    if (section.type === 'summary') {
+      return (
+        <View key={`${section.title}-${index}`} style={styles.previewSection}>
+          <Text style={styles.previewSectionTitle}>{section.title}</Text>
+          <Text style={styles.previewLine}>CA: {section.data.totalRevenue}</Text>
+          <Text style={styles.previewLine}>Transactions: {section.data.totalTransactions}</Text>
+          <Text style={styles.previewLine}>Panier moyen: {section.data.averageOrderValue}</Text>
+          <Text style={styles.previewLine}>Croissance: {section.data.growthRate}</Text>
+        </View>
+      );
+    }
+
+    if (section.type === 'metric') {
+      return (
+        <View key={`${section.title}-${index}`} style={styles.previewSection}>
+          <Text style={styles.previewSectionTitle}>{section.title}</Text>
+          <Text style={styles.previewLine}>Stock bas: {section.data.lowStockCount}</Text>
+          <Text style={styles.previewLine}>Produits expirant bientôt: {section.data.expiringCount}</Text>
+          <Text style={styles.previewLine}>Alertes actives: {section.data.activeAlerts}</Text>
+          <Text style={styles.previewLine}>Ruptures: {section.data.outOfStockCount}</Text>
+        </View>
+      );
+    }
+
+    if (section.type === 'table') {
+      return (
+        <View key={`${section.title}-${index}`} style={styles.previewSection}>
+          <Text style={styles.previewSectionTitle}>{section.title}</Text>
+          {(section.data.rows ?? []).map((row: string[], rowIndex: number) => (
+            <View key={`${section.title}-row-${rowIndex}`} style={styles.previewRow}>
+              <Text style={styles.previewRowLabel}>{row[0]}</Text>
+              <Text style={styles.previewRowValue}>{row[1]}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    const trendPoints = Array.isArray(section.data) ? section.data : [];
+    return (
+      <View key={`${section.title}-${index}`} style={styles.previewSection}>
+        <Text style={styles.previewSectionTitle}>{section.title}</Text>
+        {trendPoints.length === 0 ? (
+          <Text style={styles.previewLine}>Aucune donnée sur la période sélectionnée.</Text>
+        ) : (
+          trendPoints.slice(0, 7).map((item: any, idx: number) => (
+            <View key={`trend-${idx}`} style={styles.previewRow}>
+              <Text style={styles.previewRowLabel}>{String(item?.date ?? item?.label ?? `Jour ${idx + 1}`)}</Text>
+              <Text style={styles.previewRowValue}>{formatCdf(Number(item?.revenue ?? item?.amount ?? 0))}</Text>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  };
+
+  const renderReportPreviewModal = () => (
+    <Modal visible={previewVisible} transparent animationType="fade" onRequestClose={() => setPreviewVisible(false)}>
+      <View style={styles.previewOverlay}>
+        <View style={styles.previewCard}>
+          <View style={styles.previewHeader}>
+            <View>
+              <Text style={styles.previewTitle}>{reportPreview?.title ?? 'Rapport'}</Text>
+              <Text style={styles.previewMeta}>{reportPreview?.period} • {reportPreview?.generatedAt}</Text>
+            </View>
+            <TouchableOpacity style={styles.previewCloseBtn} onPress={() => setPreviewVisible(false)}>
+              <Ionicons name="close" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.previewContent} showsVerticalScrollIndicator={false}>
+            {(reportPreview?.sections ?? []).map((section, index) => renderReportSection(section, index))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 
   const renderAnalytics = () => (
@@ -585,6 +736,7 @@ export function PharmacyReportsScreen() {
     <View style={styles.container}>
       {renderHeader()}
       {renderTabs()}
+      {renderReportPreviewModal()}
       
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
@@ -781,6 +933,90 @@ const styles = StyleSheet.create({
   },
   analyticsContainer: {
     flex: 1,
+  },
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  previewCard: {
+    width: '100%',
+    maxWidth: 900,
+    maxHeight: '88%',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    ...shadows.sm,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+  },
+  previewTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  previewMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  previewCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.inputBackground,
+  },
+  previewContent: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  previewSection: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  previewSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  previewLine: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 4,
+  },
+  previewRowLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  previewRowValue: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   complianceSection: {
     marginBottom: spacing.lg,

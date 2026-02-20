@@ -66,6 +66,7 @@ class Sale(models.Model):
     )
     customer_name = models.CharField(max_length=200, blank=True, help_text='Nom client occasionnel')
     customer_phone = models.CharField(max_length=20, blank=True)
+    customer_email = models.EmailField(blank=True)
     
     # Prescription Reference
     prescription = models.ForeignKey(

@@ -4,11 +4,13 @@ import { PharmacyDashboardContent } from './screens/PharmacyDashboard';
 import { InventoryScreen } from './screens/InventoryScreen';
 import { SuppliersScreen } from './screens/SuppliersScreen';
 import { StockAlertsScreen } from './screens/StockAlertsScreen';
+import { ExpirationReportScreen } from './screens/ExpirationReportScreen';
 import { POSScreen } from './screens/POSScreen';
 import { PrescriptionsScreen } from './screens/PrescriptionsScreen';
 import { EnhancedPrescriptionsScreen } from './screens/EnhancedOrdonnancesScreen';
 import { SalesReportsScreen } from './screens/SalesReportsScreen';
 import { PharmacyReportsScreen } from './screens/PharmacyReportsScreen';
+import { SalesReceiptsScreen } from './screens/SalesReceiptsScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
@@ -31,6 +33,7 @@ const baseSections: SidebarSection[] = [
       { id: 'prescriptions', label: 'Prescriptions Basic', icon: 'receipt-outline', iconActive: 'receipt' },
       { id: 'suppliers', label: 'Fournisseurs', icon: 'business-outline', iconActive: 'business' },
       { id: 'stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
+      { id: 'expiration-report', label: 'Rapport Expiration', icon: 'time-outline', iconActive: 'time' },
     ],
   },
   {
@@ -38,6 +41,8 @@ const baseSections: SidebarSection[] = [
     items: [
       { id: 'reports', label: 'Tous les Rapports', icon: 'document-outline', iconActive: 'document' },
       { id: 'sales-reports', label: 'Rapports Ventes', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
+      { id: 'sales-history', label: 'Toutes les Ventes', icon: 'receipt-outline', iconActive: 'receipt' },
+      { id: 'expiration-report', label: 'Rapport Expiration', icon: 'time-outline', iconActive: 'time' },
       { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
     ],
   },
@@ -135,6 +140,27 @@ const pharmacyScreens: Record<string, { title: string; subtitle: string; icon: a
       'Comparaison inter-périodes',
     ],
   },
+  'sales-history': {
+    title: 'Toutes les Ventes',
+    subtitle: 'Historique complet des ventes avec accès rapide aux reçus.',
+    icon: 'receipt',
+    features: [
+      'Liste chronologique des ventes',
+      'Affichage détaillé des reçus',
+      'Téléchargement des reçus',
+    ],
+  },
+  'expiration-report': {
+    title: 'Rapport Expiration',
+    subtitle: 'Vue complète des lots expirés et proches de la date d\'expiration.',
+    icon: 'time',
+    features: [
+      'Liste complète des lots avec date d\'expiration',
+      'Filtres expiré / 30 jours / 90 jours',
+      'Recherche par produit et numéro de lot',
+      'Indicateurs de suivi expiration',
+    ],
+  },
   reports: {
     title: 'Centre de Rapports',
     subtitle: 'Hub centralisé pour tous vos rapports pharmacie.',
@@ -209,7 +235,7 @@ export function PharmacyNavigator() {
       case 'suppliers':
         return <SuppliersScreen />;
       case 'stock-alerts':
-        return <StockAlertsScreen />;
+        return <StockAlertsScreen onOpenExpirationReport={() => setActiveScreen('expiration-report')} />;
       case 'pos':
         return <POSScreen />;
       case 'prescriptions':
@@ -218,6 +244,10 @@ export function PharmacyNavigator() {
         return <EnhancedPrescriptionsScreen />;
       case 'sales-reports':
         return <SalesReportsScreen />;
+      case 'sales-history':
+        return <SalesReceiptsScreen />;
+      case 'expiration-report':
+        return <ExpirationReportScreen />;
       case 'reports':
         return <PharmacyReportsScreen />;
       case 'analytics':

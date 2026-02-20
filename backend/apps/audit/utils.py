@@ -178,6 +178,10 @@ def log_pharmacy_action(user, action, description, **kwargs):
     }
     
     severity = kwargs.pop('severity', severity_map.get(action, AuditSeverity.MEDIUM))
+
+    # `audit_log.error_message` is NOT NULL in DB; normalize None -> ''.
+    if kwargs.get('error_message') is None:
+        kwargs['error_message'] = ''
     
     # Create main audit log
     audit_log = AuditLog.objects.create(

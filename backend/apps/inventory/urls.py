@@ -44,6 +44,7 @@ urlpatterns = [
     path('pharmacy/alerts/<uuid:alert_id>/acknowledge/', pharmacy_views.acknowledge_alert, name='acknowledge_alert'),
     path('pharmacy/reports/sales/', pharmacy_views.pharmacy_sales_reports, name='pharmacy_sales_reports'),
     path('pharmacy/reports/overview/', pharmacy_views.pharmacy_reports_overview, name='pharmacy_reports_overview'),
+    path('products/ai-extract/', views.ai_extract_product_from_image_view, name='product_ai_extract'),
     
     # Choices
     path('choices/categories/', views.product_category_choices_view, name='product_categories'),

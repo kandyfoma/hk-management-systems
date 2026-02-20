@@ -194,6 +194,7 @@ class Product(models.Model):
     # Status
     is_active = models.BooleanField(default=True)
     is_discontinued = models.BooleanField(default=False)
+    expiration_date = models.DateField(null=True, blank=True, help_text='Date d\'expiration générale du produit')
     notes = models.TextField(blank=True)
     
     # User tracking

@@ -1833,6 +1833,7 @@ export class DatabaseService {
       customerId: cart.customerId,
       customerName: cart.customerName,
       customerPhone: cart.customerPhone,
+      customerEmail: cart.customerEmail,
       prescriptionId: cart.prescriptionId,
       items: saleItems,
       itemCount: totals.itemCount,
