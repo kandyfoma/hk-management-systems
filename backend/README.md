@@ -225,6 +225,26 @@ The application is configured for deployment with:
 - Gunicorn WSGI server
 - Environment-based configuration
 
+### Railway Deployment
+
+Backend is now preconfigured for Railway with:
+- `railway.json` (Nixpacks builder + start command + healthcheck)
+- `Procfile` (`gunicorn` web process)
+- Health endpoint: `GET /health`
+- Production-aware Django settings (`DATABASE_URL`, SSL proxy, secure cookies, HSTS)
+
+Set these Railway environment variables:
+- `SECRET_KEY`
+- `DEBUG=False`
+- `DATABASE_URL` (from Railway PostgreSQL)
+- `ALLOWED_HOSTS` (your Railway backend domain)
+- `CORS_ALLOWED_ORIGINS` (frontend domain)
+- `CSRF_TRUSTED_ORIGINS` (frontend domain)
+
+Optional:
+- `GEMINI_API_KEY`
+- `REDIS_URL`
+
 ## Contributing
 
 1. Create feature branch from `main`

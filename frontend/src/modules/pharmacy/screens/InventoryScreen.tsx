@@ -1949,6 +1949,8 @@ function ProductFormModal({ product, onClose, onSaved }: {
     brandName: product?.brandName || '',
     sku: product?.sku || `MED-${Date.now().toString(36).toUpperCase()}`,
     barcode: product?.barcode || '',
+    batchNumber: '',
+    batchBarcode: '',
     category: (product?.category || 'MEDICATION') as ProductCategory,
     dosageForm: (product?.dosageForm || 'TABLET') as DosageForm,
     strength: product?.strength || '',
@@ -2002,7 +2004,9 @@ function ProductFormModal({ product, onClose, onSaved }: {
       name: prev.name.trim() || extracted?.name || prev.name,
       genericName: prev.genericName.trim() || extracted?.generic_name || prev.genericName,
       brandName: prev.brandName.trim() || extracted?.brand_name || prev.brandName,
-      barcode: prev.barcode.trim() || extracted?.barcode || prev.barcode,
+      barcode: prev.barcode.trim() || extracted?.barcode || extracted?.batch_barcode || prev.barcode,
+      batchNumber: prev.batchNumber.trim() || extracted?.batch_number || extracted?.batch_code || extracted?.lot_number || prev.batchNumber,
+      batchBarcode: prev.batchBarcode.trim() || extracted?.batch_barcode || extracted?.lot_barcode || prev.batchBarcode,
       category: (extracted?.category || prev.category) as ProductCategory,
       dosageForm: (extracted?.dosage_form || prev.dosageForm) as DosageForm,
       strength: prev.strength.trim() || extracted?.strength || prev.strength,
@@ -2162,7 +2166,11 @@ function ProductFormModal({ product, onClose, onSaved }: {
         storage_condition: form.storageCondition,
         indication: form.indication.trim() || undefined,
         expiration_date: normalizedExpirationDate || undefined,
-        notes: form.notes.trim() || undefined,
+        notes: [
+          form.notes.trim(),
+          form.batchNumber.trim() ? `Lot/Batch: ${form.batchNumber.trim()}` : '',
+          form.batchBarcode.trim() ? `Batch barcode: ${form.batchBarcode.trim()}` : '',
+        ].filter(Boolean).join(' | ') || undefined,
         is_active: true,
       };
 
@@ -2237,6 +2245,10 @@ function ProductFormModal({ product, onClose, onSaved }: {
               <View style={modalS.row}>
                 <Field label="SKU *" value={form.sku} onChange={v => upd('sku', v)} flex />
                 <Field label="Code-barres" value={form.barcode} onChange={v => upd('barcode', v)} flex />
+              </View>
+              <View style={modalS.row}>
+                <Field label="Code lot/batch" value={form.batchNumber} onChange={v => upd('batchNumber', v)} flex />
+                <Field label="Code-barres lot" value={form.batchBarcode} onChange={v => upd('batchBarcode', v)} flex />
               </View>
 
               {/* Classification */}

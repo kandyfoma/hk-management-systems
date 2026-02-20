@@ -31,6 +31,7 @@ type SaleListRow = {
 
 type SaleDetail = {
   id: string;
+  organization_name?: string;
   sale_number: string;
   receipt_number: string;
   cashier_name?: string;
@@ -260,7 +261,7 @@ const buildReceiptHtml = (sale: SaleDetail): string => {
     <div class="header">
       <div class="brand">
         <h1>HK Management Systems</h1>
-        <p>Reçu de vente pharmacie</p>
+        <p>${escapeHtml(sale.organization_name || 'Pharmacie')}</p>
       </div>
       <div class="badge">PAIEMENT VALIDÉ</div>
     </div>
@@ -281,6 +282,10 @@ const buildReceiptHtml = (sale: SaleDetail): string => {
       <div class="card">
         <div class="label">Caissier</div>
         <div class="value">${escapeHtml(sale.cashier_name || '-')}</div>
+      </div>
+      <div class="card">
+        <div class="label">Organisation</div>
+        <div class="value">${escapeHtml(sale.organization_name || 'Pharmacie')}</div>
       </div>
     </div>
 
@@ -470,6 +475,7 @@ export function SalesReceiptsScreen() {
                 </View>
                 <ScrollView contentContainerStyle={styles.modalBody}>
                   <Text style={styles.metaLine}>{SaleUtils.formatDateTime(selectedSale.created_at)}</Text>
+                  {!!selectedSale.organization_name && <Text style={styles.metaLine}>Organisation: {selectedSale.organization_name}</Text>}
                   {!!selectedSale.customer_name && <Text style={styles.metaLine}>Client: {selectedSale.customer_name}</Text>}
                   {!!selectedSale.customer_phone && <Text style={styles.metaLine}>Téléphone: {selectedSale.customer_phone}</Text>}
                   {!!selectedSale.customer_email && <Text style={styles.metaLine}>Email: {selectedSale.customer_email}</Text>}

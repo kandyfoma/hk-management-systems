@@ -548,9 +548,10 @@ def ai_extract_product_from_image_view(request):
         "Return ONLY valid JSON object with these keys: "
         "name, generic_name, brand_name, barcode, category, dosage_form, strength, "
         "manufacturer, unit_of_measure, pack_size, indication, storage_condition, "
-        "requires_prescription, controlled_substance, expiration_date, notes. "
+        "requires_prescription, controlled_substance, expiration_date, batch_number, batch_barcode, notes. "
         "Use uppercase enum values when possible for category/dosage_form/unit_of_measure/storage_condition. "
         "For expiration_date, use YYYY-MM-DD format if visible. "
+        "For batch fields, read printed lot/batch code and any barcode tied to that lot if visible. "
         "If unknown, return null for that field."
     )
 
@@ -613,6 +614,19 @@ def ai_extract_product_from_image_view(request):
             'requires_prescription': bool(extracted.get('requires_prescription')),
             'controlled_substance': bool(extracted.get('controlled_substance')),
             'expiration_date': _normalize_date_string(extracted.get('expiration_date')),
+            'batch_number': (
+                extracted.get('batch_number')
+                or extracted.get('batch_code')
+                or extracted.get('lot_number')
+                or extracted.get('lot_code')
+                or ''
+            ),
+            'batch_barcode': (
+                extracted.get('batch_barcode')
+                or extracted.get('lot_barcode')
+                or extracted.get('barcode_batch')
+                or ''
+            ),
             'notes': extracted.get('notes') or '',
         }
 

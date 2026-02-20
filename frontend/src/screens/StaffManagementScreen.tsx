@@ -105,6 +105,8 @@ export function StaffManagementScreen() {
     department: '',
   });
   const [formLoading, setFormLoading] = useState(false);
+  const [showRolePicker, setShowRolePicker] = useState(false);
+  const [showDepartmentPicker, setShowDepartmentPicker] = useState(false);
   
   // Bulk import state
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
@@ -557,9 +559,15 @@ export function StaffManagementScreen() {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {isEdit ? 'Modifier Personnel' : 'Ajouter Personnel'}
-            </Text>
+            <View style={styles.modalHeaderLeft}>
+              <View style={styles.modalHeaderIconWrap}>
+                <Ionicons name={isEdit ? 'create-outline' : 'person-add-outline'} size={18} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.modalTitle}>{isEdit ? 'Modifier Personnel' : 'Ajouter Personnel'}</Text>
+                <Text style={styles.modalSubtitle}>Renseignez les informations essentielles du membre du personnel</Text>
+              </View>
+            </View>
             <TouchableOpacity
               onPress={() => {
                 if (isEdit) {
@@ -577,6 +585,7 @@ export function StaffManagementScreen() {
           </View>
           
           <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+            <Text style={styles.formSectionTitle}>Identité</Text>
             <View style={styles.formRow}>
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>Prénom *</Text>
@@ -625,6 +634,8 @@ export function StaffManagementScreen() {
                 autoCapitalize="none"
               />
             </View>
+
+            <Text style={styles.formSectionTitle}>Affectation</Text>
             
             <View style={styles.formRow}>
               <View style={styles.formField}>
@@ -640,52 +651,33 @@ export function StaffManagementScreen() {
               
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>Département</Text>
-                <View style={styles.departmentSelector}>
-                  {DEPARTMENT_OPTIONS.map((dept) => (
-                    <TouchableOpacity
-                      key={dept.value}
-                      style={[
-                        styles.departmentOption,
-                        formData.department === dept.value && styles.departmentOptionSelected
-                      ]}
-                      onPress={() => setFormData({ ...formData, department: dept.value })}
-                    >
-                      <Text style={[
-                        styles.departmentOptionText,
-                        formData.department === dept.value && styles.departmentOptionTextSelected
-                      ]}>
-                        {dept.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <TouchableOpacity
+                  style={styles.selectorInput}
+                  onPress={() => setShowDepartmentPicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.selectorInputText, !formData.department && styles.selectorInputPlaceholder]}>
+                    {formData.department || 'Sélectionner un département'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
             </View>
             
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Rôle</Text>
-              <View style={styles.roleSelector}>
-                {ROLE_OPTIONS.map((role) => (
-                  <TouchableOpacity
-                    key={role.value}
-                    style={[
-                      styles.roleOption,
-                      formData.primary_role === role.value && styles.roleOptionSelected
-                    ]}
-                    onPress={() => setFormData({ ...formData, primary_role: role.value })}
-                  >
-                    <Text style={[
-                      styles.roleOptionText,
-                      formData.primary_role === role.value && styles.roleOptionTextSelected
-                    ]}>
-                      {role.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <TouchableOpacity
+                style={styles.selectorInput}
+                onPress={() => setShowRolePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.selectorInputText}>
+                  {ROLE_OPTIONS.find((r) => r.value === formData.primary_role)?.label || 'Sélectionner un rôle'}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
             
-            Only show password field for editing users
             {isEdit && (
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>
@@ -752,6 +744,68 @@ export function StaffManagementScreen() {
           </ScrollView>
         </View>
       </View>
+
+      <Modal visible={showRolePicker} animationType="fade" transparent>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Choisir un rôle</Text>
+              <TouchableOpacity onPress={() => setShowRolePicker(false)}>
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerList}>
+              {ROLE_OPTIONS.map((role) => {
+                const selected = formData.primary_role === role.value;
+                return (
+                  <TouchableOpacity
+                    key={role.value}
+                    style={[styles.pickerOption, selected && styles.pickerOptionSelected]}
+                    onPress={() => {
+                      setFormData({ ...formData, primary_role: role.value });
+                      setShowRolePicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerOptionText, selected && styles.pickerOptionTextSelected]}>{role.label}</Text>
+                    {selected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showDepartmentPicker} animationType="fade" transparent>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Choisir un département</Text>
+              <TouchableOpacity onPress={() => setShowDepartmentPicker(false)}>
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerList}>
+              {DEPARTMENT_OPTIONS.map((dept) => {
+                const selected = formData.department === dept.value;
+                return (
+                  <TouchableOpacity
+                    key={dept.value}
+                    style={[styles.pickerOption, selected && styles.pickerOptionSelected]}
+                    onPress={() => {
+                      setFormData({ ...formData, department: dept.value });
+                      setShowDepartmentPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerOptionText, selected && styles.pickerOptionTextSelected]}>{dept.label}</Text>
+                    {selected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 
@@ -1137,15 +1191,36 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    flex: 1,
+    paddingRight: spacing.md,
+  },
+  modalHeaderIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primaryFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: colors.text,
+  },
+  modalSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   closeButton: {
     padding: spacing.xs,
@@ -1154,6 +1229,14 @@ const styles = StyleSheet.create({
   // Form styles
   formContainer: {
     padding: spacing.lg,
+  },
+  formSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
   },
   formRow: {
     flexDirection: isDesktop ? 'row' : 'column',
@@ -1178,60 +1261,87 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  roleSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  roleOption: {
+  selectorInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
+  },
+  selectorInputText: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    paddingRight: spacing.sm,
+  },
+  selectorInputPlaceholder: {
+    color: colors.textSecondary,
+  },
+
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  pickerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '70%',
+    ...shadows.md,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  pickerList: {
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.outline,
-    backgroundColor: colors.background,
-  },
-  roleOptionSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  roleOptionText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  roleOptionTextSelected: {
-    color: colors.surface,
-    fontWeight: '600',
-  },
-  
-  // Department selector styles
-  departmentSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  departmentOption: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.outline,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     marginBottom: spacing.xs,
   },
-  departmentOptionSelected: {
-    backgroundColor: colors.secondary,
-    borderColor: colors.secondary,
+  pickerOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryFaded,
   },
-  departmentOptionText: {
-    fontSize: 13,
-    color: colors.textSecondary,
+  pickerOptionText: {
+    fontSize: 14,
+    color: colors.text,
     fontWeight: '500',
+    flex: 1,
+    paddingRight: spacing.sm,
   },
-  departmentOptionTextSelected: {
-    color: colors.surface,
-    fontWeight: '600',
+  pickerOptionTextSelected: {
+    fontWeight: '700',
+    color: colors.primary,
   },
   
   // Info box styles
