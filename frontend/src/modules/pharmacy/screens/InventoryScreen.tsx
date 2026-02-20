@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   TextInput,
   Dimensions,
   ActivityIndicator,
-  RefreshControl,
   Modal,
   Platform,
   KeyboardAvoidingView,
@@ -24,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
+import NetInfo from '@react-native-community/netinfo';
 import {
   Product, ProductCreate, ProductUpdate, ProductCategory, DosageForm, UnitOfMeasure, StorageCondition,
   InventoryItem, InventoryBatch, StockMovement, InventoryAlert,
@@ -217,6 +217,7 @@ function abcClassify(products: EnrichedProduct[]): EnrichedProduct[] {
 
 export function InventoryScreen() {
   const toast = useToast();
+  const wasOnlineRef = useRef<boolean | null>(null);
 
   // ─── Core state ──────────────────────────────────────────
   const [loading, setLoading] = useState(true);
@@ -506,18 +507,43 @@ export function InventoryScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const onRefresh = useCallback(async () => { 
-    console.log('🔄 Manual refresh triggered');
-    setRefreshing(true); 
-    try {
-      await loadData();
-      console.log('✅ Refresh completed');
-    } catch (error) {
-      console.error('❌ Refresh failed:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadData]);
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolveOnline = (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => (
+      Boolean(state.isConnected) && state.isInternetReachable !== false
+    );
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isOnline = resolveOnline(state);
+      const wasOnline = wasOnlineRef.current;
+      wasOnlineRef.current = isOnline;
+
+      if (wasOnline === false && isOnline && isMounted) {
+        setRefreshing(true);
+        loadData()
+          .then(() => toast.info('Connexion rétablie · inventaire synchronisé'))
+          .finally(() => setRefreshing(false));
+      }
+    });
+
+    NetInfo.fetch()
+      .then((state) => {
+        if (isMounted) {
+          wasOnlineRef.current = resolveOnline(state);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          wasOnlineRef.current = null;
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [loadData, toast]);
 
   // ─── Filtering & sorting ─────────────────────────────────
   const filteredProducts = useMemo(() => {
@@ -578,6 +604,68 @@ export function InventoryScreen() {
     });
     return result;
   }, [products, catalogFilter, searchQuery, sortField, sortDir]);
+
+  const handleExportInventory = useCallback(async () => {
+    try {
+      const rowsToExport = filteredProducts.map((p) => {
+        const inv = p.inventoryItem;
+        const earliestBatchExpiry = p.batches.length
+          ? p.batches
+              .map((b) => b.expiryDate)
+              .filter(Boolean)
+              .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0]
+          : undefined;
+
+        return {
+          Produit: p.name,
+          SKU: p.sku,
+          Catégorie: categoryLabel(p.category),
+          Stock: Number(inv?.quantityOnHand ?? 0),
+          Statut: statusLabel(inv?.status),
+          'Prix Achat': Number(p.costPrice ?? 0),
+          'Prix Vente': Number(p.sellingPrice ?? 0),
+          'Valeur Stock': Number(inv?.totalStockValue ?? 0),
+          'Expiration Proche': p.expirationDate || earliestBatchExpiry || '',
+        };
+      });
+
+      if (rowsToExport.length === 0) {
+        toast.info('Aucune donnée à exporter');
+        return;
+      }
+
+      const ws = XLSX.utils.json_to_sheet(rowsToExport);
+      ws['!cols'] = [
+        { wch: 32 }, { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Inventaire');
+      const filename = `inventaire_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+      if (Platform.OS === 'web') {
+        XLSX.writeFile(wb, filename);
+        toast.success(`${rowsToExport.length} produit(s) exporté(s)`);
+        return;
+      }
+
+      const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      const uri = FileSystem.cacheDirectory + filename;
+      await FileSystem.writeAsStringAsync(uri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          dialogTitle: 'Exporter Inventaire',
+        });
+      }
+      toast.success(`${rowsToExport.length} produit(s) exporté(s)`);
+    } catch (error) {
+      console.error('Inventory export error:', error);
+      toast.error('Erreur lors de l\'export');
+    }
+  }, [filteredProducts, toast]);
 
   // ─── KPIs ────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -943,7 +1031,6 @@ export function InventoryScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
       >
         {/* ═══ HEADER ═══ */}
         <View style={styles.header}>
@@ -955,20 +1042,12 @@ export function InventoryScreen() {
           </View>
           <View style={styles.headerBtns}>
             <TouchableOpacity
-              style={[styles.btnOutline, { borderColor: colors.info, opacity: refreshing ? 0.6 : 1 }]}
-              onPress={onRefresh}
-              disabled={refreshing}
+              style={[styles.btnOutline, { borderColor: colors.primary }]}
+              onPress={handleExportInventory}
               activeOpacity={0.7}
             >
-              <Ionicons 
-                name={refreshing ? "sync" : "refresh-outline"} 
-                size={16} 
-                color={colors.info}
-                style={refreshing ? { transform: [{ rotate: '180deg' }] } : {}}
-              />
-              <Text style={[styles.btnOutlineText, { color: colors.info }]}>
-                {refreshing ? 'Actualisation...' : 'Actualiser'}
-              </Text>
+              <Ionicons name="download-outline" size={16} color={colors.primary} />
+              <Text style={[styles.btnOutlineText, { color: colors.primary }]}>Exporter</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnOutlineSuccess}

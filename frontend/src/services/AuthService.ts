@@ -30,6 +30,14 @@ interface AuthResult {
   requiresLicenseKey?: boolean;
 }
 
+interface StoredSession {
+  user: User;
+  organization: Organization;
+  licenses: License[];
+  userModuleAccess: UserModuleAccess[];
+  scopedLicenseId?: string;
+}
+
 interface RegistrationData {
   firstName: string;
   lastName: string;
@@ -129,12 +137,43 @@ export class AuthService {
       // Get module access
       const userModuleAccess = await this.db.getUserModuleAccess(user.id);
 
+      let effectiveLicenses = licenses;
+      let effectiveUserModuleAccess = userModuleAccess;
+      let scopedLicenseId: string | undefined;
+
+      if (credentials.licenseKey && licenseValidation?.license) {
+        scopedLicenseId = licenseValidation.license.id;
+        effectiveLicenses = licenses.filter((license) => license.id === scopedLicenseId);
+        effectiveUserModuleAccess = userModuleAccess.filter(
+          (access) => access.licenseId === scopedLicenseId
+        );
+
+        console.log('🎯 Scoped login mode:', {
+          scopedLicenseId,
+          scopedModule: licenseValidation.license.moduleType,
+          effectiveLicenses: effectiveLicenses.length,
+          effectiveAccess: effectiveUserModuleAccess.length,
+        });
+      }
+
       // Store session
-      await this.storeSession({ user, organization, licenses, userModuleAccess });
+      await this.storeSession({
+        user,
+        organization,
+        licenses: effectiveLicenses,
+        userModuleAccess: effectiveUserModuleAccess,
+        scopedLicenseId,
+      });
       this.currentUser = user;
       this.currentOrganization = organization;
 
-      return { success: true, user, organization, licenses, userModuleAccess };
+      return {
+        success: true,
+        user,
+        organization,
+        licenses: effectiveLicenses,
+        userModuleAccess: effectiveUserModuleAccess,
+      };
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: 'Erreur système lors de l\'authentification' };
@@ -206,7 +245,7 @@ export class AuthService {
       const raw = await AsyncStorage.getItem(SESSION_KEY);
       if (!raw) return null;
 
-      const session = JSON.parse(raw);
+      const session = JSON.parse(raw) as StoredSession;
 
       // Re-validate against live data
       const user = await this.db.getUserByPhone(session.user?.phone);
@@ -227,10 +266,26 @@ export class AuthService {
       
       const userModuleAccess = await this.db.getUserModuleAccess(user.id);
 
+      let effectiveLicenses = licenses;
+      let effectiveUserModuleAccess = userModuleAccess;
+
+      if (session.scopedLicenseId) {
+        effectiveLicenses = licenses.filter((license) => license.id === session.scopedLicenseId);
+        effectiveUserModuleAccess = userModuleAccess.filter(
+          (access) => access.licenseId === session.scopedLicenseId
+        );
+      }
+
       this.currentUser = user;
       this.currentOrganization = organization;
 
-      return { success: true, user, organization, licenses, userModuleAccess };
+      return {
+        success: true,
+        user,
+        organization,
+        licenses: effectiveLicenses,
+        userModuleAccess: effectiveUserModuleAccess,
+      };
     } catch (error) {
       console.error('Error restoring session:', error);
       return null;
@@ -295,6 +350,7 @@ export class AuthService {
     organization: Organization;
     licenses: License[];
     userModuleAccess: UserModuleAccess[];
+    scopedLicenseId?: string;
   }): Promise<void> {
     try {
       await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(data));

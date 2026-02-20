@@ -53,7 +53,7 @@ function MobileSidebarModal({
         <View style={mobileSidebarStyles.header}>
           <View style={mobileSidebarStyles.headerContent}>
             <Image
-              source={require('../../assets/icons/icon-192.png')}
+              source={require('../../assets/icon.png')}
               style={mobileSidebarStyles.brandLogo}
               resizeMode="contain"
             />
@@ -290,7 +290,7 @@ function MobileHeader({
         
         <View style={mobileHeaderStyles.titleContainer}>
           <Image
-            source={require('../../assets/icons/icon-192.png')}
+            source={require('../../assets/icon.png')}
             style={mobileHeaderStyles.brandLogo}
             resizeMode="contain"
           />
@@ -551,7 +551,7 @@ export function SidebarLayout({
         {/* Sidebar Header */}
         <View style={styles.sidebarHeader}>
           <Image
-            source={require('../../assets/icons/icon-192.png')}
+            source={require('../../assets/icon.png')}
             style={styles.sidebarBrandLogo}
             resizeMode="contain"
           />

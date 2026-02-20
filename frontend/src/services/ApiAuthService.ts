@@ -15,6 +15,7 @@ import { User } from '../models/User';
 interface LoginCredentials {
   phone: string;
   password: string;
+  licenseKey?: string;
 }
 
 interface LoginResponse {
@@ -96,6 +97,7 @@ export class ApiAuthService {
       const response: ApiResponse<LoginResponse> = await ApiService.getInstance().post('/auth/login/', {
         phone: credentials.phone,
         password: credentials.password,
+        license_key: credentials.licenseKey,
       });
 
       if (response.success && response.data) {

@@ -358,7 +358,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
         <View style={styles.headerLeft}>
           <View style={styles.brandHeaderRow}>
             <Image
-              source={require('../../assets/icons/icon-192.png')}
+              source={require('../../assets/icon.png')}
               style={styles.brandLogo}
               resizeMode="contain"
             />

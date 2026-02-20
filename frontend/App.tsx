@@ -17,11 +17,37 @@ import { GlobalUIProvider, useToast } from './src/components/GlobalUI';
 
 type AppState = 'loading' | 'authenticated' | 'unauthenticated';
 
-function scopeLicensesToOrganization(licenses: any[], organization: any): any[] {
-  const currentLicenseKey = organization?.license_key;
+interface DeviceActivationInfo {
+  licenseKey: string;
+  activatedAt: string;
+  expiresAt: string;
+  organizationId: string;
+}
+
+const DEVICE_ACTIVATION_KEY = 'device_activation_info';
+
+async function getActivatedLicenseKey(): Promise<string | null> {
+  try {
+    const raw = await AsyncStorage.getItem(DEVICE_ACTIVATION_KEY);
+    if (!raw) return null;
+    const info = JSON.parse(raw) as DeviceActivationInfo;
+    return info?.licenseKey || null;
+  } catch {
+    return null;
+  }
+}
+
+function scopeLicensesToOrganization(
+  licenses: any[],
+  organization: any,
+  preferredLicenseKey?: string | null,
+): any[] {
+  const currentLicenseKey = preferredLicenseKey || organization?.license_key || organization?.licenseKey;
   if (!currentLicenseKey) return licenses;
 
-  const scoped = licenses.filter((license) => license?.licenseKey === currentLicenseKey);
+  const scoped = licenses.filter(
+    (license) => (license?.licenseKey || license?.license_key) === currentLicenseKey
+  );
   return scoped.length > 0 ? scoped : licenses;
 }
 
@@ -185,7 +211,8 @@ function AppContent() {
               ApiAuthService.getInstance().getUserModuleAccess()
             ]);
 
-            const scopedLicenses = scopeLicensesToOrganization(licenses, organization);
+            const activatedLicenseKey = await getActivatedLicenseKey();
+            const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activatedLicenseKey);
             
             console.log('📋 Loaded licenses:', licenses);
             console.log('🔐 Loaded module access:', userModuleAccess);
@@ -241,7 +268,8 @@ function AppContent() {
           console.log('🔄 Loading fresh user data from backend...');
           const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
           const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
-          const scopedLicenses = scopeLicensesToOrganization(licenses, organization);
+          const activatedLicenseKey = await getActivatedLicenseKey();
+          const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activatedLicenseKey);
           
           dispatch(loginSuccess({
             user,
@@ -290,7 +318,8 @@ function AppContent() {
       console.log('📄 Loading organization licenses after login...');
       const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
       const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
-      const scopedLicenses = scopeLicensesToOrganization(licenses, authResult.organization);
+      const activatedLicenseKey = authResult?.activatedLicenseKey || await getActivatedLicenseKey();
+      const scopedLicenses = scopeLicensesToOrganization(licenses, authResult.organization, activatedLicenseKey);
       
       console.log('📋 Loaded licenses after login:', licenses);
       console.log('🔐 Loaded module access after login:', userModuleAccess);

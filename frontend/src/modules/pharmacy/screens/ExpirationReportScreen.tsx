@@ -9,6 +9,7 @@ import {
   TextInput,
   RefreshControl,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
@@ -121,6 +122,53 @@ export function ExpirationReportScreen() {
     return { expired, in30Days, in90Days, total: rows.length };
   }, [rows]);
 
+  const escapeCsv = (value: unknown): string => {
+    const raw = String(value ?? '');
+    if (/[",\n]/.test(raw)) {
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
+    return raw;
+  };
+
+  const handleExportLessThan90 = useCallback(() => {
+    const soonRows = rows.filter((row) => row.daysRemaining >= 0 && row.daysRemaining < 90);
+
+    if (soonRows.length === 0) {
+      toast.info('Aucun lot avec expiration < 90 jours à exporter');
+      return;
+    }
+
+    const header = ['Produit', 'Lot', 'Date expiration', 'Quantité', 'Jours restants', 'Statut'];
+    const body = soonRows.map((row) => [
+      row.productName,
+      row.batchNumber,
+      new Date(row.expiryDate).toLocaleDateString('fr-FR'),
+      row.quantity,
+      row.daysRemaining,
+      row.status,
+    ]);
+
+    const csv = [header, ...body]
+      .map((line) => line.map(escapeCsv).join(','))
+      .join('\n');
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.setAttribute('download', `expiration_lt_90j_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`${soonRows.length} ligne(s) exportée(s)`);
+      return;
+    }
+
+    toast.info('Export CSV disponible sur Web');
+  }, [rows, toast]);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -137,7 +185,13 @@ export function ExpirationReportScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} colors={[colors.primary]} />}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Rapport complet d&apos;expiration</Text>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.title}>Rapport complet d&apos;expiration</Text>
+          <TouchableOpacity style={styles.exportBtn} onPress={handleExportLessThan90} activeOpacity={0.85}>
+            <Ionicons name="download-outline" size={14} color={colors.primary} />
+            <Text style={styles.exportBtnText}>Exporter &lt; 90j</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.subtitle}>{stats.total} lot(s) avec date d&apos;expiration et stock positif</Text>
       </View>
 
@@ -210,8 +264,21 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { marginTop: spacing.md, color: colors.textSecondary, fontSize: 14 },
   header: { marginBottom: spacing.md },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   title: { fontSize: 20, fontWeight: '800', color: colors.text },
   subtitle: { marginTop: 4, fontSize: 12, color: colors.textSecondary },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.primary + '33',
+    backgroundColor: colors.primary + '10',
+  },
+  exportBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   kpiRow: { flexDirection: 'row', gap: 8, marginBottom: spacing.md },
   kpiCard: { flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, paddingVertical: 10, paddingHorizontal: 10, ...shadows.sm },
   kpiLabel: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },

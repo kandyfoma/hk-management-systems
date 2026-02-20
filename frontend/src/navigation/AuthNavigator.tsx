@@ -1004,6 +1004,7 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
       const result = await ApiAuthService.getInstance().login({
         phone: phone.trim(),
         password: password.trim(),
+        licenseKey,
       });
 
       console.log('Login result:', result);
@@ -1016,7 +1017,7 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
         
         console.log('✅ Login successful, calling onSuccess');
         setTimeout(() => {
-          onSuccess(result);
+          onSuccess({ ...result, activatedLicenseKey: licenseKey });
         }, 800);
       } else {
         const errorMessage = result.error || 'Email ou mot de passe incorrect';
