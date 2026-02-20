@@ -12,7 +12,8 @@
     "web": "expo start --web",
     "clear": "expo start --clear",
     "web-clear": "expo start --web --clear",
-    "reset": "rm -rf node_modules && npm install && expo start --clear"
+    "reset": "rm -rf node_modules && npm install && expo start --clear",
+    "generate-icons": "node ./scripts/generate-icons.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

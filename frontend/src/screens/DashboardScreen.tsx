@@ -7,6 +7,7 @@ import {
   Dimensions,
   TouchableOpacity,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '../components/GlobalUI';
@@ -355,10 +356,19 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
       {/* ── Header Section ─────────────────────────────── */}
       <View style={styles.headerSection}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>{greeting()}, Administrateur 👋</Text>
-          <Text style={styles.subtitle}>
-            Voici un aperçu de votre système de gestion
-          </Text>
+          <View style={styles.brandHeaderRow}>
+            <Image
+              source={require('../../assets/icons/icon-192.png')}
+              style={styles.brandLogo}
+              resizeMode="contain"
+            />
+            <View style={styles.headerTextBlock}>
+              <Text style={styles.greeting}>{greeting()}, Administrateur 👋</Text>
+              <Text style={styles.subtitle}>
+                Voici un aperçu de votre système de gestion
+              </Text>
+            </View>
+          </View>
         </View>
         <View style={styles.headerRight}>
           <SyncStatusIndicator compact={true} onPress={() => info('Statut de synchronisation: ' + (HybridDataService.getInstance().getSyncStatus().isOnline ? 'En ligne' : 'Hors ligne'))} />
@@ -677,6 +687,19 @@ const styles = StyleSheet.create({
   },
   headerLeft: {},
   headerRight: {},
+  brandHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  brandLogo: {
+    width: isDesktop ? 54 : 46,
+    height: isDesktop ? 54 : 46,
+    borderRadius: borderRadius.lg,
+  },
+  headerTextBlock: {
+    flex: 1,
+  },
   greeting: {
     fontSize: isDesktop ? 28 : 24,
     fontWeight: '700',

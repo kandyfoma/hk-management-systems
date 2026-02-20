@@ -8,7 +8,14 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 
-const SOURCE = path.join(__dirname, '..', 'assets', 'app-icon.png');
+const sourceCandidates = [
+  path.join(__dirname, '..', 'assets', 'app-icon.png'),
+  path.join(__dirname, '..', 'assets', 'site-logo.png'),
+  path.join(__dirname, '..', 'assets', 'logo.png'),
+  path.join(__dirname, '..', 'assets', 'adaptive-icon.png'),
+];
+
+const SOURCE = sourceCandidates.find((candidate) => fs.existsSync(candidate));
 const OUTPUT_BASE = path.join(__dirname, '..', 'assets', 'icons');
 
 // ═══════════════════════════════════════════════════════════════
@@ -44,6 +51,7 @@ const icons = {
   web: [
     { size: 16, name: 'favicon-16.png' },
     { size: 32, name: 'favicon-32.png' },
+    { size: 48, name: 'favicon-48.png' },
     { size: 48, name: 'icon-48.png' },
     { size: 72, name: 'icon-72.png' },
     { size: 96, name: 'icon-96.png' },
@@ -74,8 +82,9 @@ async function generateIcons() {
   console.log('==========================================\n');
 
   // Verify source exists
-  if (!fs.existsSync(SOURCE)) {
-    console.error('❌ Source icon not found:', SOURCE);
+  if (!SOURCE || !fs.existsSync(SOURCE)) {
+    console.error('❌ Source icon not found. Tried:');
+    sourceCandidates.forEach((candidate) => console.error(`   - ${candidate}`));
     process.exit(1);
   }
 
@@ -89,6 +98,8 @@ async function generateIcons() {
     console.warn('⚠️  Warning: Source image is smaller than 1024x1024. Quality may be reduced.\n');
   }
 
+  const sourceBuffer = fs.readFileSync(SOURCE);
+
   let totalGenerated = 0;
 
   // Generate platform icons
@@ -101,7 +112,7 @@ async function generateIcons() {
 
     for (const { size, name } of sizes) {
       const outputPath = path.join(outputDir, name);
-      await sharp(SOURCE)
+      await sharp(sourceBuffer)
         .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png()
         .toFile(outputPath);
@@ -117,7 +128,7 @@ async function generateIcons() {
 
   for (const { size, name } of expoIcons) {
     const outputPath = path.join(expoDir, name);
-    await sharp(SOURCE)
+    await sharp(sourceBuffer)
       .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(outputPath);

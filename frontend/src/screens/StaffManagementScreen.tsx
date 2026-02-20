@@ -12,6 +12,7 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -823,6 +824,10 @@ export function StaffManagementScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
+          <View style={styles.brandRow}>
+            <Image source={require('../../assets/icon.png')} style={styles.brandLogo} resizeMode="contain" />
+            <Text style={styles.brandName}>HK Management Systems</Text>
+          </View>
           <Text style={styles.headerTitle}>👥 Gestion du Personnel</Text>
           <Text style={styles.headerSubtitle}>
             {filteredUsers.length} membre(s) du personnel
@@ -1015,6 +1020,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
     marginBottom: 4,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  brandLogo: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+  },
+  brandName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   headerSubtitle: {
     fontSize: 14,

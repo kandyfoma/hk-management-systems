@@ -250,9 +250,11 @@ JAZZMIN_SETTINGS = {
     "site_title": "HK Management Admin",
     "site_header": "HK Healthcare System",
     "site_brand": "HK Santé",
-    "site_logo": None,
+    "site_logo": "branding/admin-logo.png",
     "site_logo_classes": "img-circle",
-    "site_icon": None,
+    "site_icon": "branding/admin-icon.png",
+    "login_logo": "branding/admin-logo.png",
+    "login_logo_dark": "branding/admin-logo.png",
     "welcome_sign": "Welcome to HK Healthcare Management System",
     "copyright": "© 2025 HK Management Systems - RD Congo",
     

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Dimensions,
   Platform,
+  Image,
   Animated,
   Modal,
   Pressable,
@@ -51,6 +52,11 @@ function MobileSidebarModal({
         {/* Header */}
         <View style={mobileSidebarStyles.header}>
           <View style={mobileSidebarStyles.headerContent}>
+            <Image
+              source={require('../../assets/icons/icon-192.png')}
+              style={mobileSidebarStyles.brandLogo}
+              resizeMode="contain"
+            />
             {headerIcon && (
               <View style={[mobileSidebarStyles.headerIcon, { backgroundColor: accentColor + '14' }]}>
                 <Ionicons name={headerIcon} size={24} color={accentColor} />
@@ -167,6 +173,12 @@ const mobileSidebarStyles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: spacing.md,
   },
+  brandLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: borderRadius.md,
+    marginRight: spacing.md,
+  },
   headerText: {
     flex: 1,
   },
@@ -277,6 +289,11 @@ function MobileHeader({
         </TouchableOpacity>
         
         <View style={mobileHeaderStyles.titleContainer}>
+          <Image
+            source={require('../../assets/icons/icon-192.png')}
+            style={mobileHeaderStyles.brandLogo}
+            resizeMode="contain"
+          />
           {headerIcon && (
             <View style={[mobileHeaderStyles.headerIcon, { backgroundColor: accentColor + '14' }]}>
               <Ionicons name={headerIcon} size={20} color={accentColor} />
@@ -318,6 +335,12 @@ const mobileHeaderStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+  },
+  brandLogo: {
+    width: 30,
+    height: 30,
+    borderRadius: borderRadius.sm,
+    marginRight: spacing.sm,
   },
   headerIcon: {
     width: 32,
@@ -527,6 +550,11 @@ export function SidebarLayout({
       <View style={[styles.sidebar, { width: sidebarW }]}>
         {/* Sidebar Header */}
         <View style={styles.sidebarHeader}>
+          <Image
+            source={require('../../assets/icons/icon-192.png')}
+            style={styles.sidebarBrandLogo}
+            resizeMode="contain"
+          />
           {headerIcon && (
             <View style={[styles.sidebarHeaderIcon, { backgroundColor: accentColor + '20' }]}>
               <Ionicons name={headerIcon} size={24} color={accentColor} />
@@ -721,6 +749,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.sidebarHover,
     gap: 8,
     minHeight: 56,
+  },
+  sidebarBrandLogo: {
+    width: 30,
+    height: 30,
+    borderRadius: borderRadius.sm,
   },
   sidebarHeaderIcon: {
     width: 32,
