@@ -38,6 +38,7 @@ import { EnhancedPrescriptionsScreen } from '../modules/pharmacy/screens/Enhance
 import { SalesReportsScreen } from '../modules/pharmacy/screens/SalesReportsScreen';
 import { PharmacyReportsScreen } from '../modules/pharmacy/screens/PharmacyReportsScreen';
 import { SalesReceiptsScreen } from '../modules/pharmacy/screens/SalesReceiptsScreen';
+import { AnalyticsScreen as PharmacyAnalyticsScreen } from '../modules/pharmacy/screens/AnalyticsScreen';
 import { ConnectivityScreen } from '../screens/ConnectivityScreen';
 import { PatientListScreen } from '../modules/hospital/screens/PatientListScreen';
 import { PatientDetailScreen } from '../modules/hospital/screens/PatientDetailScreen';
@@ -54,6 +55,7 @@ import { ClinicalNotesScreen } from '../modules/hospital/screens/ClinicalNotesSc
 import { HospitalBillingScreen } from '../modules/hospital/screens/HospitalBillingScreen';
 import { HospitalConsultationScreen } from '../modules/hospital/screens/HospitalConsultationScreen';
 import { HospitalPatientIntakeScreen } from '../modules/hospital/screens/HospitalPatientIntakeScreen';
+import { HospitalPrescriptionsScreen } from '../modules/hospital/screens/HospitalPrescriptionsScreen';
 import { ConsultationHistoryScreen } from '../modules/hospital/screens/ConsultationHistoryScreen';
 import { SidebarLayout, SidebarSection, SidebarMenuItem } from '../components/SidebarLayout';
 import { colors, borderRadius } from '../theme/theme';
@@ -164,7 +166,9 @@ const createDynamicSections = (
     
     if (hasFeature('basic_reporting') || hasFeature('advanced_reporting')) {
       pharmacyItems.push({ id: 'ph-reports', label: 'Rapports Ventes', icon: 'bar-chart-outline', iconActive: 'bar-chart' });
+      pharmacyItems.push({ id: 'ph-sales-reports', label: 'Rapports Ventes Détaillés', icon: 'stats-chart-outline', iconActive: 'stats-chart' });
       pharmacyItems.push({ id: 'ph-sales-history', label: 'Toutes les Ventes', icon: 'receipt-outline', iconActive: 'receipt' });
+      pharmacyItems.push({ id: 'ph-analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' });
     }
 
     sections.push({
@@ -184,6 +188,7 @@ const createDynamicSections = (
     // Emergency & Triage
     hospitalItems.push({ id: 'hp-emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 });
     hospitalItems.push({ id: 'hp-triage', label: 'Triage', icon: 'heart-outline', iconActive: 'heart' });
+    hospitalItems.push({ id: 'hp-vital-signs', label: 'Signes Vitaux', icon: 'pulse-outline', iconActive: 'pulse' });
 
     // Add features based on license
     if (hasFeature('patient_management')) {
@@ -205,6 +210,10 @@ const createDynamicSections = (
 
     // Medication Administration (MAR)
     hospitalItems.push({ id: 'hp-mar', label: 'Adm. Médicaments', icon: 'medkit-outline', iconActive: 'medkit' });
+    hospitalItems.push({ id: 'hp-prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' });
+    hospitalItems.push({ id: 'hp-medical-records', label: 'Dossiers Médicaux', icon: 'folder-open-outline', iconActive: 'folder-open' });
+    hospitalItems.push({ id: 'hp-staff', label: 'Personnel Médical', icon: 'person-outline', iconActive: 'person' });
+    hospitalItems.push({ id: 'hp-reports', label: 'Rapports', icon: 'stats-chart-outline', iconActive: 'stats-chart' });
 
     if (hasFeature('medical_records')) {
       hospitalItems.push({ id: 'hp-clinical-notes', label: 'Notes Cliniques', icon: 'document-text-outline', iconActive: 'document-text' });
@@ -287,6 +296,7 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
   'hp-wards': { title: 'Services & Lits', subtitle: 'Gérer les services et l\'occupation des lits.', icon: 'bed', features: ['Vue services', 'Occupation temps réel', 'Admission & sortie', 'Transferts', 'Statistiques occupation', 'Plan des étages'] },
   'hp-billing': { title: 'Facturation & Assurance', subtitle: 'Gérer la facturation et les assurances.', icon: 'receipt', features: ['Factures détaillées', 'Tarifs par acte', 'Réclamations assurance', 'Suivi paiements', 'Rapports financiers', 'Paiement mobile'] },
   'hp-staff': { title: 'Personnel Médical', subtitle: 'Gérer le personnel de l\'hôpital.', icon: 'person', features: ['Répertoire personnel', 'Planning & horaires', 'Spécialités', 'Gestion gardes', 'Affectation services', 'Évaluation performances'] },
+  'hp-reports': { title: 'Rapports Hospitaliers', subtitle: 'Suivi et analyse des performances hospitalières.', icon: 'stats-chart', features: ['Rapports d\'activité', 'Indicateurs de qualité', 'Statistiques de consultations', 'Performance des services', 'Exports PDF/Excel', 'Suivi mensuel'] },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -407,15 +417,22 @@ function DesktopApp() {
       'ph-expiration-report': 'PHARMACY',
       'ph-prescriptions': 'PHARMACY',
       'ph-reports': 'PHARMACY',
+      'ph-sales-reports': 'PHARMACY',
       'ph-sales-history': 'PHARMACY',
+      'ph-analytics': 'PHARMACY',
 
       'hp-dashboard': 'HOSPITAL',
       'hp-emergency': 'HOSPITAL',
       'hp-triage': 'HOSPITAL',
+      'hp-vital-signs': 'HOSPITAL',
       'hp-appointments': 'HOSPITAL',
       'hp-wards': 'HOSPITAL',
       'hp-admissions': 'HOSPITAL',
       'hp-mar': 'HOSPITAL',
+      'hp-prescriptions': 'HOSPITAL',
+      'hp-medical-records': 'HOSPITAL',
+      'hp-staff': 'HOSPITAL',
+      'hp-reports': 'HOSPITAL',
       'hp-lab-results': 'HOSPITAL',
       'hp-clinical-notes': 'HOSPITAL',
       'hp-billing': 'HOSPITAL',
@@ -557,7 +574,9 @@ function DesktopApp() {
     if (activeScreen === 'ph-expiration-report') return <ExpirationReportScreen />;
     if (activeScreen === 'ph-prescriptions') return <EnhancedPrescriptionsScreen />;
     if (activeScreen === 'ph-reports') return <PharmacyReportsScreen />;
+    if (activeScreen === 'ph-sales-reports') return <SalesReportsScreen />;
     if (activeScreen === 'ph-sales-history') return <SalesReceiptsScreen />;
+    if (activeScreen === 'ph-analytics') return <PharmacyAnalyticsScreen />;
 
     // Hospital screens
     if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent onNavigate={handleScreenChange} />;
@@ -567,6 +586,16 @@ function DesktopApp() {
     if (activeScreen === 'hp-wards') return <WardManagementScreen />;
     if (activeScreen === 'hp-admissions') return <AdmissionScreen />;
     if (activeScreen === 'hp-mar') return <MedicationAdministrationScreen />;
+    if (activeScreen === 'hp-prescriptions') return <HospitalPrescriptionsScreen />;
+    if (activeScreen === 'hp-vital-signs') {
+      const s = {
+        title: 'Signes Vitaux',
+        subtitle: 'Sélectionnez un patient depuis Gestion Patients pour la prise complète des constantes.',
+        icon: 'pulse',
+        features: ['Température', 'Tension artérielle', 'Fréquence cardiaque', 'SpO2', 'Douleur', 'IMC'],
+      };
+      return <PlaceholderScreen title={s.title} subtitle={s.subtitle} icon={s.icon} accentColor={colors.info} features={s.features} />;
+    }
     if (activeScreen === 'hp-lab-results') return <LaboratoryScreen />;
     if (activeScreen === 'hp-clinical-notes') return <ClinicalNotesScreen />;
     if (activeScreen === 'hp-billing') return <HospitalBillingScreen />;
