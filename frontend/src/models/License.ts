@@ -21,6 +21,8 @@ export type ModuleType =
   | 'PHARMACY'
   | 'HOSPITAL'
   | 'OCCUPATIONAL_HEALTH'
+  | 'PHARMACY_HOSPITAL'
+  | 'HOSPITAL_OCCUPATIONAL_HEALTH'
   | 'COMBINED'
   | 'TRIAL';
 

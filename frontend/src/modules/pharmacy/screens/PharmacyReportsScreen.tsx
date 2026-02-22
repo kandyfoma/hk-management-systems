@@ -499,7 +499,12 @@ export function PharmacyReportsScreen() {
   );
 
   const renderTabs = () => (
-    <View style={styles.tabsContainer}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.tabsContainer}
+      contentContainerStyle={styles.tabsScrollContent}
+    >
       {[
         { key: 'quick', label: 'Rapports Rapides', icon: 'flash' },
         { key: 'analytics', label: 'Analytics', icon: 'analytics' },
@@ -520,7 +525,7 @@ export function PharmacyReportsScreen() {
           </Text>
         </TouchableOpacity>
       ))}
-    </View>
+    </ScrollView>
   );
 
   const renderQuickReports = () => (
@@ -767,6 +772,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg,
     backgroundColor: colors.surface,
@@ -806,12 +813,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabsContainer: {
-    flexDirection: 'row',
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
+  },
+  tabsScrollContent: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
   },
   tab: {
     flexDirection: 'row',

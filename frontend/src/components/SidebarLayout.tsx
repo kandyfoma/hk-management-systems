@@ -52,16 +52,7 @@ function MobileSidebarModal({
         {/* Header */}
         <View style={mobileSidebarStyles.header}>
           <View style={mobileSidebarStyles.headerContent}>
-            <Image
-              source={require('../../assets/icon.png')}
-              style={mobileSidebarStyles.brandLogo}
-              resizeMode="contain"
-            />
-            {headerIcon && (
-              <View style={[mobileSidebarStyles.headerIcon, { backgroundColor: accentColor + '14' }]}>
-                <Ionicons name={headerIcon} size={24} color={accentColor} />
-              </View>
-            )}
+              <Image source={require('../../assets/icon.png')} style={mobileSidebarStyles.brandLogo} resizeMode="contain" />
             <View style={mobileSidebarStyles.headerText}>
               {title && <Text style={mobileSidebarStyles.headerTitle}>{title}</Text>}
               {subtitle && <Text style={mobileSidebarStyles.headerSubtitle}>{subtitle}</Text>}
@@ -99,7 +90,7 @@ function MobileSidebarModal({
                     style={[
                       mobileSidebarStyles.menuItem,
                       isActive && {
-                        backgroundColor: accentColor + '14',
+                        backgroundColor: colors.sidebarActive,
                         borderLeftColor: accentColor,
                         borderLeftWidth: 3,
                       },
@@ -112,17 +103,17 @@ function MobileSidebarModal({
                   >
                     <View style={[
                       mobileSidebarStyles.menuIcon,
-                      isActive && { backgroundColor: accentColor + '20' }
+                      isActive && { backgroundColor: 'rgba(255,255,255,0.15)' }
                     ]}>
                       <Ionicons
                         name={isActive ? (item.iconActive || item.icon) : item.icon}
                         size={20}
-                        color={isActive ? accentColor : colors.textSecondary}
+                        color={isActive ? colors.sidebarTextActive : colors.sidebarText}
                       />
                     </View>
                     <Text style={[
                       mobileSidebarStyles.menuLabel,
-                      isActive && { color: accentColor, fontWeight: '600' },
+                      isActive && { color: colors.sidebarTextActive, fontWeight: '600' },
                     ]}>
                       {item.label}
                     </Text>
@@ -289,16 +280,7 @@ function MobileHeader({
         </TouchableOpacity>
         
         <View style={mobileHeaderStyles.titleContainer}>
-          <Image
-            source={require('../../assets/icon.png')}
-            style={mobileHeaderStyles.brandLogo}
-            resizeMode="contain"
-          />
-          {headerIcon && (
-            <View style={[mobileHeaderStyles.headerIcon, { backgroundColor: accentColor + '14' }]}>
-              <Ionicons name={headerIcon} size={20} color={accentColor} />
-            </View>
-          )}
+          <Image source={require('../../assets/icon.png')} style={mobileHeaderStyles.brandLogo} resizeMode="contain" />
           <View>
             {title && <Text style={mobileHeaderStyles.title}>{title}</Text>}
             {subtitle && <Text style={mobileHeaderStyles.subtitle}>{subtitle}</Text>}
@@ -550,16 +532,7 @@ export function SidebarLayout({
       <View style={[styles.sidebar, { width: sidebarW }]}>
         {/* Sidebar Header */}
         <View style={styles.sidebarHeader}>
-          <Image
-            source={require('../../assets/icon.png')}
-            style={styles.sidebarBrandLogo}
-            resizeMode="contain"
-          />
-          {headerIcon && (
-            <View style={[styles.sidebarHeaderIcon, { backgroundColor: accentColor + '20' }]}>
-              <Ionicons name={headerIcon} size={24} color={accentColor} />
-            </View>
-          )}
+            <Image source={require('../../assets/icon.png')} style={styles.sidebarBrandLogo} resizeMode="contain" />
           {!collapsed && title && (
             <View style={styles.sidebarHeaderText}>
               <Text style={styles.sidebarTitle}>{title}</Text>

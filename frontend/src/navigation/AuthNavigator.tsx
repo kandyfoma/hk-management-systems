@@ -33,6 +33,8 @@ interface DeviceActivationInfo {
   activatedAt: string;
   expiresAt: string;
   organizationId: string;
+  licenseType?: string;  // Backend license type (PHARMACY, HOSPITAL, COMBINED, etc.)
+  licenseStatus?: string; // Backend license status (active, pending, etc.)
 }
 
 const showAlert = (title: string, message: string, onOk?: () => void) => {
@@ -129,6 +131,16 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
           const licenseService = LicenseService.getInstance();
           const result = await licenseService.validateLicenseKey(activationInfo.licenseKey);
           if (result.isValid) {
+            // Update stored activation info with latest license type/status
+            if (result.license?.type) {
+              const updatedInfo: DeviceActivationInfo = {
+                ...activationInfo,
+                licenseType: result.license.type,
+                licenseStatus: result.license.status,
+              };
+              await AsyncStorage.setItem(DEVICE_ACTIVATION_KEY, JSON.stringify(updatedInfo));
+              console.log('📋 Updated activation info with licenseType:', result.license.type);
+            }
             console.log('✅ Device activation is still valid, navigating to login');
             showSuccessToast('Appareil déjà activé. Redirection...');
             setTimeout(() => {
@@ -185,9 +197,12 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
         const activationInfo: DeviceActivationInfo = {
           licenseKey: licenseKey.trim(),
           activatedAt: new Date().toISOString(),
-          expiresAt: result.license.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          organizationId: result.organization.id
+          expiresAt: result.license.expiryDate || result.license.expiry_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          organizationId: result.organization.id,
+          licenseType: result.license.type,
+          licenseStatus: result.license.status,
         };
+        console.log('📋 Storing activation with licenseType:', result.license.type, 'status:', result.license.status);
         
         await AsyncStorage.setItem(DEVICE_ACTIVATION_KEY, JSON.stringify(activationInfo));
         console.log('Device activation stored successfully');

@@ -9,6 +9,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -285,7 +286,7 @@ function usePharmacyDashboardData() {
       const [metricsResponse, topProductsResponse, recentSalesResponse, salesReportResponse] = await Promise.all([
         DataService.getPharmacyDashboardMetrics(),
         DataService.getPharmacyTopProducts({ days: 30, limit: 5 }),
-        DataService.getPharmacyRecentSales({ limit: 10 }),
+        DataService.getPharmacyRecentSales({ limit: 5 }),
         DataService.getPharmacySalesReports({ start_date: startDate, end_date: endDate }),
       ]);
 
@@ -449,9 +450,9 @@ function SectionHeader({
           <View style={[secStyles.iconBubble, { backgroundColor: accentColor + '14' }]}>
             <Ionicons name={icon} size={18} color={accentColor} />
           </View>
-          <View>
-            <Text style={secStyles.title}>{title}</Text>
-            {subtitle && <Text style={secStyles.subtitle}>{subtitle}</Text>}
+          <View style={secStyles.headerText}>
+            <Text style={secStyles.title} numberOfLines={1}>{title}</Text>
+            {subtitle && <Text style={secStyles.subtitle} numberOfLines={1}>{subtitle}</Text>}
           </View>
         </View>
         {ctaLabel && (
@@ -475,12 +476,13 @@ const secStyles = StyleSheet.create({
   dividerAccent: { width: 40, height: 3, borderRadius: 2 },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.outline, marginLeft: 8 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  iconBubble: { width: 36, height: 36, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center' },
+  headerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 8 },
+  headerText: { flex: 1, minWidth: 0 },
+  iconBubble: { width: 36, height: 36, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   title: { fontSize: 15, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
   ctaBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0,
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: borderRadius.lg,
     ...shadows.sm,
   },
@@ -493,6 +495,8 @@ interface PharmacyDashboardProps {
 }
 
 export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps = {}) {
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktopDynamic = screenWidth >= 1024;
   const {
     loading,
     refreshing,
@@ -529,7 +533,7 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
       }
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, !isDesktopDynamic && { flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
         <View>
           <Text style={styles.headerTitle}>Tableau de Bord Pharmacie</Text>
           <Text style={styles.headerSubtitle}>Aperçu de l'activité pharmaceutique</Text>
@@ -588,9 +592,9 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
       />
       <View style={styles.chartCard}>
         <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.cardTitle}>Ventes Mensuelles</Text>
-            <Text style={styles.cardSubtitle}>
+          <View style={[styles.cardHeaderTitle]}>
+            <Text style={styles.cardTitle} numberOfLines={1}>Ventes Mensuelles</Text>
+            <Text style={styles.cardSubtitle} numberOfLines={1}>
               {salesChartMode === 'year'
                 ? 'Vue annuelle du mois 1 au mois 12'
                 : 'Vue mensuelle du jour 1 au dernier jour du mois'}
@@ -646,11 +650,11 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
         ctaIcon="add-circle-outline"
         onCtaPress={() => onNavigate?.('ph-inventory')}
       />
-      <View style={styles.row}>
+      <View style={[styles.row, { flexDirection: isDesktopDynamic ? 'row' : 'column' }]}>
         {/* Top Selling Drugs */}
-        <View style={[styles.card, isDesktop && { flex: 3 }]}>
+        <View style={[styles.card, isDesktopDynamic && { flex: 3 }]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Médicaments les Plus Vendus</Text>
+            <Text style={[styles.cardTitle, styles.cardHeaderTitle]} numberOfLines={1}>Médicaments les Plus Vendus</Text>
             <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-inventory')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
@@ -681,15 +685,15 @@ export function PharmacyDashboardContent({ onNavigate }: PharmacyDashboardProps 
         </View>
 
         {/* Recent Sales */}
-        <View style={[styles.card, isDesktop && { flex: 2 }]}>
+        <View style={[styles.card, isDesktopDynamic && { flex: 2 }]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Ventes Récentes</Text>
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-reports')}>
+            <Text style={[styles.cardTitle, styles.cardHeaderTitle]} numberOfLines={1}>Ventes Récentes</Text>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => onNavigate?.('ph-sales-history')}>
               <Text style={styles.viewAllText}>Tout Voir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>
           </View>
-          {recentSales.map((sale, idx) => (
+          {recentSales.slice(0, 5).map((sale, idx) => (
             <View key={idx} style={[styles.saleRow, idx === recentSales.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={styles.saleLeft}>
                 <View style={[styles.saleIcon, { backgroundColor: colors.primaryFaded }]}>
@@ -761,6 +765,7 @@ const styles = StyleSheet.create({
   },
   cardSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   chartModeToggle: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceVariant,
@@ -858,9 +863,10 @@ const styles = StyleSheet.create({
 
   row: { flexDirection: isDesktop ? 'row' : 'column', gap: 16 },
   card: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 20, borderWidth: 1, borderColor: colors.outline, ...shadows.sm },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8 },
+  cardHeaderTitle: { flex: 1, minWidth: 0 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
   viewAllText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
 
   tableHeader: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.primary + '08', borderRadius: borderRadius.md, marginBottom: 4, borderWidth: 1, borderColor: colors.primary + '20' },

@@ -50,10 +50,15 @@ interface Props {
 // ═══════════════════════════════════════════════════════════════
 
 function apiToPatient(d: any): PatientWithEncounters {
+  // Support both full serializer (first_name/last_name) and list serializer (full_name)
+  const fullName: string = d.full_name ?? '';
+  const nameParts = fullName.split(' ');
+  const firstName = d.first_name ?? nameParts[0] ?? '';
+  const lastName = d.last_name ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
   return {
     id: d.id,
-    firstName: d.first_name ?? '',
-    lastName: d.last_name ?? '',
+    firstName,
+    lastName,
     middleName: d.middle_name ?? '',
     dateOfBirth: d.date_of_birth ?? '',
     gender: d.gender ?? 'other',
@@ -129,13 +134,28 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
       const params: any = {};
       const q = (search ?? searchQuery).trim();
       if (q) params.search = q;
-      const res = await api.get('/patients/', params);
-      if (res.success && res.data) {
-        const raw = Array.isArray(res.data) ? res.data : (res.data as any).results ?? [];
-        setPatients(raw.map(apiToPatient));
-      } else {
-        setLoadError(res.error?.message ?? 'Erreur lors du chargement des patients');
+
+      // Fetch all pages to ensure no patients are missed
+      let allPatients: PatientWithEncounters[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await api.get('/patients/', { ...params, page });
+        if (res.success && res.data) {
+          const payload = res.data as any;
+          const rows: any[] = Array.isArray(payload)
+            ? payload
+            : (payload.results ?? []);
+          allPatients = [...allPatients, ...rows.map(apiToPatient)];
+          // If the response is paginated and has a next page, keep going
+          hasMore = !Array.isArray(payload) && !!payload.next;
+          page++;
+        } else {
+          setLoadError((res.error as any)?.message ?? 'Erreur lors du chargement des patients');
+          hasMore = false;
+        }
       }
+      setPatients(allPatients);
     } catch (err: any) {
       setLoadError(err?.message ?? 'Connexion impossible au serveur');
     } finally {
@@ -546,7 +566,8 @@ function PatientCard({
   deleting: boolean;
 }) {
   const fullName = PatientUtils.getFullName(patient);
-  const age = PatientUtils.getAge(patient);
+  const ageRaw = PatientUtils.getAge(patient);
+  const ageLabel = patient.dateOfBirth && !isNaN(ageRaw) && ageRaw >= 0 ? `${ageRaw} ans` : '—';
   const genderLabel = patient.gender === 'male' ? 'H' : patient.gender === 'female' ? 'F' : 'A';
   const genderColor = patient.gender === 'male' ? '#3B82F6' : patient.gender === 'female' ? '#EC4899' : '#8B5CF6';
   const initials = `${patient.firstName?.[0] ?? '?'}${patient.lastName?.[0] ?? '?'}`.toUpperCase();
@@ -568,7 +589,7 @@ function PatientCard({
           <View style={s.cardMetaRow}>
             <Text style={s.cardMeta}>{patient.patientNumber}</Text>
             <View style={s.dot} />
-            <Text style={s.cardMeta}>{age} ans</Text>
+            <Text style={s.cardMeta}>{ageLabel}</Text>
             <View style={s.dot} />
             <View style={[s.genderBadge, { backgroundColor: genderColor + '18' }]}>
               <Text style={[s.genderText, { color: genderColor }]}>{genderLabel}</Text>

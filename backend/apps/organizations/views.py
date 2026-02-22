@@ -195,17 +195,9 @@ def current_organization_licenses(request):
         # Transform licenses to match frontend License model
         license_data = []
         for license_obj in licenses:
-            # Map backend license type to frontend ModuleType
-            module_type = license_obj.type
-            if module_type == 'COMBINED':
-                module_type = 'COMBINED'
-            elif module_type == 'OCCUPATIONAL_HEALTH':
-                module_type = 'OCCUPATIONAL_HEALTH'
-            elif module_type == 'PHARMACY':
-                module_type = 'PHARMACY'
-            elif module_type == 'HOSPITAL':
-                module_type = 'HOSPITAL'
-            else:
+            # Map backend license type → frontend moduleType (keep as-is for known types)
+            module_type = license_obj.type  # PHARMACY, HOSPITAL, OCCUPATIONAL_HEALTH, PHARMACY_HOSPITAL, HOSPITAL_OCCUPATIONAL_HEALTH, COMBINED
+            if module_type not in ('PHARMACY', 'HOSPITAL', 'OCCUPATIONAL_HEALTH', 'PHARMACY_HOSPITAL', 'HOSPITAL_OCCUPATIONAL_HEALTH', 'COMBINED'):
                 module_type = 'TRIAL'
             
             # Define features based on license type
@@ -255,7 +247,35 @@ def current_organization_licenses(request):
                     'certificate_management', 'medical_examinations', 'patient_management',
                     'basic_reporting', 'user_management', 'audit_trail'
                 ]
-            else:  # TRIAL
+            elif license_obj.type == 'PHARMACY_HOSPITAL':
+                features = [
+                    # Pharmacy features
+                    'pos_system', 'basic_inventory', 'advanced_inventory',
+                    'prescription_management', 'supplier_management', 'stock_alerts',
+                    'expiry_tracking', 'dispensing_records', 'drug_interaction_checking',
+                    # Hospital features
+                    'patient_management', 'appointment_scheduling', 'medical_records',
+                    'emergency_management', 'ward_management', 'laboratory_integration',
+                    'clinical_notes', 'hospital_billing', 'consultation_management',
+                    'admission_management', 'medication_administration', 'triage_system',
+                    # General
+                    'basic_reporting', 'advanced_reporting', 'user_management', 'audit_trail'
+                ]
+            elif license_obj.type == 'HOSPITAL_OCCUPATIONAL_HEALTH':
+                features = [
+                    # Hospital features
+                    'patient_management', 'appointment_scheduling', 'medical_records',
+                    'emergency_management', 'ward_management', 'laboratory_integration',
+                    'clinical_notes', 'hospital_billing', 'consultation_management',
+                    'admission_management', 'medication_administration', 'triage_system',
+                    # Occupational Health features
+                    'occupational_health', 'health_surveillance', 'risk_assessment',
+                    'ppe_management', 'incident_reporting', 'compliance_tracking',
+                    'certificate_management', 'medical_examinations',
+                    # General
+                    'basic_reporting', 'advanced_reporting', 'user_management', 'audit_trail'
+                ]
+            else:  # TRIAL / unknown
                 features = [
                     'patient_management', 'basic_inventory', 'prescription_management',
                     'basic_reporting', 'medical_records'

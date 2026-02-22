@@ -754,9 +754,9 @@ function MobileApp() {
           shadowRadius: 8,
           shadowColor: '#0F172A',
           shadowOffset: { height: -2, width: 0 },
-          height: Platform.OS === 'web' ? 64 : 72,
-          paddingBottom: Platform.OS === 'web' ? 8 : 16,
-          paddingTop: 8,
+          height: 80,
+          paddingBottom: Platform.OS === 'web' ? 8 : undefined,
+          paddingTop: Platform.OS === 'web' ? 8 : 6,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
         headerStyle: {

@@ -11,10 +11,17 @@ const isLicenseExpired = (license: License): boolean => {
 const EXPANDED_MODULES: ModuleType[] = ['PHARMACY', 'HOSPITAL', 'OCCUPATIONAL_HEALTH'];
 
 const expandModuleType = (moduleType: ModuleType): ModuleType[] => {
-  if (moduleType === 'COMBINED' || moduleType === 'TRIAL') {
-    return EXPANDED_MODULES;
+  switch (moduleType) {
+    case 'COMBINED':
+    case 'TRIAL':
+      return EXPANDED_MODULES;
+    case 'PHARMACY_HOSPITAL':
+      return ['PHARMACY', 'HOSPITAL'];
+    case 'HOSPITAL_OCCUPATIONAL_HEALTH':
+      return ['HOSPITAL', 'OCCUPATIONAL_HEALTH'];
+    default:
+      return [moduleType];
   }
-  return [moduleType];
 };
 
 const calculateActiveModules = (licenses: License[], userModuleAccess: UserModuleAccess[]): ModuleType[] => {

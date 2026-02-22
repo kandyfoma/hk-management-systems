@@ -49,6 +49,7 @@ class PatientFilter(filters.FilterSet):
 
 class PatientListCreateAPIView(generics.ListCreateAPIView):
     queryset = Patient.objects.all()
+    pagination_class = None          # Return all patients — frontend handles display
     filter_backends = [DjangoFilterBackend]
     filterset_class = PatientFilter
     search_fields = ['first_name', 'last_name', 'patient_number', 'phone']

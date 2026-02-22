@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { Provider as ReduxProvider, useDispatch, useSelector } from 'react-redux';
 
@@ -22,33 +23,67 @@ interface DeviceActivationInfo {
   activatedAt: string;
   expiresAt: string;
   organizationId: string;
+  licenseType?: string;  // Backend license type (PHARMACY, HOSPITAL, COMBINED, etc.)
+  licenseStatus?: string; // Backend license status (active, pending, etc.)
 }
 
 const DEVICE_ACTIVATION_KEY = 'device_activation_info';
 
-async function getActivatedLicenseKey(): Promise<string | null> {
+async function getActivationInfo(): Promise<DeviceActivationInfo | null> {
   try {
     const raw = await AsyncStorage.getItem(DEVICE_ACTIVATION_KEY);
     if (!raw) return null;
-    const info = JSON.parse(raw) as DeviceActivationInfo;
-    return info?.licenseKey || null;
+    return JSON.parse(raw) as DeviceActivationInfo;
   } catch {
     return null;
   }
 }
 
+/**
+ * Scope licenses to the single license the user activated with.
+ * If the activated license is found in the API response, use it.
+ * Otherwise, build one from the stored activation info (licenseType).
+ * Never fall back to ALL org licenses.
+ */
 function scopeLicensesToOrganization(
   licenses: any[],
   organization: any,
-  preferredLicenseKey?: string | null,
+  activationInfo?: DeviceActivationInfo | null,
 ): any[] {
-  const currentLicenseKey = preferredLicenseKey || organization?.license_key || organization?.licenseKey;
-  if (!currentLicenseKey) return licenses;
+  const currentLicenseKey = activationInfo?.licenseKey || organization?.license_key || organization?.licenseKey;
 
-  const scoped = licenses.filter(
-    (license) => (license?.licenseKey || license?.license_key) === currentLicenseKey
-  );
-  return scoped.length > 0 ? scoped : licenses;
+  // Try to find the activated license in the API response
+  if (currentLicenseKey) {
+    const scoped = licenses.filter(
+      (license) => (license?.licenseKey || license?.license_key) === currentLicenseKey
+    );
+    if (scoped.length > 0) {
+      console.log('📋 Scoped to activated license:', currentLicenseKey, 'moduleType:', scoped[0]?.moduleType);
+      return scoped;
+    }
+  }
+
+  // License not found in API response — build from stored activation info
+  if (activationInfo?.licenseType) {
+    console.log('📋 Building license from stored activation info, type:', activationInfo.licenseType);
+    return [{
+      id: 'activated-license',
+      licenseKey: activationInfo.licenseKey,
+      organizationId: activationInfo.organizationId,
+      moduleType: activationInfo.licenseType,
+      licenseTier: 'PROFESSIONAL',
+      isActive: true,
+      issuedDate: activationInfo.activatedAt,
+      expiryDate: activationInfo.expiresAt,
+      features: [],
+      billingCycle: 'ANNUAL',
+      autoRenew: false,
+      createdAt: activationInfo.activatedAt,
+    }];
+  }
+
+  // No activation info at all — fallback to all licenses
+  return licenses;
 }
 
 function SyncReconnectNotifier({ enabled }: { enabled: boolean }) {
@@ -211,8 +246,8 @@ function AppContent() {
               ApiAuthService.getInstance().getUserModuleAccess()
             ]);
 
-            const activatedLicenseKey = await getActivatedLicenseKey();
-            const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activatedLicenseKey);
+            const activationInfo = await getActivationInfo();
+            const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activationInfo);
             
             console.log('📋 Loaded licenses:', licenses);
             console.log('🔐 Loaded module access:', userModuleAccess);
@@ -230,11 +265,26 @@ function AppContent() {
             return; // Exit early on successful session restore
           } catch (licenseError) {
             console.log('⚠️ Could not load licenses/module access, but user session is valid');
-            // Still proceed with authentication even if license loading fails
+            // Build license from stored activation info if available
+            const fallbackInfo = await getActivationInfo();
+            const fallbackLicenses = fallbackInfo?.licenseType ? [{
+              id: 'activated-license',
+              licenseKey: fallbackInfo.licenseKey,
+              organizationId: fallbackInfo.organizationId,
+              moduleType: fallbackInfo.licenseType,
+              licenseTier: 'PROFESSIONAL',
+              isActive: true,
+              issuedDate: fallbackInfo.activatedAt,
+              expiryDate: fallbackInfo.expiresAt,
+              features: [],
+              billingCycle: 'ANNUAL',
+              autoRenew: false,
+              createdAt: fallbackInfo.activatedAt,
+            }] : [];
             dispatch(loginSuccess({
               user,
               organization,
-              licenses: [],
+              licenses: fallbackLicenses,
               userModuleAccess: [],
             }));
             setIsLicenseValid(true);
@@ -268,8 +318,8 @@ function AppContent() {
           console.log('🔄 Loading fresh user data from backend...');
           const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
           const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
-          const activatedLicenseKey = await getActivatedLicenseKey();
-          const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activatedLicenseKey);
+          const activationInfo = await getActivationInfo();
+          const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activationInfo);
           
           dispatch(loginSuccess({
             user,
@@ -318,8 +368,8 @@ function AppContent() {
       console.log('📄 Loading organization licenses after login...');
       const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
       const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
-      const activatedLicenseKey = authResult?.activatedLicenseKey || await getActivatedLicenseKey();
-      const scopedLicenses = scopeLicensesToOrganization(licenses, authResult.organization, activatedLicenseKey);
+      const activationInfo = await getActivationInfo();
+      const scopedLicenses = scopeLicensesToOrganization(licenses, authResult.organization, activationInfo);
       
       console.log('📋 Loaded licenses after login:', licenses);
       console.log('🔐 Loaded module access after login:', userModuleAccess);
@@ -373,9 +423,11 @@ function AppContent() {
 // Root component — provides Redux store
 export default function App() {
   return (
-    <ReduxProvider store={store}>
-      <AppContent />
-    </ReduxProvider>
+    <SafeAreaProvider>
+      <ReduxProvider store={store}>
+        <AppContent />
+      </ReduxProvider>
+    </SafeAreaProvider>
   );
 }
 
