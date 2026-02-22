@@ -7,7 +7,6 @@ import { ConsultationHistoryScreen } from './screens/ConsultationHistoryScreen';
 import { PatientListScreen } from './screens/PatientListScreen';
 import { PatientDetailScreen } from './screens/PatientDetailScreen';
 import { PatientRegistrationScreen } from './screens/PatientRegistrationScreen';
-import { VitalSignsScreen } from './screens/VitalSignsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 import { Patient } from '../../models/Patient';
@@ -25,7 +24,6 @@ const hospitalSections: SidebarSection[] = [
     title: 'Services Cliniques',
     items: [
       { id: 'appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar', badge: 5 },
-      { id: 'vital-signs', label: 'Signes Vitaux', icon: 'pulse-outline', iconActive: 'pulse' },
       { id: 'consultations', label: 'Historique Consultations', icon: 'time-outline', iconActive: 'time' },
       { id: 'prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'medical-records', label: 'Dossiers Médicaux', icon: 'folder-open-outline', iconActive: 'folder-open' },
@@ -84,19 +82,7 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
       'Statistiques de fréquentation',
     ],
   },
-  'vital-signs': {
-    title: 'Prise des Signes Vitaux',
-    subtitle: 'Enregistrer les constantes vitales des patients avant consultation.',
-    icon: 'pulse',
-    features: [
-      'Température corporelle',
-      'Tension artérielle (systolique/diastolique)',
-      'Fréquence cardiaque et respiratoire',
-      'Saturation en oxygène (SpO2)',
-      'Poids et taille avec calcul IMC automatique',
-      'Évaluation de la douleur (échelle 0-10)',
-    ],
-  },
+
   prescriptions: {
     title: 'Création d\'Ordonnances',
     subtitle: 'Prescrire des médicaments et créer des ordonnances pour les patients.',
@@ -198,10 +184,6 @@ export function HospitalNavigator() {
   const [patientView, setPatientView] = useState<'list' | 'detail' | 'register'>('list');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
-  // Vital signs flow state
-  const [vitalSignsPatient, setVitalSignsPatient] = useState<Patient | null>(null);
-  const [showVitalSigns, setShowVitalSigns] = useState(false);
-
   const handleSelectPatient = useCallback((patient: Patient) => {
     setSelectedPatientId(patient.id);
     setPatientView('detail');
@@ -221,45 +203,7 @@ export function HospitalNavigator() {
     setPatientView('detail');
   }, []);
 
-  // Vital signs handlers
-  const handleStartVitalSigns = useCallback((patient: Patient) => {
-    setVitalSignsPatient(patient);
-    setShowVitalSigns(true);
-    setActiveScreen('vital-signs');
-  }, []);
 
-  const handleVitalSignsComplete = useCallback((vitals: any) => {
-    // Here you would typically save the vitals and navigate to consultation
-    console.log('Vital signs completed:', vitals);
-    setShowVitalSigns(false);
-    setVitalSignsPatient(null);
-    // Navigate to consultation (you can implement this based on your needs)
-    Alert.alert(
-      'Signes vitaux enregistrés',
-      'Procéder à la consultation ?',
-      [
-        {
-          text: 'Retour',
-          style: 'cancel',
-          onPress: () => setActiveScreen('dashboard'),
-        },
-        {
-          text: 'Consultation',
-          onPress: () => {
-            // Here you would navigate to the consultation screen
-            console.log('Navigate to consultation');
-            setActiveScreen('dashboard'); // Placeholder for now
-          },
-        },
-      ]
-    );
-  }, []);
-
-  const handleVitalSignsBack = useCallback(() => {
-    setShowVitalSigns(false);
-    setVitalSignsPatient(null);
-    setActiveScreen('dashboard');
-  }, []);
 
   // Reset patient sub-navigation when switching away
   const handleScreenChange = useCallback((screen: string) => {
@@ -267,10 +211,6 @@ export function HospitalNavigator() {
     if (screen !== 'patients') {
       setPatientView('list');
       setSelectedPatientId(null);
-    }
-    if (screen !== 'vital-signs') {
-      setShowVitalSigns(false);
-      setVitalSignsPatient(null);
     }
   }, []);
 
@@ -287,48 +227,7 @@ export function HospitalNavigator() {
       return <ConsultationHistoryScreen />;
     }
 
-    if (activeScreen === 'vital-signs' && showVitalSigns && vitalSignsPatient) {
-      return (
-        <VitalSignsScreen
-          patient={vitalSignsPatient}
-          onComplete={handleVitalSignsComplete}
-          onBack={handleVitalSignsBack}
-        />
-      );
-    }
 
-    if (activeScreen === 'vital-signs') {
-      // Demo patient for testing vital signs flow
-      const demoPatient: Patient = {
-        id: 'demo-123',
-        patientNumber: 'P2024001',
-        firstName: 'Marie',
-        lastName: 'Dubois',
-        dateOfBirth: new Date('1985-03-15'),
-        gender: 'female' as const,
-        phone: '+237 650 123 456',
-        email: 'marie.dubois@email.com',
-        address: '123 Rue de la Paix, Yaoundé',
-        emergencyContact: {
-          name: 'Jean Dubois',
-          relationship: 'époux',
-          phone: '+237 650 123 457',
-        },
-        bloodType: 'O+',
-        allergies: ['Pénicilline'],
-        medicalHistory: ['Hypertension'],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      return (
-        <VitalSignsScreen
-          patient={demoPatient}
-          onComplete={handleVitalSignsComplete}
-          onBack={handleVitalSignsBack}
-        />
-      );
-    }
 
     if (activeScreen === 'patients') {
       switch (patientView) {

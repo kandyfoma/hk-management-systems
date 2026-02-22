@@ -188,7 +188,6 @@ const createDynamicSections = (
     // Emergency & Triage
     hospitalItems.push({ id: 'hp-emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 });
     hospitalItems.push({ id: 'hp-triage', label: 'Triage', icon: 'heart-outline', iconActive: 'heart' });
-    hospitalItems.push({ id: 'hp-vital-signs', label: 'Signes Vitaux', icon: 'pulse-outline', iconActive: 'pulse' });
 
     // Add features based on license
     if (hasFeature('patient_management')) {
@@ -424,7 +423,6 @@ function DesktopApp() {
       'hp-dashboard': 'HOSPITAL',
       'hp-emergency': 'HOSPITAL',
       'hp-triage': 'HOSPITAL',
-      'hp-vital-signs': 'HOSPITAL',
       'hp-appointments': 'HOSPITAL',
       'hp-wards': 'HOSPITAL',
       'hp-admissions': 'HOSPITAL',
@@ -587,15 +585,7 @@ function DesktopApp() {
     if (activeScreen === 'hp-admissions') return <AdmissionScreen />;
     if (activeScreen === 'hp-mar') return <MedicationAdministrationScreen />;
     if (activeScreen === 'hp-prescriptions') return <HospitalPrescriptionsScreen />;
-    if (activeScreen === 'hp-vital-signs') {
-      const s = {
-        title: 'Signes Vitaux',
-        subtitle: 'Sélectionnez un patient depuis Gestion Patients pour la prise complète des constantes.',
-        icon: 'pulse',
-        features: ['Température', 'Tension artérielle', 'Fréquence cardiaque', 'SpO2', 'Douleur', 'IMC'],
-      };
-      return <PlaceholderScreen title={s.title} subtitle={s.subtitle} icon={s.icon} accentColor={colors.info} features={s.features} />;
-    }
+
     if (activeScreen === 'hp-lab-results') return <LaboratoryScreen />;
     if (activeScreen === 'hp-clinical-notes') return <ClinicalNotesScreen />;
     if (activeScreen === 'hp-billing') return <HospitalBillingScreen />;
