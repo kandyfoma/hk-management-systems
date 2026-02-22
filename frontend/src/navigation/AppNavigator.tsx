@@ -53,6 +53,7 @@ import { LaboratoryScreen } from '../modules/hospital/screens/LaboratoryScreen';
 import { ClinicalNotesScreen } from '../modules/hospital/screens/ClinicalNotesScreen';
 import { HospitalBillingScreen } from '../modules/hospital/screens/HospitalBillingScreen';
 import { HospitalConsultationScreen } from '../modules/hospital/screens/HospitalConsultationScreen';
+import { HospitalPatientIntakeScreen } from '../modules/hospital/screens/HospitalPatientIntakeScreen';
 import { ConsultationHistoryScreen } from '../modules/hospital/screens/ConsultationHistoryScreen';
 import { SidebarLayout, SidebarSection, SidebarMenuItem } from '../components/SidebarLayout';
 import { colors, borderRadius } from '../theme/theme';
@@ -187,6 +188,7 @@ const createDynamicSections = (
     // Add features based on license
     if (hasFeature('patient_management')) {
       hospitalItems.push({ id: 'hp-patients', label: 'Gestion Patients', icon: 'body-outline', iconActive: 'body' });
+      hospitalItems.push({ id: 'hp-intake', label: 'Accueil Consultation', icon: 'person-add-outline', iconActive: 'person-add' });
       hospitalItems.push({ id: 'hp-consultation', label: 'Consultation', icon: 'medkit-outline', iconActive: 'medkit' });
       hospitalItems.push({ id: 'hp-consultation-history', label: 'Historique Consult.', icon: 'time-outline', iconActive: 'time' });
     }
@@ -327,6 +329,7 @@ function DesktopApp() {
 
   // Hospital consultation state
   const [consultationPatientId, setConsultationPatientId] = useState<string | null>(null);
+  const [pendingHospitalConsultationToLoad, setPendingHospitalConsultationToLoad] = useState<string | null>(null);
 
   // Occupational health draft management
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
@@ -353,6 +356,12 @@ function DesktopApp() {
   const handleConsultationComplete = () => {
     setConsultationPatientId(null);
     setActiveScreen('hp-consultation-history');
+  };
+
+  const handleNavigateToHospitalConsultation = (pendingId?: string) => {
+    setConsultationPatientId(null);
+    setPendingHospitalConsultationToLoad(pendingId || null);
+    setActiveScreen('hp-consultation');
   };
 
   const handleResumeDraft = (draftId: string) => {
@@ -413,6 +422,7 @@ function DesktopApp() {
       'hp-consultation': 'HOSPITAL',
       'hp-consultation-history': 'HOSPITAL',
       'hp-patients': 'HOSPITAL',
+      'hp-intake': 'HOSPITAL',
 
       'oh-dashboard': 'OCCUPATIONAL_HEALTH',
       'oh-patients': 'OCCUPATIONAL_HEALTH',
@@ -560,10 +570,20 @@ function DesktopApp() {
     if (activeScreen === 'hp-lab-results') return <LaboratoryScreen />;
     if (activeScreen === 'hp-clinical-notes') return <ClinicalNotesScreen />;
     if (activeScreen === 'hp-billing') return <HospitalBillingScreen />;
+    if (activeScreen === 'hp-intake') {
+      return (
+        <HospitalPatientIntakeScreen
+          onConsultationQueued={() => {}}
+          onNavigateToConsultation={handleNavigateToHospitalConsultation}
+        />
+      );
+    }
     if (activeScreen === 'hp-consultation') {
       return (
         <HospitalConsultationScreen
           patientId={consultationPatientId || undefined}
+          pendingConsultationToLoad={pendingHospitalConsultationToLoad}
+          onPendingLoaded={() => setPendingHospitalConsultationToLoad(null)}
           onBack={() => setActiveScreen('hp-patients')}
           onComplete={handleConsultationComplete}
         />

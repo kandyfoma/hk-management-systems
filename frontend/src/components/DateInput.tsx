@@ -107,20 +107,28 @@ export default function DateInput({
       input.style.width = '0';
       input.style.height = '0';
 
+      let cleanedUp = false;
       const cleanup = () => {
-        if (input.parentNode) {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        if (input.parentNode && input.parentNode.contains(input)) {
           input.parentNode.removeChild(input);
         }
       };
 
-      input.addEventListener('change', () => {
+      const handleChange = () => {
         if (input.value) {
           onChangeText(input.value);
         }
         cleanup();
-      });
+      };
 
-      input.addEventListener('blur', cleanup);
+      const handleBlur = () => {
+        cleanup();
+      };
+
+      input.addEventListener('change', handleChange, { once: true });
+      input.addEventListener('blur', handleBlur, { once: true });
 
       document.body.appendChild(input);
       input.focus();

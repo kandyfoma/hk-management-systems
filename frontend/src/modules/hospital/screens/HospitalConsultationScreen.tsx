@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,12 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { Patient } from '../../../models/Patient';
 import { Encounter, EncounterType, EncounterStatus } from '../../../models/Encounter';
+import { PendingHospitalConsultation, HOSPITAL_PENDING_CONSULTATIONS_KEY } from './HospitalPatientIntakeScreen';
 import DateInput from '../../../components/DateInput';
 
 const { width } = Dimensions.get('window');
@@ -204,6 +206,8 @@ function getAge(dateOfBirth: string): number {
 interface HospitalConsultationScreenProps {
   patientId?: string;
   encounterId?: string;
+  pendingConsultationToLoad?: string | null;
+  onPendingLoaded?: () => void;
   onBack?: () => void;
   onComplete?: (encounter: Partial<Encounter>) => void;
 }
@@ -211,6 +215,8 @@ interface HospitalConsultationScreenProps {
 export function HospitalConsultationScreen({
   patientId,
   encounterId,
+  pendingConsultationToLoad,
+  onPendingLoaded,
   onBack,
   onComplete,
 }: HospitalConsultationScreenProps) {
@@ -224,6 +230,8 @@ export function HospitalConsultationScreen({
     patientId ? SAMPLE_PATIENTS.find(p => p.id === patientId) || null : null
   );
   const [showPatientModal, setShowPatientModal] = useState(false);
+  const [pendingConsultations, setPendingConsultations] = useState<PendingHospitalConsultation[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(false);
 
   // ─── Visit reason ──
   const [encounterType, setEncounterType] = useState<EncounterType>('outpatient');
@@ -231,6 +239,13 @@ export function HospitalConsultationScreen({
   const [historyOfPresentIllness, setHistoryOfPresentIllness] = useState('');
   const [referredBy, setReferredBy] = useState('');
   const [departmentId, setDepartmentId] = useState('');
+  const [vitals, setVitals] = useState<{
+    temperature?: number;
+    bloodPressureSystolic?: number;
+    bloodPressureDiastolic?: number;
+    heartRate?: number;
+    oxygenSaturation?: number;
+  }>({});
 
   // ─── Physical exam ──
   const [physicalExam, setPhysicalExam] = useState<PhysicalExamination>({
@@ -280,6 +295,54 @@ export function HospitalConsultationScreen({
       p.phone?.includes(q)
     );
   }, [searchQuery]);
+
+  const loadPendingQueue = useCallback(async () => {
+    setLoadingQueue(true);
+    try {
+      const stored = await AsyncStorage.getItem(HOSPITAL_PENDING_CONSULTATIONS_KEY);
+      const list: PendingHospitalConsultation[] = stored ? JSON.parse(stored) : [];
+      setPendingConsultations(list.filter(item => item.status === 'waiting'));
+    } catch {
+      setPendingConsultations([]);
+    } finally {
+      setLoadingQueue(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPendingQueue();
+  }, [loadPendingQueue]);
+
+  const loadPendingConsultation = useCallback(async (pendingId: string) => {
+    try {
+      const stored = await AsyncStorage.getItem(HOSPITAL_PENDING_CONSULTATIONS_KEY);
+      if (!stored) return;
+      const list: PendingHospitalConsultation[] = JSON.parse(stored);
+      const pending = list.find(item => item.id === pendingId);
+      if (!pending) return;
+
+      setSelectedPatient(pending.patient);
+      setChiefComplaint(pending.visitReason || '');
+      setReferredBy(pending.referredBy || 'Accueil Consultation');
+      setVitals(pending.vitals || {});
+      setCurrentStep('physical_exam');
+
+      const updated = list.map(item =>
+        item.id === pendingId ? { ...item, status: 'in_consultation' as const } : item,
+      );
+      await AsyncStorage.setItem(HOSPITAL_PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
+      setPendingConsultations(updated.filter(item => item.status === 'waiting'));
+    } catch {
+      Alert.alert('Erreur', 'Impossible de charger ce patient depuis la file d\'attente.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pendingConsultationToLoad) {
+      loadPendingConsultation(pendingConsultationToLoad);
+      onPendingLoaded?.();
+    }
+  }, [pendingConsultationToLoad, loadPendingConsultation, onPendingLoaded]);
 
   // ─── Navigation ──
   const goNext = () => {
@@ -1226,6 +1289,70 @@ export function HospitalConsultationScreen({
   //  MAIN RENDER
   // ═══════════════════════════════════════════════════════════════
 
+  if (!selectedPatient) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Salle d'attente Consultation</Text>
+            <Text style={styles.headerSubtitle}>Patients issus de l'accueil consultation</Text>
+          </View>
+          <TouchableOpacity style={styles.saveButton} onPress={loadPendingQueue}>
+            <Ionicons name="refresh" size={20} color={ACCENT} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+          <View style={styles.queueBanner}>
+            <Ionicons name="people" size={18} color={ACCENT} />
+            <Text style={styles.queueBannerText}>
+              <Text style={{ fontWeight: '700' }}>{pendingConsultations.length}</Text> patient{pendingConsultations.length > 1 ? 's' : ''} en attente
+            </Text>
+          </View>
+
+          {loadingQueue ? (
+            <View style={styles.queueEmpty}>
+              <Text style={styles.queueEmptyText}>Chargement de la file d'attente...</Text>
+            </View>
+          ) : pendingConsultations.length === 0 ? (
+            <View style={styles.queueEmpty}>
+              <Ionicons name="time-outline" size={44} color={colors.textSecondary} />
+              <Text style={styles.queueEmptyTitle}>Aucun patient en attente</Text>
+              <Text style={styles.queueEmptyText}>Passez d'abord par "Accueil Consultation" avant la visite médecin.</Text>
+            </View>
+          ) : (
+            <View style={styles.queueList}>
+              {pendingConsultations.map((pending) => (
+                <TouchableOpacity
+                  key={pending.id}
+                  style={styles.queueCard}
+                  activeOpacity={0.75}
+                  onPress={() => loadPendingConsultation(pending.id)}
+                >
+                  <View style={styles.queueCardLeft}>
+                    <View style={styles.queueAvatar}>
+                      <Text style={styles.queueAvatarText}>
+                        {pending.patient.firstName?.[0] ?? '?'}{pending.patient.lastName?.[0] ?? '?'}
+                      </Text>
+                    </View>
+                    <View>
+                      <Text style={styles.queueName}>{pending.patient.firstName} {pending.patient.lastName}</Text>
+                      <Text style={styles.queueMeta}>{pending.patient.patientNumber} • {pending.visitReason || 'Motif non renseigné'}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="play-circle" size={24} color={ACCENT} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -1426,6 +1553,85 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: isDesktop ? 32 : 16,
     paddingBottom: 100,
+  },
+  queueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: ACCENT + '12',
+    borderWidth: 1,
+    borderColor: ACCENT + '35',
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  queueBannerText: {
+    fontSize: 13,
+    color: colors.text,
+  },
+  queueEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 34,
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  queueEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  queueEmptyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+  },
+  queueList: {
+    gap: 10,
+  },
+  queueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    padding: 12,
+  },
+  queueCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  queueAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: ACCENT + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  queueAvatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: ACCENT,
+  },
+  queueName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  queueMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   stepContent: {},
   stepTitle: {
