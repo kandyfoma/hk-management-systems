@@ -18,249 +18,6 @@ import { Triage, TriageLevel, TriageStatus, TRIAGE_LEVEL_CONFIG, TriageUtils } f
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
-// ─── Sample Data ─────────────────────────────────────────────
-const sampleTriages: Triage[] = [
-  {
-    id: '1',
-    encounterId: 'E260001',
-    patientId: 'P1001',
-    nurseId: 'N001',
-    organizationId: 'ORG001',
-    facilityId: 'FAC001',
-    triageNumber: 'TR260001',
-    triageDate: new Date().toISOString(),
-    level: 1,
-    category: 'resuscitation',
-    acuity: 'critical',
-    chiefComplaint: 'Douleur thoracique sévère, essoufflement',
-    symptomOnset: '2 heures',
-    vitals: {
-      temperature: 37.2,
-      bloodPressureSystolic: 90,
-      bloodPressureDiastolic: 60,
-      heartRate: 110,
-      respiratoryRate: 28,
-      oxygenSaturation: 88,
-      weightEstimated: false,
-      pupilsEqual: true,
-    },
-    painLevel: 9,
-    consciousnessLevel: 'alert',
-    airwayStatus: 'patent',
-    breathingStatus: 'distressed',
-    circulationStatus: 'compensated',
-    mobilityStatus: 'stretcher',
-    allergiesVerified: true,
-    immunocompromised: false,
-    redFlags: ['chest_pain', 'difficulty_breathing'],
-    hasRedFlags: true,
-    isTrauma: false,
-    feverScreening: false,
-    respiratorySymptoms: true,
-    isolationRequired: false,
-    status: 'in_treatment',
-    assignedArea: 'Salle de Réanimation',
-    assignedDoctor: 'Dr. Kalala',
-    arrivalTime: new Date(Date.now() - 30 * 60000).toISOString(),
-    triageStartTime: new Date(Date.now() - 25 * 60000).toISOString(),
-    triageEndTime: new Date(Date.now() - 20 * 60000).toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    encounterId: 'E260002',
-    patientId: 'P1002',
-    nurseId: 'N001',
-    organizationId: 'ORG001',
-    facilityId: 'FAC001',
-    triageNumber: 'TR260002',
-    triageDate: new Date().toISOString(),
-    level: 2,
-    category: 'emergency',
-    acuity: 'high',
-    chiefComplaint: 'Fracture ouverte jambe gauche - Accident moto',
-    symptomOnset: '1 heure',
-    vitals: {
-      temperature: 37.0,
-      bloodPressureSystolic: 130,
-      bloodPressureDiastolic: 85,
-      heartRate: 100,
-      respiratoryRate: 20,
-      oxygenSaturation: 96,
-      weightEstimated: false,
-      pupilsEqual: true,
-    },
-    painLevel: 8,
-    consciousnessLevel: 'alert',
-    airwayStatus: 'patent',
-    breathingStatus: 'normal',
-    circulationStatus: 'normal',
-    mobilityStatus: 'stretcher',
-    allergiesVerified: true,
-    immunocompromised: false,
-    redFlags: ['severe_trauma'],
-    hasRedFlags: true,
-    isTrauma: true,
-    traumaMechanism: 'Accident de moto',
-    feverScreening: false,
-    respiratorySymptoms: false,
-    isolationRequired: false,
-    status: 'completed',
-    assignedArea: 'Salle de Trauma',
-    estimatedWaitTime: 5,
-    arrivalTime: new Date(Date.now() - 45 * 60000).toISOString(),
-    triageStartTime: new Date(Date.now() - 40 * 60000).toISOString(),
-    triageEndTime: new Date(Date.now() - 35 * 60000).toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    encounterId: 'E260003',
-    patientId: 'P1003',
-    nurseId: 'N002',
-    organizationId: 'ORG001',
-    facilityId: 'FAC001',
-    triageNumber: 'TR260003',
-    triageDate: new Date().toISOString(),
-    level: 3,
-    category: 'urgent',
-    acuity: 'moderate',
-    chiefComplaint: 'Fièvre élevée 39.5°C, vomissements depuis hier',
-    symptomOnset: '24 heures',
-    vitals: {
-      temperature: 39.5,
-      bloodPressureSystolic: 110,
-      bloodPressureDiastolic: 70,
-      heartRate: 95,
-      respiratoryRate: 18,
-      oxygenSaturation: 98,
-      weightEstimated: false,
-      pupilsEqual: true,
-    },
-    painLevel: 5,
-    consciousnessLevel: 'alert',
-    airwayStatus: 'patent',
-    breathingStatus: 'normal',
-    circulationStatus: 'normal',
-    mobilityStatus: 'ambulatory',
-    allergiesVerified: true,
-    immunocompromised: false,
-    redFlags: [],
-    hasRedFlags: false,
-    isTrauma: false,
-    feverScreening: true,
-    respiratorySymptoms: false,
-    isolationRequired: true,
-    status: 'completed',
-    assignedArea: 'Salle d\'Attente Prioritaire',
-    estimatedWaitTime: 20,
-    arrivalTime: new Date(Date.now() - 60 * 60000).toISOString(),
-    triageStartTime: new Date(Date.now() - 55 * 60000).toISOString(),
-    triageEndTime: new Date(Date.now() - 50 * 60000).toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '4',
-    encounterId: 'E260004',
-    patientId: 'P1004',
-    nurseId: 'N002',
-    organizationId: 'ORG001',
-    facilityId: 'FAC001',
-    triageNumber: 'TR260004',
-    triageDate: new Date().toISOString(),
-    level: 4,
-    category: 'semi_urgent',
-    acuity: 'low',
-    chiefComplaint: 'Entorse cheville droite - Sport',
-    symptomOnset: '3 heures',
-    vitals: {
-      temperature: 36.8,
-      bloodPressureSystolic: 120,
-      bloodPressureDiastolic: 75,
-      heartRate: 72,
-      respiratoryRate: 16,
-      oxygenSaturation: 99,
-      weightEstimated: false,
-      pupilsEqual: true,
-    },
-    painLevel: 4,
-    consciousnessLevel: 'alert',
-    airwayStatus: 'patent',
-    breathingStatus: 'normal',
-    circulationStatus: 'normal',
-    mobilityStatus: 'assisted',
-    allergiesVerified: true,
-    immunocompromised: false,
-    redFlags: [],
-    hasRedFlags: false,
-    isTrauma: true,
-    traumaMechanism: 'Chute pendant sport',
-    feverScreening: false,
-    respiratorySymptoms: false,
-    isolationRequired: false,
-    status: 'completed',
-    assignedArea: 'Salle d\'Attente Générale',
-    estimatedWaitTime: 45,
-    arrivalTime: new Date(Date.now() - 30 * 60000).toISOString(),
-    triageStartTime: new Date(Date.now() - 25 * 60000).toISOString(),
-    triageEndTime: new Date(Date.now() - 22 * 60000).toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '5',
-    encounterId: 'E260005',
-    patientId: 'P1005',
-    nurseId: 'N001',
-    organizationId: 'ORG001',
-    facilityId: 'FAC001',
-    triageNumber: 'TR260005',
-    triageDate: new Date().toISOString(),
-    level: 5,
-    category: 'non_urgent',
-    acuity: 'minimal',
-    chiefComplaint: 'Renouvellement ordonnance - Hypertension',
-    symptomOnset: 'N/A',
-    vitals: {
-      temperature: 36.6,
-      bloodPressureSystolic: 135,
-      bloodPressureDiastolic: 85,
-      heartRate: 68,
-      respiratoryRate: 14,
-      oxygenSaturation: 99,
-      weightEstimated: false,
-      pupilsEqual: true,
-    },
-    consciousnessLevel: 'alert',
-    airwayStatus: 'patent',
-    breathingStatus: 'normal',
-    circulationStatus: 'normal',
-    mobilityStatus: 'ambulatory',
-    allergiesVerified: true,
-    immunocompromised: false,
-    redFlags: [],
-    hasRedFlags: false,
-    isTrauma: false,
-    feverScreening: false,
-    respiratorySymptoms: false,
-    isolationRequired: false,
-    status: 'completed',
-    assignedArea: 'Salle d\'Attente Générale',
-    estimatedWaitTime: 90,
-    arrivalTime: new Date(Date.now() - 20 * 60000).toISOString(),
-    triageStartTime: new Date(Date.now() - 15 * 60000).toISOString(),
-    triageEndTime: new Date(Date.now() - 12 * 60000).toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const patientNames: Record<string, string> = {
-  'P1001': 'Jean Mukendi',
-  'P1002': 'Marie Kabamba',
-  'P1003': 'Pierre Kasongo',
-  'P1004': 'Sophie Mwamba',
-  'P1005': 'David Mutombo',
-};
-
 // ─── Section Header Component ────────────────────────────────
 function SectionHeader({
   title,
@@ -363,6 +120,7 @@ function StatusBadge({ status }: { status: TriageStatus }) {
 // ─── Triage Queue Card ───────────────────────────────────────
 function TriageQueueCard({ triage, patientName }: { triage: Triage; patientName: string }) {
   const waitTime = TriageUtils.getWaitTime(triage);
+  const displayWaitTime = isNaN(waitTime) ? 0 : waitTime;
   const isOverdue = TriageUtils.isWaitTimeExceeded(triage);
   const config = TRIAGE_LEVEL_CONFIG[triage.level];
 
@@ -427,7 +185,7 @@ function TriageQueueCard({ triage, patientName }: { triage: Triage; patientName:
             color={isOverdue ? colors.error : colors.textSecondary} 
           />
           <Text style={[styles.waitTimeText, isOverdue && { color: colors.error }]}>
-            {waitTime} min
+            {displayWaitTime} min
           </Text>
         </View>
       </View>
@@ -464,7 +222,7 @@ export function EmergencyDashboardScreen({ onNavigateToTriage }: { onNavigateToT
   const loadTriages = useCallback(async () => {
     try {
       setError(null);
-      const res = await api.get('/triage/?limit=200&ordering=-triaged_date');
+      const res = await api.get('/hospital/triage/?limit=200&ordering=-triage_date');
       if (res.success && res.data) {
         const payload = res.data as any;
         const raw: any[] = Array.isArray(payload) ? payload : (payload.results ?? []);
@@ -559,7 +317,10 @@ export function EmergencyDashboardScreen({ onNavigateToTriage }: { onNavigateToT
       },
       inTreatment: triages.filter(t => t.status === 'in_treatment').length,
       waiting: triages.filter(t => t.status === 'completed' || t.status === 'in_progress').length,
-      avgWait: triages.length > 0 ? Math.round(triages.reduce((acc, t) => acc + TriageUtils.getWaitTime(t), 0) / triages.length) : 0,
+      avgWait: triages.length > 0 ? Math.round(triages.reduce((acc, t) => {
+        const wt = TriageUtils.getWaitTime(t);
+        return acc + (isNaN(wt) ? 0 : wt);
+      }, 0) / triages.length) : 0,
     };
   }, [triages]);
 
@@ -678,7 +439,7 @@ export function EmergencyDashboardScreen({ onNavigateToTriage }: { onNavigateToT
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.infoLight }]}>
           <Ionicons name="time" size={24} color={colors.info} />
-          <Text style={styles.statValue}>{stats.avgWait} min</Text>
+          <Text style={styles.statValue}>{isNaN(stats.avgWait) ? 0 : stats.avgWait} min</Text>
           <Text style={styles.statLabel}>Attente Moy.</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.successLight }]}>
@@ -786,6 +547,45 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '600',
     fontSize: 14,
+  },
+
+  // Loading & Error States
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 100,
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: colors.errorLight,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.error,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: colors.error,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+  },
+  retryBtnText: {
+    color: '#FFF',
+    fontWeight: '600',
+    fontSize: 13,
   },
 
   // Level Cards

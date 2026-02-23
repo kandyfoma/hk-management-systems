@@ -63,6 +63,22 @@ urlpatterns = [
     path('beds/occupancy/', views.bed_occupancy_view, name='bed_occupancy'),
     
     # ═══════════════════════════════════════════════════════════════
+    #  TRIAGE ENDPOINTS
+    # ═══════════════════════════════════════════════════════════════
+    
+    # Main CRUD endpoints
+    path('triage/', views.TriageListCreateAPIView.as_view(), name='triage_list_create'),
+    path('triage/<uuid:pk>/', views.TriageDetailAPIView.as_view(), name='triage_detail'),
+    
+    # Specialized endpoints
+    path('triage/patient/<uuid:patient_id>/', 
+         views.triage_by_patient_view, 
+         name='triage_by_patient'),
+    path('triage/level/<int:level>/', 
+         views.triage_by_level_view, 
+         name='triage_by_level'),
+    
+    # ═══════════════════════════════════════════════════════════════
     #  CHOICE FIELDS ENDPOINTS
     # ═══════════════════════════════════════════════════════════════
     
@@ -75,4 +91,10 @@ urlpatterns = [
     # ═══════════════════════════════════════════════════════════════
     
     path('dashboard/', views.hospital_dashboard_view, name='hospital_dashboard'),
+    
+    # ═══════════════════════════════════════════════════════════════
+    #  CONSULTATION RECORDING TRANSCRIPTION
+    # ═══════════════════════════════════════════════════════════════
+    
+    path('transcribe-recording/', views.ConsultationRecordingTranscriptionView.as_view(), name='transcribe_recording'),
 ]

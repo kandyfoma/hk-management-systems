@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -10,10 +10,15 @@ import {
   Dimensions,
   Alert,
   Modal,
+  Animated,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio, Recording, Sound } from 'expo-audio';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import ApiService from '../../../services/ApiService';
 import { Patient } from '../../../models/Patient';
 import { Encounter, EncounterType, EncounterStatus } from '../../../models/Encounter';
 import { PendingHospitalConsultation, HOSPITAL_PENDING_CONSULTATIONS_KEY } from './HospitalPatientIntakeScreen';
@@ -24,6 +29,45 @@ const isDesktop = width >= 1024;
 
 const ACCENT = colors.info;
 
+// ─── Glitter Animation Helper ───
+const useGlitterAnimation = () => {
+  const opacity = new Animated.Value(1);
+  const scale = new Animated.Value(1);
+  
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 0.5,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1.1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    ).start();
+  }, [opacity, scale]);
+  
+  return { opacity, scale };
+};
+
 // ═══════════════════════════════════════════════════════════════
 //  Step-by-step wizard for hospital consultation
 // ═══════════════════════════════════════════════════════════════
@@ -32,6 +76,7 @@ type ConsultationStep =
   | 'patient_identification'
   | 'visit_reason'
   | 'physical_exam'
+  | 'generate_notes'
   | 'diagnosis'
   | 'treatment_plan'
   | 'prescriptions'
@@ -41,6 +86,7 @@ const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons
   { key: 'patient_identification', label: 'Identification', icon: 'person' },
   { key: 'visit_reason', label: 'Motif de Consultation', icon: 'clipboard' },
   { key: 'physical_exam', label: 'Examen Physique', icon: 'body' },
+  { key: 'generate_notes', label: 'Générer Notes', icon: 'document-text' },
   { key: 'diagnosis', label: 'Diagnostic', icon: 'analytics' },
   { key: 'treatment_plan', label: 'Plan de Traitement', icon: 'medkit' },
   { key: 'prescriptions', label: 'Ordonnances', icon: 'document-text' },
@@ -221,8 +267,39 @@ export function HospitalConsultationScreen({
   onBack,
   onComplete,
 }: HospitalConsultationScreenProps) {
+  // ─── Recording state ──
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [audioUri, setAudioUri] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [soundObject, setSoundObject] = useState<Sound | null>(null);
+  const recordingRef = useRef<Recording | null>(null);
+  const webMediaRecorderRef = useRef<any>(null);
+  const webMediaChunksRef = useRef<BlobPart[]>([]);
+  const webAudioElementRef = useRef<any>(null);
+  const webStreamRef = useRef<any>(null);
+  const webStopResolverRef = useRef<((uri: string | null) => void) | null>(null);
+  const webPromptOnStopRef = useRef(true);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const glitterAnim = useGlitterAnimation();
+  const notesGenerationInitiatedRef = useRef(false);
+
+  // ─── Generated notes state ──
+  const [generatedNotes, setGeneratedNotes] = useState<string>('');
+  const [editedNotes, setEditedNotes] = useState<string>('');
+  const [generatingNotes, setGeneratingNotes] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [consultationNotes, setConsultationNotes] = useState<string>('');
+
+  // ─── Custom exam types ──
+  const [customExamTypes, setCustomExamTypes] = useState<string[]>([]);
+  const [showAddExamModal, setShowAddExamModal] = useState(false);
+  const [newExamName, setNewExamName] = useState('');
+
   // ─── Step state ──
-  const [currentStep, setCurrentStep] = useState<ConsultationStep>('patient_identification');
+  const [currentStep, setCurrentStep] = useState<ConsultationStep>(
+    patientId ? 'visit_reason' : 'patient_identification'
+  );
   const currentStepIdx = STEPS.findIndex(s => s.key === currentStep);
 
   // ─── Patient identification ──
@@ -282,7 +359,6 @@ export function HospitalConsultationScreen({
   const [editingPrescription, setEditingPrescription] = useState<Partial<PrescriptionItem>>({});
 
   // ─── Summary ──
-  const [consultationNotes, setConsultationNotes] = useState('');
   const [disposition, setDisposition] = useState<'discharged' | 'admitted' | 'transferred' | 'observation'>('discharged');
 
   // ─── Filtered patients for search ──
@@ -326,13 +402,10 @@ export function HospitalConsultationScreen({
       setChiefComplaint(pending.visitReason || '');
       setReferredBy(pending.referredBy || 'Accueil Consultation');
       setVitals(pending.vitals || {});
-      setCurrentStep('physical_exam');
+      setCurrentStep('visit_reason');
 
-      const updated = list.map(item =>
-        item.id === pendingId ? { ...item, status: 'in_consultation' as const } : item,
-      );
-      await AsyncStorage.setItem(HOSPITAL_PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
-      setPendingConsultations(updated.filter(item => item.status === 'waiting'));
+      // Keep patient in waiting list until consultation is completed
+      // Patient remains in queue until doctor clicks complete button
     } catch (err) {
       console.error('[HospitalConsultation] Error loading pending:', err);
       Alert.alert('Erreur', 'Impossible de charger ce patient depuis la file d\'attente.');
@@ -376,6 +449,352 @@ export function HospitalConsultationScreen({
     }
   };
 
+  // ─── Recording functions ───
+  const formatTime = (ms: number): string => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const startRecording = async () => {
+    try {
+      console.log('[Recording] Starting recording...');
+      console.log('[Recording] Platform:', Platform.OS);
+      console.log('[Recording] Current step:', currentStep);
+      console.log('[Recording] Is recording:', isRecording);
+
+      // Web fallback via MediaRecorder
+      if (Platform.OS === 'web') {
+        const mediaDevices = (navigator as any)?.mediaDevices;
+        const MediaRecorderCtor = (globalThis as any)?.MediaRecorder;
+
+        if (!mediaDevices?.getUserMedia || !MediaRecorderCtor) {
+          Alert.alert(
+            'Non disponible',
+            'L\'enregistrement audio n\'est pas supporté sur ce navigateur.'
+          );
+          return;
+        }
+
+        const stream = await mediaDevices.getUserMedia({ audio: true });
+        webStreamRef.current = stream;
+        webMediaChunksRef.current = [];
+
+        const recorder = new MediaRecorderCtor(stream);
+        recorder.ondataavailable = (event: any) => {
+          if (event.data && event.data.size > 0) {
+            webMediaChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const mimeType = recorder.mimeType || 'audio/webm';
+          const blob = new Blob(webMediaChunksRef.current, { type: mimeType });
+          const uri = URL.createObjectURL(blob);
+
+          setAudioUri(uri);
+          setIsRecording(false);
+
+          if (webStreamRef.current) {
+            webStreamRef.current.getTracks().forEach((track: any) => track.stop());
+            webStreamRef.current = null;
+          }
+
+          if (webPromptOnStopRef.current) {
+            Alert.alert(
+              '🎙️ Enregistrement Terminé',
+              'Voulez-vous utiliser cet enregistrement pour générer automatiquement les notes de consultation avec l\'IA?',
+              [
+                { text: 'Non, continuer', onPress: () => {} },
+                {
+                  text: 'Oui, générer les notes',
+                  onPress: () => generateNotesFromRecording(uri),
+                },
+              ]
+            );
+          }
+
+          if (webStopResolverRef.current) {
+            webStopResolverRef.current(uri);
+            webStopResolverRef.current = null;
+          }
+        };
+
+        webMediaRecorderRef.current = recorder;
+        recorder.start();
+        setIsRecording(true);
+        setRecordingDuration(0);
+        setAudioUri(null);
+
+        timerRef.current = setInterval(() => {
+          setRecordingDuration(prev => prev + 100);
+        }, 100);
+
+        console.log('[Recording] Web recording started successfully');
+        return;
+      }
+
+      // Request microphone permissions
+      const permission = await Audio.requestPermissionsAsync();
+      console.log('[Recording] Permission result:', permission);
+      
+      if (!permission.granted) {
+        console.error('[Recording] Permission not granted:', permission);
+        Alert.alert('Permission refusée', 'L\'accès au microphone est nécessaire pour enregistrer.');
+        return;
+      }
+
+      console.log('[Recording] Setting audio mode...');
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      console.log('[Recording] Creating recording...');
+      const recording = await Recording.createAsync({
+        isMeteringEnabled: true,
+        android: {
+          extension: '.m4a',
+          outputFormat: 2,
+          audioEncoder: 3,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: 1,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+      });
+
+      console.log('[Recording] Recording created:', recording);
+      recordingRef.current = recording;
+      setIsRecording(true);
+      setRecordingDuration(0);
+      setAudioUri(null);
+
+      // Start timer
+      timerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 100);
+      }, 100);
+
+      console.log('[Recording] Recording started successfully');
+    } catch (err) {
+      console.error('[Recording] Error starting:', err);
+      console.error('[Recording] Error details:', JSON.stringify(err));
+      Alert.alert('Erreur', 'Impossible de démarrer l\'enregistrement: ' + (err as any)?.message);
+    }
+  };
+
+  const stopRecording = async (options: { promptForNotes?: boolean } = {}): Promise<string | null> => {
+    try {
+      const promptForNotes = options.promptForNotes ?? true;
+      console.log('[Recording] Stopping recording...');
+      console.log('[Recording] recordingRef.current exists:', !!recordingRef.current);
+
+      if (Platform.OS === 'web') {
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        const recorder = webMediaRecorderRef.current;
+        if (!recorder || recorder.state === 'inactive') {
+          console.log('[Recording] No web recording in progress');
+          return audioUri;
+        }
+
+        webPromptOnStopRef.current = promptForNotes;
+        return await new Promise<string | null>((resolve) => {
+          webStopResolverRef.current = resolve;
+          recorder.stop();
+        });
+      }
+      
+      if (!recordingRef.current) {
+        console.log('[Recording] No recording in progress');
+        return audioUri;
+      }
+
+      if (timerRef.current) clearInterval(timerRef.current);
+
+      console.log('[Recording] Stopping and unloading...');
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+
+      console.log('[Recording] Recording saved to:', uri);
+      setAudioUri(uri || null);
+      setIsRecording(false);
+      recordingRef.current = null;
+
+      // Ask if user wants to use recording for notes
+      if (promptForNotes) {
+        Alert.alert(
+          '🎙️ Enregistrement Terminé',
+          'Voulez-vous utiliser cet enregistrement pour générer automatiquement les notes de consultation avec l\'IA?',
+          [
+            { text: 'Non, continuer', onPress: () => {} },
+            {
+              text: 'Oui, générer les notes',
+              onPress: () => generateNotesFromRecording(uri),
+            },
+          ]
+        );
+      }
+
+      return uri || null;
+    } catch (err) {
+      console.error('[Recording] Error stopping:', err);
+      console.error('[Recording] Error details:', JSON.stringify(err));
+      Alert.alert('Erreur', 'Impossible d\'arrêter l\'enregistrement: ' + (err as any)?.message);
+      return null;
+    }
+  };
+
+  const playRecording = async () => {
+    try {
+      if (!audioUri) return;
+
+      if (Platform.OS === 'web') {
+        if (webAudioElementRef.current) {
+          webAudioElementRef.current.pause();
+          webAudioElementRef.current = null;
+        }
+
+        const htmlAudio = new (globalThis as any).Audio(audioUri);
+        webAudioElementRef.current = htmlAudio;
+        setIsPlaying(true);
+
+        htmlAudio.onended = () => {
+          setIsPlaying(false);
+          webAudioElementRef.current = null;
+        };
+
+        await htmlAudio.play();
+        return;
+      }
+
+      const sound = await Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: false }
+      );
+      setSoundObject(sound);
+      setIsPlaying(true);
+
+      await sound.playAsync();
+
+      // Monitor playback
+      sound.setOnPlaybackStatusUpdate(status => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+          setSoundObject(null);
+        }
+      });
+    } catch (err) {
+      console.error('[Recording] Error playing:', err);
+      Alert.alert('Erreur', 'Impossible de lire l\'enregistrement.');
+    }
+  };
+
+  const stopPlayback = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        if (webAudioElementRef.current) {
+          webAudioElementRef.current.pause();
+          setIsPlaying(false);
+        }
+        return;
+      }
+
+      if (soundObject) {
+        await soundObject.pauseAsync();
+        setIsPlaying(false);
+      }
+    } catch (err) {
+      console.error('[Recording] Error stopping playback:', err);
+    }
+  };
+
+  const generateNotesFromRecording = async (uri: string | null) => {
+    if (!uri) return;
+
+    try {
+      Alert.alert('📝', 'Génération des notes en cours...');
+      
+      // Read audio file and create FormData
+      const formData = new FormData();
+      
+      // Convert URI to blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      formData.append('audio', blob, 'consultation_recording.wav');
+      
+      // Make API call to transcribe with Gemini
+      const api = ApiService.getInstance();
+      const result = await api.post('/hospital/transcribe-recording/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      if (result.success && result.data) {
+        const notes = result.data;
+        
+        // Populate the consultation form with generated notes
+        if (notes.chief_complaint) setChiefComplaint(notes.chief_complaint);
+        if (notes.history_of_present_illness) setHistoryOfPresentIllness(notes.history_of_present_illness);
+        if (notes.assessment) {
+          // Add diagnosis from assessment
+          if (notes.assessment.trim()) {
+            setDiagnoses([{
+              description: notes.assessment,
+              type: 'primary',
+              certainty: 'suspected',
+            }]);
+          }
+        }
+        if (notes.treatment_plan) setTreatmentNotes(notes.treatment_plan);
+        
+        Alert.alert(
+          '✅ Notes Générées',
+          'Les notes de consultation ont été générées avec succès. Vous pouvez les modifier et continuer.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Erreur', result.data?.error || 'Impossible de générer les notes.');
+      }
+    } catch (err) {
+      console.error('[Recording] Error generating notes:', err);
+      Alert.alert('Erreur', 'Impossible de générer les notes de consultation.');
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (webMediaRecorderRef.current && webMediaRecorderRef.current.state !== 'inactive') {
+        webMediaRecorderRef.current.stop();
+      }
+      if (webStreamRef.current) {
+        webStreamRef.current.getTracks().forEach((track: any) => track.stop());
+      }
+      if (webAudioElementRef.current) {
+        webAudioElementRef.current.pause();
+      }
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync();
+      }
+      if (soundObject) {
+        soundObject.unloadAsync();
+      }
+    };
+  }, [soundObject]);
+
   const canProceed = useMemo(() => {
     switch (currentStep) {
       case 'patient_identification':
@@ -384,6 +803,8 @@ export function HospitalConsultationScreen({
         return !!chiefComplaint.trim();
       case 'physical_exam':
         return true; // Optional
+      case 'generate_notes':
+        return !!consultationNotes.trim(); // Must have validated notes
       case 'diagnosis':
         return diagnoses.length > 0;
       case 'treatment_plan':
@@ -395,7 +816,7 @@ export function HospitalConsultationScreen({
       default:
         return true;
     }
-  }, [currentStep, selectedPatient, chiefComplaint, diagnoses]);
+  }, [currentStep, selectedPatient, chiefComplaint, diagnoses, consultationNotes]);
 
   // ─── Add diagnosis ──
   const addDiagnosis = () => {
@@ -452,7 +873,7 @@ export function HospitalConsultationScreen({
       // Would include all other data in real implementation
     };
 
-    // Mark pending consultation as completed if it exists
+    // Mark pending consultation as completed - remove from waiting list
     try {
       const stored = await AsyncStorage.getItem(HOSPITAL_PENDING_CONSULTATIONS_KEY);
       if (stored) {
@@ -463,6 +884,8 @@ export function HospitalConsultationScreen({
             : item,
         );
         await AsyncStorage.setItem(HOSPITAL_PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
+        // Update displayed queue to remove completed patient from waiting list
+        setPendingConsultations(updated.filter(item => item.status === 'waiting'));
       }
     } catch (err) {
       console.error('Error updating pending consultation:', err);
@@ -486,6 +909,83 @@ export function HospitalConsultationScreen({
     );
   };
 
+  // ─── Generate consultation notes from recording and form data ──
+  const generateConsultationNotes = async () => {
+    try {
+      let recordingUri = audioUri;
+
+      // Stop recording if still active
+      if (isRecording) {
+        recordingUri = await stopRecording({ promptForNotes: false });
+      }
+
+      // Check if we have audio
+      if (!recordingUri) {
+        Alert.alert('Enregistrement', 'Aucun enregistrement audio trouvé. Veuillez enregistrer avant de continuer.');
+        return;
+      }
+
+      // Show loading indicator
+      setGeneratingNotes(true);
+
+      // Collect all consultation data
+      const consultationData = {
+        patientId: selectedPatient?.id,
+        patientName: selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : '',
+        encounterType,
+        chiefComplaint,
+        historyOfPresentIllness,
+        referredBy,
+        vitals,
+        physicalExam,
+        allergies: selectedPatient?.allergies || [],
+        chronicConditions: selectedPatient?.chronicConditions || [],
+        currentMedications: selectedPatient?.currentMedications || [],
+      };
+
+      // Create FormData with audio file and consultation context
+      const formData = new FormData();
+
+      // Convert audio URI to blob
+      const response = await fetch(recordingUri);
+      const blob = await response.blob();
+      formData.append('audio', blob, 'consultation_recording.wav');
+      formData.append('consultationContext', JSON.stringify(consultationData));
+
+      // Call API to generate notes
+      const api = ApiService.getInstance();
+      const result = await api.post('/hospital/transcribe-recording/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (result.success && result.data) {
+        const generatedText = result.data.structured_notes || result.data.transcription || '';
+        setGeneratedNotes(generatedText);
+        setEditedNotes(generatedText);
+        setShowNotesModal(true);
+      } else {
+        Alert.alert('Erreur', result.data?.error || 'Impossible de générer les notes.');
+      }
+    } catch (err) {
+      console.error('[Notes] Error generating notes:', err);
+      Alert.alert('Erreur', 'Impossible de générer les notes de consultation.');
+    } finally {
+      setGeneratingNotes(false);
+    }
+  };
+
+  // Auto-trigger note generation when entering generate_notes step
+  useEffect(() => {
+    if (currentStep === 'generate_notes' && !notesGenerationInitiatedRef.current) {
+      notesGenerationInitiatedRef.current = true;
+      generateConsultationNotes();
+    } else if (currentStep !== 'generate_notes') {
+      notesGenerationInitiatedRef.current = false;
+    }
+  }, [currentStep]);
+
   // ═══════════════════════════════════════════════════════════════
   //  RENDER STEP CONTENT
   // ═══════════════════════════════════════════════════════════════
@@ -498,6 +998,8 @@ export function HospitalConsultationScreen({
         return renderVisitReason();
       case 'physical_exam':
         return renderPhysicalExam();
+      case 'generate_notes':
+        return renderGenerateNotes();
       case 'diagnosis':
         return renderDiagnosis();
       case 'treatment_plan':
@@ -781,9 +1283,221 @@ export function HospitalConsultationScreen({
             </View>
           );
         })}
+
+        {/* Custom Exam Types */}
+        {customExamTypes.length > 0 && (
+          <View style={styles.customExamsSection}>
+            <Text style={styles.customExamsTitle}>Examens Personnalisés</Text>
+            {customExamTypes.map(examType => {
+              const examKey = `custom_${examType}`;
+              const value = (physicalExam as any)[examKey] || 'not_examined';
+              const notes = `${examKey}_Notes`;
+
+              return (
+                <View key={examType} style={styles.examSection}>
+                  <View style={styles.examHeader}>
+                    <Ionicons name="add-circle-outline" size={20} color={ACCENT} />
+                    <Text style={styles.examLabel}>{examType}</Text>
+                  </View>
+
+                  <View style={styles.examOptions}>
+                    {[
+                      { key: 'normal', label: 'Normal', color: colors.success },
+                      { key: 'abnormal', label: 'Anormal', color: colors.error },
+                      { key: 'not_examined', label: 'Non examiné', color: colors.textSecondary },
+                    ].map(option => {
+                      const isSelected = value === option.key;
+                      return (
+                        <TouchableOpacity
+                          key={option.key}
+                          style={[
+                            styles.examOption,
+                            isSelected && { backgroundColor: option.color + '20', borderColor: option.color },
+                          ]}
+                          onPress={() =>
+                            setPhysicalExam({ ...physicalExam, [examKey]: option.key })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.examOptionText,
+                              isSelected && { color: option.color, fontWeight: '600' },
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {value === 'abnormal' && (
+                    <TextInput
+                      style={styles.examNotes}
+                      placeholder="Décrivez les anomalies..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={(physicalExam as any)[notes] || ''}
+                      onChangeText={text =>
+                        setPhysicalExam({ ...physicalExam, [notes]: text })
+                      }
+                      multiline
+                    />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Add Custom Exam Button */}
+        <TouchableOpacity
+          style={styles.addCustomExamButton}
+          onPress={() => setShowAddExamModal(true)}
+        >
+          <Ionicons name="add" size={20} color="#FFF" />
+          <Text style={styles.addCustomExamButtonText}>Ajouter Type d'Examen</Text>
+        </TouchableOpacity>
+
+        {/* Add Custom Exam Modal */}
+        <Modal visible={showAddExamModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Ajouter Type d'Examen</Text>
+                <TouchableOpacity onPress={() => setShowAddExamModal(false)}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+                <Text style={styles.fieldLabel}>Nom de l'examen *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: Réflexe palpébral, Mobilité..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={newExamName}
+                  onChangeText={setNewExamName}
+                />
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                  onPress={() => setShowAddExamModal(false)}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  onPress={() => {
+                    if (newExamName.trim() && !customExamTypes.includes(newExamName.trim())) {
+                      setCustomExamTypes([...customExamTypes, newExamName.trim()]);
+                      setNewExamName('');
+                      setShowAddExamModal(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.modalButtonPrimaryText}>Ajouter</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   };
+
+  // ─── Step 4: Generate Notes ────────────────────────────────
+  const renderGenerateNotes = () => (
+    <View style={styles.stepContent}>
+      <Text style={styles.stepTitle}>Générer Notes de Consultation</Text>
+      <Text style={styles.stepSubtitle}>
+        Les notes sont générées par IA à partir de votre enregistrement audio
+      </Text>
+
+      {generatingNotes ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={ACCENT} style={{ marginBottom: 16 }} />
+          <Text style={styles.loadingText}>Analyse en cours...</Text>
+          <Text style={styles.loadingSubtext}>
+            Transcription et génération des notes médicales
+          </Text>
+        </View>
+      ) : (
+        <View>
+          {!showNotesModal && (
+            <View style={styles.notesPreview}>
+              <View style={styles.notesInfo}>
+                <Ionicons name="document-text" size={32} color={ACCENT} />
+                <Text style={styles.notesInfoTitle}>Prêt à générer les notes</Text>
+                <Text style={styles.notesInfoSubtitle}>
+                  Cliquez ci-dessous pour générer les notes à partir de votre enregistrement
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.generateButton}
+                onPress={generateConsultationNotes}
+              >
+                <Ionicons name="sparkles" size={20} color="#FFF" />
+                <Text style={styles.generateButtonText}>Générer les Notes</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {showNotesModal && (
+            <View style={styles.notesModalContent}>
+              <View style={styles.notesHeader}>
+                <Text style={styles.notesTitle}>Notes de Consultation - Révision</Text>
+                <Text style={styles.notesSubtitle}>Vérifiez et modifiez les notes générées</Text>
+              </View>
+
+              <TextInput
+                style={styles.notesEditor}
+                placeholder="Les notes de consultation apparaîtront ici..."
+                placeholderTextColor={colors.textSecondary}
+                value={editedNotes}
+                onChangeText={setEditedNotes}
+                multiline
+                scrollEnabled
+              />
+
+              <View style={styles.notesActions}>
+                <TouchableOpacity
+                  style={[styles.notesButton, styles.notesButtonSecondary]}
+                  onPress={() => {
+                    setEditedNotes(generatedNotes);
+                  }}
+                >
+                  <Ionicons name="refresh" size={18} color={colors.primary} />
+                  <Text style={styles.notesButtonSecondaryText}>Réinitialiser</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.notesButton, styles.notesButtonPrimary]}
+                  onPress={() => {
+                    if (editedNotes.trim()) {
+                      setConsultationNotes(editedNotes);
+                      setShowNotesModal(false);
+                      // Auto-proceed to next step
+                      setTimeout(() => {
+                        goNext();
+                      }, 300);
+                    } else {
+                      Alert.alert('Erreur', 'Veuillez entrer le contenu des notes');
+                    }
+                  }}
+                >
+                  <Ionicons name="checkmark" size={18} color="#FFF" />
+                  <Text style={styles.notesButtonPrimaryText}>Valider</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
 
   // ─── Step 5: Diagnosis ─────────────────────────────────────
   const renderDiagnosis = () => (
@@ -1430,6 +2144,55 @@ export function HospitalConsultationScreen({
           )}
         </View>
         <View style={styles.headerRight}>
+          {selectedPatient && currentStep === 'visit_reason' && (
+            <>
+              {console.log('[RecordingUI] Recording controls visible - selectedPatient:', !!selectedPatient, 'currentStep:', currentStep, 'isRecording:', isRecording)}
+              <View style={styles.recordingControls}>
+              {audioUri && !isRecording && (
+                <TouchableOpacity
+                  style={styles.recordButton}
+                  onPress={() => (isPlaying ? stopPlayback() : playRecording())}
+                >
+                  <Ionicons
+                    name={isPlaying ? 'pause-circle' : 'play-circle'}
+                    size={18}
+                    color={ACCENT}
+                  />
+                </TouchableOpacity>
+              )}
+              <Animated.View
+                style={[
+                  styles.recordingButton,
+                  currentStep === 'visit_reason' && {
+                    opacity: glitterAnim.opacity,
+                    transform: [{ scale: glitterAnim.scale }],
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[styles.iconButton, isRecording && styles.recordingActive]}
+                  onPress={() => {
+                    console.log('[Recording Button] Clicked - isRecording:', isRecording);
+                    if (isRecording) {
+                      console.log('[Recording Button] Stopping recording');
+                      stopRecording();
+                    } else {
+                      console.log('[Recording Button] Starting recording');
+                      startRecording();
+                    }
+                  }}
+                >
+                  <Ionicons
+                    name={isRecording ? 'stop-circle' : 'radio-button-on'}
+                    size={20}
+                    color={isRecording ? colors.error : ACCENT}
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+              {isRecording && <Text style={styles.recordingTime}>{formatTime(recordingDuration)}</Text>}
+            </View>
+            </>
+          )}
           <TouchableOpacity style={styles.saveButton}>
             <Ionicons name="save-outline" size={20} color={ACCENT} />
           </TouchableOpacity>
@@ -1565,6 +2328,30 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: ACCENT + '15',
     borderRadius: borderRadius.md,
+  },
+  recordingButton: {
+    padding: 8,
+  },
+  recordingControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordButton: {
+    padding: 8,
+  },
+  recordingTime: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.error,
+    minWidth: 35,
+  },
+  iconButton: {
+    padding: 8,
+    borderRadius: borderRadius.md,
+  },
+  recordingActive: {
+    backgroundColor: colors.error + '15',
   },
 
   // Steps
@@ -1930,6 +2717,35 @@ const styles = StyleSheet.create({
     color: colors.text,
     minHeight: 60,
     textAlignVertical: 'top',
+  },
+  
+  // Custom Exam Types
+  customExamsSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.outline,
+  },
+  customExamsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: ACCENT,
+    marginBottom: 12,
+  },
+  addCustomExamButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: ACCENT,
+    borderRadius: borderRadius.lg,
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  addCustomExamButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
   },
 
   // Diagnosis
@@ -2327,6 +3143,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '500',
+  },
+
+  // ─── Notes Styles ─
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl * 2,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.lg,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  notesPreview: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl * 2,
+  },
+  notesInfo: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  notesInfoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.md,
+  },
+  notesInfoSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  generateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ACCENT,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    gap: spacing.sm,
+  },
+  generateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  notesModalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    width: '100%',
+  },
+  notesHeader: {
+    marginBottom: spacing.lg,
+  },
+  notesTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  notesSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  notesEditor: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    fontSize: 13,
+    color: colors.text,
+    minHeight: 300,
+    maxHeight: 400,
+    textAlignVertical: 'top',
+    marginBottom: spacing.lg,
+  },
+  notesActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  notesButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  notesButtonSecondary: {
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  notesButtonSecondaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  notesButtonPrimary: {
+    backgroundColor: ACCENT,
+  },
+  notesButtonPrimaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFF',
   },
 });
 

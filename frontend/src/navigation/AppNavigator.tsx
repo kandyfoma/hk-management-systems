@@ -339,6 +339,9 @@ function DesktopApp() {
   // Hospital consultation state
   const [consultationPatientId, setConsultationPatientId] = useState<string | null>(null);
   const [pendingHospitalConsultationToLoad, setPendingHospitalConsultationToLoad] = useState<string | null>(null);
+  
+  // Emergency/Triage refresh trigger
+  const [emergencyRefreshTrigger, setEmergencyRefreshTrigger] = useState(0);
 
   // Occupational health draft management
   const [draftToLoad, setDraftToLoad] = useState<string | null>(null);
@@ -578,12 +581,24 @@ function DesktopApp() {
 
     // Hospital screens
     if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent onNavigate={handleScreenChange} />;
-    if (activeScreen === 'hp-emergency') return <EmergencyDashboardScreen />;
+    if (activeScreen === 'hp-emergency') return (
+      <EmergencyDashboardScreen 
+        key={`emergency-${emergencyRefreshTrigger}`}
+        onNavigateToTriage={() => setActiveScreen('hp-triage')}
+      />
+    );
     if (activeScreen === 'hp-triage') return (
       <TriageScreen 
         onNavigateToRegisterPatient={() => {
           setActiveScreen('hp-patients');
           setPatientView('register');
+        }}
+        onTriageSaved={() => {
+          setEmergencyRefreshTrigger(prev => prev + 1);
+        }}
+        onNavigateToEmergency={() => {
+          setEmergencyRefreshTrigger(prev => prev + 1);
+          setActiveScreen('hp-emergency');
         }}
       />
     );

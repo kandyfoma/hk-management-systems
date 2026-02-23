@@ -5,16 +5,19 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count, Q
 from django.utils import timezone
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import (
     HospitalEncounter, VitalSigns, HospitalDepartment,
-    HospitalBed, EncounterType, EncounterStatus, BedStatus
+    HospitalBed, EncounterType, EncounterStatus, BedStatus,
+    Triage, TriageLevel, TriageStatus
 )
 from .serializers import (
     HospitalEncounterSerializer, HospitalEncounterCreateSerializer, HospitalEncounterListSerializer,
     HospitalEncounterDetailSerializer, VitalSignsSerializer, VitalSignsCreateSerializer, VitalSignsListSerializer,
     HospitalDepartmentSerializer, HospitalBedSerializer, HospitalBedListSerializer,
-    EncounterTypeChoicesSerializer, EncounterStatusChoicesSerializer, BedStatusChoicesSerializer
+    EncounterTypeChoicesSerializer, EncounterStatusChoicesSerializer, BedStatusChoicesSerializer,
+    TriageSerializer, TriageListSerializer
 )
 from apps.audit.decorators import audit_critical_action
 
@@ -548,3 +551,158 @@ def patient_medical_summary_view(request, patient_id):
             {'error': str(e)}, 
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  TRIAGE API VIEWS
+# ═══════════════════════════════════════════════════════════════
+
+class TriageListCreateAPIView(generics.ListCreateAPIView):
+    """List and create triages"""
+    queryset = Triage.objects.select_related(
+        'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
+    )
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['patient', 'triage_level', 'status', 'organization']
+    search_fields = ['patient__first_name', 'patient__last_name', 'patient__patient_number', 'triage_number', 'chief_complaint']
+    ordering_fields = ['triage_date', 'triage_level', 'created_at']
+    ordering = ['-triage_date']
+
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return TriageListSerializer
+        return TriageSerializer
+
+    @audit_critical_action(description="Création d'un triage")
+    def perform_create(self, serializer):
+        serializer.save(
+            organization=self.request.user.organization,
+            nurse=self.request.user
+        )
+
+
+class TriageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a triage"""
+    queryset = Triage.objects.select_related(
+        'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
+    )
+    serializer_class = TriageSerializer
+
+    @audit_critical_action(description="Mise à jour d'un triage")
+    def perform_update(self, serializer):
+        serializer.save()
+
+    @audit_critical_action(description="Suppression d'un triage")
+    def perform_destroy(self, instance):
+        instance.delete()
+
+
+@api_view(['GET'])
+def triage_by_patient_view(request, patient_id):
+    """Get triages for a specific patient"""
+    try:
+        triages = Triage.objects.filter(patient_id=patient_id).select_related(
+            'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
+        ).order_by('-triage_date')
+        
+        serializer = TriageListSerializer(triages, many=True)
+        return Response({
+            'success': True,
+            'count': triages.count(),
+            'results': serializer.data
+        })
+    except Exception as e:
+        return Response(
+            {'success': False, 'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['GET'])
+def triage_by_level_view(request, level):
+    """Get triages by priority level"""
+    try:
+        triages = Triage.objects.filter(triage_level=level, status__in=[
+            TriageStatus.IN_PROGRESS, TriageStatus.COMPLETED
+        ]).select_related(
+            'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
+        ).order_by('-triage_date')
+        
+        serializer = TriageListSerializer(triages, many=True)
+        return Response({
+            'success': True,
+            'level': level,
+            'count': triages.count(),
+            'results': serializer.data
+        })
+    except Exception as e:
+        return Response(
+            {'success': False, 'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+# ═══════════════════════════════════════════════════════════════
+#  CONSULTATION RECORDING TRANSCRIPTION API
+# ═══════════════════════════════════════════════════════════════
+
+class ConsultationRecordingTranscriptionView(generics.CreateAPIView):
+    """
+    Transcribe consultation recording and generate structured notes using Gemini Flash
+    
+    POST /api/v1/hospital/transcribe-recording/
+    - Accepts audio file upload
+    - Uses Gemini Flash to transcribe and generate clinical notes
+    - Returns structured consultation notes
+    """
+    parser_classes = (MultiPartParser, FormParser)
+    
+    def post(self, request, *args, **kwargs):
+        """Handle audio file upload and transcription"""
+        try:
+            audio_file = request.FILES.get('audio')
+            if not audio_file:
+                return Response(
+                    {'success': False, 'error': 'No audio file provided'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Extract consultation context if provided
+            import json
+            consultation_context = None
+            if 'consultationContext' in request.POST:
+                try:
+                    consultation_context = json.loads(request.POST.get('consultationContext', '{}'))
+                except json.JSONDecodeError:
+                    logger = __import__('logging').getLogger(__name__)
+                    logger.warning("Could not parse consultation context")
+            
+            # Import here to avoid circular imports
+            from .gemini_service import get_gemini_service
+            import tempfile
+            import os
+            
+            # Save temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
+                for chunk in audio_file.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
+            
+            try:
+                # Transcribe with Gemini, passing consultation context
+                service = get_gemini_service()
+                result = service.transcribe_and_generate_notes(tmp_path, consultation_context=consultation_context)
+                
+                return Response(result, status=status.HTTP_200_OK)
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error transcribing recording: {str(e)}")
+            return Response(
+                {'success': False, 'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

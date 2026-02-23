@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     HospitalEncounter, VitalSigns, HospitalDepartment, 
-    HospitalBed, EncounterType, EncounterStatus, BedStatus
+    HospitalBed, EncounterType, EncounterStatus, BedStatus,
+    Triage, TriageLevel, TriageStatus
 )
 
 User = get_user_model()
@@ -378,3 +379,70 @@ class BedStatusChoicesSerializer(serializers.Serializer):
     """Serializer for bed status choices"""
     value = serializers.CharField()
     label = serializers.CharField()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  TRIAGE SERIALIZERS
+# ═══════════════════════════════════════════════════════════════
+
+class TriageSerializer(serializers.ModelSerializer):
+    """Complete triage serializer"""
+    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    patient_number = serializers.CharField(source='patient.patient_number', read_only=True)
+    encounter_number = serializers.CharField(source='encounter.encounter_number', read_only=True, allow_null=True)
+    nurse_name = serializers.CharField(source='nurse.full_name', read_only=True, allow_null=True)
+    assigned_doctor_name = serializers.CharField(source='assigned_doctor.full_name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = Triage
+        fields = [
+            'id', 'triage_number', 'triage_date',
+            'patient', 'patient_name', 'patient_number',
+            'encounter', 'encounter_number',
+            'organization',
+            'triage_level', 'triage_category', 'acuity',
+            'chief_complaint', 'symptom_onset',
+            'vitals', 'pain_level',
+            'consciousness_level', 'airway_status', 'breathing_status',
+            'circulation_status', 'mobility_status',
+            'red_flags', 'has_red_flags',
+            'is_trauma', 'fever_screening', 'respiratory_symptoms',
+            'isolation_required',
+            'allergies_verified', 'immunocompromised',
+            'assigned_area', 'assigned_doctor', 'assigned_doctor_name',
+            'nurse', 'nurse_name',
+            'status',
+            'arrival_time', 'triage_start_time', 'triage_end_time',
+            'estimated_wait_time',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'triage_number', 'triage_date', 'created_at', 'updated_at',
+            'organization', 'nurse'
+        ]
+    
+    def create(self, validated_data):
+        """Generate triage number on creation"""
+        import datetime
+        triage_number = f"TR{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        validated_data['triage_number'] = triage_number
+        return super().create(validated_data)
+
+
+class TriageListSerializer(serializers.ModelSerializer):
+    """Simplified triage serializer for lists"""
+    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    patient_number = serializers.CharField(source='patient.patient_number', read_only=True)
+    nurse_name = serializers.CharField(source='nurse.full_name', read_only=True, allow_null=True)
+    assigned_doctor_name = serializers.CharField(source='assigned_doctor.full_name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = Triage
+        fields = [
+            'id', 'triage_number', 'triage_date',
+            'patient_name', 'patient_number',
+            'triage_level', 'acuity', 'chief_complaint',
+            'pain_level', 'status',
+            'assigned_area', 'assigned_doctor_name',
+            'nurse_name'
+        ]

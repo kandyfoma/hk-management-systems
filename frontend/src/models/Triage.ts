@@ -391,12 +391,17 @@ export class TriageUtils {
     if (triage.seenByDoctorTime) {
       const end = new Date(triage.seenByDoctorTime);
       const start = new Date(triage.triageEndTime || triage.triageStartTime);
-      return Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+      const waitMs = end.getTime() - start.getTime();
+      return isNaN(waitMs) ? 0 : Math.round(waitMs / (1000 * 60));
     }
     
     const now = new Date();
-    const start = new Date(triage.triageEndTime || triage.triageStartTime);
-    return Math.round((now.getTime() - start.getTime()) / (1000 * 60));
+    const startTime = triage.triageEndTime || triage.triageStartTime;
+    if (!startTime) return 0;
+    
+    const start = new Date(startTime);
+    const waitMs = now.getTime() - start.getTime();
+    return isNaN(waitMs) ? 0 : Math.round(waitMs / (1000 * 60));
   }
 
   /**

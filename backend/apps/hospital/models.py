@@ -556,3 +556,153 @@ class HospitalBed(models.Model):
         
     def __str__(self):
         return f"{self.department.name} - Chambre {self.room_number} - Lit {self.bed_number}"
+
+
+# ═══════════════════════════════════════════════════════════════
+#  TRIAGE MODELS
+# ═══════════════════════════════════════════════════════════════
+
+class TriageLevel(models.IntegerChoices):
+    """Emergency triage priority levels"""
+    RESUSCITATION = 1, 'Réanimation'
+    EMERGENCY = 2, 'Urgence'
+    URGENT = 3, 'Urgent'
+    LESS_URGENT = 4, 'Moins urgent'
+    NON_URGENT = 5, 'Non urgent'
+
+
+class TriageStatus(models.TextChoices):
+    """Status of triage assessment"""
+    IN_PROGRESS = 'in_progress', 'En cours'
+    COMPLETED = 'completed', 'En attente'
+    IN_TREATMENT = 'in_treatment', 'En traitement'
+    REASSESSMENT_NEEDED = 'reassessment_needed', 'Réévaluation'
+    DISCHARGED = 'discharged', 'Sorti'
+    ADMITTED = 'admitted', 'Hospitalisé'
+    TRANSFERRED = 'transferred', 'Transféré'
+    LEFT_BEFORE_SEEN = 'left_before_seen', 'Parti'
+    LEFT_AGAINST_ADVICE = 'left_against_advice', 'Parti (AMA)'
+
+
+class Triage(models.Model):
+    """Emergency triage assessment"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    triage_number = models.CharField(max_length=50, unique=True, verbose_name='Numéro de triage')
+    
+    # Patient and Organization
+    patient = models.ForeignKey(
+        'patients.Patient',
+        on_delete=models.PROTECT,
+        related_name='triages',
+        verbose_name='Patient'
+    )
+    encounter = models.ForeignKey(
+        'HospitalEncounter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='triages',
+        verbose_name='Consultation'
+    )
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.PROTECT,
+        related_name='triages',
+        verbose_name='Établissement'
+    )
+    
+    # Triage Assessment
+    triage_date = models.DateTimeField(auto_now_add=True, verbose_name='Date du triage')
+    triage_level = models.IntegerField(
+        choices=TriageLevel.choices,
+        default=TriageLevel.URGENT,
+        verbose_name='Niveau de triage'
+    )
+    triage_category = models.CharField(max_length=50, blank=True, verbose_name='Catégorie')
+    
+    # Chief Complaint
+    chief_complaint = models.TextField(verbose_name='Plainte principale')
+    symptom_onset = models.CharField(max_length=100, blank=True, verbose_name='Début des symptômes')
+    acuity = models.CharField(max_length=50, blank=True, verbose_name='Acuité')
+    
+    # Vital Signs (stored as JSON for flexibility)
+    vitals = models.JSONField(default=dict, blank=True, verbose_name='Signes vitaux')
+    
+    # Pain Level
+    pain_level = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        verbose_name='Niveau de douleur'
+    )
+    
+    # Consciousness and Physical Assessment
+    consciousness_level = models.CharField(max_length=50, blank=True, verbose_name='Niveau de conscience')
+    airway_status = models.CharField(max_length=50, blank=True, verbose_name='Statut des voies aériennes')
+    breathing_status = models.CharField(max_length=50, blank=True, verbose_name='Statut respiratoire')
+    circulation_status = models.CharField(max_length=50, blank=True, verbose_name='Statut circulatoire')
+    mobility_status = models.CharField(max_length=50, blank=True, verbose_name='Statut de mobilité')
+    
+    # Red Flags and Special Conditions
+    red_flags = models.JSONField(default=list, blank=True, verbose_name='Signaux d\'alarme')
+    has_red_flags = models.BooleanField(default=False, verbose_name='Présente des signaux d\'alarme')
+    is_trauma = models.BooleanField(default=False, verbose_name='Traumatisme')
+    fever_screening = models.BooleanField(default=False, verbose_name='Dépistage fièvre')
+    respiratory_symptoms = models.BooleanField(default=False, verbose_name='Symptômes respiratoires')
+    isolation_required = models.BooleanField(default=False, verbose_name='Isolement requis')
+    
+    # Allergies and Medical History
+    allergies_verified = models.BooleanField(default=False, verbose_name='Allergies vérifiées')
+    immunocompromised = models.BooleanField(default=False, verbose_name='Immunodéprimé')
+    
+    # Assignments
+    assigned_area = models.CharField(max_length=200, blank=True, verbose_name='Zone assignée')
+    assigned_doctor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='triaged_patients',
+        verbose_name='Médecin assigné'
+    )
+    
+    # Nursing staff who performed triage
+    nurse = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='triages_performed',
+        verbose_name='Infirmière'
+    )
+    
+    # Status
+    status = models.CharField(
+        max_length=50,
+        choices=TriageStatus.choices,
+        default=TriageStatus.IN_PROGRESS,
+        verbose_name='Statut'
+    )
+    
+    # Times
+    arrival_time = models.DateTimeField(null=True, blank=True, verbose_name='Heure d\'arrivée')
+    triage_start_time = models.DateTimeField(null=True, blank=True, verbose_name='Début du triage')
+    triage_end_time = models.DateTimeField(null=True, blank=True, verbose_name='Fin du triage')
+    estimated_wait_time = models.IntegerField(null=True, blank=True, verbose_name='Temps d\'attente estimé (min)')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Créé le')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Modifié le')
+    
+    class Meta:
+        db_table = 'hospital_triages'
+        verbose_name = 'Triage'
+        verbose_name_plural = 'Triages'
+        ordering = ['-triage_date', 'triage_level']
+        indexes = [
+            models.Index(fields=['patient', '-triage_date']),
+            models.Index(fields=['triage_level', '-triage_date']),
+            models.Index(fields=['status', '-triage_date']),
+        ]
+    
+    def __str__(self):
+        return f"{self.triage_number} - {self.patient.full_name} (Niveau {self.triage_level})"

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import ApiService from '../../../services/ApiService';
@@ -29,6 +30,8 @@ import {
   TRIAGE_LEVEL_CONFIG,
   TriageUtils,
 } from '../../../models/Triage';
+
+export const TRIAGE_DRAFT_KEY = '@triage_draft';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -183,9 +186,11 @@ function RedFlagChip({
 // ─── Main Component ──────────────────────────────────────────
 interface TriageScreenProps {
   onNavigateToRegisterPatient?: () => void;
+  onTriageSaved?: () => void;
+  onNavigateToEmergency?: () => void;
 }
 
-export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps = {}) {
+export function TriageScreen({ onNavigateToRegisterPatient, onTriageSaved, onNavigateToEmergency }: TriageScreenProps = {}) {
   const api = ApiService.getInstance();
   
   // Patient list state
@@ -243,16 +248,28 @@ export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps 
     loadPatients();
   }, [loadPatients]);
   
-  // Filter patients based on search
+  // Filter patients based on search and selection
   const filteredPatients = useMemo(() => {
-    if (!patientSearch.trim()) return patients;
-    const q = patientSearch.toLowerCase();
-    return patients.filter(p =>
-      `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
-      p.patientNumber.toLowerCase().includes(q) ||
-      (p.phone || '').includes(q)
-    );
-  }, [patients, patientSearch]);
+    const searchQuery = patientSearch.trim();
+    
+    // If patient is selected and no search, show only selected patient
+    if (selectedPatientId && !searchQuery) {
+      return patients.filter(p => p.id === selectedPatientId);
+    }
+    
+    // If there's a search query, show all matching patients
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return patients.filter(p =>
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+        p.patientNumber.toLowerCase().includes(q) ||
+        (p.phone || '').includes(q)
+      );
+    }
+    
+    // No selection and no search: show only last 2 patients
+    return patients.slice(0, 2);
+  }, [patients, patientSearch, selectedPatientId]);
   
   // Handle patient selection
   const handleSelectPatient = (patient: Patient) => {
@@ -330,10 +347,16 @@ export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps 
   const levelConfig = TRIAGE_LEVEL_CONFIG[suggestedLevel];
 
   // Handle triage submission
-  const handleSubmitTriage = () => {
+  const handleSubmitTriage = async () => {
+    if (!selectedPatientId) {
+      alert('Veuillez sélectionner un patient');
+      return;
+    }
+
+    setSubmitting(true);
     const triageData: Partial<Triage> = {
       chiefComplaint,
-      symptomOnset: 'today', // This should be collected from form
+      symptomOnset: 'today',
       consciousnessLevel: consciousness,
       airwayStatus: airway,
       breathingStatus: breathing,
@@ -358,9 +381,149 @@ export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps 
       assignedArea,
     };
 
-    console.log('Triage Data:', triageData);
-    // TODO: Call API to save triage
-    alert(`Triage enregistré avec succès!\nNiveau: ${suggestedLevel} - ${levelConfig.name}`);
+    try {
+      console.log('[TriageScreen] Saving triage for patient:', selectedPatientId);
+      const res = await api.post('/hospital/triage/', {
+        patient: selectedPatientId,
+        chief_complaint: triageData.chiefComplaint,
+        symptom_onset: triageData.symptomOnset,
+        consciousness_level: triageData.consciousnessLevel,
+        airway_status: triageData.airwayStatus,
+        breathing_status: triageData.breathingStatus,
+        circulation_status: triageData.circulationStatus,
+        mobility_status: triageData.mobilityStatus,
+        red_flags: triageData.redFlags,
+        triage_level: triageData.level,
+        triage_category: triageData.category,
+        pain_level: triageData.painLevel,
+        vitals: triageData.vitals,
+        isolation_required: triageData.isolationRequired,
+        assigned_area: triageData.assignedArea,
+        status: 'in_progress',
+      });
+
+      console.log('[TriageScreen] Save response:', res);
+      if (res.success) {
+        alert(`✅ Triage enregistré avec succès!\nNiveau: ${suggestedLevel} - ${levelConfig.name}`);
+        onTriageSaved?.();
+        // Navigate to emergency dashboard
+        onNavigateToEmergency?.();
+      } else {
+        alert('Erreur: ' + (res.message || 'Impossible d\'enregistrer le triage'));
+      }
+    } catch (err) {
+      console.error('[TriageScreen] Error saving triage:', err);
+      alert('Erreur lors de l\'enregistrement du triage');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Form submission state
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Draft state
+  const [hasDraft, setHasDraft] = useState(false);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+
+  // Check for draft on mount
+  useEffect(() => {
+    const checkDraft = async () => {
+      try {
+        const draft = await AsyncStorage.getItem(TRIAGE_DRAFT_KEY);
+        setHasDraft(!!draft);
+      } catch (err) {
+        console.error('[TriageScreen] Error checking draft:', err);
+      }
+    };
+    checkDraft();
+  }, []);
+
+  // Save draft
+  const saveDraft = async () => {
+    if (!selectedPatientId) {
+      alert('Veuillez sélectionner un patient');
+      return;
+    }
+    try {
+      const draft = {
+        selectedPatientId,
+        selectedPatient,
+        chiefComplaint,
+        symptomOnset,
+        symptomProgression,
+        temperature,
+        systolic,
+        diastolic,
+        heartRate,
+        respiratoryRate,
+        oxygenSat,
+        bloodGlucose,
+        painLevel,
+        consciousness,
+        airway,
+        breathing,
+        circulation,
+        mobility,
+        redFlags,
+        isolationRequired,
+        assignedArea,
+        savedAt: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(TRIAGE_DRAFT_KEY, JSON.stringify(draft));
+      setHasDraft(true);
+      alert('✅ Triage sauvegardé en brouillon');
+    } catch (err) {
+      alert('Erreur lors de la sauvegarde du brouillon');
+    }
+  };
+
+  // Load draft
+  const loadDraft = async () => {
+    setLoadingDraft(true);
+    try {
+      const draft = await AsyncStorage.getItem(TRIAGE_DRAFT_KEY);
+      if (draft) {
+        const data = JSON.parse(draft);
+        setSelectedPatientId(data.selectedPatientId);
+        setSelectedPatient(data.selectedPatient);
+        setChiefComplaint(data.chiefComplaint || '');
+        setSymptomOnset(data.symptomOnset || '');
+        setSymptomProgression(data.symptomProgression);
+        setTemperature(data.temperature || '');
+        setSystolic(data.systolic || '');
+        setDiastolic(data.diastolic || '');
+        setHeartRate(data.heartRate || '');
+        setRespiratoryRate(data.respiratoryRate || '');
+        setOxygenSat(data.oxygenSat || '');
+        setBloodGlucose(data.bloodGlucose || '');
+        setPainLevel(data.painLevel);
+        setConsciousness(data.consciousness);
+        setAirway(data.airway);
+        setBreathing(data.breathing);
+        setCirculation(data.circulation);
+        setMobility(data.mobility);
+        setRedFlags(data.redFlags || []);
+        setIsolationRequired(data.isolationRequired);
+        setAssignedArea(data.assignedArea || '');
+        alert('✅ Brouillon restauré avec succès');
+      }
+    } catch (err) {
+      alert('Erreur lors du chargement du brouillon');
+    } finally {
+      setLoadingDraft(false);
+    }
+  };
+
+  // Clear draft
+  const clearDraft = async () => {
+    try {
+      await AsyncStorage.removeItem(TRIAGE_DRAFT_KEY);
+      setHasDraft(false);
+      alert('✅ Brouillon supprimé');
+    } catch (err) {
+      alert('Erreur lors de la suppression du brouillon');
+    }
   };
 
   // Toggle red flag
@@ -413,6 +576,32 @@ export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps 
           </Text>
         </View>
       </View>
+
+      {/* Draft Banner */}
+      {hasDraft && (
+        <View style={styles.draftBanner}>
+          <View style={styles.draftContent}>
+            <Ionicons name="document-text" size={20} color={colors.warning} />
+            <View style={styles.draftText}>
+              <Text style={styles.draftTitle}>Brouillon disponible</Text>
+              <Text style={styles.draftSubtitle}>Restaurez votre triage précédent</Text>
+            </View>
+          </View>
+          <View style={styles.draftActions}>
+            <TouchableOpacity 
+              style={styles.draftLoadBtn} 
+              onPress={loadDraft}
+              disabled={loadingDraft}
+            >
+              <Ionicons name="download" size={16} color={colors.primary} />
+              <Text style={styles.draftLoadBtnText}>Charger</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.draftClearBtn} onPress={clearDraft}>
+              <Ionicons name="trash" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ══════ SECTION: Patient ══════ */}
       <SectionHeader title="Identification Patient" icon="person" accentColor={colors.info} />
@@ -858,16 +1047,32 @@ export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps 
 
       {/* ══════ Action Buttons ══════ */}
       <View style={styles.actions}>
+        <TouchableOpacity 
+          style={styles.draftBtn}
+          onPress={saveDraft}
+          disabled={submitting}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="save" size={16} color={colors.info} />
+          <Text style={styles.draftBtnText}>Brouillon</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.cancelBtn} activeOpacity={0.7}>
           <Text style={styles.cancelBtnText}>Annuler</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.submitBtn, { backgroundColor: levelConfig.color }]} 
+          style={[styles.submitBtn, { backgroundColor: levelConfig.color, opacity: submitting ? 0.7 : 1 }]} 
           activeOpacity={0.7}
           onPress={handleSubmitTriage}
+          disabled={submitting}
         >
-          <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-          <Text style={styles.submitBtnText}>Enregistrer Triage (Niveau {suggestedLevel})</Text>
+          {submitting ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+          )}
+          <Text style={styles.submitBtnText}>
+            {submitting ? 'Enregistrement...' : `Enregistrer Triage (Niveau ${suggestedLevel})`}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1259,8 +1464,77 @@ const styles = StyleSheet.create({
   // Actions
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     marginTop: 8,
+  },
+  draftBanner: {
+    backgroundColor: colors.warningLight,
+    borderRadius: borderRadius.lg,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warning,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  draftContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  draftText: {
+    flex: 1,
+  },
+  draftTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  draftSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  draftActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  draftLoadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+  },
+  draftLoadBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  draftClearBtn: {
+    padding: 6,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceVariant,
+  },
+  draftBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.info,
+    backgroundColor: colors.info + '10',
+  },
+  draftBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.info,
   },
   cancelBtn: {
     flex: 1,
