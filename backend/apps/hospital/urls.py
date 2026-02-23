@@ -97,4 +97,5 @@ urlpatterns = [
     # ═══════════════════════════════════════════════════════════════
     
     path('transcribe-recording/', views.ConsultationRecordingTranscriptionView.as_view(), name='transcribe_recording'),
+    path('test-gemini/', views.test_gemini_config_view, name='test_gemini'),
 ]

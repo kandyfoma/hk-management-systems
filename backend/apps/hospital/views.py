@@ -1,6 +1,7 @@
 from rest_framework import generics, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count, Q
@@ -645,6 +646,39 @@ def triage_by_level_view(request, level):
 #  CONSULTATION RECORDING TRANSCRIPTION API
 # ═══════════════════════════════════════════════════════════════
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def test_gemini_config_view(request):
+    """
+    Test endpoint to check Gemini API configuration
+    GET /api/v1/hospital/test-gemini/
+    """
+    try:
+        from .gemini_service import get_gemini_service
+        import google.generativeai as genai
+        from decouple import config
+        
+        api_key = config('GEMINI_API_KEY', default=None)
+        logger = __import__('logging').getLogger(__name__)
+        
+        return Response({
+            'success': True,
+            'api_key_configured': bool(api_key),
+            'api_key_preview': f"{api_key[:10]}...{api_key[-10:]}" if api_key else None,
+            'gemini_service_available': True,
+            'message': 'Gemini configuration appears to be set up correctly'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Gemini config test failed: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to initialize Gemini service'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class ConsultationRecordingTranscriptionView(generics.CreateAPIView):
     """
     Transcribe consultation recording and generate structured notes using Gemini Flash
@@ -700,9 +734,15 @@ class ConsultationRecordingTranscriptionView(generics.CreateAPIView):
         
         except Exception as e:
             import logging
+            import traceback
             logger = logging.getLogger(__name__)
             logger.error(f"Error transcribing recording: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response(
-                {'success': False, 'error': str(e)},
+                {
+                    'success': False,
+                    'error': str(e),
+                    'detail': 'Audio transcription failed. Check server logs for details.'
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

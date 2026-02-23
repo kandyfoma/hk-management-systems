@@ -222,6 +222,88 @@ const COMMON_LAB_TESTS = [
   'Radiographie thorax',
 ];
 
+// ─── Common treatments (Congo-specific and general) ──────────
+const COMMON_TREATMENTS = [
+  // Paludisme (Malaria)
+  'Artemether IV/IM',
+  'Artemisinin-based combination therapy (ACT)',
+  'Quinine IV',
+  'Amodiaquine 150mg',
+  'Artésunate IV/IM',
+  
+  // Infections
+  'Amoxicilline 500mg TID',
+  'Ciprofloxacine 500mg BID',
+  'Métronidazole 500mg TID',
+  'Sulfaméthoxazole-Triméthoprime',
+  'Ceftriaxone 1g IM/IV',
+  'Chloramphénicol',
+  'Doxycycline 100mg BID',
+  
+  // Fièvre (Fever)
+  'Paracétamol 500mg (3-4xday)',
+  'Ibuprofène 400mg BID',
+  'Aspirine 500mg',
+  
+  // Troubles digestifs (Gastrointestinal)
+  'Oméprazole 20mg OD',
+  'Ranitidine 150mg BID',
+  'Métoclopramide 10mg TID',
+  'Charbon activé',
+  'Bisacodyl 5mg',
+  
+  // Douleur (Pain)
+  'Morphine IM/IV',
+  'Diclofénac 50mg TID',
+  'Tramadol 100mg',
+  'Codéine 30mg',
+  
+  // Hypertension
+  'Amlodipine 5mg OD',
+  'Lisinopril 10mg OD',
+  'Atenolol 50mg OD',
+  'Hydrochlorothiazide 25mg OD',
+  
+  // Diabète (Diabetes)
+  'Metformine 500mg BID',
+  'Glibenclamide 5mg OD',
+  'Insuline NPH',
+  
+  // Respiratoire (Respiratory)
+  'Salbutamol inhaler',
+  'Théophylline 300mg BID',
+  'Prednisolone 5mg OD',
+  'Ampicilline IV',
+  
+  // Antiparastrophé (Antiparasitic)
+  'Mébendazole 100mg BID x3 jours',
+  'Albendazole 400mg OD',
+  'Ivermectine 200mcg/kg',
+  'Praziquantel 600-800mg',
+  
+  // Vitamine & Suppléments
+  'Vitamine B complexe',
+  'Vitamine C 500mg',
+  'Zinc 20mg OD',
+  'Fer + Acide folique',
+  
+  // Antiémétique (Anti-nausea)
+  'Ondansetron 4mg IV/PO',
+  'Promethazine 25mg',
+  
+  // Autres (Other)
+  'Antibiotique topique',
+  'Pommade cutanée',
+  'Injection intramusculaire',
+];
+
+interface TreatmentItem {
+  id: string;
+  name: string;
+  category?: string;
+  customAdded?: boolean;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 function calculateBMI(weight?: number, height?: number): number | undefined {
   if (!weight || !height) return undefined;
@@ -244,6 +326,36 @@ function getAge(dateOfBirth: string): number {
   const m = today.getMonth() - birth.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
   return age;
+}
+
+function formatStructuredNotesForDisplay(notes: any): string {
+  if (!notes || typeof notes !== 'object') return '';
+  
+  const sections = [
+    { title: 'MOTIF PRINCIPAL', key: 'chief_complaint' },
+    { title: 'HISTORIQUE DE LA MALADIE', key: 'history_of_present_illness' },
+    { title: 'EXAMEN PHYSIQUE', key: 'physical_exam_findings' },
+    { title: 'ÉVALUATION CLINIQUE', key: 'assessment' },
+    { title: 'DIAGNOSTIC', key: 'diagnosis' },
+    { title: 'PLAN DE TRAITEMENT', key: 'treatment_plan' },
+    { title: 'MÉDICAMENTS', key: 'medications' },
+    { title: 'SUIVI RECOMMANDÉ', key: 'follow_up' },
+    { title: 'NOTES CLINIQUES', key: 'clinical_notes' },
+  ];
+  
+  let result = 'NOTES DE CONSULTATION MÉDICALE\n';
+  result += '='.repeat(50) + '\n\n';
+  
+  for (const section of sections) {
+    const value = notes[section.key];
+    if (value) {
+      result += `${section.title}:\n`;
+      result += `${String(value).trim()}\n`;
+      result += '\n' + '-'.repeat(50) + '\n\n';
+    }
+  }
+  
+  return result.trim();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -289,6 +401,7 @@ export function HospitalConsultationScreen({
   const [editedNotes, setEditedNotes] = useState<string>('');
   const [generatingNotes, setGeneratingNotes] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [consultationNotes, setConsultationNotes] = useState<string>('');
 
   // ─── Custom exam types ──
@@ -346,6 +459,9 @@ export function HospitalConsultationScreen({
 
   // ─── Treatment plan ──
   const [treatmentNotes, setTreatmentNotes] = useState('');
+  const [treatments, setTreatments] = useState<TreatmentItem[]>([]);
+  const [showAddTreatmentModal, setShowAddTreatmentModal] = useState(false);
+  const [newTreatmentName, setNewTreatmentName] = useState('');
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [imagingOrders, setImagingOrders] = useState<string[]>([]);
   const [referrals, setReferrals] = useState<string[]>([]);
@@ -436,6 +552,106 @@ export function HospitalConsultationScreen({
     }, [selectedPatient, loadPendingQueue])
   );
 
+  // ─── Load saved consultation on mount ──
+  useEffect(() => {
+    const loadSavedConsultation = async () => {
+      try {
+        const savedConsultation = await AsyncStorage.getItem('CURRENT_CONSULTATION_DRAFT');
+        if (savedConsultation) {
+          const data = JSON.parse(savedConsultation);
+          console.log('[Consultation] Loaded saved draft:', data.currentStep);
+          
+          // Restore all state
+          if (data.selectedPatient) setSelectedPatient(data.selectedPatient);
+          if (data.currentStep) setCurrentStep(data.currentStep);
+          if (data.chiefComplaint) setChiefComplaint(data.chiefComplaint);
+          if (data.historyOfPresentIllness) setHistoryOfPresentIllness(data.historyOfPresentIllness);
+          if (data.referredBy) setReferredBy(data.referredBy);
+          if (data.vitals) setVitals(data.vitals);
+          if (data.physicalExam) setPhysicalExam(data.physicalExam);
+          if (data.diagnoses) setDiagnoses(data.diagnoses);
+          if (data.treatments) setTreatments(data.treatments);
+          if (data.treatmentNotes) setTreatmentNotes(data.treatmentNotes);
+          if (data.labOrders) setLabOrders(data.labOrders);
+          if (data.prescriptions) setPrescriptions(data.prescriptions);
+          if (data.followUpNeeded) setFollowUpNeeded(data.followUpNeeded);
+          if (data.followUpDate) setFollowUpDate(data.followUpDate);
+          if (data.followUpNotes) setFollowUpNotes(data.followUpNotes);
+          if (data.consultationNotes) setConsultationNotes(data.consultationNotes);
+          if (data.disposition) setDisposition(data.disposition);
+          if (data.customExamTypes) setCustomExamTypes(data.customExamTypes);
+          if (data.audioUri) setAudioUri(data.audioUri);
+          if (data.generatedNotes) setGeneratedNotes(data.generatedNotes);
+        }
+      } catch (err) {
+        console.error('[Consultation] Error loading saved consultation:', err);
+      }
+    };
+    
+    loadSavedConsultation();
+  }, []);
+
+  // ─── Auto-save consultation data ──
+  useEffect(() => {
+    const autoSaveConsultation = async () => {
+      try {
+        const consultationDraft = {
+          currentStep,
+          selectedPatient,
+          chiefComplaint,
+          historyOfPresentIllness,
+          referredBy,
+          vitals,
+          physicalExam,
+          diagnoses,
+          treatments,
+          treatmentNotes,
+          labOrders,
+          prescriptions,
+          followUpNeeded,
+          followUpDate,
+          followUpNotes,
+          consultationNotes,
+          disposition,
+          customExamTypes,
+          audioUri,
+          generatedNotes,
+          lastSaved: new Date().toISOString(),
+        };
+        
+        await AsyncStorage.setItem('CURRENT_CONSULTATION_DRAFT', JSON.stringify(consultationDraft));
+        console.log('[Consultation] Auto-saved at step:', currentStep);
+      } catch (err) {
+        console.error('[Consultation] Error auto-saving:', err);
+      }
+    };
+
+    // Save whenever key state changes (debounce with timeout)
+    const saveTimeout = setTimeout(autoSaveConsultation, 1000);
+    return () => clearTimeout(saveTimeout);
+  }, [
+    currentStep,
+    selectedPatient,
+    chiefComplaint,
+    historyOfPresentIllness,
+    referredBy,
+    vitals,
+    physicalExam,
+    diagnoses,
+    treatments,
+    treatmentNotes,
+    labOrders,
+    prescriptions,
+    followUpNeeded,
+    followUpDate,
+    followUpNotes,
+    consultationNotes,
+    disposition,
+    customExamTypes,
+    audioUri,
+    generatedNotes,
+  ]);
+
   // ─── Navigation ──
   const goNext = () => {
     if (currentStepIdx < STEPS.length - 1) {
@@ -463,7 +679,47 @@ export function HospitalConsultationScreen({
       console.log('[Recording] Platform:', Platform.OS);
       console.log('[Recording] Current step:', currentStep);
       console.log('[Recording] Is recording:', isRecording);
+      console.log('[Recording] Previous audioUri exists:', !!audioUri);
 
+      // If there's already a recording, ask if they want to keep or replace it
+      if (audioUri && !isRecording) {
+        return new Promise<void>((resolve) => {
+          Alert.alert(
+            '🔄 Enregistrement existant',
+            'Vous avez déjà un enregistrement. Voulez-vous le garder ou en faire un nouveau?',
+            [
+              { 
+                text: 'Garder', 
+                onPress: () => {
+                  console.log('[Recording] Keeping existing recording');
+                  resolve();
+                } 
+              },
+              { 
+                text: 'Nouveau', 
+                onPress: () => {
+                  console.log('[Recording] Replacing with new recording');
+                  // Clear the old recording and proceed
+                  setAudioUri(null);
+                  startRecordingProcess();
+                }
+              },
+            ]
+          );
+        }).then(() => resolve());
+      }
+
+      // No previous recording, proceed normally
+      await startRecordingProcess();
+    } catch (err) {
+      console.error('[Recording] Error starting:', err);
+      console.error('[Recording] Error details:', JSON.stringify(err));
+      Alert.alert('Erreur', 'Impossible de démarrer l\'enregistrement: ' + (err as any)?.message);
+    }
+  };
+
+  const startRecordingProcess = async () => {
+    try {
       // Web fallback via MediaRecorder
       if (Platform.OS === 'web') {
         const mediaDevices = (navigator as any)?.mediaDevices;
@@ -525,7 +781,6 @@ export function HospitalConsultationScreen({
         recorder.start();
         setIsRecording(true);
         setRecordingDuration(0);
-        setAudioUri(null);
 
         timerRef.current = setInterval(() => {
           setRecordingDuration(prev => prev + 100);
@@ -578,7 +833,6 @@ export function HospitalConsultationScreen({
       recordingRef.current = recording;
       setIsRecording(true);
       setRecordingDuration(0);
-      setAudioUri(null);
 
       // Start timer
       timerRef.current = setInterval(() => {
@@ -587,9 +841,8 @@ export function HospitalConsultationScreen({
 
       console.log('[Recording] Recording started successfully');
     } catch (err) {
-      console.error('[Recording] Error starting:', err);
-      console.error('[Recording] Error details:', JSON.stringify(err));
-      Alert.alert('Erreur', 'Impossible de démarrer l\'enregistrement: ' + (err as any)?.message);
+      console.error('[Recording] Error in recording process:', err);
+      throw err;
     }
   };
 
@@ -735,11 +988,7 @@ export function HospitalConsultationScreen({
       
       // Make API call to transcribe with Gemini
       const api = ApiService.getInstance();
-      const result = await api.post('/hospital/transcribe-recording/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const result = await api.post('/hospital/transcribe-recording/', formData);
       
       if (result.success && result.data) {
         const notes = result.data;
@@ -765,7 +1014,8 @@ export function HospitalConsultationScreen({
           [{ text: 'OK' }]
         );
       } else {
-        Alert.alert('Erreur', result.data?.error || 'Impossible de générer les notes.');
+        const errorMessage = result.error?.message || result.data?.error || 'Impossible de générer les notes.';
+        Alert.alert('Erreur', errorMessage);
       }
     } catch (err) {
       console.error('[Recording] Error generating notes:', err);
@@ -852,6 +1102,30 @@ export function HospitalConsultationScreen({
     setShowPrescriptionModal(false);
   };
 
+  // ─── Add treatment ──
+  const addTreatment = (treatmentName: string) => {
+    if (treatments.find(t => t.name === treatmentName)) return;
+    setTreatments([
+      ...treatments,
+      { id: `TREAT${Date.now()}`, name: treatmentName, customAdded: false },
+    ]);
+  };
+
+  // ─── Add custom treatment ──
+  const addCustomTreatment = () => {
+    if (!newTreatmentName.trim()) return;
+    if (treatments.find(t => t.name === newTreatmentName.trim())) {
+      Alert.alert('Traitement', 'Ce traitement existe déjà.');
+      return;
+    }
+    setTreatments([
+      ...treatments,
+      { id: `TREAT${Date.now()}`, name: newTreatmentName.trim(), customAdded: true },
+    ]);
+    setNewTreatmentName('');
+    setShowAddTreatmentModal(false);
+  };
+
   // ─── Add lab order ──
   const addLabOrder = (testName: string) => {
     if (labOrders.find(l => l.testName === testName)) return;
@@ -897,7 +1171,15 @@ export function HospitalConsultationScreen({
       [
         {
           text: 'OK',
-          onPress: () => {
+          onPress: async () => {
+            try {
+              // Clear the saved draft
+              await AsyncStorage.removeItem('CURRENT_CONSULTATION_DRAFT');
+              console.log('[Consultation] Draft cleared after completion');
+            } catch (err) {
+              console.error('[Consultation] Error clearing draft:', err);
+            }
+            
             onComplete?.(encounter);
             // Return to waiting room to see next patient
             setSelectedPatient(null);
@@ -954,37 +1236,85 @@ export function HospitalConsultationScreen({
 
       // Call API to generate notes
       const api = ApiService.getInstance();
-      const result = await api.post('/hospital/transcribe-recording/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const result = await api.post('/hospital/transcribe-recording/', formData);
 
       if (result.success && result.data) {
-        const generatedText = result.data.structured_notes || result.data.transcription || '';
+        // Format structured notes for display
+        let generatedText = '';
+        
+        // Check if we have structured notes as an object
+        if (result.data.structured_notes && typeof result.data.structured_notes === 'object') {
+          const notes = result.data.structured_notes;
+          generatedText = formatStructuredNotesForDisplay(notes);
+        } else if (typeof result.data.structured_notes === 'string') {
+          // Try to parse if it's a JSON string
+          try {
+            const notes = JSON.parse(result.data.structured_notes);
+            generatedText = formatStructuredNotesForDisplay(notes);
+          } catch {
+            generatedText = result.data.structured_notes;
+          }
+        } else if (typeof result.data.transcription === 'string') {
+          generatedText = result.data.transcription;
+        }
+        
         setGeneratedNotes(generatedText);
         setEditedNotes(generatedText);
         setShowNotesModal(true);
+        setNotesError(null);
       } else {
-        Alert.alert('Erreur', result.data?.error || 'Impossible de générer les notes.');
+        const errorMessage = result.error?.message || result.data?.error || 'Impossible de générer les notes.';
+        const errorDetail = result.error?.message || result.data?.detail || '';
+        const errorStatus = result.error?.status;
+        
+        console.error('[Notes] API Error:', { 
+          message: errorMessage, 
+          detail: errorDetail, 
+          status: errorStatus,
+          fullError: result.error 
+        });
+        
+        setNotesError(errorMessage);
+        setShowNotesModal(false);
+        
+        // Check if it's a network connectivity error (status 0)
+        if (errorStatus === 0) {
+          Alert.alert(
+            '❌ Erreur de Connectivité',
+            'Impossible de contacter le serveur.\n\nVérifiez que:\n1. Le serveur Django est en cours d\'exécution\n2. Votre connexion réseau est active\n3. Cliquez sur Réessayer pour une nouvelle tentative',
+            [{ text: 'OK' }]
+          );
+        }
+        // Check if it's a Gemini API key error
+        else if (errorMessage.includes('Gemini API key') || errorMessage.includes('not configured')) {
+          Alert.alert(
+            '⚙️ Configuration Manquante',
+            'La clé API Gemini n\'est pas configurée sur le serveur.\n\nVeuillez contacter l\'administrateur pour configurer GEMINI_API_KEY.'
+          );
+        } else {
+          Alert.alert('Erreur', errorMessage + (errorDetail ? `\n\nDétails: ${errorDetail}` : ''));
+        }
       }
     } catch (err) {
       console.error('[Notes] Error generating notes:', err);
-      Alert.alert('Erreur', 'Impossible de générer les notes de consultation.');
+      const errorMsg = (err as any)?.message || String(err);
+      setNotesError(errorMsg);
+      setShowNotesModal(false);
+      Alert.alert('Erreur', `Impossible de générer les notes: ${errorMsg}`);
     } finally {
       setGeneratingNotes(false);
     }
   };
 
-  // Auto-trigger note generation when entering generate_notes step
-  useEffect(() => {
-    if (currentStep === 'generate_notes' && !notesGenerationInitiatedRef.current) {
-      notesGenerationInitiatedRef.current = true;
-      generateConsultationNotes();
-    } else if (currentStep !== 'generate_notes') {
-      notesGenerationInitiatedRef.current = false;
+  const handleNotesQuickView = () => {
+    const notesText = typeof generatedNotes === 'string' ? generatedNotes : String(generatedNotes || '');
+    if (!notesText.trim()) {
+      Alert.alert('Notes IA indisponibles', 'Générez d\'abord les notes dans l\'étape dédiée.');
+      return;
     }
-  }, [currentStep]);
+    setEditedNotes(notesText);
+    setShowNotesModal(true);
+  };
 
   // ═══════════════════════════════════════════════════════════════
   //  RENDER STEP CONTENT
@@ -1020,6 +1350,64 @@ export function HospitalConsultationScreen({
       <Text style={styles.stepSubtitle}>
         Recherchez et sélectionnez le patient pour cette consultation
       </Text>
+
+      {/* Draft Status Alert */}
+      {selectedPatient && (
+        <View style={styles.draftStatusCard}>
+          <View style={styles.draftStatusContent}>
+            <Ionicons name="cloud-done" size={20} color={colors.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.draftStatusTitle}>Brouillon sauvegardé</Text>
+              <Text style={styles.draftStatusText}>
+                Votre consultation est automatiquement enregistrée
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={async () => {
+              Alert.alert(
+                'Nouveau Brouillon',
+                'Êtes-vous sûr de vouloir commencer une nouvelle consultation? Le brouillon actuel sera supprimé.',
+                [
+                  { text: 'Annuler' },
+                  {
+                    text: 'Supprimer le brouillon',
+                    onPress: async () => {
+                      try {
+                        await AsyncStorage.removeItem('CURRENT_CONSULTATION_DRAFT');
+                        // Reset all state
+                        setSelectedPatient(null);
+                        setCurrentStep('patient_identification');
+                        setChiefComplaint('');
+                        setHistoryOfPresentIllness('');
+                        setReferredBy('');
+                        setVitals({});
+                        setDiagnoses([]);
+                        setTreatments([]);
+                        setTreatmentNotes('');
+                        setLabOrders([]);
+                        setPrescriptions([]);
+                        setFollowUpNeeded(false);
+                        setFollowUpDate('');
+                        setFollowUpNotes('');
+                        setConsultationNotes('');
+                        setAudioUri(null);
+                        setGeneratedNotes('');
+                        console.log('[Consultation] Draft cleared');
+                      } catch (err) {
+                        console.error('[Consultation] Error clearing draft:', err);
+                      }
+                    },
+                    style: 'destructive',
+                  },
+                ]
+              );
+            }}
+          >
+            <Ionicons name="trash" size={18} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Search */}
       <View style={styles.searchBox}>
@@ -1425,23 +1813,92 @@ export function HospitalConsultationScreen({
         </View>
       ) : (
         <View>
-          {!showNotesModal && (
-            <View style={styles.notesPreview}>
-              <View style={styles.notesInfo}>
-                <Ionicons name="document-text" size={32} color={ACCENT} />
-                <Text style={styles.notesInfoTitle}>Prêt à générer les notes</Text>
-                <Text style={styles.notesInfoSubtitle}>
-                  Cliquez ci-dessous pour générer les notes à partir de votre enregistrement
-                </Text>
+          {/* Recording Status Section */}
+          {audioUri && (
+            <View style={[styles.recordingStatusCard, { marginBottom: 16 }]}>
+              <View style={styles.recordingStatusHeader}>
+                <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                <Text style={styles.recordingStatusText}>Enregistrement disponible</Text>
               </View>
+              <View style={styles.recordingStatusActions}>
+                <TouchableOpacity
+                  style={[styles.recordingActionBtn, styles.playBtn]}
+                  onPress={playRecording}
+                >
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={16} color="#FFF" />
+                  <Text style={styles.recordingActionBtnText}>
+                    {isPlaying ? 'Pause' : 'Écouter'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.recordingActionBtn, styles.deleteBtn]}
+                  onPress={() => {
+                    Alert.alert(
+                      'Supprimer l\'enregistrement',
+                      'Êtes-vous sûr? Vous ne pourrez pas récupérer cet enregistrement.',
+                      [
+                        { text: 'Annuler' },
+                        {
+                          text: 'Supprimer',
+                          onPress: () => {
+                            setAudioUri(null);
+                            setGeneratedNotes('');
+                            setEditedNotes('');
+                            console.log('[Recording] Recording deleted by user');
+                          },
+                          style: 'destructive',
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="trash" size={16} color="#FFF" />
+                  <Text style={styles.recordingActionBtnText}>Supprimer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
-              <TouchableOpacity
-                style={styles.generateButton}
-                onPress={generateConsultationNotes}
-              >
-                <Ionicons name="sparkles" size={20} color="#FFF" />
-                <Text style={styles.generateButtonText}>Générer les Notes</Text>
-              </TouchableOpacity>
+          {!showNotesModal && (
+            <View>
+              {notesError && (
+                <View style={[styles.errorCard, { marginBottom: 16 }]}>
+                  <View style={styles.errorCardHeader}>
+                    <Ionicons name="alert-circle" size={24} color={colors.error} />
+                    <Text style={styles.errorCardTitle}>Génération échouée</Text>
+                  </View>
+                  <Text style={styles.errorCardMessage}>{notesError}</Text>
+                </View>
+              )}
+
+              <View style={styles.notesPreview}>
+                <View style={styles.notesInfo}>
+                  <Ionicons name="document-text" size={32} color={ACCENT} />
+                  <Text style={styles.notesInfoTitle}>
+                    {notesError ? 'Réessayer la génération' : 'Prêt à générer les notes'}
+                  </Text>
+                  <Text style={styles.notesInfoSubtitle}>
+                    {notesError 
+                      ? 'Vérifiez votre connexion et cliquez sur Générer pour réessayer'
+                      : 'Cliquez ci-dessous pour générer les notes à partir de votre enregistrement'
+                    }
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.generateButton, notesError && { backgroundColor: colors.warning }]}
+                  onPress={() => {
+                    setNotesError(null);
+                    generateConsultationNotes();
+                  }}
+                  disabled={generatingNotes}
+                >
+                  <Ionicons name={notesError ? 'refresh' : 'sparkles'} size={20} color="#FFF" />
+                  <Text style={styles.generateButtonText}>
+                    {notesError ? 'Réessayer' : 'Générer les Notes'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -1623,13 +2080,140 @@ export function HospitalConsultationScreen({
       {/* Treatment Notes */}
       <Text style={styles.fieldLabel}>Notes de Traitement</Text>
       <TextInput
-        style={[styles.textArea, { height: 100 }]}
+        style={[styles.textArea, { height: 80 }]}
         placeholder="Décrivez le plan de traitement..."
         placeholderTextColor={colors.textSecondary}
         value={treatmentNotes}
         onChangeText={setTreatmentNotes}
         multiline
       />
+
+      {/* Selected Treatments */}
+      {treatments.length > 0 && (
+        <View style={styles.selectedTreatmentsCard}>
+          <View style={styles.selectedTreatmentsHeader}>
+            <Ionicons name="checkmark-done" size={20} color={colors.success} />
+            <Text style={styles.selectedTreatmentsTitle}>
+              Traitements sélectionnés ({treatments.length})
+            </Text>
+          </View>
+          {treatments.map(treatment => (
+            <View key={treatment.id} style={styles.treatmentItem}>
+              <View style={styles.treatmentItemContent}>
+                <Ionicons 
+                  name={treatment.customAdded ? 'add-circle' : 'checkmark-circle'} 
+                  size={18} 
+                  color={treatment.customAdded ? colors.warning : colors.success} 
+                />
+                <Text style={styles.treatmentItemText}>{treatment.name}</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setTreatments(treatments.filter(t => t.id !== treatment.id))}
+              >
+                <Ionicons name="close-circle" size={20} color={colors.error} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Treatment Selection Grid */}
+      <Text style={styles.fieldLabel}>Ajouter Traitement</Text>
+      <View style={styles.treatmentSearchGrid}>
+        <TextInput
+          style={styles.treatmentSearchInput}
+          placeholder="Rechercher un traitement..."
+          placeholderTextColor={colors.textSecondary}
+        />
+      </View>
+
+      <ScrollView style={styles.treatmentGrid} scrollEnabled={false}>
+        {COMMON_TREATMENTS.map(treatment => {
+          const isSelected = treatments.find(t => t.name === treatment);
+          return (
+            <TouchableOpacity
+              key={treatment}
+              style={[styles.treatmentChip, isSelected && styles.treatmentChipSelected]}
+              onPress={() => {
+                if (isSelected) {
+                  setTreatments(treatments.filter(t => t.name !== treatment));
+                } else {
+                  addTreatment(treatment);
+                }
+              }}
+            >
+              <Ionicons
+                name={isSelected ? 'checkmark-circle' : 'add-circle-outline'}
+                size={16}
+                color={isSelected ? '#FFF' : colors.textSecondary}
+              />
+              <Text 
+                style={[
+                  styles.treatmentChipText, 
+                  isSelected && { color: '#FFF', fontWeight: '600' }
+                ]}
+                numberOfLines={2}
+              >
+                {treatment}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Add Custom Treatment Button */}
+      <TouchableOpacity
+        style={styles.addCustomTreatmentButton}
+        onPress={() => setShowAddTreatmentModal(true)}
+      >
+        <Ionicons name="add" size={20} color="#FFF" />
+        <Text style={styles.addCustomTreatmentButtonText}>Ajouter Traitement Personnalisé</Text>
+      </TouchableOpacity>
+
+      {/* Add Custom Treatment Modal */}
+      <Modal visible={showAddTreatmentModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ajouter Traitement</Text>
+              <TouchableOpacity onPress={() => setShowAddTreatmentModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.fieldLabel}>Nom du traitement *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Artemether 80mg IM/jour"
+                placeholderTextColor={colors.textSecondary}
+                value={newTreatmentName}
+                onChangeText={setNewTreatmentName}
+                multiline
+              />
+              <Text style={styles.helperText}>
+                Inclure la posologie et la voie d'administration si applicable
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => setShowAddTreatmentModal(false)}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={addCustomTreatment}
+                disabled={!newTreatmentName.trim()}
+              >
+                <Text style={styles.modalButtonPrimaryText}>Ajouter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Lab Orders */}
       <Text style={styles.fieldLabel}>Examens de Laboratoire</Text>
@@ -2145,12 +2729,10 @@ export function HospitalConsultationScreen({
         </View>
         <View style={styles.headerRight}>
           {selectedPatient && currentStep === 'visit_reason' && (
-            <>
-              {console.log('[RecordingUI] Recording controls visible - selectedPatient:', !!selectedPatient, 'currentStep:', currentStep, 'isRecording:', isRecording)}
-              <View style={styles.recordingControls}>
+            <View style={styles.recordingWrapper}>
               {audioUri && !isRecording && (
                 <TouchableOpacity
-                  style={styles.recordButton}
+                  style={styles.playActionButton}
                   onPress={() => (isPlaying ? stopPlayback() : playRecording())}
                 >
                   <Ionicons
@@ -2162,7 +2744,7 @@ export function HospitalConsultationScreen({
               )}
               <Animated.View
                 style={[
-                  styles.recordingButton,
+                  styles.recordingButtonWrapper,
                   currentStep === 'visit_reason' && {
                     opacity: glitterAnim.opacity,
                     transform: [{ scale: glitterAnim.scale }],
@@ -2170,14 +2752,14 @@ export function HospitalConsultationScreen({
                 ]}
               >
                 <TouchableOpacity
-                  style={[styles.iconButton, isRecording && styles.recordingActive]}
+                  style={[
+                    styles.recordActionButton,
+                    isRecording && styles.recordActionButtonActive,
+                  ]}
                   onPress={() => {
-                    console.log('[Recording Button] Clicked - isRecording:', isRecording);
                     if (isRecording) {
-                      console.log('[Recording Button] Stopping recording');
                       stopRecording();
                     } else {
-                      console.log('[Recording Button] Starting recording');
                       startRecording();
                     }
                   }}
@@ -2188,14 +2770,29 @@ export function HospitalConsultationScreen({
                     color={isRecording ? colors.error : ACCENT}
                   />
                 </TouchableOpacity>
+                <Text style={styles.recordActionLabel}>
+                  {isRecording ? 'Stop' : 'Enregistrer'}
+                </Text>
               </Animated.View>
-              {isRecording && <Text style={styles.recordingTime}>{formatTime(recordingDuration)}</Text>}
+              {isRecording && (
+                <Text style={styles.recordingDurationLabel}>
+                  {formatTime(recordingDuration)}
+                </Text>
+              )}
             </View>
-            </>
           )}
-          <TouchableOpacity style={styles.saveButton}>
-            <Ionicons name="save-outline" size={20} color={ACCENT} />
-          </TouchableOpacity>
+          {selectedPatient && (
+            <TouchableOpacity style={styles.saveActionButton} onPress={handleNotesQuickView}>
+              <Ionicons
+                name={(typeof generatedNotes === 'string' ? generatedNotes : '').trim() ? 'checkmark-done-outline' : 'save-outline'}
+                size={18}
+                color="#FFF"
+              />
+              <Text style={styles.saveActionLabel}>
+                {(typeof generatedNotes === 'string' ? generatedNotes : '').trim() ? 'Notes prêtes' : 'Notes IA'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -2322,6 +2919,7 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   saveButton: {
@@ -2329,29 +2927,69 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT + '15',
     borderRadius: borderRadius.md,
   },
-  recordingButton: {
-    padding: 8,
-  },
-  recordingControls: {
+  recordingWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginRight: 4,
   },
-  recordButton: {
-    padding: 8,
+  recordingButtonWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  recordingTime: {
-    fontSize: 12,
+  recordActionButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: ACCENT + '55',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceVariant,
+  },
+  recordActionButtonActive: {
+    borderColor: colors.error,
+    backgroundColor: colors.error + '20',
+  },
+  recordActionLabel: {
+    marginTop: 2,
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  recordingDurationLabel: {
+    fontSize: 11,
     fontWeight: '600',
     color: colors.error,
-    minWidth: 35,
   },
-  iconButton: {
-    padding: 8,
-    borderRadius: borderRadius.md,
+  playActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: ACCENT + '55',
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  recordingActive: {
-    backgroundColor: colors.error + '15',
+  saveActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: borderRadius.lg,
+    backgroundColor: ACCENT,
+    borderWidth: 1,
+    borderColor: ACCENT + '80',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  saveActionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFF',
   },
 
   // Steps
@@ -3261,6 +3899,204 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#FFF',
+  },
+  recordingStatusCard: {
+    backgroundColor: colors.success + '10',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.lg,
+  },
+  recordingStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  recordingStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  recordingStatusActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  recordingActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    gap: spacing.xs,
+  },
+  playBtn: {
+    backgroundColor: colors.info,
+  },
+  deleteBtn: {
+    backgroundColor: colors.error,
+  },
+  recordingActionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  treatmentSearchGrid: {
+    marginBottom: spacing.md,
+  },
+  treatmentSearchInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
+    color: colors.text,
+  },
+  treatmentGrid: {
+    maxHeight: 300,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    backgroundColor: colors.surfaceVariant,
+  },
+  treatmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surface,
+    gap: spacing.sm,
+  },
+  treatmentChipSelected: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
+  },
+  treatmentChipText: {
+    fontSize: 13,
+    color: colors.text,
+    flex: 1,
+  },
+  addCustomTreatmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.info,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  addCustomTreatmentButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  selectedTreatmentsCard: {
+    backgroundColor: colors.success + '10',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.lg,
+  },
+  selectedTreatmentsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  selectedTreatmentsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  treatmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: '#FFF',
+    marginBottom: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  treatmentItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  treatmentItemText: {
+    fontSize: 13,
+    color: colors.text,
+    flex: 1,
+  },
+  helperText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
+  },
+  draftStatusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.success + '15',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.lg,
+  },
+  draftStatusContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  draftStatusTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  draftStatusText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  errorCard: {
+    backgroundColor: colors.error + '15',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  errorCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  errorCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  errorCardMessage: {
+    fontSize: 12,
+    color: colors.text,
+    lineHeight: 18,
   },
 });
 

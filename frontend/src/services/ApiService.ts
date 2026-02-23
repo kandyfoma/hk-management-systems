@@ -2,7 +2,7 @@
  * ApiService - Central API client for communicating with Django backend
  */
 
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, AxiosError, AxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, NativeModules } from 'react-native';
 
@@ -84,7 +84,7 @@ class ApiService {
   private constructor() {
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 30000,
+      timeout: 120000, // Extended to 120s for Gemini API calls
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -102,13 +102,19 @@ class ApiService {
   }
 
   private setupInterceptors() {
-    // Request interceptor - add auth token
+    // Request interceptor - add auth token and handle FormData
     this.axiosInstance.interceptors.request.use(
       async (config) => {
         const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
         if (token) {
           config.headers.Authorization = `Token ${token}`;
         }
+
+        // If data is FormData, delete Content-Type so browser/axios sets it with boundary
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+          delete config.headers['Content-Type'];
+        }
+
         return config;
       },
       (error) => {
@@ -145,6 +151,15 @@ class ApiService {
     if (error.response) {
       // Server responded with error status
       const errorData = error.response.data as any;
+      console.error('[ApiService] Server Error:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: errorData,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+        },
+      });
       
       if (errorData.detail) {
         return {
@@ -188,6 +203,15 @@ class ApiService {
       };
     } else if (error.request) {
       // Network error
+      console.error('[ApiService] Network Error:', {
+        message: error.message,
+        code: error.code,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          timeout: error.config?.timeout,
+        },
+      });
       return {
         success: false,
         error: {
@@ -197,6 +221,10 @@ class ApiService {
       };
     } else {
       // Other error
+      console.error('[ApiService] Error:', {
+        message: error.message,
+        code: error.code,
+      });
       return {
         success: false,
         error: {
@@ -219,9 +247,9 @@ class ApiService {
     }
   }
 
-  async post<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
     try {
-      const response = await this.axiosInstance.post(url, data);
+      const response = await this.axiosInstance.post(url, data, config);
       return this.handleApiResponse<T>(response);
     } catch (error) {
       return this.handleApiError(error as AxiosError);

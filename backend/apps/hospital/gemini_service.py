@@ -4,6 +4,12 @@ Gemini AI Service for consultation note generation from audio recordings
 import logging
 import os
 import json
+import warnings
+import sys
+
+# Suppress all FutureWarnings before importing google.generativeai
+warnings.simplefilter('ignore', FutureWarning)
+
 import google.generativeai as genai
 from decouple import config
 
@@ -35,60 +41,129 @@ class GeminiConsultationService:
         """
         try:
             if not self.api_key:
+                logger.error("GEMINI_API_KEY environment variable is not set")
                 return {
                     'success': False,
-                    'error': 'Gemini API key not configured'
+                    'error': 'Gemini API key not configured',
+                    'detail': 'GEMINI_API_KEY not set in environment'
+                }
+            
+            # Check if file exists
+            import os
+            if not os.path.exists(audio_file_path):
+                logger.error(f"Audio file not found: {audio_file_path}")
+                return {
+                    'success': False,
+                    'error': 'Audio file not found',
+                    'detail': f'File path: {audio_file_path}'
+                }
+            
+            # Check file size
+            file_size = os.path.getsize(audio_file_path)
+            logger.info(f"Audio file size: {file_size} bytes")
+            if file_size == 0:
+                logger.error("Audio file is empty")
+                return {
+                    'success': False,
+                    'error': 'Audio file is empty',
+                    'detail': 'Received empty audio file from frontend'
                 }
             
             # Upload file to Gemini
-            logger.info(f"Uploading audio file: {audio_file_path}")
-            audio_file = genai.upload_file(audio_file_path)
+            logger.info(f"Uploading audio file: {audio_file_path} (size: {file_size} bytes)")
+            try:
+                audio_file = genai.upload_file(audio_file_path)
+                logger.info(f"File uploaded successfully: {audio_file.name if hasattr(audio_file, 'name') else audio_file}")
+            except Exception as upload_err:
+                logger.error(f"Failed to upload file to Gemini: {str(upload_err)}")
+                import traceback
+                logger.error(f"Upload traceback: {traceback.format_exc()}")
+                return {
+                    'success': False,
+                    'error': 'Failed to upload audio to Gemini',
+                    'detail': str(upload_err)
+                }
             
             # Create model instance
-            model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+            try:
+                model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+                logger.info("Gemini model initialized")
+            except Exception as model_err:
+                logger.error(f"Failed to initialize Gemini model: {str(model_err)}")
+                return {
+                    'success': False,
+                    'error': 'Failed to initialize AI model',
+                    'detail': str(model_err)
+                }
             
             # First, transcribe the audio
             transcription_prompt = """Please transcribe this medical consultation audio recording. 
             Provide a complete, accurate transcription of the entire consultation.
             Format: Plain text transcription."""
             
-            transcription_response = model.generate_content(
-                [transcription_prompt, audio_file]
-            )
-            transcription_text = transcription_response.text
+            logger.info("Generating transcription from audio...")
+            try:
+                transcription_response = model.generate_content(
+                    [transcription_prompt, audio_file]
+                )
+                transcription_text = transcription_response.text
+                logger.info(f"Transcription completed ({len(transcription_text)} chars)")
+            except Exception as transcribe_err:
+                logger.error(f"Failed to transcribe audio: {str(transcribe_err)}")
+                import traceback
+                logger.error(f"Transcription traceback: {traceback.format_exc()}")
+                return {
+                    'success': False,
+                    'error': 'Failed to transcribe audio',
+                    'detail': str(transcribe_err)
+                }
             
             # Build enhanced prompt with consultation context
             context_info = self._build_context_info(consultation_context)
             
-            # Then, generate structured consultation notes in French
-            notes_prompt = f"""Based on the medical consultation audio provided, generate comprehensive consultation notes in FRENCH (Français).
+            # Then, generate structured consultation notes in French from transcription
+            notes_prompt = f"""Based on the following medical consultation transcription, generate comprehensive consultation notes in FRENCH (Français).
 
 PATIENT CONTEXT:
 {context_info}
 
-Generate ONLY valid JSON (no markdown, no code blocks) with this exact structure:
+TRANSCRIPTION OF CONSULTATION:
+{transcription_text}
+
+Generate ONLY valid JSON (no markdown, no code blocks) with this exact structure, derived from the transcription above:
 {{
     "chief_complaint": "motif principal de la consultation",
-    "history_of_present_illness": "historique détaillé des symptômes et de la maladie",
-    "physical_exam_findings": "résultats de l'examen physique par système",
-    "assessment": "évaluation et impressions cliniques",
-    "diagnosis": "diagnostics principaux et secondaires",
-    "treatment_plan": "plan de traitement recommandé",
-    "medications": "médicaments prescrits ou recommandés",
-    "follow_up": "recommandations de suivi",
-    "clinical_notes": "notes cliniques supplémentaires et observations"
+    "history_of_present_illness": "historique détaillé des symptômes et de la maladie actuelle",
+    "physical_exam_findings": "résultats de l'examen physique par système et observations cliniques",
+    "assessment": "évaluation et impressions cliniques basées sur la conversation",
+    "diagnosis": "diagnostics principaux et secondaires identifiés",
+    "treatment_plan": "plan de traitement recommandé et suivi proposé",
+    "medications": "médicaments prescrits ou recommandés avec posologie",
+    "follow_up": "recommandations de suivi et date de retour si mentionnée",
+    "clinical_notes": "notes cliniques supplémentaires et observations importantes"
 }}
 
 IMPORTANT: 
+- Extract information DIRECTLY from the transcription provided above
 - All text MUST be in French (Français)
 - Ensure all JSON is valid and properly formatted
 - Close all brackets and braces
-- Use the patient context provided above to enrich the notes"""
+- Create a professional medical consultation note from the conversation"""
             
-            notes_response = model.generate_content(
-                [notes_prompt, audio_file]
-            )
-            notes_text = notes_response.text
+            logger.info("Generating structured notes from transcription...")
+            try:
+                notes_response = model.generate_content(notes_prompt)
+                notes_text = notes_response.text
+                logger.info(f"Notes generation completed ({len(notes_text)} chars)")
+            except Exception as notes_err:
+                logger.error(f"Failed to generate notes: {str(notes_err)}")
+                import traceback
+                logger.error(f"Notes generation traceback: {traceback.format_exc()}")
+                return {
+                    'success': False,
+                    'error': 'Failed to generate consultation notes',
+                    'detail': str(notes_err)
+                }
             
             # Parse JSON from notes
             structured_notes = self._parse_json_response(notes_text)
@@ -113,9 +188,12 @@ IMPORTANT:
         
         except Exception as e:
             logger.error(f"Error transcribing audio with Gemini: {str(e)}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'detail': 'An unexpected error occurred during transcription'
             }
     
     def _build_context_info(self, consultation_context: dict = None) -> str:
