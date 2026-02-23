@@ -579,7 +579,14 @@ function DesktopApp() {
     // Hospital screens
     if (activeScreen === 'hp-dashboard') return <HospitalDashboardContent onNavigate={handleScreenChange} />;
     if (activeScreen === 'hp-emergency') return <EmergencyDashboardScreen />;
-    if (activeScreen === 'hp-triage') return <TriageScreen />;
+    if (activeScreen === 'hp-triage') return (
+      <TriageScreen 
+        onNavigateToRegisterPatient={() => {
+          setActiveScreen('hp-patients');
+          setPatientView('register');
+        }}
+      />
+    );
     if (activeScreen === 'hp-appointments') return <AppointmentSchedulerScreen />;
     if (activeScreen === 'hp-wards') return <WardManagementScreen />;
     if (activeScreen === 'hp-admissions') return <AdmissionScreen />;

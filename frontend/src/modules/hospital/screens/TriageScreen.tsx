@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,13 @@ import {
   Dimensions,
   TextInput,
   Modal,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import ApiService from '../../../services/ApiService';
+import { Patient } from '../../../models/Patient';
 import {
   Triage,
   TriageLevel,
@@ -177,10 +181,105 @@ function RedFlagChip({
 }
 
 // ─── Main Component ──────────────────────────────────────────
-export function TriageScreen() {
-  // Form state
+interface TriageScreenProps {
+  onNavigateToRegisterPatient?: () => void;
+}
+
+export function TriageScreen({ onNavigateToRegisterPatient }: TriageScreenProps = {}) {
+  const api = ApiService.getInstance();
+  
+  // Patient list state
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  
+  // Fetch patients
+  const loadPatients = useCallback(async () => {
+    setLoadingPatients(true);
+    try {
+      const res = await api.get('/patients/?limit=100&ordering=-created_at');
+      if (res.success && res.data) {
+        const payload = res.data as any;
+        const raw: any[] = Array.isArray(payload) ? payload : (payload.results ?? []);
+        const patientList = raw.map((d: any) => ({
+          id: String(d.id),
+          firstName: d.first_name ?? '',
+          lastName: d.last_name ?? '',
+          middleName: d.middle_name ?? '',
+          dateOfBirth: d.date_of_birth ?? '',
+          gender: d.gender ?? 'other',
+          phone: d.phone ?? '',
+          email: d.email ?? '',
+          address: d.address ?? '',
+          city: d.city ?? '',
+          nationalId: d.national_id ?? '',
+          bloodType: d.blood_type,
+          allergies: Array.isArray(d.allergies) ? d.allergies : [],
+          chronicConditions: Array.isArray(d.chronic_conditions) ? d.chronic_conditions : [],
+          currentMedications: Array.isArray(d.current_medications) ? d.current_medications : [],
+          emergencyContactName: d.emergency_contact_name ?? '',
+          emergencyContactPhone: d.emergency_contact_phone ?? '',
+          insuranceProvider: d.insurance_provider ?? '',
+          insuranceNumber: d.insurance_number ?? '',
+          patientNumber: d.patient_number ?? '',
+          registrationDate: d.registration_date ?? d.created_at ?? '',
+          lastVisit: d.last_visit,
+          status: d.status ?? 'active',
+          createdAt: d.created_at ?? '',
+          accessCount: 0,
+        }));
+        setPatients(patientList);
+      }
+    } catch (err) {
+      console.error('[TriageScreen] Error loading patients:', err);
+    } finally {
+      setLoadingPatients(false);
+    }
+  }, [api]);
+  
+  useEffect(() => {
+    loadPatients();
+  }, [loadPatients]);
+  
+  // Filter patients based on search
+  const filteredPatients = useMemo(() => {
+    if (!patientSearch.trim()) return patients;
+    const q = patientSearch.toLowerCase();
+    return patients.filter(p =>
+      `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+      p.patientNumber.toLowerCase().includes(q) ||
+      (p.phone || '').includes(q)
+    );
+  }, [patients, patientSearch]);
+  
+  // Handle patient selection
+  const handleSelectPatient = (patient: Patient) => {
+    setSelectedPatientId(patient.id);
+    setSelectedPatient(patient);
+    setChiefComplaint('');
+    setTemperature('');
+    setSystolic('');
+    setDiastolic('');
+    setHeartRate('');
+    setRespiratoryRate('');
+    setOxygenSat('');
+    setBloodGlucose('');
+  };
+  
+  // Calculate age from DOB
+  const calculateAge = (dob?: string): string => {
+    if (!dob) return '—';
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age.toString();
+  };
   
   // Chief complaint
   const [chiefComplaint, setChiefComplaint] = useState('');
@@ -328,11 +427,76 @@ export function TriageScreen() {
             onChangeText={setPatientSearch}
           />
         </View>
-        <TouchableOpacity style={styles.newPatientBtn} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={styles.newPatientBtn} 
+          activeOpacity={0.7}
+          onPress={onNavigateToRegisterPatient}
+        >
           <Ionicons name="add-circle" size={18} color={colors.primary} />
           <Text style={styles.newPatientBtnText}>Enregistrer Nouveau Patient</Text>
         </TouchableOpacity>
+        
+        {/* Patient List */}
+        {loadingPatients ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={colors.info} />
+            <Text style={styles.loadingText}>Chargement des patients...</Text>
+          </View>
+        ) : filteredPatients.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="person-outline" size={40} color={colors.textSecondary} />
+            <Text style={styles.emptyStateText}>Aucun patient trouvé</Text>
+          </View>
+        ) : (
+          <View style={styles.patientList}>
+            {filteredPatients.map((patient) => (
+              <TouchableOpacity
+                key={patient.id}
+                style={[
+                  styles.patientListItem,
+                  selectedPatientId === patient.id && styles.patientListItemSelected,
+                ]}
+                onPress={() => handleSelectPatient(patient)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.patientListItemContent}>
+                  <View style={styles.patientListItemHeader}>
+                    <Text style={styles.patientListItemName}>
+                      {patient.firstName} {patient.lastName}
+                    </Text>
+                    <Text style={styles.patientListItemAge}>
+                      {calculateAge(patient.dateOfBirth)} ans
+                    </Text>
+                  </View>
+                  <Text style={styles.patientListItemMeta}>
+                    {patient.patientNumber} • {patient.phone || '—'}
+                  </Text>
+                </View>
+                {selectedPatientId === patient.id && (
+                  <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
+      
+      {/* Selected Patient Info */}
+      {selectedPatient && (
+        <View style={styles.selectedPatientInfo}>
+          <View style={styles.selectedPatientRow}>
+            <Ionicons name="person" size={24} color={colors.info} />
+            <View style={styles.selectedPatientText}>
+              <Text style={styles.selectedPatientName}>
+                {selectedPatient.firstName} {selectedPatient.lastName}
+              </Text>
+              <Text style={styles.selectedPatientMeta}>
+                {selectedPatient.patientNumber} • {calculateAge(selectedPatient.dateOfBirth)} ans • {selectedPatient.phone}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* ══════ SECTION: Plainte Principale ══════ */}
       <SectionHeader title="Plainte Principale" icon="medical" accentColor={colors.warning} />
@@ -818,7 +982,96 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // Inputs
+  // Patient List
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 20,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 8,
+  },
+  patientList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  patientListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  patientListItemSelected: {
+    borderColor: colors.success,
+    backgroundColor: colors.success + '08',
+  },
+  patientListItemContent: {
+    flex: 1,
+  },
+  patientListItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  patientListItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  patientListItemAge: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  patientListItemMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+
+  // Selected Patient Info
+  selectedPatientInfo: {
+    backgroundColor: colors.info + '12',
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.info,
+  },
+  selectedPatientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectedPatientText: {
+    flex: 1,
+  },
+  selectedPatientName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  selectedPatientMeta: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   inputGroup: {
     marginBottom: 16,
   },

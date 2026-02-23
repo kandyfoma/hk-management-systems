@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -300,18 +301,18 @@ export function HospitalConsultationScreen({
     setLoadingQueue(true);
     try {
       const stored = await AsyncStorage.getItem(HOSPITAL_PENDING_CONSULTATIONS_KEY);
+      console.log('[HospitalConsultation] Stored queue:', stored);
       const list: PendingHospitalConsultation[] = stored ? JSON.parse(stored) : [];
-      setPendingConsultations(list.filter(item => item.status === 'waiting'));
-    } catch {
+      const waiting = list.filter(item => item.status === 'waiting');
+      console.log('[HospitalConsultation] Waiting patients:', waiting.length);
+      setPendingConsultations(waiting);
+    } catch (err) {
+      console.error('[HospitalConsultation] Error loading queue:', err);
       setPendingConsultations([]);
     } finally {
       setLoadingQueue(false);
     }
   }, []);
-
-  useEffect(() => {
-    loadPendingQueue();
-  }, [loadPendingQueue]);
 
   const loadPendingConsultation = useCallback(async (pendingId: string) => {
     try {
@@ -332,17 +333,35 @@ export function HospitalConsultationScreen({
       );
       await AsyncStorage.setItem(HOSPITAL_PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
       setPendingConsultations(updated.filter(item => item.status === 'waiting'));
-    } catch {
+    } catch (err) {
+      console.error('[HospitalConsultation] Error loading pending:', err);
       Alert.alert('Erreur', 'Impossible de charger ce patient depuis la file d\'attente.');
     }
   }, []);
 
+  // Load queue on mount
+  useEffect(() => {
+    loadPendingQueue();
+  }, [loadPendingQueue]);
+
+  // Wait a bit then load pending consultation if provided
   useEffect(() => {
     if (pendingConsultationToLoad) {
-      loadPendingConsultation(pendingConsultationToLoad);
-      onPendingLoaded?.();
+      setTimeout(() => {
+        loadPendingConsultation(pendingConsultationToLoad);
+        onPendingLoaded?.();
+      }, 100);
     }
   }, [pendingConsultationToLoad, loadPendingConsultation, onPendingLoaded]);
+
+  // Auto-refresh waiting room when screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedPatient) {
+        loadPendingQueue();
+      }
+    }, [selectedPatient, loadPendingQueue])
+  );
 
   // ─── Navigation ──
   const goNext = () => {
@@ -422,7 +441,7 @@ export function HospitalConsultationScreen({
   };
 
   // ─── Complete consultation ──
-  const completeConsultation = () => {
+  const completeConsultation = async () => {
     if (!selectedPatient) return;
 
     const encounter: Partial<Encounter> = {
@@ -433,13 +452,35 @@ export function HospitalConsultationScreen({
       // Would include all other data in real implementation
     };
 
+    // Mark pending consultation as completed if it exists
+    try {
+      const stored = await AsyncStorage.getItem(HOSPITAL_PENDING_CONSULTATIONS_KEY);
+      if (stored) {
+        const list: PendingHospitalConsultation[] = JSON.parse(stored);
+        const updated = list.map(item =>
+          item.patient.id === selectedPatient.id 
+            ? { ...item, status: 'completed' as const }
+            : item,
+        );
+        await AsyncStorage.setItem(HOSPITAL_PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
+      }
+    } catch (err) {
+      console.error('Error updating pending consultation:', err);
+    }
+
     Alert.alert(
       'Consultation Terminée',
       `La consultation pour ${selectedPatient.firstName} ${selectedPatient.lastName} a été enregistrée.`,
       [
         {
           text: 'OK',
-          onPress: () => onComplete?.(encounter),
+          onPress: () => {
+            onComplete?.(encounter);
+            // Return to waiting room to see next patient
+            setSelectedPatient(null);
+            setCurrentStep('patient_identification');
+            loadPendingQueue();
+          },
         },
       ]
     );
@@ -1357,14 +1398,34 @@ export function HospitalConsultationScreen({
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => {
+            if (selectedPatient) {
+              // Going back from consultation to waiting room
+              setSelectedPatient(null);
+              setCurrentStep('patient_identification');
+              loadPendingQueue();
+            } else {
+              // Going back from waiting room to patients
+              onBack?.();
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Consultation Médicale</Text>
+          <Text style={styles.headerTitle}>
+            {selectedPatient ? 'Consultation Médicale' : 'Salle d\'attente Consultation'}
+          </Text>
           {selectedPatient && (
             <Text style={styles.headerSubtitle}>
               {selectedPatient.firstName} {selectedPatient.lastName}
+            </Text>
+          )}
+          {!selectedPatient && (
+            <Text style={styles.headerSubtitle}>
+              Patients issus de l'accueil consultation
             </Text>
           )}
         </View>

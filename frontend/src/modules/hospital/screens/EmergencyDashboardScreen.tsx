@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,13 @@ import {
   TouchableOpacity,
   Dimensions,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
-import { 
-  Triage, 
-  TriageLevel, 
-  TriageStatus, 
-  TRIAGE_LEVEL_CONFIG, 
-  TriageUtils 
-} from '../../../models/Triage';
+import ApiService from '../../../services/ApiService';
+import { Triage, TriageLevel, TriageStatus, TRIAGE_LEVEL_CONFIG, TriageUtils } from '../../../models/Triage';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -449,49 +446,189 @@ function TriageQueueCard({ triage, patientName }: { triage: Triage; patientName:
 }
 
 // ─── Main Component ──────────────────────────────────────────
-export function EmergencyDashboardScreen() {
+export function EmergencyDashboardScreen({ onNavigateToTriage }: { onNavigateToTriage?: () => void } = {}) {
+  const api = ApiService.getInstance();
+  
+  // State for triages and patients
+  const [triages, setTriages] = useState<Triage[]>([]);
+  const [patientMap, setPatientMap] = useState<Record<string, { firstName: string; lastName: string }>>({});
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLevel, setSelectedLevel] = useState<TriageLevel | null>(null);
 
+  // Fetch triages from API
+  const loadTriages = useCallback(async () => {
+    try {
+      setError(null);
+      const res = await api.get('/triage/?limit=200&ordering=-triaged_date');
+      if (res.success && res.data) {
+        const payload = res.data as any;
+        const raw: any[] = Array.isArray(payload) ? payload : (payload.results ?? []);
+        
+        const triageList = raw.map((d: any) => ({
+          id: String(d.id),
+          encounterId: d.encounter_id ?? '',
+          patientId: String(d.patient_id ?? ''),
+          nurseId: d.nurse_id ?? '',
+          organizationId: d.organization_id ?? '',
+          facilityId: d.facility_id ?? '',
+          triageNumber: d.triage_number ?? `TR${d.id}`,
+          triageDate: d.triage_date ?? new Date().toISOString(),
+          level: (d.triage_level ?? 3) as TriageLevel,
+          category: d.category ?? 'urgent',
+          acuity: d.acuity ?? 'high',
+          chiefComplaint: d.chief_complaint ?? '—',
+          symptomOnset: d.symptom_onset ?? '—',
+          vitals: d.vitals ?? {},
+          painLevel: d.pain_level ?? 0,
+          consciousnessLevel: d.consciousness_level ?? 'alert',
+          airwayStatus: d.airway_status ?? 'patent',
+          breathingStatus: d.breathing_status ?? 'normal',
+          circulationStatus: d.circulation_status ?? 'normal',
+          mobilityStatus: d.mobility_status ?? 'ambulatory',
+          allergiesVerified: d.allergies_verified ?? false,
+          immunocompromised: d.immunocompromised ?? false,
+          redFlags: Array.isArray(d.red_flags) ? d.red_flags : [],
+          hasRedFlags: (Array.isArray(d.red_flags) ? d.red_flags.length : 0) > 0,
+          isTrauma: d.is_trauma ?? false,
+          feverScreening: d.fever_screening ?? false,
+          respiratorySymptoms: d.respiratory_symptoms ?? false,
+          isolationRequired: d.isolation_required ?? false,
+          status: (d.status ?? 'in_progress') as TriageStatus,
+          assignedArea: d.assigned_area ?? '—',
+          assignedDoctor: d.assigned_doctor ?? '—',
+          arrivalTime: d.arrival_time ?? new Date().toISOString(),
+          triageStartTime: d.triage_start_time,
+          triageEndTime: d.triage_end_time,
+          createdAt: d.created_at ?? new Date().toISOString(),
+          accessCount: 0,
+        }));
+        
+        setTriages(triageList);
+        
+        // Fetch patient details for all triages
+        const uniquePatientIds = [...new Set(triageList.map(t => t.patientId))];
+        if (uniquePatientIds.length > 0) {
+          try {
+            const patientRes = await api.get(`/patients/?id__in=${uniquePatientIds.join(',')}`);
+            if (patientRes.success && patientRes.data) {
+              const patientPayload = patientRes.data as any;
+              const patientList: any[] = Array.isArray(patientPayload) ? patientPayload : (patientPayload.results ?? []);
+              const map: Record<string, { firstName: string; lastName: string }> = {};
+              patientList.forEach((p: any) => {
+                map[String(p.id)] = {
+                  firstName: p.first_name ?? '',
+                  lastName: p.last_name ?? '',
+                };
+              });
+              setPatientMap(map);
+            }
+          } catch (err) {
+            console.error('[EmergencyDashboard] Error fetching patients:', err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[EmergencyDashboard] Error loading triages:', err);
+      setError('Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadTriages();
+  }, [loadTriages]);
+
   // Calculate stats
-  const stats = {
-    total: sampleTriages.length,
-    byLevel: {
-      1: sampleTriages.filter(t => t.level === 1).length,
-      2: sampleTriages.filter(t => t.level === 2).length,
-      3: sampleTriages.filter(t => t.level === 3).length,
-      4: sampleTriages.filter(t => t.level === 4).length,
-      5: sampleTriages.filter(t => t.level === 5).length,
-    },
-    inTreatment: sampleTriages.filter(t => t.status === 'in_treatment').length,
-    waiting: sampleTriages.filter(t => t.status === 'completed').length,
-    avgWait: Math.round(sampleTriages.reduce((acc, t) => acc + TriageUtils.getWaitTime(t), 0) / sampleTriages.length),
-  };
+  const stats = useMemo(() => {
+    return {
+      total: triages.length,
+      byLevel: {
+        1: triages.filter(t => t.level === 1).length,
+        2: triages.filter(t => t.level === 2).length,
+        3: triages.filter(t => t.level === 3).length,
+        4: triages.filter(t => t.level === 4).length,
+        5: triages.filter(t => t.level === 5).length,
+      },
+      inTreatment: triages.filter(t => t.status === 'in_treatment').length,
+      waiting: triages.filter(t => t.status === 'completed' || t.status === 'in_progress').length,
+      avgWait: triages.length > 0 ? Math.round(triages.reduce((acc, t) => acc + TriageUtils.getWaitTime(t), 0) / triages.length) : 0,
+    };
+  }, [triages]);
 
   // Filter triages
-  const filteredTriages = sampleTriages.filter(t => {
-    if (selectedLevel && t.level !== selectedLevel) return false;
-    if (searchQuery) {
-      const name = patientNames[t.patientId]?.toLowerCase() || '';
-      const query = searchQuery.toLowerCase();
-      return name.includes(query) || t.triageNumber.toLowerCase().includes(query) || t.chiefComplaint.toLowerCase().includes(query);
-    }
-    return true;
-  }).sort((a, b) => a.level - b.level); // Sort by priority
+  const filteredTriages = useMemo(() => {
+    return triages.filter(t => {
+      if (selectedLevel && t.level !== selectedLevel) return false;
+      if (searchQuery) {
+        const firstName = patientMap[t.patientId]?.firstName?.toLowerCase() || '';
+        const lastName = patientMap[t.patientId]?.lastName?.toLowerCase() || '';
+        const name = `${firstName} ${lastName}`;
+        const query = searchQuery.toLowerCase();
+        return name.includes(query) || t.triageNumber.toLowerCase().includes(query) || t.chiefComplaint.toLowerCase().includes(query);
+      }
+      return true;
+    }).sort((a, b) => a.level - b.level);
+  }, [triages, patientMap, selectedLevel, searchQuery]); // Sort by priority
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>🚨 Urgences</Text>
-          <Text style={styles.headerSubtitle}>Tableau de bord du service d'urgence</Text>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={() => {
+            setRefreshing(true);
+            loadTriages();
+          }}
+        />
+      }
+    >
+      {/* Loading Error */}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={24} color={colors.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => {
+            setLoading(true);
+            loadTriages();
+          }}>
+            <Text style={styles.retryBtnText}>Réessayer</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.7}>
-          <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.addBtnText}>Nouveau Triage</Text>
-        </TouchableOpacity>
-      </View>
+      )}
+
+      {/* Loading State */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.error} />
+          <Text style={styles.loadingText}>Chargement des urgences...</Text>
+        </View>
+      ) : (
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerTitle}>🚨 Urgences</Text>
+              <Text style={styles.headerSubtitle}>Tableau de bord du service d'urgence</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.addBtn} 
+              activeOpacity={0.7}
+              onPress={onNavigateToTriage}
+            >
+              <Ionicons name="add" size={20} color="#FFF" />
+              <Text style={styles.addBtnText}>Nouveau Triage</Text>
+            </TouchableOpacity>
+          </View>
 
       {/* ══════ SECTION: Niveaux de Triage ══════ */}
       <SectionHeader
@@ -559,6 +696,10 @@ export function EmergencyDashboardScreen() {
         accentColor={colors.warning}
         ctaLabel="Actualiser"
         ctaIcon="refresh"
+        onCtaPress={() => {
+          setLoading(true);
+          loadTriages();
+        }}
       />
 
       {/* Search */}
@@ -582,13 +723,17 @@ export function EmergencyDashboardScreen() {
 
       {/* Queue List */}
       <View style={styles.queueList}>
-        {filteredTriages.map((triage) => (
-          <TriageQueueCard
-            key={triage.id}
-            triage={triage}
-            patientName={patientNames[triage.patientId] || 'Inconnu'}
-          />
-        ))}
+        {filteredTriages.map((triage) => {
+          const patient = patientMap[triage.patientId];
+          const patientName = patient ? `${patient.firstName} ${patient.lastName}` : 'Inconnu';
+          return (
+            <TriageQueueCard
+              key={triage.id}
+              triage={triage}
+              patientName={patientName}
+            />
+          );
+        })}
         {filteredTriages.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle" size={48} color={colors.success} />
@@ -596,6 +741,8 @@ export function EmergencyDashboardScreen() {
           </View>
         )}
       </View>
+        </>
+      )}
     </ScrollView>
   );
 }

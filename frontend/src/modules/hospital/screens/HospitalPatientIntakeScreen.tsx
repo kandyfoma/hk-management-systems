@@ -154,8 +154,31 @@ export function HospitalPatientIntakeScreen({
       await AsyncStorage.setItem(HOSPITAL_PENDING_CONSULTATIONS_KEY, JSON.stringify(nextQueue));
 
       onConsultationQueued?.();
-      Alert.alert('Patient ajouté', 'Le patient a été ajouté à la salle d\'attente de consultation.');
-      onNavigateToConsultation?.(pending.id);
+      Alert.alert(
+        'Patient Ajouté ✓',
+        `${selectedPatient?.firstName} ${selectedPatient?.lastName} est maintenant en attente de consultation.`,
+        [
+          {
+            text: 'Continuer Accueil',
+            onPress: () => {
+              // Reset form to queue more patients
+              setSelectedPatient(null);
+              setVisitReason('');
+              setReferredBy('');
+              setTemperature('');
+              setSystolic('');
+              setDiastolic('');
+              setHeartRate('');
+              setOxygenSat('');
+              setSearchQuery('');
+            },
+          },
+          {
+            text: 'Voir File Attente',
+            onPress: () => onNavigateToConsultation?.(), // No pending ID - shows waiting room
+          },
+        ]
+      );
     } catch {
       Alert.alert('Erreur', 'Impossible d\'ajouter le patient à la file d\'attente.');
     } finally {
