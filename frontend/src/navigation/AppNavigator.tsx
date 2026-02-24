@@ -17,7 +17,6 @@ import { OccHealthDashboardContent } from '../modules/occupational-health/screen
 import { OccHealthConsultationScreen } from '../modules/occupational-health/screens/OccHealthConsultationScreen';
 import { PreviousVisitsScreen } from '../modules/occupational-health/screens/PreviousVisitsScreen';
 import { CertificatesScreen } from '../modules/occupational-health/screens/CertificatesScreen';
-import { OHPatientsScreen } from '../modules/occupational-health/screens/OHPatientsScreen';
 import { OHPatientIntakeScreen } from '../modules/occupational-health/screens/OHPatientIntakeScreen';
 import { IncidentsScreen } from '../modules/occupational-health/screens/IncidentsScreen';
 import { IncidentDashboardScreen } from '../modules/occupational-health/screens/IncidentDashboardScreen';
@@ -29,7 +28,8 @@ import { ReportsScreen } from '../modules/occupational-health/screens/ReportsScr
 import { ComplianceScreen } from '../modules/occupational-health/screens/ComplianceScreen';
 import { AnalyticsScreen } from '../modules/occupational-health/screens/AnalyticsScreen';
 import { ProtocolManagementScreen } from '../modules/occupational-health/screens/ProtocolManagementScreen';
-import { WorkerRegistrationScreen, EnterpriseManagementScreen } from '../modules/occupational-health/screens/WorkerAndEnterpriseScreen';
+import { PersonnelRegistryScreen } from '../modules/occupational-health/screens/PersonnelRegistryScreen';
+import { EnterpriseManagementScreen } from '../modules/occupational-health/screens/WorkerAndEnterpriseScreen';
 import { MedicalTestVisualizationScreen, ExitExamScreen } from '../modules/occupational-health/screens/MedicalTestVisualizationScreen';
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from '../modules/occupational-health/screens/DiseaseRegistryAndHealthScreeningScreen';
 import { ExposureMonitoringDashboard, RegulatoryReportsScreen } from '../modules/occupational-health/screens/ExposureAndReportingScreen';
@@ -175,6 +175,10 @@ const createDynamicSections = (
       items: [
         { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
         { id: 'staff-management', label: 'Gestion Personnel', icon: 'people-outline', iconActive: 'people' },
+        ...(activeModules.includes('OCCUPATIONAL_HEALTH') ? [
+          { id: 'oh-personnel-registry', label: 'Registre Personnel', icon: 'people-outline' as const, iconActive: 'people' as const },
+          { id: 'oh-enterprise-management', label: 'Gestion Entreprises', icon: 'business-outline' as const, iconActive: 'business' as const },
+        ] : []),
       ],
     }
   ];
@@ -286,9 +290,6 @@ const createDynamicSections = (
       defaultCollapsed: false,
       items: [
         { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' },
-        { id: 'oh-worker-management', label: 'Gestion Travailleurs', icon: 'people-outline', iconActive: 'people' },
-        { id: 'oh-enterprise-management', label: 'Gestion Entreprises', icon: 'business-outline', iconActive: 'business' },
-        { id: 'oh-patients', label: 'Patients Historiques', icon: 'person-outline', iconActive: 'person' },
         { id: 'oh-intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
         { id: 'oh-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit' },
         { id: 'oh-medical-tests', label: 'Tests Médicaux', icon: 'flask-outline', iconActive: 'flask' },
@@ -358,7 +359,6 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
 // Occupational Health placeholder screen definitions
 // ═══════════════════════════════════════════════════════════════
 const occHealthScreens: Record<string, { title: string; subtitle: string; icon: any; features: string[] }> = {
-  'oh-patients': { title: 'Patients — Santé au Travail', subtitle: 'Registre des patients par secteur d\'activité et entreprise.', icon: 'people', features: ['Enregistrement multi-secteur', 'Profil de risque par secteur & poste', 'Historique d\'exposition', 'Suivi EPI', 'Gestion multi-entreprise', 'Export CNSS'] },
   'oh-exams': { title: 'Visites Médicales', subtitle: 'Examens d\'aptitude adaptés par secteur (ILO C161).', icon: 'medkit', features: ['Visite d\'embauche', 'Visites périodiques', 'Examens sectoriels adaptés', 'Bilan ergonomique & stress', 'Évaluation santé mentale', 'Tests de risque sectoriel'] },
   'oh-certificates': { title: 'Certificats d\'Aptitude', subtitle: 'Gestion des certificats médicaux.', icon: 'shield-checkmark', features: ['Émission certificats', 'Suivi expirations', 'Alertes renouvellement', 'Classifications aptitude', 'Historique par patient', 'Signature numérique'] },
   'oh-incidents': { title: 'Incidents & Accidents', subtitle: 'Signalement et investigation ISO 45001 §10.2.', icon: 'warning', features: ['Déclaration accident', 'Classification gravité', 'Investigation causes racines', 'Actions correctives (CAPA)', 'Calcul LTIFR/TRIFR/SR', 'Rapports réglementaires par secteur'] },
@@ -499,7 +499,7 @@ function DesktopApp() {
       'hp-intake': 'HOSPITAL',
 
       'oh-dashboard': 'OCCUPATIONAL_HEALTH',
-      'oh-patients': 'OCCUPATIONAL_HEALTH',
+      'oh-personnel-registry': 'OCCUPATIONAL_HEALTH',
       'oh-intake': 'OCCUPATIONAL_HEALTH',
       'oh-protocol': 'OCCUPATIONAL_HEALTH',
       'oh-exams': 'OCCUPATIONAL_HEALTH',
@@ -756,6 +756,9 @@ function DesktopApp() {
 
     // Occupational Health screens
     if (activeScreen === 'oh-dashboard') return <OccHealthDashboardContent onNavigate={handleScreenChange} />;
+    
+    if (activeScreen === 'oh-personnel-registry') return <PersonnelRegistryScreen />;
+    
     if (activeScreen === 'oh-exams') return (
       <OccHealthConsultationScreen 
         key={`oh-exams-${ohExamsScreenKey}`}
@@ -766,26 +769,30 @@ function DesktopApp() {
         onNavigateBack={() => setActiveScreen('oh-dashboard')}
       />
     );
+    
     if (activeScreen === 'oh-protocol') return <ProtocolManagementScreen />;
+    
     if (activeScreen === 'oh-previous-visits') return (
       <PreviousVisitsScreen 
         onResumeDraft={handleResumeDraft} 
         onNewConsultation={handleNewConsultation}
       />
     );
+    
     if (activeScreen === 'oh-certificates') return (
       <CertificatesScreen 
         onNavigateBack={() => setActiveScreen('oh-dashboard')}
         showBackButton={true}
       />
     );
-    if (activeScreen === 'oh-patients') return <OHPatientsScreen />;
+    
     if (activeScreen === 'oh-intake') return (
       <OHPatientIntakeScreen
         onConsultationQueued={() => {}}
         onNavigateToConsultation={handleNavigateToOccConsultation}
       />
     );
+    
     if (activeScreen === 'oh-incident-dashboard') return <IncidentDashboardScreen />;
     if (activeScreen === 'oh-incidents') return <IncidentsScreen />;
     if (activeScreen === 'oh-diseases') return <DiseasesScreen />;
@@ -802,7 +809,6 @@ function DesktopApp() {
     if (activeScreen === 'oh-reports') return <ReportsScreen />;
     if (activeScreen === 'oh-compliance') return <ComplianceScreen />;
     if (activeScreen === 'oh-analytics') return <AnalyticsScreen />;
-    if (activeScreen === 'oh-worker-management') return <WorkerRegistrationScreen />;
     if (activeScreen === 'oh-enterprise-management') return <EnterpriseManagementScreen />;
     if (activeScreen === 'oh-medical-tests') return <MedicalTestVisualizationScreen />;
     if (activeScreen === 'oh-exam-management') return <MedicalExamManagementScreen />;

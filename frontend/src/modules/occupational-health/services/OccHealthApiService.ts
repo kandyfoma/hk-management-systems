@@ -1,7 +1,8 @@
 import axios, { AxiosInstance } from 'axios';
 
 // Base API configuration
-const API_BASE = 'http://your-backend-url/api/v1';  // Update with actual backend URL
+// Update with your backend URL (e.g., http://localhost:8000/api)
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 // ─── Types ──────────────────────────────────────────────────────
 export interface DashboardMetrics {
@@ -324,6 +325,52 @@ class OccHealthApiService {
   }
 
   // ─── Health Surveillance ────────────────────────────────────
+  
+  // Fetch all surveillance programs with optional filtering
+  async getSurveillancePrograms(params?: { sector?: string; isActive?: boolean }): Promise<any[]> {
+    try {
+      const response = await this.api.get('/surveillance/programs/', { params });
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch surveillance programs:', error);
+      return [];
+    }
+  }
+
+  // Create new surveillance program
+  async createSurveillanceProgram(programData: any): Promise<any> {
+    try {
+      const response = await this.api.post('/surveillance/programs/', programData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create surveillance program:', error);
+      throw error;
+    }
+  }
+
+  // Update surveillance program
+  async updateSurveillanceProgram(id: string, programData: any): Promise<any> {
+    try {
+      const response = await this.api.patch(`/surveillance/programs/${id}/`, programData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update surveillance program:', error);
+      throw error;
+    }
+  }
+
+  // Delete surveillance program
+  async deleteSurveillanceProgram(id: string): Promise<boolean> {
+    try {
+      await this.api.delete(`/surveillance/programs/${id}/`);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete surveillance program:', error);
+      return false;
+    }
+  }
+
+  // Get surveillance programs with enrollment stats
   async getHealthSurveillancePrograms(): Promise<Array<{
     id: string;
     name: string;
@@ -332,10 +379,185 @@ class OccHealthApiService {
     overdue: number;
   }>> {
     try {
-      const response = await this.api.get('/surveillance/programs/');
+      const response = await this.api.get('/surveillance/programs/stats/');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch surveillance programs:', error);
+      return [];
+    }
+  }
+
+  // Check exam results against surveillance program thresholds
+  async checkExamThresholds(examId: string, programId: string): Promise<{
+    violations: Array<{
+      parameter: string;
+      level: 'warning' | 'action' | 'critical';
+      value: number;
+      threshold: number;
+      actionRequired: string;
+    }>;
+    overallStatus: 'compliant' | 'non-compliant' | 'critical';
+  }> {
+    try {
+      const response = await this.api.post('/surveillance/check-thresholds/', {
+        exam_id: examId,
+        program_id: programId,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to check exam thresholds:', error);
+      return { violations: [], overallStatus: 'compliant' };
+    }
+  }
+
+  // Get surveillance compliance metrics by sector/enterprise
+  async getSurveillanceCompliance(params?: { 
+    enterprise_id?: string; 
+    sector?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    totalWorkers: number;
+    workersInSurveillance: number;
+    complianceRate: number;
+    dueSoonCount: number;
+    overdueCount: number;
+    programStats: Array<{
+      programId: string;
+      programName: string;
+      enrolledWorkers: number;
+      completedExams: number;
+      pendingExams: number;
+      overdueExams: number;
+    }>;
+  }> {
+    try {
+      const response = await this.api.get('/surveillance/compliance/', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch surveillance compliance:', error);
+      return {
+        totalWorkers: 0,
+        workersInSurveillance: 0,
+        complianceRate: 0,
+        dueSoonCount: 0,
+        overdueCount: 0,
+        programStats: [],
+      };
+    }
+  }
+
+  // Enroll worker in surveillance program
+  async enrollWorkerInSurveillance(workerId: string, programId: string): Promise<any> {
+    try {
+      const response = await this.api.post('/surveillance/enroll/', {
+        worker_id: workerId,
+        program_id: programId,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to enroll worker in surveillance:', error);
+      throw error;
+    }
+  }
+
+  // Get worker's surveillance enrollment status
+  async getWorkerSurveillanceStatus(workerId: string): Promise<{
+    enrolledPrograms: Array<{
+      programId: string;
+      programName: string;
+      enrollmentDate: string;
+      lastExamDate?: string;
+      nextExamDue: string;
+      status: 'compliant' | 'due-soon' | 'overdue';
+    }>;
+    overallStatus: 'compliant' | 'due-soon' | 'overdue';
+  }> {
+    try {
+      const response = await this.api.get(`/surveillance/worker/${workerId}/status/`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch worker surveillance status:', error);
+      return { enrolledPrograms: [], overallStatus: 'compliant' };
+    }
+  }
+
+  // Get threshold violations
+  async getThresholdViolations(params?: {
+    severity?: 'warning' | 'action' | 'critical';
+    programId?: string;
+    status?: 'open' | 'resolved';
+  }): Promise<Array<{
+    id: string;
+    workerId: string;
+    workerName: string;
+    programName: string;
+    parameter: string;
+    value: number;
+    threshold: number;
+    severity: 'warning' | 'action' | 'critical';
+    actionRequired: string;
+    createdAt: string;
+    status: 'open' | 'resolved';
+  }>> {
+    try {
+      const response = await this.api.get('/surveillance/threshold-violations/', { params });
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch threshold violations:', error);
+      return [];
+    }
+  }
+
+  // Resolve a threshold violation
+  async resolveThresholdViolation(violationId: string, resolution: string): Promise<any> {
+    try {
+      const response = await this.api.patch(`/surveillance/threshold-violations/${violationId}/`, {
+        status: 'resolved',
+        resolution,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to resolve threshold violation:', error);
+      throw error;
+    }
+  }
+
+  // Generate surveillance compliance report
+  async generateComplianceReport(params?: {
+    startDate?: string;
+    endDate?: string;
+    sector?: string;
+    enterpriseId?: string;
+    format?: 'json' | 'pdf';
+  }): Promise<any> {
+    try {
+      const response = await this.api.get('/surveillance/compliance-report/', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to generate compliance report:', error);
+      throw error;
+    }
+  }
+
+  // Get surveillance trends over time
+  async getSurveillanceTrends(params?: {
+    programId?: string;
+    startDate?: string;
+    endDate?: string;
+    interval?: 'daily' | 'weekly' | 'monthly';
+  }): Promise<Array<{
+    date: string;
+    completedExams: number;
+    dueSoonCount: number;
+    overdueCount: number;
+    violationCount: number;
+  }>> {
+    try {
+      const response = await this.api.get('/surveillance/trends/', { params });
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch surveillance trends:', error);
       return [];
     }
   }

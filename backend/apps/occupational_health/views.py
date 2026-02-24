@@ -38,7 +38,7 @@ from .models import (
     RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
     # Medical examination extended models
     XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
-    FitnessCertificationDecision,
+    FitnessCertificationDecision, HealthScreening,
     # Risk assessment models
     HierarchyOfControls, RiskHeatmapData, RiskHeatmapReport,
     # Choice constants
@@ -73,7 +73,7 @@ from .serializers import (
     RegulatoryCNSSReportSerializer, DRCRegulatoryReportSerializer, PPEComplianceRecordSerializer,
     # Medical examination extended serializers
     XrayImagingResultSerializer, HeavyMetalsTestSerializer, DrugAlcoholScreeningSerializer,
-    FitnessCertificationDecisionSerializer,
+    HealthScreeningSerializer, FitnessCertificationDecisionSerializer,
     # Risk assessment serializers
     HierarchyOfControlsSerializer, RiskHeatmapDataSerializer, RiskHeatmapReportSerializer,
     # Utility serializers
@@ -2647,6 +2647,44 @@ class DrugAlcoholScreeningViewSet(viewsets.ModelViewSet):
             'fit_for_duty': screening.fit_for_duty,
             'restrictions': screening.restrictions,
         })
+
+
+class HealthScreeningViewSet(viewsets.ModelViewSet):
+    """
+    Health screening results for various assessment types
+    
+    GET /api/health-screening/ - List all screenings
+    GET /api/health-screening/{id}/ - Get specific screening
+    POST /api/health-screening/ - Create screening
+    PUT /api/health-screening/{id}/ - Complete screening update
+    PATCH /api/health-screening/{id}/ - Partial screening update
+    DELETE /api/health-screening/{id}/ - Delete screening
+    
+    Supported screening types:
+    - ergonomic: Ergonomic Assessment
+    - mental: Mental Health Screening
+    - cardio: Cardiovascular Risk Assessment
+    - msk: Musculoskeletal Screening
+    """
+    
+    serializer_class = HealthScreeningSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['screening_type', 'status', 'worker__enterprise']
+    search_fields = [
+        'worker__first_name',
+        'worker__last_name', 
+        'worker__employee_id'
+    ]
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """Get health screenings with related data"""
+        return HealthScreening.objects.select_related(
+            'worker',
+            'conducted_by',
+            'reviewed_by'
+        ).order_by('-created_at')
 
 
 class FitnessCertificationDecisionViewSet(viewsets.ModelViewSet):

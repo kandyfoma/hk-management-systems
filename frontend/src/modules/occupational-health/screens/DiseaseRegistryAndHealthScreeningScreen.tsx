@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, Switch, Dimensions, ActivityIndicator, FlatList,
+  TextInput, Modal, Switch, Dimensions, ActivityIndicator, FlatList, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -539,37 +539,115 @@ export function HealthScreeningFormScreen() {
           {/* Completed Health Screenings History */}
           {completedScreenings.length > 0 && (
             <>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: spacing.lg, marginBottom: spacing.md, textTransform: 'uppercase' }}>
-                Screening History
-              </Text>
-              {completedScreenings.map(screening => {
-                const screeningType = screenings.find(s => s.id === screening.screeningType);
-                return (
-                  <View
-                    key={screening.id}
-                    style={[styles.screeningCard, styles.cardShadow, { backgroundColor: colors.surface, borderLeftWidth: 4, borderLeftColor: screeningType?.color || colors.primary }]}
-                  >
-                    <View style={[styles.screeningIcon, { backgroundColor: (screeningType?.color || colors.primary) + '20' }]}>
-                      <Ionicons name={(screeningType?.icon as any) || 'checkmark-circle-outline'} size={28} color={screeningType?.color || colors.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.screeningName}>{screening.screeningTypeDisplay}</Text>
-                      <Text style={styles.screeningDesc}>{screening.workerName}</Text>
-                      <Text style={[styles.screeningDesc, { fontSize: 11, marginTop: spacing.xs }]}>
-                        {new Date(screening.completedDate).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: 'center' }}>
-                      <View style={{ backgroundColor: colors.primary + '20', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 4, marginBottom: spacing.xs }}>
-                        <Text style={{ fontSize: 10, fontWeight: '600', color: colors.primary, textTransform: 'uppercase' }}>
-                          {screening.status}
-                        </Text>
+              <View style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' }}>
+                    Screening History
+                  </Text>
+                </View>
+
+                {/* Filter and Sort Controls */}
+                <View style={{ gap: spacing.md }}>
+                  {/* Filter Buttons */}
+                  <View style={{ gap: spacing.xs }}>
+                    <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' }}>Filter by Type</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                        {['all', 'ergonomic', 'mental', 'cardio', 'msk'].map((type) => (
+                          <TouchableOpacity
+                            key={type}
+                            onPress={() => setFilterType(type as any)}
+                            style={[
+                              styles.filterBtn,
+                              filterType === type && styles.filterBtnActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.filterBtnText,
+                                filterType === type && styles.filterBtnTextActive,
+                              ]}
+                            >
+                              {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
                       </View>
-                      <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                    </ScrollView>
+                  </View>
+
+                  {/* Sort Controls */}
+                  <View style={{ gap: spacing.xs }}>
+                    <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' }}>Sort By</Text>
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      {[
+                        { value: 'date-desc' as const, label: 'Newest' },
+                        { value: 'date-asc' as const, label: 'Oldest' },
+                        { value: 'worker' as const, label: 'Worker' },
+                      ].map((option) => (
+                        <TouchableOpacity
+                          key={option.value}
+                          onPress={() => setSortBy(option.value)}
+                          style={[
+                            styles.sortBtn,
+                            sortBy === option.value && styles.sortBtnActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sortBtnText,
+                              sortBy === option.value && styles.sortBtnTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
                     </View>
                   </View>
-                );
-              })}
+                </View>
+              </View>
+
+              {loadingScreenings ? (
+                <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+              ) : filteredAndSortedScreenings.length > 0 ? (
+                filteredAndSortedScreenings.map(screening => {
+                  const screeningType = screenings.find(s => s.id === screening.screeningType);
+                  return (
+                    <TouchableOpacity
+                      key={screening.id}
+                      onPress={() => setSelectedScreening(screening)}
+                      style={[styles.screeningCard, styles.cardShadow, { backgroundColor: colors.surface, borderLeftWidth: 4, borderLeftColor: screeningType?.color || colors.primary }]}
+                    >
+                      <View style={[styles.screeningIcon, { backgroundColor: (screeningType?.color || colors.primary) + '20' }]}>
+                        <Ionicons name={(screeningType?.icon as any) || 'checkmark-circle-outline'} size={28} color={screeningType?.color || colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.screeningName}>{screening.screeningTypeDisplay}</Text>
+                        <Text style={styles.screeningDesc}>{screening.workerName}</Text>
+                        <Text style={[styles.screeningDesc, { fontSize: 11, marginTop: spacing.xs }]}>
+                          {new Date(screening.completedDate).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'center', gap: spacing.xs }}>
+                        <View style={{ backgroundColor: colors.primary + '20', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 4 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '600', color: colors.primary, textTransform: 'uppercase' }}>
+                            {screening.status}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={{ paddingVertical: spacing.lg, alignItems: 'center' }}>
+                  <Ionicons name="filter-outline" size={40} color={colors.textSecondary + '40'} />
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: spacing.md }}>No screenings found</Text>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -579,8 +657,20 @@ export function HealthScreeningFormScreen() {
         <ScreeningFormModal
           formType={activeForm}
           onClose={() => setActiveForm(null)}
+          onSuccess={() => {
+            setActiveForm(null);
+            loadCompletedScreenings();
+          }}
           workers={workers}
           loadingWorkers={loadingWorkers}
+        />
+      )}
+
+      {selectedScreening && (
+        <ScreeningDetailsModal
+          screening={selectedScreening}
+          onClose={() => setSelectedScreening(null)}
+          screenings={screenings}
         />
       )}
     </View>
@@ -591,11 +681,13 @@ export function HealthScreeningFormScreen() {
 function ScreeningFormModal({
   formType,
   onClose,
+  onSuccess,
   workers,
   loadingWorkers,
 }: {
   formType: 'ergonomic' | 'mental' | 'cardio' | 'msk';
   onClose: () => void;
+  onSuccess?: () => void;
   workers: Worker[];
   loadingWorkers: boolean;
 }) {
@@ -603,6 +695,7 @@ function ScreeningFormModal({
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
   const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
   const [workerSearchText, setWorkerSearchText] = useState('');
+  const [saving, setSaving] = useState(false);
   const selectedWorker = workers.find(w => w.id === selectedWorkerId || w.employeeId === selectedWorkerId);
   
   // Filter workers based on search text (name or employee ID)
@@ -802,21 +895,157 @@ function ScreeningFormModal({
 
             <TouchableOpacity 
               style={[styles.submitBtn, styles.cardShadow, !selectedWorkerId && { opacity: 0.5 }]}
-              onPress={() => {
-                if (selectedWorkerId) {
-                  // Save screening with worker ID
-                  console.log(`Screening for worker: ${selectedWorkerId}`, { formType, responses });
-                  onClose();
+              onPress={async () => {
+                if (!selectedWorkerId) return;
+                
+                setSaving(true);
+                try {
+                  const result = await OccHealthApiService.getInstance().createHealthScreening({
+                    worker_id: selectedWorkerId,
+                    screening_type: formType,
+                    responses,
+                    notes: '',
+                  });
+                  
+                  if (result.error) {
+                    Alert.alert('Error', result.error || 'Failed to save screening');
+                  } else {
+                    Alert.alert('Success', 'Screening saved successfully');
+                    onSuccess?.();
+                  }
+                } catch (error: any) {
+                  Alert.alert('Error', error?.message || 'Failed to save screening');
+                } finally {
+                  setSaving(false);
                 }
               }}
-              disabled={!selectedWorkerId}
+              disabled={!selectedWorkerId || saving}
             >
-              <Ionicons name="send" size={20} color="#FFF" />
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Submit Assessment</Text>
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={20} color="#FFF" />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>
+                    {saving ? 'Saving...' : 'Submit Assessment'}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={{ height: 20 }} />
           </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Screening Details Modal ────────────────────────────────────
+interface ScreeningDetailsModalProps {
+  screening: any;
+  onClose: () => void;
+  screenings: Array<{ id: string; name: string; icon: string; color: string }>;
+}
+
+function ScreeningDetailsModal({ screening, onClose, screenings }: ScreeningDetailsModalProps) {
+  const screeningType = screenings.find(s => s.id === screening.screeningType);
+  const details = screening.details || {};
+
+  return (
+    <Modal visible={true} transparent animationType="fade">
+      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+        <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 }}>
+              <View style={[styles.screeningIcon, { backgroundColor: (screeningType?.color || colors.primary) + '20' }]}>
+                <Ionicons name={(screeningType?.icon as any) || 'checkmark-circle-outline'} size={28} color={screeningType?.color || colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>{screening.screeningTypeDisplay}</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary }}>ID: {screening.id}</Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ padding: spacing.sm }}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Basic Information */}
+            <View style={{ backgroundColor: colors.background, padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: spacing.lg }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.md, textTransform: 'uppercase' }}>
+                Basic Information
+              </Text>
+              <InfoRow label="Worker Name" value={screening.workerName} />
+              <InfoRow label="Screening Type" value={screening.screeningTypeDisplay} />
+              <InfoRow label="Completed Date" value={new Date(screening.completedDate).toLocaleString()} />
+              <InfoRow label="Status" value={screening.status.charAt(0).toUpperCase() + screening.status.slice(1)} />
+            </View>
+
+            {/* Assessment Details */}
+            {Object.keys(details).length > 0 && (
+              <View style={{ backgroundColor: colors.background, padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: spacing.lg }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.md, textTransform: 'uppercase' }}>
+                  Assessment Details
+                </Text>
+                {Object.entries(details).map(([key, value]) => {
+                  if (key === 'recommendations' && Array.isArray(value)) {
+                    return (
+                      <View key={key} style={{ marginBottom: spacing.md }}>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, textTransform: 'uppercase' }}>
+                          {key.replace(/([A-Z])/g, ' $1').trim()}
+                        </Text>
+                        {value.map((rec, idx) => (
+                          <View key={idx} style={{ flexDirection: 'row', marginBottom: 6, alignItems: 'flex-start' }}>
+                            <Text style={{ color: screeningType?.color || colors.primary, marginRight: spacing.sm, fontWeight: 'bold' }}>•</Text>
+                            <Text style={{ fontSize: 13, color: colors.text, flex: 1 }}>{rec}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  }
+                  return (
+                    <InfoRow
+                      key={key}
+                      label={key.replace(/([A-Z])/g, ' $1').trim()}
+                      value={typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value)}
+                    />
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg }}>
+              <TouchableOpacity
+                style={[styles.submitBtn, { flex: 1, backgroundColor: colors.primary + '20', marginHorizontal: 0 }]}
+                onPress={() => {
+                  // TODO: Implement download/export functionality
+                  console.log('Export screening:', screening.id);
+                }}
+              >
+                <Ionicons name="download-outline" size={20} color={colors.primary} />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Export</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.submitBtn, { flex: 1, marginHorizontal: 0 }]}
+                onPress={() => {
+                  // TODO: Implement rescan/retake functionality
+                  console.log('Rescan screening:', screening.id);
+                  onClose();
+                }}
+              >
+                <Ionicons name="refresh-outline" size={20} color="#FFF" />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#FFF' }}>Rescan</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          <TouchableOpacity style={[styles.submitBtn, { marginBottom: 0 }]} onPress={onClose}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Close</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -950,6 +1179,50 @@ const styles = StyleSheet.create({
   scaleBtnSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   scaleBtnText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
   scaleBtnTextSelected: { color: '#FFF' },
+
+  filterBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.surface,
+  },
+  filterBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  filterBtnTextActive: {
+    color: '#FFF',
+  },
+
+  sortBtn: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  sortBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sortBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  sortBtnTextActive: {
+    color: '#FFF',
+  },
 
   submitBtn: {
     flexDirection: 'row',

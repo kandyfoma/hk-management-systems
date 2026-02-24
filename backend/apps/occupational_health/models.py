@@ -2162,6 +2162,49 @@ class FitnessCertificationDecision(models.Model):
         return 0
 
 
+class HealthScreening(models.Model):
+    """Generic health screening for versatile occupational health assessments (ergonomic, mental, cardio, musculoskeletal)"""
+    
+    SCREENING_TYPE_CHOICES = [
+        ('ergonomic', 'Ergonomic Assessment'),
+        ('mental', 'Mental Health Screening'),
+        ('cardio', 'Cardiovascular Risk Assessment'),
+        ('msk', 'Musculoskeletal Screening'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('reviewed', 'Reviewed'),
+        ('archived', 'Archived'),
+    ]
+    
+    worker = models.ForeignKey(Worker, on_delete=models.CASCADE, related_name='health_screenings')
+    screening_type = models.CharField(max_length=20, choices=SCREENING_TYPE_CHOICES)
+    responses = models.JSONField(
+        default=dict,
+        help_text="Flexible JSON storage for screening responses"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='completed')
+    notes = models.TextField(blank=True)
+    conducted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='health_screenings_conducted')
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='health_screenings_reviewed')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Health Screening'
+        verbose_name_plural = 'Health Screenings'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['worker', 'screening_type']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.worker.first_name} - {self.get_screening_type_display()}"
+
+
 # ==================== RISK ASSESSMENT EXTENDED MODELS ====================
 
 class HierarchyOfControls(models.Model):
@@ -2323,6 +2366,28 @@ class RiskHeatmapReport(models.Model):
             matrix.append(row)
         return matrix
 
+
+# ==================== ISO 27001 MODELS ====================
+# Import ISO 27001 Information Security Management models
+from .models_iso27001 import (
+    AuditLog,
+    AccessControl,
+    SecurityIncident,
+    VulnerabilityRecord,
+    AccessRequest,
+    DataRetentionPolicy,
+    EncryptionKeyRecord,
+    ComplianceDashboard,
+)
+
+# ==================== SURVEILLANCE PROGRAMS MODELS ====================
+# Import Surveillance Programs models for medical surveillance and compliance monitoring
+from .models_surveillance import (
+    SurveillanceProgram,
+    SurveillanceEnrollment,
+    ThresholdViolation,
+    ComplianceMetrics,
+)
 
 # ==================== ISO 27001 MODELS ====================
 # Import ISO 27001 Information Security Management models

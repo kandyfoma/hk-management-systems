@@ -34,7 +34,7 @@ from .models import (
     RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
     # Medical examination extended models
     XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
-    FitnessCertificationDecision,
+    HealthScreening, FitnessCertificationDecision,
     # Risk assessment models
     HierarchyOfControls, RiskHeatmapData, RiskHeatmapReport,
 )
@@ -1289,6 +1289,45 @@ class DrugAlcoholScreeningAdmin(admin.ModelAdmin):
         updated = queryset.update(fit_for_duty=False)
         self.message_user(request, f"Marked {updated} as unfit")
     mark_unfit.short_description = _("Mark as unfit")
+
+
+@admin.register(HealthScreening)
+class HealthScreeningAdmin(admin.ModelAdmin):
+    """Admin interface for health screenings"""
+    list_display = [
+        'worker_name', 'screening_type', 'status', 'conducted_by_name', 
+        'created_at'
+    ]
+    list_filter = [
+        'screening_type', 'status', 'created_at'
+    ]
+    search_fields = [
+        'worker__first_name',
+        'worker__last_name',
+        'worker__employee_id'
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+    fieldsets = (
+        (_('Worker & Screening Type'), {
+            'fields': ('worker', 'screening_type')
+        }),
+        (_('Screening Data'), {
+            'fields': ('responses', 'notes', 'status')
+        }),
+        (_('Audit Trail'), {
+            'fields': (
+                'conducted_by', 'reviewed_by', 'created_at', 'updated_at'
+            )
+        }),
+    )
+    
+    def worker_name(self, obj):
+        return obj.worker.get_full_name() if obj.worker else '---'
+    worker_name.short_description = _('Worker')
+    
+    def conducted_by_name(self, obj):
+        return obj.conducted_by.get_full_name() if obj.conducted_by else '---'
+    conducted_by_name.short_description = _('Conducted By')
 
 
 @admin.register(FitnessCertificationDecision)

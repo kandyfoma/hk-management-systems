@@ -1069,6 +1069,55 @@ export class OccHealthApiService {
       return { data: [], error: e?.message };
     }
   }
+
+  /** POST /api/occupational-health/health-screening/ - Create health screening */
+  async createHealthScreening(payload: {
+    worker_id: string | number;
+    screening_type: 'ergonomic' | 'mental' | 'cardio' | 'msk';
+    responses: Record<string, any>;
+    notes?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/health-screening/`, {
+        worker: payload.worker_id,
+        screening_type: payload.screening_type,
+        responses: payload.responses,
+        notes: payload.notes || '',
+      });
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/health-screening/ - List health screenings */
+  async listHealthScreenings(params: { worker_id?: string | number; screening_type?: string; page?: number } = {}): Promise<{ data: any[]; error?: string }> {
+    try {
+      const query = new URLSearchParams();
+      if (params.worker_id) query.append('worker', String(params.worker_id));
+      if (params.screening_type) query.append('screening_type', params.screening_type);
+      if (params.page) query.append('page', String(params.page));
+      
+      const res = await this.api.get(`${OH}/health-screening/?${query.toString()}`);
+      if (!res.success) return { data: [], error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      return { data: raw };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/health-screening/{id}/ - Get specific screening */
+  async getHealthScreening(id: string | number): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/health-screening/${id}/`);
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
 }
 
 export const occHealthApi = OccHealthApiService.getInstance();

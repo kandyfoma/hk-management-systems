@@ -18,6 +18,7 @@ from .views import (
     XrayImagingResultViewSet,
     HeavyMetalsTestViewSet,
     DrugAlcoholScreeningViewSet,
+    HealthScreeningViewSet,
     FitnessCertificationDecisionViewSet,
     HierarchyOfControlsViewSet,
     RiskHeatmapDataViewSet,
@@ -77,6 +78,9 @@ router.register(r'heavy-metals-tests', HeavyMetalsTestViewSet, basename='heavy-m
 # Drug & alcohol screening
 router.register(r'drug-alcohol-screening', DrugAlcoholScreeningViewSet, basename='drug-alcohol-screening')
 
+# Health screenings (ergonomic, mental, cardio, musculoskeletal)
+router.register(r'health-screening', HealthScreeningViewSet, basename='health-screening')
+
 # Fitness certification decisions
 router.register(r'fitness-decisions', FitnessCertificationDecisionViewSet, basename='fitness-decision')
 
@@ -131,6 +135,9 @@ router.register(r'ohs/worker-feedback', WorkerFeedbackViewSet, basename='worker-
 urlpatterns = [
     # ViewSet URLs (REST API)
     path('api/', include(router.urls)),
+    
+    # ==================== SURVEILLANCE PROGRAMS ====================
+    path('api/surveillance/', include('apps.occupational_health.urls_surveillance')),
     
     # ==================== DASHBOARD & ANALYTICS ====================
     path('api/dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),

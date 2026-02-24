@@ -28,7 +28,7 @@ from .models import (
     RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
     # Medical examination extended models
     XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
-    FitnessCertificationDecision,
+    FitnessCertificationDecision, HealthScreening,
     # Risk assessment models
     HierarchyOfControls, RiskHeatmapData, RiskHeatmapReport,
     # Choice constants
@@ -1029,6 +1029,49 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
             'test_type_display', 'alcohol_result_display',
             'drug_result_display', 'confirmation_result_display',
             'overall_result', 'created', 'updated'
+        ]
+
+
+class HealthScreeningSerializer(serializers.ModelSerializer):
+    """Serializer for flexible health screenings (ergonomic, mental, cardio, musculoskeletal)"""
+    
+    worker_name = serializers.CharField(
+        source='worker.get_full_name',
+        read_only=True
+    )
+    worker_id = serializers.CharField(
+        source='worker.employee_id',
+        read_only=True
+    )
+    screening_type_display = serializers.CharField(
+        source='get_screening_type_display',
+        read_only=True
+    )
+    conducted_by_name = serializers.CharField(
+        source='conducted_by.get_full_name',
+        read_only=True,
+        allow_null=True
+    )
+    reviewed_by_name = serializers.CharField(
+        source='reviewed_by.get_full_name',
+        read_only=True,
+        allow_null=True
+    )
+    
+    class Meta:
+        model = HealthScreening
+        fields = [
+            'id', 'worker', 'worker_name', 'worker_id',
+            'screening_type', 'screening_type_display',
+            'responses', 'status', 'notes',
+            'conducted_by', 'conducted_by_name',
+            'reviewed_by', 'reviewed_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'worker_name', 'worker_id',
+            'screening_type_display', 'conducted_by_name', 'reviewed_by_name',
+            'created_at', 'updated_at'
         ]
 
 
