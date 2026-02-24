@@ -121,8 +121,8 @@ class GeminiConsultationService:
             # Build enhanced prompt with consultation context
             context_info = self._build_context_info(consultation_context)
             
-            # Then, generate structured consultation notes in French from transcription
-            notes_prompt = f"""Based on the following medical consultation transcription, generate comprehensive consultation notes in FRENCH (Français).
+            # Then, generate a professional consultation summary in French from transcription
+            notes_prompt = f"""Based on the following medical consultation transcription, create a professional and concise consultation summary in FRENCH (Français).
 
 PATIENT CONTEXT:
 {context_info}
@@ -130,43 +130,32 @@ PATIENT CONTEXT:
 TRANSCRIPTION OF CONSULTATION:
 {transcription_text}
 
-Generate ONLY valid JSON (no markdown, no code blocks) with this exact structure, derived from the transcription above:
-{{
-    "chief_complaint": "motif principal de la consultation",
-    "history_of_present_illness": "historique détaillé des symptômes et de la maladie actuelle",
-    "physical_exam_findings": "résultats de l'examen physique par système et observations cliniques",
-    "assessment": "évaluation et impressions cliniques basées sur la conversation",
-    "diagnosis": "diagnostics principaux et secondaires identifiés",
-    "treatment_plan": "plan de traitement recommandé et suivi proposé",
-    "medications": "médicaments prescrits ou recommandés avec posologie",
-    "follow_up": "recommandations de suivi et date de retour si mentionnée",
-    "clinical_notes": "notes cliniques supplémentaires et observations importantes"
-}}
+Generate ONLY a professional consultation summary (plain text, no JSON, no markdown formatting). 
+The summary should:
+- Be comprehensive yet concise
+- Include chief complaint, history, physical exam findings, and plan
+- Be written in professional medical French
+- NOT include diagnosis or diagnostic conclusions
+- Focus on documentation of what was discussed and examined
+- Include vital signs and clinical observations made during the consultation
+- Include any treatments or interventions discussed
 
-IMPORTANT: 
-- Extract information DIRECTLY from the transcription provided above
-- All text MUST be in French (Français)
-- Ensure all JSON is valid and properly formatted
-- Close all brackets and braces
-- Create a professional medical consultation note from the conversation"""
+Write the summary as clean, professional medical notes suitable for patient records."""
             
-            logger.info("Generating structured notes from transcription...")
+            logger.info("Generating consultation summary from transcription...")
             try:
                 notes_response = model.generate_content(notes_prompt)
                 notes_text = notes_response.text
-                logger.info(f"Notes generation completed ({len(notes_text)} chars)")
+                logger.info(f"Summary generation completed ({len(notes_text)} chars)")
             except Exception as notes_err:
-                logger.error(f"Failed to generate notes: {str(notes_err)}")
+                logger.error(f"Failed to generate summary: {str(notes_err)}")
                 import traceback
-                logger.error(f"Notes generation traceback: {traceback.format_exc()}")
+                logger.error(f"Summary generation traceback: {traceback.format_exc()}")
                 return {
                     'success': False,
-                    'error': 'Failed to generate consultation notes',
+                    'error': 'Failed to generate consultation summary',
                     'detail': str(notes_err)
                 }
-            
-            # Parse JSON from notes
-            structured_notes = self._parse_json_response(notes_text)
             
             # Clean up uploaded file
             try:
@@ -177,13 +166,7 @@ IMPORTANT:
             return {
                 'success': True,
                 'transcription': transcription_text,
-                'structured_notes': structured_notes,
-                'chief_complaint': structured_notes.get('chief_complaint', ''),
-                'history_of_present_illness': structured_notes.get('history_of_present_illness', ''),
-                'assessment': structured_notes.get('assessment', ''),
-                'treatment_plan': structured_notes.get('treatment_plan', ''),
-                'medications': structured_notes.get('medications', ''),
-                'follow_up': structured_notes.get('follow_up', ''),
+                'structured_notes': notes_text,
             }
         
         except Exception as e:

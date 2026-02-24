@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio, Recording, Sound } from 'expo-audio';
+import { Audio } from 'expo-av';
+import type { AVPlaybackStatus } from 'expo-av';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import ApiService from '../../../services/ApiService';
 import { Patient } from '../../../models/Patient';
@@ -156,7 +157,7 @@ const SAMPLE_PATIENTS: Patient[] = [
     chronicConditions: ['Hypertension', 'Diabète Type 2'],
     currentMedications: ['Amlodipine 5mg', 'Metformine 850mg'],
     createdAt: '2023-01-15',
-    encounters: [],
+    accessCount: 0,
   },
   {
     id: 'P002',
@@ -173,7 +174,7 @@ const SAMPLE_PATIENTS: Patient[] = [
     chronicConditions: [],
     currentMedications: [],
     createdAt: '2023-06-10',
-    encounters: [],
+    accessCount: 0,
   },
   {
     id: 'P003',
@@ -190,7 +191,7 @@ const SAMPLE_PATIENTS: Patient[] = [
     chronicConditions: ['Asthme', 'Arthrite'],
     currentMedications: ['Ventoline PRN', 'Ibuprofène 400mg'],
     createdAt: '2022-03-20',
-    encounters: [],
+    accessCount: 0,
   },
 ];
 
@@ -384,10 +385,11 @@ export function HospitalConsultationScreen({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [soundObject, setSoundObject] = useState<Sound | null>(null);
-  const recordingRef = useRef<Recording | null>(null);
+  const [soundObject, setSoundObject] = useState<any>(null);
+  const recordingRef = useRef<any>(null);
   const webMediaRecorderRef = useRef<any>(null);
   const webMediaChunksRef = useRef<BlobPart[]>([]);
+  const webAudioBlobRef = useRef<Blob | null>(null);
   const webAudioElementRef = useRef<any>(null);
   const webStreamRef = useRef<any>(null);
   const webStopResolverRef = useRef<((uri: string | null) => void) | null>(null);
@@ -403,6 +405,9 @@ export function HospitalConsultationScreen({
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
   const [consultationNotes, setConsultationNotes] = useState<string>('');
+  const [useManualEntry, setUseManualEntry] = useState(false);
+  const [showManualNotesModal, setShowManualNotesModal] = useState(false);
+  const [manualNotes, setManualNotes] = useState<string>('');
 
   // ─── Custom exam types ──
   const [customExamTypes, setCustomExamTypes] = useState<string[]>([]);
@@ -582,6 +587,8 @@ export function HospitalConsultationScreen({
           if (data.customExamTypes) setCustomExamTypes(data.customExamTypes);
           if (data.audioUri) setAudioUri(data.audioUri);
           if (data.generatedNotes) setGeneratedNotes(data.generatedNotes);
+          if (data.useManualEntry !== undefined) setUseManualEntry(data.useManualEntry);
+          if (data.manualNotes) setManualNotes(data.manualNotes);
         }
       } catch (err) {
         console.error('[Consultation] Error loading saved consultation:', err);
@@ -616,6 +623,8 @@ export function HospitalConsultationScreen({
           customExamTypes,
           audioUri,
           generatedNotes,
+          useManualEntry,
+          manualNotes,
           lastSaved: new Date().toISOString(),
         };
         
@@ -650,6 +659,8 @@ export function HospitalConsultationScreen({
     customExamTypes,
     audioUri,
     generatedNotes,
+    useManualEntry,
+    manualNotes,
   ]);
 
   // ─── Navigation ──
@@ -701,12 +712,14 @@ export function HospitalConsultationScreen({
                   console.log('[Recording] Replacing with new recording');
                   // Clear the old recording and proceed
                   setAudioUri(null);
+                  webAudioBlobRef.current = null;
                   startRecordingProcess();
+                  resolve();
                 }
               },
             ]
           );
-        }).then(() => resolve());
+        });
       }
 
       // No previous recording, proceed normally
@@ -748,6 +761,9 @@ export function HospitalConsultationScreen({
           const mimeType = recorder.mimeType || 'audio/webm';
           const blob = new Blob(webMediaChunksRef.current, { type: mimeType });
           const uri = URL.createObjectURL(blob);
+
+          // Store the actual blob for later use
+          webAudioBlobRef.current = blob;
 
           setAudioUri(uri);
           setIsRecording(false);
@@ -807,7 +823,7 @@ export function HospitalConsultationScreen({
       });
 
       console.log('[Recording] Creating recording...');
-      const recording = await Recording.createAsync({
+      const recording = await (Audio.Recording as any).createAsync({
         isMeteringEnabled: true,
         android: {
           extension: '.m4a',
@@ -864,6 +880,10 @@ export function HospitalConsultationScreen({
         webPromptOnStopRef.current = promptForNotes;
         return await new Promise<string | null>((resolve) => {
           webStopResolverRef.current = resolve;
+          // Request any remaining data before stopping
+          if (recorder.state === 'recording') {
+            recorder.requestData?.();
+          }
           recorder.stop();
         });
       }
@@ -931,7 +951,7 @@ export function HospitalConsultationScreen({
         return;
       }
 
-      const sound = await Sound.createAsync(
+      const sound = await (Audio.Sound as any).createAsync(
         { uri: audioUri },
         { shouldPlay: false }
       );
@@ -941,7 +961,7 @@ export function HospitalConsultationScreen({
       await sound.playAsync();
 
       // Monitor playback
-      sound.setOnPlaybackStatusUpdate(status => {
+      sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
         if (status.isLoaded && status.didJustFinish) {
           setIsPlaying(false);
           setSoundObject(null);
@@ -1141,8 +1161,8 @@ export function HospitalConsultationScreen({
 
     const encounter: Partial<Encounter> = {
       patientId: selectedPatient.id,
-      encounterType,
-      status: disposition === 'admitted' ? 'in_progress' : 'completed',
+      type: encounterType as EncounterType,
+      status: 'in_progress' as EncounterStatus,
       chiefComplaint,
       // Would include all other data in real implementation
     };
@@ -1207,6 +1227,15 @@ export function HospitalConsultationScreen({
         return;
       }
 
+      // Debug logging
+      console.log('[Notes] Platform.OS:', Platform.OS);
+      console.log('[Notes] recordingUri:', recordingUri);
+      console.log('[Notes] webAudioBlobRef.current exists:', !!webAudioBlobRef.current);
+      console.log('[Notes] webMediaChunksRef.current length:', webMediaChunksRef.current?.length);
+      if (webAudioBlobRef.current) {
+        console.log('[Notes] Stored blob size:', webAudioBlobRef.current.size);
+      }
+
       // Show loading indicator
       setGeneratingNotes(true);
 
@@ -1228,10 +1257,50 @@ export function HospitalConsultationScreen({
       // Create FormData with audio file and consultation context
       const formData = new FormData();
 
-      // Convert audio URI to blob
-      const response = await fetch(recordingUri);
-      const blob = await response.blob();
-      formData.append('audio', blob, 'consultation_recording.wav');
+      // Use stored blob directly (on web) or fetch it (on native)
+      let audioBlob: Blob;
+      
+      // Try approach 1: Use stored blob if available
+      if (webAudioBlobRef.current && webAudioBlobRef.current.size > 0) {
+        audioBlob = webAudioBlobRef.current;
+        console.log('[Notes] Using stored web audio blob:', audioBlob.size, 'bytes');
+      } 
+      // Try approach 2: Create blob from chunks if available
+      else if (webMediaChunksRef.current && webMediaChunksRef.current.length > 0) {
+        console.log('[Notes] Creating blob from chunks...');
+        const mimeType = 'audio/webm';
+        audioBlob = new Blob(webMediaChunksRef.current, { type: mimeType });
+        console.log('[Notes] Created blob from chunks:', audioBlob.size, 'bytes');
+        webAudioBlobRef.current = audioBlob; // Store for next time
+      }
+      // Try approach 3: Fetch from blob URL or native URI
+      else {
+        console.log('[Notes] Attempting to fetch audio from URI:', recordingUri);
+        try {
+          const response = await fetch(recordingUri);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          audioBlob = await response.blob();
+          console.log('[Notes] Fetched audio blob:', audioBlob.size, 'bytes');
+          webAudioBlobRef.current = audioBlob; // Store for next time
+        } catch (fetchErr) {
+          console.error('[Notes] Failed to fetch audio blob:', fetchErr);
+          setNotesError(`Impossible de récupérer l'audio: ${(fetchErr as any)?.message}`);
+          setGeneratingNotes(false);
+          return;
+        }
+      }
+      
+      // Verify we have audio data
+      if (!audioBlob || audioBlob.size === 0) {
+        console.error('[Notes] Audio blob is empty or null');
+        setNotesError('Le fichier audio est vide. Veuillez enregistrer à nouveau.');
+        setGeneratingNotes(false);
+        return;
+      }
+
+      formData.append('audio', audioBlob, 'consultation_recording.wav');
       formData.append('consultationContext', JSON.stringify(consultationData));
 
       // Call API to generate notes
@@ -1770,13 +1839,13 @@ export function HospitalConsultationScreen({
 
               <View style={styles.modalFooter}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                  style={styles.notesButtonSecondary}
                   onPress={() => setShowAddExamModal(false)}
                 >
-                  <Text style={styles.modalButtonSecondaryText}>Annuler</Text>
+                  <Text style={styles.notesButtonSecondaryText}>Annuler</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  style={styles.notesButtonPrimary}
                   onPress={() => {
                     if (newExamName.trim() && !customExamTypes.includes(newExamName.trim())) {
                       setCustomExamTypes([...customExamTypes, newExamName.trim()]);
@@ -1785,7 +1854,7 @@ export function HospitalConsultationScreen({
                     }
                   }}
                 >
-                  <Text style={styles.modalButtonPrimaryText}>Ajouter</Text>
+                  <Text style={styles.notesButtonPrimaryText}>Ajouter</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1800,8 +1869,30 @@ export function HospitalConsultationScreen({
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Générer Notes de Consultation</Text>
       <Text style={styles.stepSubtitle}>
-        Les notes sont générées par IA à partir de votre enregistrement audio
+        Choisissez entre la génération par IA ou l'entrée manuelle
       </Text>
+
+      {/* Mode Selection Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, !useManualEntry && styles.tabActive]}
+          onPress={() => setUseManualEntry(false)}
+        >
+          <Ionicons name="sparkles" size={18} color={!useManualEntry ? '#FFF' : colors.primary} />
+          <Text style={[styles.tabText, !useManualEntry && styles.tabTextActive]}>
+            Génération IA
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, useManualEntry && styles.tabActive]}
+          onPress={() => setUseManualEntry(true)}
+        >
+          <Ionicons name="create" size={18} color={useManualEntry ? '#FFF' : colors.primary} />
+          <Text style={[styles.tabText, useManualEntry && styles.tabTextActive]}>
+            Saisie Manuelle
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {generatingNotes ? (
         <View style={styles.centerContent}>
@@ -1814,7 +1905,7 @@ export function HospitalConsultationScreen({
       ) : (
         <View>
           {/* Recording Status Section */}
-          {audioUri && (
+          {audioUri && !useManualEntry && (
             <View style={[styles.recordingStatusCard, { marginBottom: 16 }]}>
               <View style={styles.recordingStatusHeader}>
                 <Ionicons name="checkmark-circle" size={24} color={colors.success} />
@@ -1844,6 +1935,7 @@ export function HospitalConsultationScreen({
                             setAudioUri(null);
                             setGeneratedNotes('');
                             setEditedNotes('');
+                            webAudioBlobRef.current = null;
                             console.log('[Recording] Recording deleted by user');
                           },
                           style: 'destructive',
@@ -1859,96 +1951,177 @@ export function HospitalConsultationScreen({
             </View>
           )}
 
-          {!showNotesModal && (
+          {!useManualEntry ? (
+            // AI Generation Mode
             <View>
-              {notesError && (
-                <View style={[styles.errorCard, { marginBottom: 16 }]}>
-                  <View style={styles.errorCardHeader}>
-                    <Ionicons name="alert-circle" size={24} color={colors.error} />
-                    <Text style={styles.errorCardTitle}>Génération échouée</Text>
+              {!showNotesModal && (
+                <View>
+                  {notesError && (
+                    <View style={[styles.errorCard, { marginBottom: 16 }]}>
+                      <View style={styles.errorCardHeader}>
+                        <Ionicons name="alert-circle" size={24} color={colors.error} />
+                        <Text style={styles.errorCardTitle}>Génération échouée</Text>
+                      </View>
+                      <Text style={styles.errorCardMessage}>{notesError}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.notesPreview}>
+                    <View style={styles.notesInfo}>
+                      <Ionicons name="document-text" size={32} color={ACCENT} />
+                      <Text style={styles.notesInfoTitle}>
+                        {notesError ? 'Réessayer la génération' : 'Prêt à générer les notes'}
+                      </Text>
+                      <Text style={styles.notesInfoSubtitle}>
+                        {notesError 
+                          ? 'Vérifiez votre connexion et cliquez sur Générer pour réessayer'
+                          : 'Cliquez ci-dessous pour générer les notes à partir de votre enregistrement'
+                        }
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.generateButton, notesError && { backgroundColor: colors.warning }]}
+                      onPress={() => {
+                        setNotesError(null);
+                        generateConsultationNotes();
+                      }}
+                      disabled={generatingNotes}
+                    >
+                      <Ionicons name={notesError ? 'refresh' : 'sparkles'} size={20} color="#FFF" />
+                      <Text style={styles.generateButtonText}>
+                        {notesError ? 'Réessayer' : 'Générer les Notes'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.errorCardMessage}>{notesError}</Text>
                 </View>
               )}
 
-              <View style={styles.notesPreview}>
-                <View style={styles.notesInfo}>
-                  <Ionicons name="document-text" size={32} color={ACCENT} />
-                  <Text style={styles.notesInfoTitle}>
-                    {notesError ? 'Réessayer la génération' : 'Prêt à générer les notes'}
-                  </Text>
-                  <Text style={styles.notesInfoSubtitle}>
-                    {notesError 
-                      ? 'Vérifiez votre connexion et cliquez sur Générer pour réessayer'
-                      : 'Cliquez ci-dessous pour générer les notes à partir de votre enregistrement'
-                    }
-                  </Text>
+              {showNotesModal && (
+                <View style={styles.notesModalContent}>
+                  <View style={styles.notesHeader}>
+                    <Text style={styles.notesTitle}>Notes de Consultation - Révision</Text>
+                    <Text style={styles.notesSubtitle}>Vérifiez et modifiez les notes générées</Text>
+                  </View>
+
+                  <TextInput
+                    style={styles.notesEditor}
+                    placeholder="Les notes de consultation apparaîtront ici..."
+                    placeholderTextColor={colors.textSecondary}
+                    value={editedNotes}
+                    onChangeText={setEditedNotes}
+                    multiline
+                    scrollEnabled
+                  />
+
+                  <View style={styles.notesActions}>
+                    <TouchableOpacity
+                      style={[styles.notesButton, styles.notesButtonSecondary]}
+                      onPress={() => {
+                        setEditedNotes(generatedNotes);
+                      }}
+                    >
+                      <Ionicons name="refresh" size={18} color={colors.primary} />
+                      <Text style={styles.notesButtonSecondaryText}>Réinitialiser</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.notesButton, styles.notesButtonPrimary]}
+                      onPress={() => {
+                        if (editedNotes.trim()) {
+                          setConsultationNotes(editedNotes);
+                          setShowNotesModal(false);
+                          // Auto-proceed to next step
+                          setTimeout(() => {
+                            goNext();
+                          }, 300);
+                        } else {
+                          Alert.alert('Erreur', 'Veuillez entrer le contenu des notes');
+                        }
+                      }}
+                    >
+                      <Ionicons name="checkmark" size={18} color="#FFF" />
+                      <Text style={styles.notesButtonPrimaryText}>Valider</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-
-                <TouchableOpacity
-                  style={[styles.generateButton, notesError && { backgroundColor: colors.warning }]}
-                  onPress={() => {
-                    setNotesError(null);
-                    generateConsultationNotes();
-                  }}
-                  disabled={generatingNotes}
-                >
-                  <Ionicons name={notesError ? 'refresh' : 'sparkles'} size={20} color="#FFF" />
-                  <Text style={styles.generateButtonText}>
-                    {notesError ? 'Réessayer' : 'Générer les Notes'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              )}
             </View>
-          )}
+          ) : (
+            // Manual Entry Mode
+            <View>
+              {!showManualNotesModal && (
+                <View style={styles.notesPreview}>
+                  <View style={styles.notesInfo}>
+                    <Ionicons name="create" size={32} color={ACCENT} />
+                    <Text style={styles.notesInfoTitle}>Saisie Manuelle des Notes</Text>
+                    <Text style={styles.notesInfoSubtitle}>
+                      Tapez directement vos notes de consultation sans utiliser l'IA
+                    </Text>
+                  </View>
 
-          {showNotesModal && (
-            <View style={styles.notesModalContent}>
-              <View style={styles.notesHeader}>
-                <Text style={styles.notesTitle}>Notes de Consultation - Révision</Text>
-                <Text style={styles.notesSubtitle}>Vérifiez et modifiez les notes générées</Text>
-              </View>
+                  <TouchableOpacity
+                    style={styles.generateButton}
+                    onPress={() => {
+                      setShowManualNotesModal(true);
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={20} color="#FFF" />
+                    <Text style={styles.generateButtonText}>Saisir les Notes</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-              <TextInput
-                style={styles.notesEditor}
-                placeholder="Les notes de consultation apparaîtront ici..."
-                placeholderTextColor={colors.textSecondary}
-                value={editedNotes}
-                onChangeText={setEditedNotes}
-                multiline
-                scrollEnabled
-              />
+              {showManualNotesModal && (
+                <View style={styles.notesModalContent}>
+                  <View style={styles.notesHeader}>
+                    <Text style={styles.notesTitle}>Saisir Notes de Consultation</Text>
+                    <Text style={styles.notesSubtitle}>Entrez vos notes médicales</Text>
+                  </View>
 
-              <View style={styles.notesActions}>
-                <TouchableOpacity
-                  style={[styles.notesButton, styles.notesButtonSecondary]}
-                  onPress={() => {
-                    setEditedNotes(generatedNotes);
-                  }}
-                >
-                  <Ionicons name="refresh" size={18} color={colors.primary} />
-                  <Text style={styles.notesButtonSecondaryText}>Réinitialiser</Text>
-                </TouchableOpacity>
+                  <TextInput
+                    style={styles.notesEditor}
+                    placeholder="Entrez les notes de consultation ici..."
+                    placeholderTextColor={colors.textSecondary}
+                    value={manualNotes}
+                    onChangeText={setManualNotes}
+                    multiline
+                    scrollEnabled
+                  />
 
-                <TouchableOpacity
-                  style={[styles.notesButton, styles.notesButtonPrimary]}
-                  onPress={() => {
-                    if (editedNotes.trim()) {
-                      setConsultationNotes(editedNotes);
-                      setShowNotesModal(false);
-                      // Auto-proceed to next step
-                      setTimeout(() => {
-                        goNext();
-                      }, 300);
-                    } else {
-                      Alert.alert('Erreur', 'Veuillez entrer le contenu des notes');
-                    }
-                  }}
-                >
-                  <Ionicons name="checkmark" size={18} color="#FFF" />
-                  <Text style={styles.notesButtonPrimaryText}>Valider</Text>
-                </TouchableOpacity>
-              </View>
+                  <View style={styles.notesActions}>
+                    <TouchableOpacity
+                      style={[styles.notesButton, styles.notesButtonSecondary]}
+                      onPress={() => {
+                        setManualNotes('');
+                        setShowManualNotesModal(false);
+                      }}
+                    >
+                      <Ionicons name="close" size={18} color={colors.primary} />
+                      <Text style={styles.notesButtonSecondaryText}>Annuler</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.notesButton, styles.notesButtonPrimary]}
+                      onPress={() => {
+                        if (manualNotes.trim()) {
+                          setConsultationNotes(manualNotes);
+                          setShowManualNotesModal(false);
+                          // Auto-proceed to next step
+                          setTimeout(() => {
+                            goNext();
+                          }, 300);
+                        } else {
+                          Alert.alert('Erreur', 'Veuillez entrer le contenu des notes');
+                        }
+                      }}
+                    >
+                      <Ionicons name="checkmark" size={18} color="#FFF" />
+                      <Text style={styles.notesButtonPrimaryText}>Enregistrer</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -2198,17 +2371,17 @@ export function HospitalConsultationScreen({
 
             <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonSecondary]}
+                style={styles.notesButtonSecondary}
                 onPress={() => setShowAddTreatmentModal(false)}
               >
-                <Text style={styles.modalButtonSecondaryText}>Annuler</Text>
+                <Text style={styles.notesButtonSecondaryText}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonPrimary]}
+                style={styles.notesButtonPrimary}
                 onPress={addCustomTreatment}
                 disabled={!newTreatmentName.trim()}
               >
-                <Text style={styles.modalButtonPrimaryText}>Ajouter</Text>
+                <Text style={styles.notesButtonPrimaryText}>Ajouter</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3801,6 +3974,36 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: 'center',
   },
+  tabsContainer: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceVariant,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.textSecondary,
+  },
+  tabActive: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  tabTextActive: {
+    color: '#FFF',
+  },
   notesPreview: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -3858,7 +4061,7 @@ const styles = StyleSheet.create({
   },
   notesEditor: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textSecondary,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     fontSize: 13,
@@ -3885,7 +4088,7 @@ const styles = StyleSheet.create({
   notesButtonSecondary: {
     backgroundColor: colors.surfaceVariant,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textSecondary,
   },
   notesButtonSecondaryText: {
     fontSize: 13,
@@ -3948,7 +4151,7 @@ const styles = StyleSheet.create({
   },
   treatmentSearchInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textSecondary,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -3959,7 +4162,7 @@ const styles = StyleSheet.create({
     maxHeight: 300,
     marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textSecondary,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     backgroundColor: colors.surfaceVariant,
@@ -3970,7 +4173,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textSecondary,
     borderRadius: borderRadius.md,
     backgroundColor: colors.surface,
     gap: spacing.sm,
@@ -4029,7 +4232,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderRadius: borderRadius.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textSecondary,
   },
   treatmentItemContent: {
     flexDirection: 'row',
