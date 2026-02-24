@@ -1738,3 +1738,619 @@ class SiteHealthMetrics(models.Model):
             return 0
         fit_workers = self.workers_fit + self.workers_fit_with_restrictions
         return round((fit_workers / self.total_workers) * 100, 2)
+
+
+# ==================== EXTENDED OCCUPATIONAL HEALTH MODELS ====================
+
+class WorkerRiskProfile(models.Model):
+    """Comprehensive risk profile for each worker"""
+    
+    RISK_LEVEL_CHOICES = [
+        ('low', _('Faible')),
+        ('moderate', _('Modéré')),
+        ('high', _('Élevé')),
+        ('critical', _('Critique')),
+    ]
+    
+    worker = models.OneToOneField(Worker, on_delete=models.CASCADE, related_name='risk_profile')
+    health_risk_score = models.PositiveIntegerField(default=0)  # 0-100
+    exposure_risk_score = models.PositiveIntegerField(default=0)  # 0-100
+    compliance_risk_score = models.PositiveIntegerField(default=0)  # 0-100
+    overall_risk_score = models.PositiveIntegerField(default=0)  # 0-100
+    risk_level = models.CharField(max_length=20, choices=RISK_LEVEL_CHOICES, default='low')
+    age_risk_factor = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.0'))
+    exposure_years_factor = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.0'))
+    medical_history_factor = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.0'))
+    fitness_status_factor = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.0'))
+    ppe_compliance_factor = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.0'))
+    exams_overdue = models.BooleanField(default=False)
+    days_overdue = models.PositiveIntegerField(default=0)
+    abnormal_findings_count = models.PositiveIntegerField(default=0)
+    incidents_last_12months = models.PositiveIntegerField(default=0)
+    near_misses_last_12months = models.PositiveIntegerField(default=0)
+    intervention_recommended = models.BooleanField(default=False)
+    intervention_type = models.CharField(max_length=200, blank=True)
+    priority_actions = models.TextField(blank=True)
+    last_calculated = models.DateTimeField(auto_now=True)
+    calculated_by_system = models.BooleanField(default=True)
+    manual_notes = models.TextField(blank=True)
+    
+    class Meta:
+        verbose_name = 'Worker Risk Profile'
+        verbose_name_plural = 'Worker Risk Profiles'
+    
+    def __str__(self):
+        return f"Risk Profile - {self.worker.full_name} ({self.risk_level})"
+    
+    def calculate_overall_risk(self):
+        weighted_health = self.health_risk_score * 0.3
+        weighted_exposure = self.exposure_risk_score * 0.35
+        weighted_compliance = self.compliance_risk_score * 0.35
+        self.overall_risk_score = int(weighted_health + weighted_exposure + weighted_compliance)
+        if self.overall_risk_score < 25:
+            self.risk_level = 'low'
+        elif self.overall_risk_score < 50:
+            self.risk_level = 'moderate'
+        elif self.overall_risk_score < 75:
+            self.risk_level = 'high'
+        else:
+            self.risk_level = 'critical'
+        self.save()
+        return self.overall_risk_score
+
+
+class OverexposureAlert(models.Model):
+    """Real-time alerts for worker overexposure to hazards"""
+    
+    SEVERITY_CHOICES = [('warning', 'Warning'), ('critical', 'Critical'), ('emergency', 'Emergency')]
+    STATUS_CHOICES = [('active', 'Active'), ('acknowledged', 'Acknowledged'), ('resolved', 'Resolved')]
+    
+    worker = models.ForeignKey(Worker, on_delete=models.CASCADE, related_name='overexposure_alerts')
+    exposure_type = models.CharField(max_length=100, default='unknown')
+    exposure_level = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    exposure_threshold = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    unit_measurement = models.CharField(max_length=50, default='unknown')
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='warning')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    detected_date = models.DateTimeField(auto_now_add=True)
+    acknowledged_date = models.DateTimeField(null=True, blank=True)
+    resolved_date = models.DateTimeField(null=True, blank=True)
+    recommended_action = models.TextField(default='')
+    action_taken = models.TextField(blank=True)
+    acknowledged_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='alerts_acknowledged')
+    medical_followup_required = models.BooleanField(default=False)
+    medical_followup_date = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'Overexposure Alert'
+        verbose_name_plural = 'Overexposure Alerts'
+        ordering = ['-detected_date']
+    
+    def __str__(self):
+        return f"{self.worker.full_name} - {self.exposure_type} ({self.severity})"
+    
+    def mark_acknowledged(self, user):
+        self.status = 'acknowledged'
+        self.acknowledged_date = timezone.now()
+        self.acknowledged_by = user
+        self.save()
+    
+    def mark_resolved(self):
+        self.status = 'resolved'
+        self.resolved_date = timezone.now()
+        self.save()
+
+
+class ExitExamination(models.Model):
+    """Exit examination workflow for departing workers"""
+    
+    REASON_CHOICES = [('retirement', 'Retirement'), ('resignation', 'Resignation'), ('termination', 'Termination'), ('contract_end', 'Contract End'), ('transfer', 'Transfer'), ('other', 'Other')]
+    
+    worker = models.OneToOneField(Worker, on_delete=models.CASCADE, related_name='exit_examination')
+    exit_date = models.DateField()
+    reason_for_exit = models.CharField(max_length=50, choices=REASON_CHOICES)
+    last_work_date = models.DateField(null=True, blank=True)
+    exam_completed = models.BooleanField(default=False)
+    examiner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='exit_exams_conducted')
+    exam_date = models.DateField(null=True, blank=True)
+    health_status_summary = models.TextField(blank=True)
+    occupational_disease_present = models.BooleanField(default=False)
+    disease_notes = models.TextField(blank=True)
+    post_employment_medical_followup = models.BooleanField(default=False)
+    followup_frequency_months = models.PositiveIntegerField(null=True, blank=True)
+    followup_recommendations = models.TextField(blank=True)
+    exit_certificate_issued = models.BooleanField(default=False)
+    exit_certificate_date = models.DateField(null=True, blank=True)
+    reported_to_cnss = models.BooleanField(default=False)
+    cnss_report_date = models.DateField(null=True, blank=True)
+    compensation_claim_filed = models.BooleanField(default=False)
+    records_provided_to_worker = models.BooleanField(default=False)
+    records_provided_date = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'Exit Examination'
+        verbose_name_plural = 'Exit Examinations'
+    
+    def __str__(self):
+        return f"Exit Exam - {self.worker.full_name} ({self.exit_date})"
+    
+    @property
+    def days_until_exit(self):
+        delta = self.exit_date - timezone.now().date()
+        return delta.days if delta.days >= 0 else 0
+
+
+class RegulatoryCNSSReport(models.Model):
+    """CNSS (National Social Security) regulatory report"""
+    
+    STATUS_CHOICES = [('draft', 'Draft'), ('ready_for_submission', 'Ready'), ('submitted', 'Submitted'), ('acknowledged', 'Acknowledged'), ('rejected', 'Rejected'), ('approved', 'Approved')]
+    REPORT_TYPE_CHOICES = [('incident', 'Incident'), ('occupational_disease', 'Disease'), ('fatality', 'Fatality'), ('monthly_stats', 'Monthly Stats')]
+    
+    enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='cnss_reports')
+    report_type = models.CharField(max_length=50, choices=REPORT_TYPE_CHOICES)
+    reference_number = models.CharField(max_length=100, unique=True)
+    report_period_start = models.DateField()
+    report_period_end = models.DateField()
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='draft')
+    content_json = models.JSONField(default=dict)
+    related_incident = models.ForeignKey(WorkplaceIncident, on_delete=models.SET_NULL, null=True, blank=True, related_name='cnss_reports')
+    related_disease = models.ForeignKey(OccupationalDisease, on_delete=models.SET_NULL, null=True, blank=True, related_name='cnss_reports')
+    prepared_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='cnss_reports_prepared')
+    prepared_date = models.DateTimeField(auto_now_add=True)
+    submitted_date = models.DateTimeField(null=True, blank=True)
+    submission_method = models.CharField(max_length=50, blank=True)
+    cnss_acknowledgment_number = models.CharField(max_length=100, blank=True)
+    cnss_acknowledgment_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'CNSS Report'
+        verbose_name_plural = 'CNSS Reports'
+        ordering = ['-prepared_date']
+    
+    def __str__(self):
+        return f"{self.reference_number} - {self.get_report_type_display()}"
+
+
+class DRCRegulatoryReport(models.Model):
+    """DRC (Democratic Republic of Congo) labor regulatory report"""
+    
+    STATUS_CHOICES = [('draft', 'Draft'), ('submitted', 'Submitted'), ('approved', 'Approved'), ('rejected', 'Rejected')]
+    REPORT_TYPE_CHOICES = [('monthly_incident', 'Monthly Incidents'), ('quarterly_health', 'Quarterly Health'), ('annual_compliance', 'Annual Compliance'), ('fatal_incident', 'Fatal Incident'), ('severe_incident', 'Severe Incident'), ('occupational_disease_notice', 'Disease Notice')]
+    
+    enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='drc_reports')
+    report_type = models.CharField(max_length=100, choices=REPORT_TYPE_CHOICES)
+    reference_number = models.CharField(max_length=100, unique=True)
+    report_period_start = models.DateField()
+    report_period_end = models.DateField()
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='draft')
+    content_json = models.JSONField(default=dict)
+    related_incidents = models.ManyToManyField(WorkplaceIncident, blank=True, related_name='drc_reports')
+    related_diseases = models.ManyToManyField(OccupationalDisease, blank=True, related_name='drc_reports')
+    submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='drc_reports_submitted')
+    submitted_date = models.DateTimeField(null=True, blank=True)
+    submission_method = models.CharField(max_length=50, blank=True)
+    submission_recipient = models.CharField(max_length=100, blank=True)
+    authority_response = models.TextField(blank=True)
+    authority_response_date = models.DateField(null=True, blank=True)
+    required_actions = models.TextField(blank=True)
+    
+    class Meta:
+        verbose_name = 'DRC Report'
+        verbose_name_plural = 'DRC Reports'
+        ordering = ['-submitted_date']
+    
+    def __str__(self):
+        return f"{self.reference_number} - {self.enterprise.name}"
+
+
+class PPEComplianceRecord(models.Model):
+    """PPE compliance tracking and audit records"""
+    
+    STATUS_CHOICES = [('in_use', 'In Use'), ('expired', 'Expired'), ('damaged', 'Damaged'), ('lost', 'Lost'), ('replaced', 'Replaced'), ('compliant', 'Compliant'), ('non_compliant', 'Non-Compliant')]
+    
+    ppe_item = models.ForeignKey(PPEItem, on_delete=models.CASCADE, related_name='compliance_records')
+    check_date = models.DateField()
+    check_type = models.CharField(max_length=50, choices=[('routine', 'Routine'), ('pre_use', 'Pre-Use'), ('post_incident', 'Post-Incident'), ('inventory', 'Inventory'), ('expiry', 'Expiry'), ('damage', 'Damage')])
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES)
+    condition_notes = models.TextField(blank=True)
+    is_compliant = models.BooleanField(default=True)
+    non_compliance_reason = models.TextField(blank=True)
+    corrective_action_required = models.BooleanField(default=False)
+    corrective_action = models.TextField(blank=True)
+    checked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='ppe_compliance_checks')
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='ppe_compliance_approvals')
+    approval_date = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'PPE Compliance Record'
+        verbose_name_plural = 'PPE Compliance Records'
+        ordering = ['-check_date']
+    
+    def __str__(self):
+        return f"PPE Check - {self.ppe_item.worker.full_name} ({self.check_date})"
+
+
+# ==================== MEDICAL EXAMINATION EXTENDED MODELS ====================
+
+class XrayImagingResult(models.Model):
+    """X-ray imaging results with ILO pneumoconiosis classification"""
+    
+    ILO_CLASSIFICATION_CHOICES = [('0/0', '0/0'), ('0/1', '0/1'), ('1/0', '1/0'), ('1/1', '1/1'), ('1/2', '1/2'), ('2/1', '2/1'), ('2/2', '2/2'), ('2/3', '2/3'), ('3/2', '3/2'), ('3/3', '3/3')]
+    PROFUSION_CHOICES = [('absent', 'Absent'), ('minimal', 'Minimal'), ('mild', 'Mild'), ('moderate', 'Moderate'), ('severe', 'Severe')]
+    IMAGING_TYPE_CHOICES = [('chest_xray', 'Chest X-Ray'), ('hrct', 'HRCT'), ('plain_film', 'Plain Film')]
+    
+    examination = models.OneToOneField(MedicalExamination, on_delete=models.CASCADE, related_name='xray_result')
+    imaging_type = models.CharField(max_length=20, choices=IMAGING_TYPE_CHOICES, default='chest_xray')
+    imaging_date = models.DateField()
+    imaging_facility = models.CharField(max_length=200, blank=True)
+    radiologist = models.CharField(max_length=200, blank=True)
+    ilo_classification = models.CharField(max_length=10, choices=ILO_CLASSIFICATION_CHOICES, default='0/0')
+    profusion = models.CharField(max_length=20, choices=PROFUSION_CHOICES, default='absent')
+    small_opacities = models.BooleanField(default=False)
+    large_opacities = models.BooleanField(default=False)
+    pleural_thickening = models.BooleanField(default=False)
+    pleural_effusion = models.BooleanField(default=False)
+    costophrenic_angle_obliteration = models.BooleanField(default=False)
+    cardiac_enlargement = models.BooleanField(default=False)
+    other_findings = models.TextField(blank=True)
+    pneumoconiosis_detected = models.BooleanField(default=False)
+    pneumoconiosis_type = models.CharField(max_length=100, blank=True)
+    severity = models.CharField(max_length=20, choices=[('mild', 'Mild'), ('moderate', 'Moderate'), ('severe', 'Severe'), ('advanced', 'Advanced')], blank=True)
+    follow_up_required = models.BooleanField(default=False)
+    follow_up_interval_months = models.IntegerField(null=True, blank=True)
+    clinical_notes = models.TextField(blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'X-Ray Imaging Result'
+        verbose_name_plural = 'X-Ray Imaging Results'
+    
+    def __str__(self):
+        return f"X-Ray {self.get_imaging_type_display()}"
+    
+    @property
+    def worker(self):
+        return self.examination.worker
+
+
+class HeavyMetalsTest(models.Model):
+    """Heavy metals blood/urine testing results"""
+    
+    METAL_CHOICES = [('lead', 'Lead'), ('mercury', 'Mercury'), ('cadmium', 'Cadmium'), ('cobalt', 'Cobalt'), ('chromium', 'Chromium'), ('nickel', 'Nickel'), ('manganese', 'Manganese'), ('arsenic', 'Arsenic'), ('beryllium', 'Beryllium'), ('aluminum', 'Aluminum')]
+    SPECIMEN_TYPE_CHOICES = [('blood', 'Blood'), ('urine', 'Urine'), ('hair', 'Hair')]
+    STATUS_CHOICES = [('normal', 'Normal'), ('elevated', 'Elevated'), ('high', 'High'), ('critical', 'Critical')]
+    
+    examination = models.ForeignKey(MedicalExamination, on_delete=models.CASCADE, related_name='heavy_metals_tests')
+    heavy_metal = models.CharField(max_length=20, choices=METAL_CHOICES)
+    specimen_type = models.CharField(max_length=10, choices=SPECIMEN_TYPE_CHOICES)
+    test_date = models.DateField()
+    level_value = models.DecimalField(max_digits=10, decimal_places=4)
+    unit = models.CharField(max_length=20)
+    reference_lower = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    reference_upper = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='normal')
+    osha_action_level = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    exceeds_osha_limit = models.BooleanField(default=False)
+    clinical_significance = models.CharField(max_length=200, blank=True)
+    occupational_exposure = models.BooleanField(default=True)
+    follow_up_required = models.BooleanField(default=False)
+    follow_up_recommendation = models.TextField(blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Heavy Metals Test'
+        verbose_name_plural = 'Heavy Metals Tests'
+        ordering = ['-test_date']
+    
+    def __str__(self):
+        return f"{self.get_heavy_metal_display()} test"
+    
+    def save(self, *args, **kwargs):
+        if self.reference_upper:
+            if self.level_value > self.reference_upper * 1.5:
+                self.status = 'critical'
+            elif self.level_value > self.reference_upper:
+                self.status = 'high'
+            elif self.level_value > self.reference_upper * 0.8:
+                self.status = 'elevated'
+            else:
+                self.status = 'normal'
+        if self.osha_action_level and self.level_value > self.osha_action_level:
+            self.exceeds_osha_limit = True
+        super().save(*args, **kwargs)
+
+
+class DrugAlcoholScreening(models.Model):
+    """Drug and alcohol screening test results"""
+    
+    TEST_TYPE_CHOICES = [('urine', 'Urine'), ('breath', 'Breath'), ('blood', 'Blood'), ('oral_fluid', 'Oral Fluid')]
+    RESULT_CHOICES = [('negative', 'Negative'), ('positive', 'Positive'), ('presumptive', 'Presumptive'), ('invalid', 'Invalid')]
+    
+    examination = models.OneToOneField(MedicalExamination, on_delete=models.CASCADE, related_name='drug_alcohol_screening')
+    test_type = models.CharField(max_length=20, choices=TEST_TYPE_CHOICES)
+    test_date = models.DateField()
+    testing_facility = models.CharField(max_length=200, blank=True)
+    collector = models.CharField(max_length=200, blank=True)
+    alcohol_tested = models.BooleanField(default=True)
+    alcohol_result = models.CharField(max_length=20, choices=RESULT_CHOICES, default='negative')
+    alcohol_level = models.DecimalField(max_digits=5, decimal_places=3, null=True, blank=True)
+    drug_tested = models.BooleanField(default=True)
+    drug_result = models.CharField(max_length=20, choices=RESULT_CHOICES, default='negative')
+    substances_tested = models.CharField(max_length=200, blank=True)
+    specific_substances_detected = models.CharField(max_length=200, blank=True)
+    confirmation_required = models.BooleanField(default=False)
+    confirmation_date = models.DateField(null=True, blank=True)
+    confirmation_result = models.CharField(max_length=20, choices=RESULT_CHOICES, null=True, blank=True)
+    mro_reviewed = models.BooleanField(default=False)
+    mro_name = models.CharField(max_length=200, blank=True)
+    mro_comments = models.TextField(blank=True)
+    fit_for_duty = models.BooleanField(default=True)
+    restrictions = models.TextField(blank=True)
+    chain_of_custody_verified = models.BooleanField(default=True)
+    specimen_id = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Drug & Alcohol Screening'
+        verbose_name_plural = 'Drug & Alcohol Screenings'
+    
+    def __str__(self):
+        return f"Drug/Alcohol Screen"
+    
+    @property
+    def overall_result(self):
+        if self.alcohol_result == 'positive' or self.drug_result == 'positive':
+            return 'positive'
+        elif self.alcohol_result == 'presumptive' or self.drug_result == 'presumptive':
+            return 'presumptive'
+        return 'negative'
+
+
+class FitnessCertificationDecision(models.Model):
+    """Final fitness-for-duty certification decision"""
+    
+    FITNESS_STATUS_CHOICES = [('fit', 'Fit'), ('fit_with_restrictions', 'Fit with Restrictions'), ('temporarily_unfit', 'Temporarily Unfit'), ('permanently_unfit', 'Permanently Unfit')]
+    DECISION_BASIS_CHOICES = [('medical_exam', 'Medical Exam'), ('test_results', 'Test Results'), ('xray', 'X-Ray'), ('drug_alcohol', 'Drug/Alcohol'), ('heavy_metals', 'Heavy Metals'), ('mental_health', 'Mental Health'), ('ergonomic', 'Ergonomic'), ('combination', 'Combination')]
+    
+    examinations = models.ForeignKey(MedicalExamination, on_delete=models.CASCADE, related_name='fitness_decisions')
+    decision_date = models.DateField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='fitness_decisions_reviewed')
+    fitness_status = models.CharField(max_length=25, choices=FITNESS_STATUS_CHOICES)
+    decision_basis = models.CharField(max_length=20, choices=DECISION_BASIS_CHOICES)
+    key_findings = models.TextField()
+    risk_factors = models.TextField(blank=True)
+    work_restrictions = models.TextField(blank=True)
+    required_accommodations = models.TextField(blank=True)
+    recommended_interventions = models.TextField(blank=True)
+    follow_up_required = models.BooleanField(default=False)
+    follow_up_interval_months = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(36)])
+    follow_up_justification = models.TextField(blank=True)
+    certification_date = models.DateField()
+    certification_valid_until = models.DateField()
+    medical_fit = models.BooleanField(default=True)
+    psychological_fit = models.BooleanField(default=True)
+    safety_sensitive = models.BooleanField(default=False)
+    subject_to_appeal = models.BooleanField(default=False)
+    appeal_deadline = models.DateField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Fitness Certification Decision'
+        verbose_name_plural = 'Fitness Certification Decisions'
+        ordering = ['-certification_date']
+    
+    def __str__(self):
+        return f"Fitness Decision"
+    
+    @property
+    def is_valid(self):
+        from datetime import date
+        return date.today() <= self.certification_valid_until
+    
+    @property
+    def days_until_expiry(self):
+        from datetime import date
+        if self.is_valid:
+            return (self.certification_valid_until - date.today()).days
+        return 0
+
+
+# ==================== RISK ASSESSMENT EXTENDED MODELS ====================
+
+class HierarchyOfControls(models.Model):
+    """Hierarchy of Controls (HOC) recommendation engine for risk mitigation"""
+    
+    CONTROL_LEVEL_CHOICES = [(1, 'Elimination'), (2, 'Substitution'), (3, 'Engineering'), (4, 'Administrative'), (5, 'PPE')]
+    STATUS_CHOICES = [('draft', 'Draft'), ('recommended', 'Recommended'), ('approved', 'Approved'), ('implemented', 'Implemented'), ('effective', 'Effective'), ('ineffective', 'Ineffective'), ('archived', 'Archived')]
+    EFFECTIVENESS_CHOICES = [('excellent', 'Excellent'), ('good', 'Good'), ('fair', 'Fair'), ('poor', 'Poor'), ('unknown', 'Unknown')]
+    
+    hazard = models.ForeignKey(HazardIdentification, on_delete=models.CASCADE, related_name='hoc_recommendations')
+    enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='hoc_recommendations')
+    control_level = models.IntegerField(choices=CONTROL_LEVEL_CHOICES)
+    control_name = models.CharField(max_length=200)
+    description = models.TextField()
+    implementation_requirements = models.TextField(blank=True)
+    estimated_cost = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    estimated_timeline = models.CharField(max_length=100, blank=True)
+    responsible_person = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='hoc_responsibilities')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='recommended')
+    implementation_date = models.DateField(blank=True, null=True)
+    effectiveness_rating = models.CharField(max_length=20, choices=EFFECTIVENESS_CHOICES, blank=True)
+    effectiveness_notes = models.TextField(blank=True)
+    risk_reduction_percentage = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    residual_risk_score = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(1), MaxValueValidator(100)])
+    dependant_controls = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='dependent_on')
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='hoc_created')
+    
+    class Meta:
+        verbose_name = 'Hierarchy of Controls'
+        verbose_name_plural = 'Hierarchy of Controls'
+        ordering = ['control_level', '-created']
+    
+    def __str__(self):
+        return f"{self.get_control_level_display()} - {self.control_name}"
+    
+    def is_effective(self):
+        if self.status != 'implemented':
+            return False
+        return self.effectiveness_rating in ['excellent', 'good']
+
+
+class RiskHeatmapData(models.Model):
+    """Risk Heatmap visualization data - 5x5 probability/severity matrix"""
+    
+    PROBABILITY_LEVEL_CHOICES = [(1, 'Remote'), (2, 'Low'), (3, 'Medium'), (4, 'High'), (5, 'Very High')]
+    SEVERITY_LEVEL_CHOICES = [(1, 'Negligible'), (2, 'Minor'), (3, 'Moderate'), (4, 'Severe'), (5, 'Catastrophic')]
+    RISK_ZONE_CHOICES = [('green', 'Green'), ('yellow', 'Yellow'), ('orange', 'Orange'), ('red', 'Red')]
+    TREND_CHOICES = [('improving', 'Improving'), ('stable', 'Stable'), ('worsening', 'Worsening')]
+    PRIORITY_CHOICES = [('critical', 'Critical'), ('high', 'High'), ('medium', 'Medium'), ('low', 'Low')]
+    
+    enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='risk_heatmaps')
+    heatmap_date = models.DateField(auto_now_add=True)
+    period = models.CharField(max_length=50, blank=True)
+    probability_level = models.IntegerField(choices=PROBABILITY_LEVEL_CHOICES)
+    severity_level = models.IntegerField(choices=SEVERITY_LEVEL_CHOICES)
+    risk_score = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(25)])
+    risk_zone = models.CharField(max_length=20, choices=RISK_ZONE_CHOICES)
+    hazards_count = models.IntegerField(default=0)
+    related_hazards = models.ManyToManyField(HazardIdentification, related_name='heatmap_entries', blank=True)
+    incidents_count = models.IntegerField(default=0)
+    near_misses_count = models.IntegerField(default=0)
+    workers_exposed = models.ManyToManyField(Worker, related_name='risk_heatmap_exposure', blank=True)
+    workers_affected_count = models.IntegerField(default=0)
+    controls_implemented = models.IntegerField(default=0)
+    controls_effective_percentage = models.IntegerField(blank=True, null=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    previous_period_score = models.IntegerField(blank=True, null=True)
+    trend = models.CharField(max_length=20, blank=True, choices=TREND_CHOICES)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
+    notes = models.TextField(blank=True)
+    action_recommendations = models.TextField(blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='risk_heatmaps_created')
+    
+    class Meta:
+        verbose_name = 'Risk Heatmap Data'
+        verbose_name_plural = 'Risk Heatmap Data'
+        ordering = ['-heatmap_date', '-risk_score']
+    
+    def __str__(self):
+        return f"Risk {self.risk_score} ({self.risk_zone}) - {self.heatmap_date}"
+    
+    def save(self, *args, **kwargs):
+        self.risk_score = self.probability_level * self.severity_level
+        if self.risk_score <= 4:
+            self.risk_zone = 'green'
+            if not self.priority or self.priority == 'critical':
+                self.priority = 'low'
+        elif self.risk_score <= 10:
+            self.risk_zone = 'yellow'
+            if not self.priority or self.priority == 'critical':
+                self.priority = 'medium'
+        elif self.risk_score <= 20:
+            self.risk_zone = 'orange'
+            if not self.priority or self.priority == 'low':
+                self.priority = 'high'
+        else:
+            self.risk_zone = 'red'
+            self.priority = 'critical'
+        super().save(*args, **kwargs)
+    
+    def get_trend_indicator(self):
+        if not self.previous_period_score:
+            return '—'
+        if self.risk_score < self.previous_period_score:
+            return '↓ Improving'
+        elif self.risk_score > self.previous_period_score:
+            return '↑ Worsening'
+        else:
+            return '→ Stable'
+
+
+class RiskHeatmapReport(models.Model):
+    """Aggregated risk heatmap report by enterprise and time period"""
+    
+    enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='risk_heatmap_reports')
+    report_date = models.DateField(auto_now_add=True)
+    period = models.CharField(max_length=50)
+    total_heatmap_cells = models.IntegerField(default=25)
+    critical_cells = models.IntegerField()
+    high_risk_cells = models.IntegerField()
+    medium_risk_cells = models.IntegerField()
+    low_risk_cells = models.IntegerField()
+    average_risk_score = models.DecimalField(max_digits=5, decimal_places=2)
+    highest_risk_score = models.IntegerField()
+    lowest_risk_score = models.IntegerField()
+    total_workers_exposed = models.IntegerField()
+    workers_in_critical_zones = models.IntegerField()
+    incidents_this_period = models.IntegerField()
+    incidents_last_period = models.IntegerField()
+    incident_trend = models.CharField(max_length=20, choices=[('up', 'Up'), ('down', 'Down'), ('stable', 'Stable')])
+    total_controls = models.IntegerField()
+    effective_controls = models.IntegerField()
+    ineffective_controls = models.IntegerField()
+    control_effectiveness_percentage = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(100)])
+    critical_actions_required = models.IntegerField()
+    action_items = models.TextField(blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='risk_heatmap_reports_created')
+    
+    class Meta:
+        verbose_name = 'Risk Heatmap Report'
+        verbose_name_plural = 'Risk Heatmap Reports'
+        ordering = ['-report_date']
+    
+    def __str__(self):
+        return f"{self.enterprise.name} - {self.period}"
+    
+    @property
+    def heatmap_html_matrix(self):
+        matrix = []
+        for severity in range(5, 0, -1):
+            row = []
+            for probability in range(1, 6):
+                score = probability * severity
+                row.append({'probability': probability, 'severity': severity, 'score': score})
+            matrix.append(row)
+        return matrix
+
+
+# ==================== ISO 27001 MODELS ====================
+# Import ISO 27001 Information Security Management models
+from .models_iso27001 import (
+    AuditLog,
+    AccessControl,
+    SecurityIncident,
+    VulnerabilityRecord,
+    AccessRequest,
+    DataRetentionPolicy,
+    EncryptionKeyRecord,
+    ComplianceDashboard,
+)
+
+# ==================== ISO 45001 MODELS ====================
+# Import ISO 45001 Occupational Health & Safety Management models
+from .models_iso45001 import (
+    OHSPolicy,
+    HazardRegister,
+    IncidentInvestigation,
+    SafetyTraining,
+    TrainingCertification,
+    EmergencyProcedure,
+    EmergencyDrill,
+    HealthSurveillance,
+    PerformanceIndicator,
+    ComplianceAudit,
+    ContractorQualification,
+    ManagementReview,
+    WorkerFeedback,
+)

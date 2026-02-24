@@ -75,7 +75,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -343,12 +343,14 @@ JAZZMIN_SETTINGS = {
 
     # ============= UI Settings =============
     "use_google_fonts_cdn": True,
-    "changeform_format": "collapsible",
+    "changeform_format": "horizontal_tabs",
     "changeform_format_overrides": {
         "accounts.user": "horizontal_tabs",
         "licenses.license": "horizontal_tabs",
         "organizations.organization": "horizontal_tabs",
     },
+    "show_formset_buttons": False,
+    "form_tabs_vertical": False,
 
     # ============= Dashboard =============
     "show_dashboard": True,

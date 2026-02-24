@@ -8,6 +8,21 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from . import views
+from .views import (
+    WorkerRiskProfileViewSet,
+    OverexposureAlertViewSet,
+    ExitExaminationViewSet,
+    RegulatoryCNSSReportViewSet,
+    DRCRegulatoryReportViewSet,
+    PPEComplianceRecordViewSet,
+    XrayImagingResultViewSet,
+    HeavyMetalsTestViewSet,
+    DrugAlcoholScreeningViewSet,
+    FitnessCertificationDecisionViewSet,
+    HierarchyOfControlsViewSet,
+    RiskHeatmapDataViewSet,
+    RiskHeatmapReportViewSet,
+)
 
 # Create router for ViewSets
 router = DefaultRouter()
@@ -32,8 +47,86 @@ router.register(r'fitness-certificates', views.FitnessCertificateViewSet, basena
 # Disease and incident endpoints
 router.register(r'occupational-diseases', views.OccupationalDiseaseViewSet, basename='occupationaldisease')
 router.register(r'workplace-incidents', views.WorkplaceIncidentViewSet, basename='workplaceincident')
+router.register(r'hazard-identifications', views.HazardIdentificationViewSet, basename='hazard-identification')
+router.register(r'ppe-items', views.PPEItemViewSet, basename='ppe-item')
 
-app_name = 'occupational_health'
+# ==================== EXTENDED FEATURES ENDPOINTS ====================
+# Risk profiling
+router.register(r'worker-risk-profiles', WorkerRiskProfileViewSet, basename='worker-risk-profile')
+
+# Occupational exposure alerts
+router.register(r'overexposure-alerts', OverexposureAlertViewSet, basename='overexposure-alert')
+
+# Exit examinations
+router.register(r'exit-exams', ExitExaminationViewSet, basename='exit-examination')
+
+# Regulatory reporting
+router.register(r'cnss-reports', RegulatoryCNSSReportViewSet, basename='cnss-report')
+router.register(r'drc-reports', DRCRegulatoryReportViewSet, basename='drc-report')
+
+# PPE compliance tracking
+router.register(r'ppe-compliance', PPEComplianceRecordViewSet, basename='ppe-compliance')
+
+# ==================== MEDICAL EXAMINATION EXTENDED ENDPOINTS ====================
+# X-ray imaging with ILO classification
+router.register(r'xray-imaging', XrayImagingResultViewSet, basename='xray-imaging')
+
+# Heavy metals testing
+router.register(r'heavy-metals-tests', HeavyMetalsTestViewSet, basename='heavy-metals-test')
+
+# Drug & alcohol screening
+router.register(r'drug-alcohol-screening', DrugAlcoholScreeningViewSet, basename='drug-alcohol-screening')
+
+# Fitness certification decisions
+router.register(r'fitness-decisions', FitnessCertificationDecisionViewSet, basename='fitness-decision')
+
+# ==================== RISK ASSESSMENT EXTENDED ENDPOINTS ====================
+# Hierarchy of controls recommendations
+router.register(r'hierarchy-of-controls', HierarchyOfControlsViewSet, basename='hierarchy-of-controls')
+
+# Risk heatmap data points
+router.register(r'risk-heatmap-data', RiskHeatmapDataViewSet, basename='risk-heatmap-data')
+
+# Risk heatmap reports
+router.register(r'risk-heatmap-reports', RiskHeatmapReportViewSet, basename='risk-heatmap-report')
+
+# ==================== ISO 27001 COMPLIANCE ENDPOINTS ====================
+from .views_iso_compliance import (
+    AuditLogViewSet, AccessControlViewSet, SecurityIncidentViewSet,
+    VulnerabilityRecordViewSet, AccessRequestViewSet,
+    DataRetentionPolicyViewSet, EncryptionKeyRecordViewSet, ComplianceDashboardViewSet,
+    OHSPolicyViewSet, HazardRegisterViewSet, IncidentInvestigationViewSet,
+    SafetyTrainingViewSet, TrainingCertificationViewSet,
+    EmergencyProcedureViewSet, EmergencyDrillViewSet,
+    HealthSurveillanceViewSet, PerformanceIndicatorViewSet,
+    ComplianceAuditViewSet, ContractorQualificationViewSet,
+    ManagementReviewViewSet, WorkerFeedbackViewSet,
+)
+
+# ISO 27001 - Information Security Management endpoints
+router.register(r'compliance/audit-logs', AuditLogViewSet, basename='audit-log')
+router.register(r'compliance/access-controls', AccessControlViewSet, basename='access-control')
+router.register(r'compliance/security-incidents', SecurityIncidentViewSet, basename='security-incident')
+router.register(r'compliance/vulnerabilities', VulnerabilityRecordViewSet, basename='vulnerability-record')
+router.register(r'compliance/access-requests', AccessRequestViewSet, basename='access-request')
+router.register(r'compliance/retention-policies', DataRetentionPolicyViewSet, basename='retention-policy')
+router.register(r'compliance/encryption-keys', EncryptionKeyRecordViewSet, basename='encryption-key')
+router.register(r'compliance/dashboard', ComplianceDashboardViewSet, basename='compliance-dashboard')
+
+# ISO 45001 - Occupational Health & Safety Management endpoints
+router.register(r'ohs/policies', OHSPolicyViewSet, basename='ohs-policy')
+router.register(r'ohs/hazard-register', HazardRegisterViewSet, basename='hazard-register')
+router.register(r'ohs/incident-investigations', IncidentInvestigationViewSet, basename='incident-investigation')
+router.register(r'ohs/safety-training', SafetyTrainingViewSet, basename='safety-training')
+router.register(r'ohs/training-certifications', TrainingCertificationViewSet, basename='training-certification')
+router.register(r'ohs/emergency-procedures', EmergencyProcedureViewSet, basename='emergency-procedure')
+router.register(r'ohs/emergency-drills', EmergencyDrillViewSet, basename='emergency-drill')
+router.register(r'ohs/health-surveillance', HealthSurveillanceViewSet, basename='health-surveillance')
+router.register(r'ohs/performance-indicators', PerformanceIndicatorViewSet, basename='performance-indicator')
+router.register(r'ohs/compliance-audits', ComplianceAuditViewSet, basename='compliance-audit')
+router.register(r'ohs/contractor-qualifications', ContractorQualificationViewSet, basename='contractor-qualification')
+router.register(r'ohs/management-reviews', ManagementReviewViewSet, basename='management-review')
+router.register(r'ohs/worker-feedback', WorkerFeedbackViewSet, basename='worker-feedback')
 
 urlpatterns = [
     # ViewSet URLs (REST API)

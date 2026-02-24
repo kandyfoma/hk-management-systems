@@ -227,11 +227,13 @@ const dedupePendingQueue = (list: PendingConsultation[]): PendingConsultation[] 
 
 const hasInitialNurseScreening = (pending: PendingConsultation): boolean => {
   const vitals = pending?.vitals || {};
+  // Allow consultation to start if ANY vital signs are present (matching hospital module pattern)
+  // This allows nurse to continue taking vitals during the consultation if incomplete
   return Boolean(
-    vitals.bloodPressureSystolic &&
-    vitals.bloodPressureDiastolic &&
-    vitals.heartRate &&
-    vitals.temperature
+    vitals.temperature ||
+    vitals.bloodPressureSystolic ||
+    vitals.bloodPressureDiastolic ||
+    vitals.heartRate
   );
 };
 
@@ -869,7 +871,7 @@ export function OccHealthConsultationScreen({
         return;
       }
 
-      const linkedDraftId = (pending as any)?.resumeDraftId as string | undefined;
+      const linkedDraftId = pending.resumeDraftId as string | undefined;
 
       if (linkedDraftId) {
         await loadDraft(linkedDraftId);

@@ -7,25 +7,6 @@ occupational medicine management system.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    # Core models
-    Enterprise, WorkSite, Worker,
-    # Medical examination models
-    MedicalExamination, VitalSigns, PhysicalExamination,
-    AudiometryResult, SpirometryResult, VisionTestResult,
-    MentalHealthScreening, ErgonomicAssessment,
-    FitnessCertificate,
-    # Disease and incident models
-    OccupationalDiseaseType, OccupationalDisease,
-    WorkplaceIncident,
-    # PPE and risk models
-    PPEItem, HazardIdentification,
-    SiteHealthMetrics,
-    # Choice constants
-    INDUSTRY_SECTORS, JOB_CATEGORIES, EXPOSURE_RISKS, PPE_TYPES,
-    SECTOR_RISK_LEVELS
-)
-
-from .models import (
     # Protocol hierarchy models
     MedicalExamCatalog, OccSector, OccDepartment, OccPosition,
     ExamVisitProtocol, ProtocolRequiredExam,
@@ -42,6 +23,14 @@ from .models import (
     # PPE and risk models
     PPEItem, HazardIdentification,
     SiteHealthMetrics,
+    # Extended occupational health models
+    WorkerRiskProfile, OverexposureAlert, ExitExamination,
+    RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
+    # Medical examination extended models
+    XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
+    FitnessCertificationDecision,
+    # Risk assessment models
+    HierarchyOfControls, RiskHeatmapData, RiskHeatmapReport,
     # Choice constants
     INDUSTRY_SECTORS, JOB_CATEGORIES, EXPOSURE_RISKS, PPE_TYPES,
     SECTOR_RISK_LEVELS
@@ -744,3 +733,590 @@ class EnterpriseCreateSerializer(serializers.ModelSerializer):
     # Recommendations
     immediate_actions = serializers.ListField()
     preventive_measures = serializers.ListField()
+
+
+# ==================== EXTENDED OCCUPATIONAL HEALTH SERIALIZERS ====================
+
+class OverexposureAlertSerializer(serializers.ModelSerializer):
+    """Serializer for overexposure alerts"""
+    
+    worker_name = serializers.CharField(source='worker.full_name', read_only=True)
+    worker_employee_id = serializers.CharField(source='worker.employee_id', read_only=True)
+    enterprise_name = serializers.CharField(source='worker.enterprise.name', read_only=True)
+    severity_display = serializers.CharField(source='get_severity_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    acknowledged_by_name = serializers.CharField(source='acknowledged_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = OverexposureAlert
+        fields = '__all__'
+
+
+class ExitExaminationSerializer(serializers.ModelSerializer):
+    """Serializer for exit examinations"""
+    
+    worker_name = serializers.CharField(source='worker.full_name', read_only=True)
+    worker_employee_id = serializers.CharField(source='worker.employee_id', read_only=True)
+    enterprise_name = serializers.CharField(source='worker.enterprise.name', read_only=True)
+    reason_display = serializers.CharField(source='get_reason_for_exit_display', read_only=True)
+    examiner_name = serializers.CharField(source='examiner.get_full_name', read_only=True)
+    days_until_exit = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = ExitExamination
+        fields = '__all__'
+
+
+class RegulatoryCNSSReportSerializer(serializers.ModelSerializer):
+    """Serializer for CNSS regulatory reports"""
+    
+    enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    report_type_display = serializers.CharField(source='get_report_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    prepared_by_name = serializers.CharField(source='prepared_by.get_full_name', read_only=True)
+    incident_details = serializers.SerializerMethodField(read_only=True)
+    disease_details = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = RegulatoryCNSSReport
+        fields = '__all__'
+    
+    def get_incident_details(self, obj):
+        """Include related incident details if present"""
+        if obj.related_incident:
+            return {
+                'incident_number': obj.related_incident.incident_number,
+                'category': obj.related_incident.category,
+                'date': obj.related_incident.incident_date,
+                'severity': obj.related_incident.severity,
+            }
+        return None
+    
+    def get_disease_details(self, obj):
+        """Include related disease details if present"""
+        if obj.related_disease:
+            return {
+                'case_number': obj.related_disease.case_number,
+                'disease_name': obj.related_disease.disease_type.name,
+                'diagnosis_date': obj.related_disease.diagnosis_date,
+                'severity': obj.related_disease.severity_level,
+            }
+        return None
+
+
+class DRCRegulatoryReportSerializer(serializers.ModelSerializer):
+    """Serializer for DRC regulatory reports"""
+    
+    enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    report_type_display = serializers.CharField(source='get_report_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    submitted_by_name = serializers.CharField(source='submitted_by.get_full_name', read_only=True)
+    related_incidents_summary = serializers.SerializerMethodField(read_only=True)
+    related_diseases_summary = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = DRCRegulatoryReport
+        fields = '__all__'
+    
+    def get_related_incidents_summary(self, obj):
+        """Include count and summary of related incidents"""
+        incidents = obj.related_incidents.all()
+        return {
+            'count': incidents.count(),
+            'items': [
+                {'incident_number': inc.incident_number, 'category': inc.category}
+                for inc in incidents[:5]
+            ]
+        }
+    
+    def get_related_diseases_summary(self, obj):
+        """Include count and summary of related diseases"""
+        diseases = obj.related_diseases.all()
+        return {
+            'count': diseases.count(),
+            'items': [
+                {'case_number': dis.case_number, 'disease_name': dis.disease_type.name}
+                for dis in diseases[:5]
+            ]
+        }
+
+
+class PPEComplianceRecordSerializer(serializers.ModelSerializer):
+    """Serializer for PPE compliance records"""
+    
+    worker_name = serializers.CharField(source='ppe_item.worker.full_name', read_only=True)
+    worker_employee_id = serializers.CharField(source='ppe_item.worker.employee_id', read_only=True)
+    ppe_type_display = serializers.CharField(source='ppe_item.get_ppe_type_display', read_only=True)
+    check_type_display = serializers.CharField(source='get_check_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    checked_by_name = serializers.CharField(source='checked_by.get_full_name', read_only=True)
+    approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = PPEComplianceRecord
+        fields = '__all__'
+
+
+class WorkerRiskProfileSerializer(serializers.ModelSerializer):
+    """Serializer for worker risk profiles"""
+    
+    worker_name = serializers.CharField(source='worker.full_name', read_only=True)
+    worker_employee_id = serializers.CharField(source='worker.employee_id', read_only=True)
+    job_category_display = serializers.CharField(source='worker.get_job_category_display', read_only=True)
+    enterprise_name = serializers.CharField(source='worker.enterprise.name', read_only=True)
+    risk_level_display = serializers.CharField(source='get_risk_level_display', read_only=True)
+    
+    class Meta:
+        model = WorkerRiskProfile
+        fields = '__all__'
+
+
+# ==================== MEDICAL EXAMINATION EXTENDED SERIALIZERS ====================
+
+class XrayImagingResultSerializer(serializers.ModelSerializer):
+    """Serializer for X-ray imaging results"""
+    
+    worker_name = serializers.CharField(
+        source='examination.worker.full_name',
+        read_only=True
+    )
+    worker_id = serializers.CharField(
+        source='examination.worker.employee_id',
+        read_only=True
+    )
+    exam_type = serializers.CharField(
+        source='examination.exam_type',
+        read_only=True
+    )
+    imaging_type_display = serializers.CharField(
+        source='get_imaging_type_display',
+        read_only=True
+    )
+    ilo_classification_display = serializers.CharField(
+        source='get_ilo_classification_display',
+        read_only=True
+    )
+    profusion_display = serializers.CharField(
+        source='get_profusion_display',
+        read_only=True
+    )
+    
+    class Meta:
+        model = XrayImagingResult
+        fields = [
+            'id', 'examination', 'worker_name', 'worker_id', 'exam_type',
+            'imaging_type', 'imaging_type_display', 'imaging_date',
+            'imaging_facility', 'radiologist',
+            'ilo_classification', 'ilo_classification_display',
+            'profusion', 'profusion_display',
+            'small_opacities', 'large_opacities', 'pleural_thickening',
+            'pleural_effusion', 'costophrenic_angle_obliteration',
+            'cardiac_enlargement', 'other_findings',
+            'pneumoconiosis_detected', 'pneumoconiosis_type', 'severity',
+            'follow_up_required', 'follow_up_interval_months',
+            'clinical_notes', 'created', 'updated'
+        ]
+        read_only_fields = [
+            'id', 'worker_name', 'worker_id', 'exam_type',
+            'imaging_type_display', 'ilo_classification_display',
+            'profusion_display', 'created', 'updated'
+        ]
+
+
+class HeavyMetalsTestSerializer(serializers.ModelSerializer):
+    """Serializer for heavy metals test results"""
+    
+    worker_name = serializers.CharField(
+        source='examination.worker.full_name',
+        read_only=True
+    )
+    worker_id = serializers.CharField(
+        source='examination.worker.employee_id',
+        read_only=True
+    )
+    heavy_metal_display = serializers.CharField(
+        source='get_heavy_metal_display',
+        read_only=True
+    )
+    specimen_type_display = serializers.CharField(
+        source='get_specimen_type_display',
+        read_only=True
+    )
+    status_display = serializers.CharField(
+        source='get_status_display',
+        read_only=True
+    )
+    is_abnormal = serializers.SerializerMethodField()
+    
+    def get_is_abnormal(self, obj):
+        return obj.status in ['elevated', 'high', 'critical']
+    
+    class Meta:
+        model = HeavyMetalsTest
+        fields = [
+            'id', 'examination', 'worker_name', 'worker_id',
+            'heavy_metal', 'heavy_metal_display',
+            'specimen_type', 'specimen_type_display',
+            'test_date', 'level_value', 'unit',
+            'reference_lower', 'reference_upper', 'status', 'status_display',
+            'osha_action_level', 'exceeds_osha_limit',
+            'clinical_significance', 'occupational_exposure',
+            'follow_up_required', 'follow_up_recommendation',
+            'is_abnormal', 'created', 'updated'
+        ]
+        read_only_fields = [
+            'id', 'worker_name', 'worker_id',
+            'heavy_metal_display', 'specimen_type_display',
+            'status_display', 'exceeds_osha_limit', 'created', 'updated'
+        ]
+
+
+class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
+    """Serializer for drug and alcohol screening"""
+    
+    worker_name = serializers.CharField(
+        source='examination.worker.full_name',
+        read_only=True
+    )
+    worker_id = serializers.CharField(
+        source='examination.worker.employee_id',
+        read_only=True
+    )
+    test_type_display = serializers.CharField(
+        source='get_test_type_display',
+        read_only=True
+    )
+    alcohol_result_display = serializers.CharField(
+        source='get_alcohol_result_display',
+        read_only=True
+    )
+    drug_result_display = serializers.CharField(
+        source='get_drug_result_display',
+        read_only=True
+    )
+    confirmation_result_display = serializers.CharField(
+        source='get_confirmation_result_display',
+        read_only=True
+    )
+    overall_result = serializers.SerializerMethodField()
+    
+    def get_overall_result(self, obj):
+        if obj.alcohol_result == 'positive' or obj.drug_result == 'positive':
+            return 'positive'
+        elif obj.alcohol_result == 'presumptive' or obj.drug_result == 'presumptive':
+            return 'presumptive'
+        return 'negative'
+    
+    class Meta:
+        model = DrugAlcoholScreening
+        fields = [
+            'id', 'examination', 'worker_name', 'worker_id',
+            'test_type', 'test_type_display', 'test_date',
+            'testing_facility', 'collector',
+            'alcohol_tested', 'alcohol_result', 'alcohol_result_display',
+            'alcohol_level',
+            'drug_tested', 'drug_result', 'drug_result_display',
+            'substances_tested', 'specific_substances_detected',
+            'confirmation_required', 'confirmation_date',
+            'confirmation_result', 'confirmation_result_display',
+            'mro_reviewed', 'mro_name', 'mro_comments',
+            'fit_for_duty', 'restrictions',
+            'chain_of_custody_verified', 'specimen_id', 'notes',
+            'overall_result', 'created', 'updated'
+        ]
+        read_only_fields = [
+            'id', 'worker_name', 'worker_id',
+            'test_type_display', 'alcohol_result_display',
+            'drug_result_display', 'confirmation_result_display',
+            'overall_result', 'created', 'updated'
+        ]
+
+
+class FitnessCertificationDecisionSerializer(serializers.ModelSerializer):
+    """Serializer for fitness certification decisions"""
+    
+    worker_name = serializers.CharField(
+        source='examinations.worker.full_name',
+        read_only=True
+    )
+    worker_id = serializers.CharField(
+        source='examinations.worker.employee_id',
+        read_only=True
+    )
+    enterprise_name = serializers.CharField(
+        source='examinations.worker.enterprise.name',
+        read_only=True
+    )
+    reviewed_by_name = serializers.CharField(
+        source='reviewed_by.get_full_name',
+        read_only=True
+    )
+    fitness_status_display = serializers.CharField(
+        source='get_fitness_status_display',
+        read_only=True
+    )
+    decision_basis_display = serializers.CharField(
+        source='get_decision_basis_display',
+        read_only=True
+    )
+    is_valid = serializers.BooleanField(read_only=True)
+    days_until_expiry = serializers.IntegerField(read_only=True)
+    
+    class Meta:
+        model = FitnessCertificationDecision
+        fields = [
+            'id', 'examinations', 'worker_name', 'worker_id',
+            'enterprise_name',
+            'decision_date', 'reviewed_by', 'reviewed_by_name',
+            'fitness_status', 'fitness_status_display',
+            'decision_basis', 'decision_basis_display',
+            'key_findings', 'risk_factors',
+            'work_restrictions', 'required_accommodations',
+            'recommended_interventions',
+            'follow_up_required', 'follow_up_interval_months',
+            'follow_up_justification',
+            'certification_date', 'certification_valid_until',
+            'medical_fit', 'psychological_fit', 'safety_sensitive',
+            'subject_to_appeal', 'appeal_deadline',
+            'is_valid', 'days_until_expiry',
+            'created', 'updated'
+        ]
+        read_only_fields = [
+            'id', 'worker_name', 'worker_id', 'enterprise_name',
+            'reviewed_by_name', 'fitness_status_display',
+            'decision_basis_display', 'is_valid', 'days_until_expiry',
+            'created', 'updated'
+        ]
+
+
+# ==================== RISK ASSESSMENT EXTENDED SERIALIZERS ====================
+
+class HierarchyOfControlsSerializer(serializers.ModelSerializer):
+    """Serializer for Hierarchy of Controls recommendations"""
+    
+    hazard_name = serializers.CharField(source='hazard.hazard_type', read_only=True)
+    enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    responsible_person_name = serializers.CharField(
+        source='responsible_person.get_full_name',
+        read_only=True
+    )
+    control_level_display = serializers.CharField(
+        source='get_control_level_display',
+        read_only=True
+    )
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    effectiveness_display = serializers.CharField(
+        source='get_effectiveness_rating_display',
+        read_only=True
+    )
+    dependant_controls_data = serializers.SerializerMethodField()
+    is_effective = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = HierarchyOfControls
+        fields = [
+            'id',
+            'hazard',
+            'hazard_name',
+            'enterprise',
+            'enterprise_name',
+            'control_level',
+            'control_level_display',
+            'control_name',
+            'description',
+            'implementation_requirements',
+            'estimated_cost',
+            'estimated_timeline',
+            'responsible_person',
+            'responsible_person_name',
+            'status',
+            'status_display',
+            'implementation_date',
+            'effectiveness_rating',
+            'effectiveness_display',
+            'effectiveness_notes',
+            'risk_reduction_percentage',
+            'residual_risk_score',
+            'dependant_controls',
+            'dependant_controls_data',
+            'is_effective',
+            'created',
+            'updated',
+        ]
+        read_only_fields = ['created', 'updated']
+    
+    def get_dependant_controls_data(self, obj):
+        """Get details of dependent controls"""
+        dependants = obj.dependant_controls.values('id', 'control_name', 'control_level')
+        return list(dependants)
+    
+    def get_is_effective(self, obj):
+        """Check if control is effective"""
+        return obj.is_effective()
+
+
+class RiskHeatmapDataSerializer(serializers.ModelSerializer):
+    """Serializer for Risk Heatmap Data points"""
+    
+    enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    probability_display = serializers.CharField(
+        source='get_probability_level_display',
+        read_only=True
+    )
+    severity_display = serializers.CharField(
+        source='get_severity_level_display',
+        read_only=True
+    )
+    risk_zone_display = serializers.CharField(
+        source='get_risk_zone_display',
+        read_only=True
+    )
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    trend_display = serializers.CharField(source='get_trend_display', read_only=True)
+    hazards_list = serializers.SerializerMethodField()
+    workers_list = serializers.SerializerMethodField()
+    trend_indicator = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RiskHeatmapData
+        fields = [
+            'id',
+            'enterprise',
+            'enterprise_name',
+            'heatmap_date',
+            'period',
+            'probability_level',
+            'probability_display',
+            'severity_level',
+            'severity_display',
+            'risk_score',
+            'risk_zone',
+            'risk_zone_display',
+            'hazards_count',
+            'hazards_list',
+            'incidents_count',
+            'near_misses_count',
+            'workers_exposed',
+            'workers_list',
+            'workers_affected_count',
+            'controls_implemented',
+            'controls_effective_percentage',
+            'previous_period_score',
+            'trend',
+            'trend_display',
+            'trend_indicator',
+            'priority',
+            'priority_display',
+            'notes',
+            'action_recommendations',
+            'created',
+            'updated',
+        ]
+        read_only_fields = ['created', 'updated', 'risk_score', 'risk_zone']
+    
+    def get_hazards_list(self, obj):
+        """Get list of related hazards"""
+        return list(obj.related_hazards.values('id', 'hazard_type', 'severity'))
+    
+    def get_workers_list(self, obj):
+        """Get list of exposed workers"""
+        return list(obj.workers_exposed.values('id', 'first_name', 'last_name', 'employee_id'))
+    
+    def get_trend_indicator(self, obj):
+        """Get visual trend indicator"""
+        return obj.get_trend_indicator()
+
+
+class RiskHeatmapReportSerializer(serializers.ModelSerializer):
+    """Serializer for Risk Heatmap Reports"""
+    
+    enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    incident_trend_display = serializers.CharField(
+        source='get_incident_trend_display',
+        read_only=True
+    )
+    heatmap_matrix = serializers.SerializerMethodField()
+    risk_distribution = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RiskHeatmapReport
+        fields = [
+            'id',
+            'enterprise',
+            'enterprise_name',
+            'report_date',
+            'period',
+            'total_heatmap_cells',
+            'critical_cells',
+            'high_risk_cells',
+            'medium_risk_cells',
+            'low_risk_cells',
+            'average_risk_score',
+            'highest_risk_score',
+            'lowest_risk_score',
+            'total_workers_exposed',
+            'workers_in_critical_zones',
+            'incidents_this_period',
+            'incidents_last_period',
+            'incident_trend',
+            'incident_trend_display',
+            'total_controls',
+            'effective_controls',
+            'ineffective_controls',
+            'control_effectiveness_percentage',
+            'critical_actions_required',
+            'action_items',
+            'heatmap_matrix',
+            'risk_distribution',
+            'created',
+        ]
+        read_only_fields = ['created', 'report_date']
+    
+    def get_heatmap_matrix(self, obj):
+        """Get 5x5 heatmap matrix structure"""
+        return obj.heatmap_html_matrix
+    
+    def get_risk_distribution(self, obj):
+        """Get risk distribution breakdown"""
+        return {
+            'critical': obj.critical_cells,
+            'high': obj.high_risk_cells,
+            'medium': obj.medium_risk_cells,
+            'low': obj.low_risk_cells,
+            'critical_percentage': round((obj.critical_cells / obj.total_heatmap_cells) * 100, 1) if obj.total_heatmap_cells > 0 else 0,
+            'high_percentage': round((obj.high_risk_cells / obj.total_heatmap_cells) * 100, 1) if obj.total_heatmap_cells > 0 else 0,
+            'medium_percentage': round((obj.medium_risk_cells / obj.total_heatmap_cells) * 100, 1) if obj.total_heatmap_cells > 0 else 0,
+            'low_percentage': round((obj.low_risk_cells / obj.total_heatmap_cells) * 100, 1) if obj.total_heatmap_cells > 0 else 0,
+        }
+
+
+# ==================== ISO 27001 SERIALIZERS ====================
+# Import ISO 27001 Information Security serializers
+from .serializers_iso27001 import (
+    AuditLogSerializer,
+    AccessControlSerializer,
+    SecurityIncidentSerializer,
+    VulnerabilityRecordSerializer,
+    AccessRequestSerializer,
+    DataRetentionPolicySerializer,
+    EncryptionKeyRecordSerializer,
+    ComplianceDashboardSerializer,
+)
+
+# ==================== ISO 45001 SERIALIZERS ====================
+# Import ISO 45001 Occupational Health & Safety serializers
+from .serializers_iso45001 import (
+    OHSPolicySerializer,
+    HazardRegisterSerializer,
+    IncidentInvestigationSerializer,
+    SafetyTrainingSerializer,
+    TrainingCertificationSerializer,
+    EmergencyProcedureSerializer,
+    EmergencyDrillSerializer,
+    HealthSurveillanceSerializer,
+    PerformanceIndicatorSerializer,
+    ComplianceAuditSerializer,
+    ContractorQualificationSerializer,
+    ManagementReviewSerializer,
+    WorkerFeedbackSerializer,
+)

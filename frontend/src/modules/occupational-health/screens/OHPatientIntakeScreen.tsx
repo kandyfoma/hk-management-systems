@@ -85,6 +85,9 @@ export interface PendingConsultation {
   vitals: VitalSigns;
   arrivalTime: string;
   status: 'waiting' | 'in_consultation' | 'completed';
+  resumeDraftId?: string;  // Linked draft for resuming consultation
+  resumeStatus?: string;   // Status of the resumed draft
+  resumeStep?: string;     // Step to resume from
 }
 
 type IntakeStep = 'patient_search' | 'visit_motif' | 'vital_signs';

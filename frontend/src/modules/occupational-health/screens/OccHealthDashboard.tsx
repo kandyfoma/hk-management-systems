@@ -1,4 +1,4 @@
-﻿import React from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
 import { SECTOR_PROFILES, OccHealthUtils } from '../../../models/OccupationalHealth';
 import type { IndustrySector, SectorRiskLevel } from '../../../models/OccupationalHealth';
+import axios from 'axios';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -26,56 +29,51 @@ interface MetricCard {
   color: string;
 }
 
-// ─── Sample Data (sector-agnostic) ───────────────────────────
-const metrics: MetricCard[] = [
-  { title: 'Travailleurs Actifs', value: '1.247', change: '+23', changeType: 'up', icon: 'people', color: colors.primary },
-  { title: 'Visites Aujourd\'hui', value: '18', change: '+4', changeType: 'up', icon: 'medkit', color: colors.secondary },
-  { title: 'Taux Aptitude', value: '94.2%', change: '+1.3%', changeType: 'up', icon: 'shield-checkmark', color: '#22C55E' },
-  { title: 'Incidents (Mois)', value: '3', change: '-2', changeType: 'up', icon: 'warning', color: colors.error },
-];
-
-const fitnessOverview = [
-  { label: 'Apte', count: 1174, color: '#22C55E', percent: 94.2 },
-  { label: 'Apte avec Restrictions', count: 38, color: '#F59E0B', percent: 3.0 },
-  { label: 'Inapte Temporaire', count: 21, color: '#EF4444', percent: 1.7 },
-  { label: 'En Attente', count: 14, color: '#6366F1', percent: 1.1 },
-];
-
-const recentExams = [
-  { id: 'EX-0342', worker: 'Kabamba Mutombo', type: 'Periodique', result: 'Apte', time: '14:30', dept: 'Operations' },
-  { id: 'EX-0341', worker: 'Tshisekedi Ilunga', type: 'Post-Accident', result: 'Avec Restrictions', time: '13:45', dept: 'Technique' },
-  { id: 'EX-0340', worker: 'Mukendi Kasongo', type: 'Embauche', result: 'Apte', time: '11:20', dept: 'Maintenance' },
-  { id: 'EX-0339', worker: 'Mwamba Kalala', type: 'Reprise', result: 'Inapte Temp.', time: '10:00', dept: 'Logistique' },
-  { id: 'EX-0338', worker: 'Lukusa Nzuzi', type: 'Periodique', result: 'Apte', time: '09:15', dept: 'Administration' },
-];
-
-const recentIncidents = [
-  { id: 'INC-087', type: 'Premiers Secours', site: 'Site Principal', severity: 'Mineur', date: '10/02/2026', status: 'Ferme' },
-  { id: 'INC-086', type: 'Presque-Accident', site: 'Batiment B', severity: 'Modere', date: '08/02/2026', status: 'Investigation' },
-  { id: 'INC-085', type: 'Accident avec Arret', site: 'Zone Nord', severity: 'Majeur', date: '05/02/2026', status: 'En Cours' },
-];
-
-const expiringCertificates = [
-  { worker: 'Pongo Tshimanga', expires: '15/02/2026', dept: 'Operations', daysLeft: 4 },
-  { worker: 'Nkulu Mwamba', expires: '18/02/2026', dept: 'Technique', daysLeft: 7 },
-  { worker: 'Kasai Mulumba', expires: '22/02/2026', dept: 'Maintenance', daysLeft: 11 },
-  { worker: 'Lubala Kapend', expires: '28/02/2026', dept: 'Logistique', daysLeft: 17 },
-];
-
-const safetyKPIs = [
-  { label: 'LTIFR', value: '1.42', target: '< 2.0', status: 'good' },
-  { label: 'TRIFR', value: '4.85', target: '< 5.0', status: 'warning' },
-  { label: 'Jours Sans Incident', value: '23', target: '> 30', status: 'warning' },
-  { label: 'Conformite SST', value: '97%', target: '> 95%', status: 'good' },
-];
-
-const activeSectors: { sector: IndustrySector; enterprises: number; workers: number }[] = [
-  { sector: 'mining', enterprises: 3, workers: 420 },
-  { sector: 'construction', enterprises: 5, workers: 312 },
-  { sector: 'banking_finance', enterprises: 4, workers: 285 },
-  { sector: 'manufacturing', enterprises: 2, workers: 130 },
-  { sector: 'healthcare', enterprises: 1, workers: 100 },
-];
+interface DashboardData {
+  metrics: MetricCard[];
+  fitness_overview: Array<{
+    label: string;
+    count: number;
+    percentage: number;
+    color: string;
+  }>;
+  recent_exams: Array<{
+    id: string;
+    worker: string;
+    type: string;
+    result: string;
+    time: string;
+    dept: string;
+  }>;
+  recent_incidents: Array<{
+    id: string;
+    type: string;
+    site: string;
+    severity: string;
+    date: string;
+    status: string;
+  }>;
+  expiring_certificates: Array<{
+    worker: string;
+    expires: string;
+    dept: string;
+    daysLeft: number;
+  }>;
+  sectors: Array<{
+    sector: string;
+    name: string;
+    enterprises: number;
+    workers: number;
+    color: string;
+    icon: string;
+  }>;
+  safety_kpis: Array<{
+    label: string;
+    value: string;
+    target: string;
+    status: string;
+  }>;
+}
 
 // ─── Helper Components ───────────────────────────────────────
 
@@ -165,13 +163,111 @@ interface OccHealthDashboardProps {
 }
 
 export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProps = {}) {
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [organizationName, setOrganizationName] = useState<string>('');
+
+  // Fetch dashboard data from API
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Get the API base URL from environment or use default
+        const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        
+        // Get auth token and organization from AsyncStorage
+        const token = await AsyncStorage.getItem('auth_token');
+        const orgData = await AsyncStorage.getItem('current_organization');
+        
+        // Extract organization name if available
+        if (orgData) {
+          try {
+            const org = JSON.parse(orgData);
+            setOrganizationName(org.name || '');
+          } catch (e) {
+            console.warn('Failed to parse organization data');
+          }
+        }
+        
+        const response = await axios.get(
+          `${baseURL}/api/v1/occupational-health/api/dashboard/stats/`,
+          {
+            headers: {
+              Authorization: `Token ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        
+        if (response.data) {
+          setDashboardData(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard data:', err);
+        setError('Could not load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+    
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchDashboardData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fallback data in case API is not available (for development)
+  const getFallbackData = (): DashboardData => ({
+    metrics: [
+      { title: 'Travailleurs Actifs', value: '—', change: '+0', changeType: 'up', icon: 'people', color: colors.primary },
+      { title: "Visites Aujourd'hui", value: '—', change: '+0', changeType: 'up', icon: 'medkit', color: colors.secondary },
+      { title: 'Taux Aptitude', value: '—', change: '+0', changeType: 'up', icon: 'shield-checkmark', color: '#22C55E' },
+      { title: 'Incidents (Mois)', value: '—', change: '+0', changeType: 'up', icon: 'warning', color: colors.error },
+    ],
+    fitness_overview: [],
+    recent_exams: [],
+    recent_incidents: [],
+    expiring_certificates: [],
+    sectors: [],
+    safety_kpis: [],
+  });
+
+  const data = dashboardData || getFallbackData();
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ marginTop: 12, color: colors.textSecondary }}>Chargement du tableau de bord...</Text>
+      </View>
+    );
+  }
+
+  if (error && !dashboardData) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+        <Text style={{ marginTop: 12, color: colors.error, fontSize: 14, textAlign: 'center' }}>{error}</Text>
+        <Text style={{ marginTop: 8, color: colors.textSecondary, fontSize: 12, textAlign: 'center' }}>
+          Connexion au serveur échouée
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Medecine du Travail</Text>
-          <Text style={styles.headerSubtitle}>Sante & Securite au Travail - ISO 45001 - ILO C155/C161</Text>
+          <Text style={styles.headerSubtitle}>
+            {organizationName ? `${organizationName} - ` : ''}Sante & Securite au Travail - ISO 45001 - ILO C155/C161
+          </Text>
         </View>
         <TouchableOpacity style={styles.addBtn} activeOpacity={0.7} onPress={() => onNavigate?.('oh-exams')}>
           <Ionicons name="add-circle" size={20} color="#FFF" />
@@ -206,43 +302,74 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         </TouchableOpacity>
       </View>
 
-      {/* ══════ SECTION: Sectors Overview ══════ */}
+      {/* ══════ SECTION: Occupational Health Summary ══════ */}
       <SectionHeader
-        title="Secteurs Actifs"
-        subtitle="Entreprises couvertes par secteur d'activite"
-        icon="business"
-        accentColor={colors.primary}
-        ctaLabel="Ajouter Entreprise"
-        ctaIcon="add-circle-outline"
-        onCtaPress={() => onNavigate?.('oh-patients')}
+        title="Sante Occupationnelle"
+        subtitle="Maladies professionnelles, risques & formation"
+        icon="heart"
+        accentColor={colors.secondary}
       />
-      <View style={styles.sectorsGrid}>
-        {activeSectors.map((s, i) => {
-          const profile = SECTOR_PROFILES[s.sector];
-          return (
-            <TouchableOpacity key={i} style={styles.sectorCard} activeOpacity={0.7}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <View style={{ width: 36, height: 36, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: profile.color + '14' }}>
-                  <Ionicons name={profile.icon as any} size={18} color={profile.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{profile.label}</Text>
-                  <RiskLevelBadge level={profile.riskLevel} />
-                </View>
+      <View style={styles.row}>
+        <View style={[styles.card, isDesktop && { flex: 1 }]}>
+          <Text style={styles.cardTitle}>Maladies Professionnelles</Text>
+          <View style={{ marginTop: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+              <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(239,68,68,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#DC2626' }}>YTD</Text>
               </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 11, color: colors.textSecondary }}>{s.enterprises} entreprises</Text>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: profile.color }}>{s.workers} travailleurs</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>Diagnostiques cette année</Text>
+                <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text }}>
+                  {(data as any).total_diseases_this_year || 0}
+                </Text>
               </View>
-            </TouchableOpacity>
-          );
-        })}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(245,158,11,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#F59E0B' }}>MTD</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>Diagnostiques ce mois</Text>
+                <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text }}>
+                  {(data as any).current_month_diseases || 0}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View style={[styles.card, isDesktop && { flex: 1 }]}>
+          <Text style={styles.cardTitle}>Personnel Entrainé & Risques</Text>
+          <View style={{ marginTop: 12 }}>
+            <View style={{ marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={{ fontSize: 13, color: colors.text, fontWeight: '500' }}>Formation SST</Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                  {(data as any).trained_workers || 0} travailleurs
+                </Text>
+              </View>
+              <View style={{ height: 8, backgroundColor: colors.outlineVariant, borderRadius: 4, overflow: 'hidden' }}>
+                <View style={{ height: 8, width: '72%', backgroundColor: '#22C55E', borderRadius: 4 }} />
+              </View>
+            </View>
+            <View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={{ fontSize: 13, color: colors.text, fontWeight: '500' }}>Haut Risque</Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '600' }}>
+                  {(data as any).high_risk_workers || 0} workers
+                </Text>
+              </View>
+              <View style={{ height: 8, backgroundColor: colors.outlineVariant, borderRadius: 4, overflow: 'hidden' }}>
+                <View style={{ height: 8, width: '28%', backgroundColor: '#EF4444', borderRadius: 4 }} />
+              </View>
+            </View>
+          </View>
+        </View>
       </View>
 
       {/* ══════ SECTION: KPIs ══════ */}
       <SectionHeader
         title="Indicateurs Cles"
-        subtitle="Apercu global - tous secteurs confondus"
+        subtitle="Statut des travailleurs et indicateurs de performance"
         icon="pulse"
         accentColor={colors.primary}
         ctaLabel="Exporter"
@@ -250,7 +377,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         onCtaPress={() => onNavigate?.('oh-reports')}
       />
       <View style={styles.metricsGrid}>
-        {metrics.map((m, i) => (
+        {data.metrics.map((m, i) => (
           <View key={i} style={styles.metricCard}>
             <View style={styles.metricTop}>
               <View style={[styles.metricIcon, { backgroundColor: m.color + '14' }]}>
@@ -278,30 +405,30 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
           <Text style={styles.cardTitle}>Repartition Aptitude</Text>
           <View style={{ marginTop: 12 }}>
-            {fitnessOverview.map((f, i) => (
+            {data.fitness_overview && data.fitness_overview.length > 0 ? data.fitness_overview.map((f, i) => (
               <View key={i} style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={{ fontSize: 13, color: colors.text, fontWeight: '500' }}>{f.label}</Text>
-                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>{f.count} ({f.percent}%)</Text>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>{f.count} ({f.percentage}%)</Text>
                 </View>
                 <View style={{ height: 8, backgroundColor: colors.outlineVariant, borderRadius: 4, overflow: 'hidden' }}>
-                  <View style={{ height: 8, width: `${f.percent}%`, backgroundColor: f.color, borderRadius: 4 }} />
+                  <View style={{ height: 8, width: `${f.percentage}%`, backgroundColor: f.color, borderRadius: 4 }} />
                 </View>
               </View>
-            ))}
+            )) : <Text style={{ color: colors.textSecondary }}>Aucune donnée</Text>}
           </View>
         </View>
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
           <Text style={styles.cardTitle}>Indicateurs SST (ISO 45001)</Text>
           <View style={{ marginTop: 8 }}>
-            {safetyKPIs.map((kpi, i) => (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < safetyKPIs.length - 1 ? 1 : 0, borderBottomColor: colors.outline }}>
+            {data.safety_kpis && data.safety_kpis.length > 0 ? data.safety_kpis.map((kpi, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < (data.safety_kpis?.length || 0) - 1 ? 1 : 0, borderBottomColor: colors.outline }}>
                 <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: kpi.status === 'good' ? '#22C55E' : '#F59E0B', marginRight: 10 }} />
                 <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: colors.text }}>{kpi.label}</Text>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, marginRight: 8 }}>{kpi.value}</Text>
                 <Text style={{ fontSize: 11, color: colors.textSecondary }}>Cible: {kpi.target}</Text>
               </View>
-            ))}
+            )) : <Text style={{ color: colors.textSecondary }}>Aucune donnée</Text>}
           </View>
         </View>
       </View>
@@ -325,7 +452,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
           <Text style={[styles.th, { flex: 1 }]}>Resultat</Text>
           <Text style={[styles.th, { flex: 0.6 }]}>Heure</Text>
         </View>
-        {recentExams.map((exam, i) => (
+        {data.recent_exams && data.recent_exams.length > 0 ? data.recent_exams.map((exam, i) => (
           <TouchableOpacity key={i} style={[styles.tableRow, i % 2 === 0 && { backgroundColor: colors.background + '80' }]} activeOpacity={0.7}>
             <Text style={[styles.td, { flex: 0.8 }, { color: ACCENT, fontWeight: '600' }]}>{exam.id}</Text>
             <Text style={[styles.td, { flex: 1.5, fontWeight: '500' }]}>{exam.worker}</Text>
@@ -336,7 +463,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
             </View>
             <Text style={[styles.td, { flex: 0.6, color: colors.textSecondary }]}>{exam.time}</Text>
           </TouchableOpacity>
-        ))}
+        )) : <View style={styles.tableRow}><Text style={{ color: colors.textSecondary }}>Aucune visite récente</Text></View>}
       </View>
 
       {/* ══════ SECTION: Incidents & Expiring Certificates ══════ */}
@@ -355,8 +482,8 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
               <Ionicons name="chevron-forward" size={14} color={ACCENT} />
             </TouchableOpacity>
           </View>
-          {recentIncidents.map((inc, i) => (
-            <TouchableOpacity key={i} style={{ paddingVertical: 10, borderBottomWidth: i < recentIncidents.length - 1 ? 1 : 0, borderBottomColor: colors.outline }} activeOpacity={0.7}>
+          {data.recent_incidents && data.recent_incidents.length > 0 ? data.recent_incidents.map((inc, i) => (
+            <TouchableOpacity key={i} style={{ paddingVertical: 10, borderBottomWidth: i < (data.recent_incidents?.length || 0) - 1 ? 1 : 0, borderBottomColor: colors.outline }} activeOpacity={0.7}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: ACCENT }}>{inc.id}</Text>
@@ -369,17 +496,17 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
                 <Text style={{ fontSize: 12, color: colors.textSecondary }}>{inc.date}</Text>
               </View>
             </TouchableOpacity>
-          ))}
+          )) : <View style={{ paddingVertical: 10 }}><Text style={{ color: colors.textSecondary }}>Aucun incident récent</Text></View>}
         </View>
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Certificats a Renouveler</Text>
             <View style={[styles.badge, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
-              <Text style={[styles.badgeText, { color: '#DC2626' }]}>{expiringCertificates.length}</Text>
+              <Text style={[styles.badgeText, { color: '#DC2626' }]}>{data.expiring_certificates?.length || 0}</Text>
             </View>
           </View>
-          {expiringCertificates.map((cert, i) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < expiringCertificates.length - 1 ? 1 : 0, borderBottomColor: colors.outline }}>
+          {data.expiring_certificates && data.expiring_certificates.length > 0 ? data.expiring_certificates.map((cert, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < (data.expiring_certificates?.length || 0) - 1 ? 1 : 0, borderBottomColor: colors.outline }}>
               <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: cert.daysLeft <= 7 ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
                 <Ionicons name="time" size={18} color={cert.daysLeft <= 7 ? '#EF4444' : '#F59E0B'} />
               </View>
@@ -391,7 +518,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
                 <Text style={[styles.badgeText, { color: cert.daysLeft <= 7 ? '#DC2626' : '#D97706' }]}>{cert.daysLeft}j</Text>
               </View>
             </View>
-          ))}
+          )) : <View style={{ paddingVertical: 10 }}><Text style={{ color: colors.textSecondary }}>Aucun certificat à expirer</Text></View>}
         </View>
       </View>
 
@@ -422,21 +549,18 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
           ))}
         </View>
         <View style={[styles.card, isDesktop && { flex: 1 }]}>
-          <Text style={styles.cardTitle}>Conformite par Secteur</Text>
-          {activeSectors.slice(0, 4).map((s, i) => {
-            const profile = SECTOR_PROFILES[s.sector];
-            const compliance = [97, 92, 99, 88][i];
-            return (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < 3 ? 1 : 0, borderBottomColor: colors.outline }}>
-                <Ionicons name={profile.icon as any} size={16} color={profile.color} style={{ marginRight: 8 }} />
-                <Text style={{ flex: 1, fontSize: 13, fontWeight: '500', color: colors.text }}>{profile.label}</Text>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: OccHealthUtils.getComplianceColor(compliance), marginRight: 4 }}>{compliance}%</Text>
-                <View style={{ width: 60, height: 6, backgroundColor: colors.outlineVariant, borderRadius: 3, overflow: 'hidden' }}>
-                  <View style={{ height: 6, width: `${compliance}%`, backgroundColor: OccHealthUtils.getComplianceColor(compliance), borderRadius: 3 }} />
-                </View>
-              </View>
-            );
-          })}
+          <Text style={styles.cardTitle}>Statut Conformite</Text>
+          {[
+            { label: 'Taux Aptitude', value: data && (data as any).overall_fitness_rate ? `${(data as any).overall_fitness_rate}%` : '—', status: 'good', icon: 'checkmark-circle' },
+            { label: 'Exams Conformite', value: data && (data as any).exam_compliance_rate ? `${(data as any).exam_compliance_rate}%` : '—', status: 'good', icon: 'checkmark-circle' },
+            { label: 'PPE Conformite', value: data && (data as any).ppe_compliance_rate ? `${(data as any).ppe_compliance_rate}%` : '—', status: 'warning', icon: 'alert-circle' },
+          ].map((item, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < 2 ? 1 : 0, borderBottomColor: colors.outline }}>
+              <Ionicons name={item.icon as any} size={16} color={item.status === 'good' ? '#22C55E' : '#F59E0B'} style={{ marginRight: 8 }} />
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: '500', color: colors.text }}>{item.label}</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: item.status === 'good' ? '#22C55E' : '#F59E0B' }}>{item.value}</Text>
+            </View>
+          ))}
         </View>
       </View>
     </ScrollView>

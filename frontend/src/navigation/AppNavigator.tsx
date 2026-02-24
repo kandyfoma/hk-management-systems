@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, View, StyleSheet, Dimensions, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -72,18 +73,50 @@ import { ModuleType } from '../models/License';
 // ═══════════════════════════════════════════════════════════════
 function NoLicenseScreen() {
   const dispatch = useDispatch();
+  const navigation = useNavigation<any>();
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('auth_session');
-      await AsyncStorage.removeItem('device_activation_info');
+      // Clear all auth-related storage
+      const keysToRemove = [
+        'auth_session',
+        'current_user',
+        'current_organization',
+        'device_activation_info',
+        'AUTH_TOKEN_KEY',
+        'HK_SYNC_CHANGELOG',
+        'SYNC_QUEUE_KEY',
+        'LAST_SYNC_KEY',
+      ];
+
+      // Remove known keys
+      await Promise.all(
+        keysToRemove.map(key => 
+          AsyncStorage.removeItem(key).catch(() => {})
+        )
+      );
+
+      // Also clear all storage to be safe
+      const allKeys = await AsyncStorage.getAllKeys();
+      await AsyncStorage.multiRemove(allKeys).catch(() => {});
+
+      // Clear Redux state
       dispatch(logoutAction());
-      // Force reload to get fresh state
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.location.reload();
-      }
+
+      // Navigate to Auth and reset navigation stack
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Auth' }],
+        });
+      }, 500);
     } catch (error) {
       console.error('Logout error:', error);
+      // Still try to redirect even if clear fails
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Auth' }],
+      });
     }
   };
 

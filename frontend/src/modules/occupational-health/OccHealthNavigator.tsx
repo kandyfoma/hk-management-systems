@@ -16,6 +16,16 @@ import { ReportsScreen } from './screens/ReportsScreen';
 import { ComplianceScreen } from './screens/ComplianceScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { ProtocolManagementScreen } from './screens/ProtocolManagementScreen';
+import { ExposureMonitoringScreen } from './screens/ExposureMonitoringScreen';
+import { MedicalExamManagementScreen } from './screens/MedicalExamManagementScreen';
+import { CertificateExportModal } from './screens/CertificateExportScreen';
+import { IncidentDashboardScreen } from './screens/IncidentDashboardScreen';
+import { FeaturesOverviewScreen } from './screens/FeaturesOverviewScreen';
+import { WorkerAndEnterpriseScreen, EnterpriseManagementScreen } from './screens/WorkerAndEnterpriseScreen';
+import { MedicalTestVisualizationScreen, ExitExamScreen } from './screens/MedicalTestVisualizationScreen';
+import { DiseaseRegistryScreen, HealthScreeningFormScreen } from './screens/DiseaseRegistryAndHealthScreeningScreen';
+import { ExposureMonitoringDashboard, RegulatoryReportsScreen } from './screens/ExposureAndReportingScreen';
+import { ISO45001DashboardScreen, ISO27001DashboardScreen } from './screens/ComplianceDashboardsScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 
@@ -140,6 +150,22 @@ const occHealthScreens: Record<string, { title: string; subtitle: string; icon: 
       'Alertes de renouvellement',
     ],
   },
+  'exposure-monitoring': {
+    title: 'Monitoring d\'Exposition',
+    subtitle: 'Suivi en temps réel des expositions professionnelles.',
+    icon: 'water',
+    features: [
+      'Silica cristalline (résirable)',
+      'Cobalt et composés cobalt',
+      'Poussière inhalable totale',
+      'Bruit occupationnel',
+      'Vibrations main-bras',
+      'Chaleur (WBGT)',
+      'Alertes de dépassement des limites',
+      'Historique et tendances d\'exposition',
+      'Calibrage des équipements de mesure',
+    ],
+  },
   reports: {
     title: 'Rapports SST',
     subtitle: 'Tableaux de bord et rapports de santé-sécurité au travail.',
@@ -218,8 +244,11 @@ export function OccHealthNavigator() {
     {
       title: 'Principal',
       items: [
-        { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
-        { id: 'patients', label: 'Gestion Patients', icon: 'people-outline', iconActive: 'people' },
+        { id: 'features', label: 'Aperçu Fonctionnalités', icon: 'grid-outline', iconActive: 'grid' },
+        { id: 'dashboard', label: 'Tableau de Bord', icon: 'home-outline', iconActive: 'home' },
+        { id: 'worker-management', label: 'Gestion Travailleurs', icon: 'people-outline', iconActive: 'people' },
+        { id: 'enterprise-management', label: 'Gestion Entreprises', icon: 'business-outline', iconActive: 'business' },
+        { id: 'patients', label: 'Patients Historiques', icon: 'person-outline', iconActive: 'person' },
         { id: 'intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
       ],
     },
@@ -227,24 +256,37 @@ export function OccHealthNavigator() {
       title: 'Médecine du Travail',
       items: [
         { id: 'medical-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit', badge: pendingCount > 0 ? pendingCount : undefined },
+        { id: 'medical-tests', label: 'Tests Médicaux', icon: 'flask-outline', iconActive: 'flask' },
+        { id: 'exam-management', label: 'Gestion Examens', icon: 'document-outline', iconActive: 'document' },
+        { id: 'exit-exams', label: 'Examens de Départ', icon: 'log-out-outline', iconActive: 'log-out' },
+        { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
         { id: 'protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
         { id: 'previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
-        { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
         { id: 'surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
-        { id: 'diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
+        { id: 'health-screening', label: 'Dépistage Santé', icon: 'pulse-outline', iconActive: 'pulse' },
+      ],
+    },
+    {
+      title: 'Maladies Professionnelles',
+      items: [
+        { id: 'diseases', label: 'Registre Maladies', icon: 'fitness-outline', iconActive: 'fitness' },
       ],
     },
     {
       title: 'Sécurité au Travail',
       items: [
-        { id: 'incidents', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
+        { id: 'incident-dashboard', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
         { id: 'risk-assessment', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
+        { id: 'exposure-monitoring', label: 'Monitoring Expositions', icon: 'water-outline', iconActive: 'water' },
         { id: 'ppe-management', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
       ],
     },
     {
       title: 'Rapports & Conformité',
       items: [
+        { id: 'regulatory-reports', label: 'Rapports Réglementaires', icon: 'document-attach-outline', iconActive: 'document-attach' },
+        { id: 'iso45001', label: 'ISO 45001', icon: 'shield-outline', iconActive: 'shield' },
+        { id: 'iso27001', label: 'ISO 27001', icon: 'lock-closed-outline', iconActive: 'lock-closed' },
         { id: 'reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
         { id: 'compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
         { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
@@ -275,8 +317,20 @@ export function OccHealthNavigator() {
   }, []);
 
   const renderContent = () => {
+    if (activeScreen === 'features') {
+      return <FeaturesOverviewScreen onNavigate={setActiveScreen} />;
+    }
+
     if (activeScreen === 'dashboard') {
       return <OccHealthDashboardContent onNavigate={setActiveScreen} />;
+    }
+
+    if (activeScreen === 'worker-management') {
+      return <WorkerAndEnterpriseScreen />;
+    }
+
+    if (activeScreen === 'enterprise-management') {
+      return <EnterpriseManagementScreen />;
     }
 
     if (activeScreen === 'intake') {
@@ -299,6 +353,18 @@ export function OccHealthNavigator() {
       );
     }
 
+    if (activeScreen === 'medical-tests') {
+      return <MedicalTestVisualizationScreen />;
+    }
+
+    if (activeScreen === 'exit-exams') {
+      return <ExitExamScreen />;
+    }
+
+    if (activeScreen === 'health-screening') {
+      return <HealthScreeningFormScreen />;
+    }
+
     if (activeScreen === 'protocol') {
       return <ProtocolManagementScreen />;
     }
@@ -316,16 +382,16 @@ export function OccHealthNavigator() {
       return <CertificatesScreen />;
     }
 
-    if (activeScreen === 'patients') {
-      return <OHPatientsScreen />;
+    if (activeScreen === 'exam-management') {
+      return <MedicalExamManagementScreen />;
     }
 
-    if (activeScreen === 'incidents') {
-      return <IncidentsScreen />;
+    if (activeScreen === 'incident-dashboard') {
+      return <IncidentDashboardScreen />;
     }
 
     if (activeScreen === 'diseases') {
-      return <DiseasesScreen />;
+      return <DiseaseRegistryScreen />;
     }
 
     if (activeScreen === 'surveillance') {
@@ -334,6 +400,22 @@ export function OccHealthNavigator() {
 
     if (activeScreen === 'risk-assessment') {
       return <RiskAssessmentScreen />;
+    }
+
+    if (activeScreen === 'exposure-monitoring') {
+      return <ExposureMonitoringDashboard />;
+    }
+
+    if (activeScreen === 'regulatory-reports') {
+      return <RegulatoryReportsScreen />;
+    }
+
+    if (activeScreen === 'iso45001') {
+      return <ISO45001DashboardScreen />;
+    }
+
+    if (activeScreen === 'iso27001') {
+      return <ISO27001DashboardScreen />;
     }
 
     if (activeScreen === 'ppe-management') {
