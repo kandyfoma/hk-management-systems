@@ -1,15 +1,12 @@
-import React, { useState, useMemo, useCallback } from 'react';
+﻿import React, { useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
-  Modal, Alert, FlatList, RefreshControl, TextInput, Animated,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Modal, Alert, FlatList, RefreshControl, TextInput, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
-import DateInput from '../../../components/DateInput';
 
-const { width } = Dimensions.get('window');
-const isDesktop = width >= 1024;
-
+// ─── Types ──────────────────────────────────────────────────
 interface Incident {
   id: string;
   number: string;
@@ -23,23 +20,44 @@ interface Incident {
   description: string;
   location: string;
   department: string;
-  lti: boolean; // Lost Time Injury
+  lti: boolean;
   ltiDays?: number;
-  investigationId?: string;
   rootCause?: string;
   capaDeadline?: string;
   modifiedDate?: string;
 }
 
-// Sample Data
+// ─── Config Maps ─────────────────────────────────────────────
+const TYPE_CONFIG: Record<Incident['type'], { icon: string; color: string; label: string }> = {
+  injury:            { icon: 'bandage',       color: '#EF4444', label: 'Injury' },
+  near_miss:         { icon: 'alert-circle',  color: '#F59E0B', label: 'Near Miss' },
+  medical_treatment: { icon: 'medical',       color: '#3B82F6', label: 'Medical' },
+  property_damage:   { icon: 'hammer',        color: '#8B5CF6', label: 'Property' },
+  environmental:     { icon: 'leaf',          color: '#10B981', label: 'Environmental' },
+};
+
+const STATUS_CONFIG: Record<Incident['status'], { icon: string; color: string; label: string }> = {
+  reported:               { icon: 'flag',                  color: '#3B82F6', label: 'Reported' },
+  under_investigation:    { icon: 'search',                 color: '#F59E0B', label: 'Investigating' },
+  investigation_complete: { icon: 'checkmark-circle',       color: '#8B5CF6', label: 'Complete' },
+  closed:                 { icon: 'checkmark-done-circle',  color: '#22C55E', label: 'Closed' },
+};
+
+const SEVERITY_CONFIG: Record<Incident['severity'], { color: string; label: string }> = {
+  low:      { color: '#22C55E', label: 'Low' },
+  medium:   { color: '#F59E0B', label: 'Medium' },
+  high:     { color: '#EF4444', label: 'High' },
+  critical: { color: '#DC2626', label: 'Critical' },
+};
+
+// ─── Sample Data ─────────────────────────────────────────────
 const SAMPLE_INCIDENTS: Incident[] = [
   {
     id: 'i1', number: 'INC-2025-0342', date: '2025-02-20', time: '09:15',
     worker: 'Pierre Kabamba', workerId: 'w003', type: 'injury',
     severity: 'high', status: 'under_investigation',
     description: 'Cut to left hand from sharp edge during equipment maintenance',
-    location: 'Processing Building - Section C', department: 'Maintenance',
-    lti: false,
+    location: 'Processing Building - Section C', department: 'Maintenance', lti: false,
   },
   {
     id: 'i2', number: 'INC-2025-0341', date: '2025-02-19', time: '14:30',
@@ -67,347 +85,269 @@ const SAMPLE_INCIDENTS: Incident[] = [
   },
 ];
 
-// ─── Status Badge ───────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────
 function StatusBadge({ status }: { status: Incident['status'] }) {
-  const config = {
-    reported: { color: '#3B82F6', icon: 'flag-outline', label: 'Reported' },
-    under_investigation: { color: '#F59E0B', icon: 'search-outline', label: 'Investigating' },
-    investigation_complete: { color: '#8B5CF6', icon: 'checkmark-outline', label: 'Complete' },
-    closed: { color: '#22C55E', icon: 'checkmark-circle', label: 'Closed' },
-  }[status];
-
+  const cfg = STATUS_CONFIG[status];
   return (
-    <View style={[styles.badge, { backgroundColor: config.color + '20' }]}>
-      <Ionicons name={config.icon as any} size={12} color={config.color} />
-      <Text style={[styles.badgeText, { color: config.color }]}>{config.label}</Text>
+    <View style={[styles.badge, { backgroundColor: cfg.color + '18' }]}>
+      <Ionicons name={cfg.icon as any} size={11} color={cfg.color} />
+      <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
     </View>
   );
 }
 
 function SeverityBadge({ severity }: { severity: Incident['severity'] }) {
-  const config = {
-    low: { color: '#22C55E', label: 'Low' },
-    medium: { color: '#F59E0B', label: 'Medium' },
-    high: { color: '#EF4444', label: 'High' },
-    critical: { color: '#DC2626', label: 'Critical' },
-  }[severity];
-
+  const cfg = SEVERITY_CONFIG[severity];
   return (
-    <View style={[styles.severityBadge, { backgroundColor: config.color }]}>
-      <Text style={styles.severityText}>{config.label}</Text>
+    <View style={[styles.severityBadge, { backgroundColor: cfg.color }]}>
+      <Text style={styles.severityText}>{cfg.label}</Text>
     </View>
   );
 }
 
-// ─── Incident Type Icon ─────────────────────────────────────
-function IncidentTypeIcon({ type }: { type: Incident['type'] }) {
-  const config = {
-    injury: { icon: 'bandage', color: '#EF4444' },
-    near_miss: { icon: 'alert-circle', color: '#F59E0B' },
-    medical_treatment: { icon: 'medical', color: '#3B82F6' },
-    property_damage: { icon: 'hammer', color: '#8B5CF6' },
-    environmental: { icon: 'leaf', color: '#10B981' },
-  }[type];
-
+function MetricTile({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <View style={[styles.typeIcon, { backgroundColor: config.color + '20' }]}>
-      <Ionicons name={config.icon as any} size={20} color={config.color} />
+    <View style={[styles.metricTile, { borderTopColor: color, borderTopWidth: 3 }]}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={[styles.metricValue, { color }]}>{value}</Text>
     </View>
   );
 }
 
-// ─── Incident Card ──────────────────────────────────────────
-function IncidentCard({
-  incident,
-  onPress,
-}: {
-  incident: Incident;
-  onPress: () => void;
-}) {
+// ─── Incident Card ───────────────────────────────────────────
+function IncidentCard({ incident, onPress }: { incident: Incident; onPress: () => void }) {
+  const typeCfg   = TYPE_CONFIG[incident.type];
+  const statusCfg = STATUS_CONFIG[incident.status];
+
   return (
     <TouchableOpacity
-      style={[styles.incidentCard, styles.cardShadow]}
+      style={[styles.incidentCard, styles.cardShadow, { borderLeftColor: statusCfg.color }]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
     >
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleRow}>
-          <IncidentTypeIcon type={incident.type} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.incidentNumber}>{incident.number}</Text>
-            <Text style={styles.incidentDate}>{incident.date} • {incident.time}</Text>
-          </View>
+      {/* Top row */}
+      <View style={styles.cardTop}>
+        <View style={[styles.typeIconBox, { backgroundColor: typeCfg.color + '18' }]}>
+          <Ionicons name={typeCfg.icon as any} size={20} color={typeCfg.color} />
         </View>
-        <View style={styles.cardMeta}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.incidentNumber}>{incident.number}</Text>
+          <Text style={styles.incidentDate}>{incident.date} · {incident.time}</Text>
+        </View>
+        <View style={styles.badgeStack}>
           <SeverityBadge severity={incident.severity} />
           <StatusBadge status={incident.status} />
         </View>
       </View>
 
-      <View style={styles.cardContent}>
-        <View style={styles.contentRow}>
-          <Ionicons name="person-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.contentText}>{incident.worker}</Text>
+      {/* Meta row */}
+      <View style={styles.metaRow}>
+        <View style={styles.metaItem}>
+          <Ionicons name="person-outline" size={13} color={colors.textSecondary} />
+          <Text style={styles.metaText} numberOfLines={1}>{incident.worker}</Text>
         </View>
-        <View style={styles.contentRow}>
-          <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.contentText}>{incident.location}</Text>
+        <View style={styles.metaItem}>
+          <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
+          <Text style={styles.metaText} numberOfLines={1}>{incident.location}</Text>
         </View>
-        <Text style={styles.description} numberOfLines={2}>{incident.description}</Text>
       </View>
 
+      {/* Description */}
+      <Text style={styles.description} numberOfLines={2}>{incident.description}</Text>
+
+      {/* Alert pills */}
       {incident.lti && (
-        <View style={styles.ltiAlert}>
-          <Ionicons name="alert-circle" size={14} color="#DC2626" />
-          <Text style={styles.ltiText}>
-            LTI • {incident.ltiDays} day{incident.ltiDays !== 1 ? 's' : ''} lost
+        <View style={styles.alertPill}>
+          <Ionicons name="alert-circle" size={13} color="#DC2626" />
+          <Text style={styles.alertPillText}>
+            LTI — {incident.ltiDays} day{incident.ltiDays !== 1 ? 's' : ''} lost
           </Text>
         </View>
       )}
-
       {incident.capaDeadline && (
-        <View style={styles.deadlineRow}>
-          <Ionicons name="calendar-outline" size={14} color="#F59E0B" />
-          <Text style={styles.deadlineText}>CAPA DUE: {incident.capaDeadline}</Text>
+        <View style={[styles.alertPill, styles.alertPillAmber]}>
+          <Ionicons name="calendar-outline" size={13} color="#D97706" />
+          <Text style={[styles.alertPillText, { color: '#92400E' }]}>CAPA due {incident.capaDeadline}</Text>
         </View>
       )}
 
+      {/* Footer */}
       <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.footerBtn}>
-          <Ionicons name="document-outline" size={14} color={colors.primary} />
-          <Text style={[styles.footerBtnText, { color: colors.primary }]}>Details</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.footerBtn}>
-          <Ionicons name="checkmark-done" size={14} color={colors.primary} />
-          <Text style={[styles.footerBtnText, { color: colors.primary }]}>Update</Text>
+        <View style={[styles.typeLabelPill, { backgroundColor: typeCfg.color + '12' }]}>
+          <Ionicons name={typeCfg.icon as any} size={11} color={typeCfg.color} />
+          <Text style={[styles.typeLabelText, { color: typeCfg.color }]}>{typeCfg.label}</Text>
+        </View>
+        <TouchableOpacity style={styles.footerBtn} onPress={onPress}>
+          <Ionicons name="eye-outline" size={14} color={colors.primary} />
+          <Text style={[styles.footerBtnText, { color: colors.primary }]}>View Details</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
-// ─── Incident Detail Modal ──────────────────────────────────
+// ─── Detail Modal ────────────────────────────────────────────
 function IncidentDetailModal({
-  visible,
-  incident,
-  onClose,
-  onUpdate,
+  visible, incident, onClose, onUpdate, isDesktop,
 }: {
   visible: boolean;
   incident: Incident | null;
   onClose: () => void;
   onUpdate: (data: Incident) => void;
+  isDesktop: boolean;
 }) {
   const [formData, setFormData] = useState<Incident | null>(incident);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  React.useEffect(() => {
-    setFormData(incident);
-  }, [incident, visible]);
-
+  React.useEffect(() => { setFormData(incident); }, [incident, visible]);
   if (!formData) return null;
 
-  const handleUpdate = () => {
-    onUpdate(formData);
-    setIsUpdating(false);
-    onClose();
-  };
-
-  const typeLabels = {
-    injury: 'Injury',
-    near_miss: 'Near Miss',
-    medical_treatment: 'Medical Treatment',
-    property_damage: 'Property Damage',
-    environmental: 'Environmental',
-  };
-
-  const severityLabels = {
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
-    critical: 'Critical',
-  };
-
-  const statusLabels = {
-    reported: 'Reported',
-    under_investigation: 'Under Investigation',
-    investigation_complete: 'Investigation Complete',
-    closed: 'Closed',
-  };
+  const typeCfg   = TYPE_CONFIG[formData.type];
+  const statusCfg = STATUS_CONFIG[formData.status];
+  const sevCfg    = SEVERITY_CONFIG[formData.severity];
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <View>
+    <Modal visible={visible} transparent animationType={isDesktop ? 'fade' : 'slide'}>
+      <View style={[styles.modalOverlay, isDesktop && styles.modalOverlayDesktop]}>
+        <View style={[styles.modalContent, isDesktop && styles.modalContentDesktop]}>
+
+          {/* Header */}
+          <View style={[styles.modalHeader, { borderTopColor: statusCfg.color, borderTopWidth: 4 }]}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle}>{formData.number}</Text>
-              <Text style={styles.modalSubtitle}>{formData.date}</Text>
+              <Text style={styles.modalSubtitle}>
+                {formData.date} · {formData.time} · {formData.department}
+              </Text>
             </View>
-            <TouchableOpacity onPress={onClose} disabled={isUpdating}>
-              <Ionicons name="close" size={24} color={colors.text} />
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            {/* Status Cards */}
-            <View style={styles.statusGrid}>
-              <View style={[styles.statusCard, { borderLeftColor: '#EF4444' }]}>
-                <Text style={styles.statusLabel}>Severity</Text>
-                <Text style={[styles.statusValue, { color: '#EF4444' }]}>
-                  {severityLabels[formData.severity]}
-                </Text>
-              </View>
-              <View style={[styles.statusCard, { borderLeftColor: colors.primary }]}>
-                <Text style={styles.statusLabel}>Status</Text>
-                <Text style={[styles.statusValue, { color: colors.primary }]}>
-                  {statusLabels[formData.status]}
-                </Text>
-              </View>
+
+            {/* Metrics grid */}
+            <View style={styles.metricsGrid}>
+              <MetricTile label="Type"     value={typeCfg.label}   color={typeCfg.color} />
+              <MetricTile label="Severity" value={sevCfg.label}    color={sevCfg.color} />
+              <MetricTile label="Status"   value={statusCfg.label} color={statusCfg.color} />
+              <MetricTile label="Dept."    value={formData.department} color={colors.primary} />
             </View>
 
-            {/* Incident Details */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Incident Details</Text>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Incident Type</Text>
-                <View style={styles.infoBox}>
-                  <Text style={styles.infoText}>{typeLabels[formData.type]}</Text>
-                </View>
+            {/* Description */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Description</Text>
               </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Description</Text>
-                <Text style={styles.infoText}>{formData.description}</Text>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Location</Text>
-                <Text style={styles.infoText}>{formData.location}</Text>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Department</Text>
-                <Text style={styles.infoText}>{formData.department}</Text>
-              </View>
+              <Text style={styles.modalBodyText}>{formData.description}</Text>
             </View>
 
-            {/* Worker Information */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Affected Worker</Text>
-              <View style={styles.infoBox}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Name</Text>
-                  <Text style={styles.infoValue}>{formData.worker}</Text>
+            {/* Location */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="location-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Location</Text>
+              </View>
+              <Text style={styles.modalBodyText}>{formData.location}</Text>
+            </View>
+
+            {/* Worker */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="person-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Affected Worker</Text>
+              </View>
+              <View style={styles.infoTable}>
+                <View style={styles.infoTableRow}>
+                  <Text style={styles.infoTableLabel}>Name</Text>
+                  <Text style={styles.infoTableValue}>{formData.worker}</Text>
                 </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>ID</Text>
-                  <Text style={styles.infoValue}>{formData.workerId}</Text>
+                <View style={[styles.infoTableRow, { borderBottomWidth: 0 }]}>
+                  <Text style={styles.infoTableLabel}>Worker ID</Text>
+                  <Text style={styles.infoTableValue}>{formData.workerId}</Text>
                 </View>
               </View>
             </View>
 
-            {/* LTI Information */}
+            {/* LTI */}
             {formData.lti && (
-              <View style={[styles.section, { backgroundColor: '#FEE2E2', borderRadius: borderRadius.lg, padding: spacing.md }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
-                  <Ionicons name="alert" size={20} color="#DC2626" />
-                  <Text style={[styles.sectionTitle, { marginLeft: spacing.md, marginBottom: 0 }]}>
-                    Lost Time Injury
-                  </Text>
+              <View style={styles.ltiBanner}>
+                <View style={styles.ltiBannerTitle}>
+                  <Ionicons name="alert-circle" size={18} color="#DC2626" />
+                  <Text style={styles.ltiBannerHeading}>Lost Time Injury (LTI)</Text>
                 </View>
-                <Text style={styles.ltiDetailText}>
-                  This is a reportable Lost Time Injury (LTI). Days recorded: {formData.ltiDays} day{formData.ltiDays !== 1 ? 's' : ''}
+                <Text style={styles.ltiBannerText}>
+                  Reportable LTI — {formData.ltiDays} day{formData.ltiDays !== 1 ? 's' : ''} recorded
                 </Text>
               </View>
             )}
 
-            {/* Investigation Section */}
+            {/* Investigation */}
             {formData.status !== 'reported' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Investigation</Text>
-
+              <View style={styles.modalSection}>
+                <View style={styles.modalSectionHeader}>
+                  <Ionicons name="search-outline" size={16} color={colors.primary} />
+                  <Text style={styles.modalSectionTitle}>Investigation</Text>
+                </View>
                 {formData.rootCause && (
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>Root Cause</Text>
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoText}>{formData.rootCause}</Text>
-                    </View>
+                  <View style={styles.rootCauseBox}>
+                    <Text style={styles.infoTableLabel}>Root Cause</Text>
+                    <Text style={styles.modalBodyText}>{formData.rootCause}</Text>
                   </View>
                 )}
-
                 {formData.capaDeadline && (
-                  <View style={[styles.formGroup, { backgroundColor: '#FFFBEB', borderRadius: borderRadius.md, padding: spacing.md }]}>
-                    <Text style={styles.label}>CAPA Deadline</Text>
-                    <Text style={[styles.infoText, { color: '#92400E', fontWeight: '600', marginTop: spacing.sm }]}>
-                      {formData.capaDeadline}
-                    </Text>
+                  <View style={styles.capaBanner}>
+                    <Ionicons name="calendar-outline" size={15} color="#D97706" />
+                    <Text style={styles.capaBannerText}>CAPA Deadline: {formData.capaDeadline}</Text>
                   </View>
                 )}
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Update Status</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {['under_investigation', 'investigation_complete', 'closed'].map((st) => (
+                <Text style={[styles.infoTableLabel, { marginTop: spacing.sm }]}>Update Status</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
+                  {(Object.entries(STATUS_CONFIG) as [Incident['status'], typeof STATUS_CONFIG[Incident['status']]][])
+                    .filter(([k]) => k !== 'reported')
+                    .map(([st, cfg]) => (
                       <TouchableOpacity
                         key={st}
                         style={[
-                          styles.statusOption,
-                          formData.status === st && styles.statusOptionActive,
+                          styles.statusChip,
+                          formData.status === st && { backgroundColor: cfg.color + '20', borderColor: cfg.color },
                         ]}
-                        onPress={() => setFormData({ ...formData, status: st as any })}
+                        onPress={() => setFormData({ ...formData, status: st })}
                       >
-                        <Text
-                          style={[
-                            styles.statusOptionText,
-                            formData.status === st && { color: colors.primary, fontWeight: '600' },
-                          ]}
-                        >
-                          {statusLabels[st as keyof typeof statusLabels]}
+                        <Ionicons name={cfg.icon as any} size={13} color={formData.status === st ? cfg.color : colors.textSecondary} />
+                        <Text style={[styles.statusChipText, formData.status === st && { color: cfg.color, fontWeight: '600' }]}>
+                          {cfg.label}
                         </Text>
                       </TouchableOpacity>
                     ))}
-                  </ScrollView>
-                </View>
+                </ScrollView>
               </View>
             )}
 
-            {/* Additional Information */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Additional Information</Text>
-              <View style={styles.infoBox}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Created</Text>
-                  <Text style={styles.infoValue}>{formData.date} {formData.time}</Text>
-                </View>
-                {formData.modifiedDate && (
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Last Updated</Text>
-                    <Text style={styles.infoValue}>{formData.modifiedDate}</Text>
-                  </View>
-                )}
+            {/* Timestamps */}
+            <View style={[styles.infoTable, { marginBottom: spacing.md }]}>
+              <View style={styles.infoTableRow}>
+                <Text style={styles.infoTableLabel}>Reported</Text>
+                <Text style={styles.infoTableValue}>{formData.date} {formData.time}</Text>
               </View>
+              {formData.modifiedDate && (
+                <View style={[styles.infoTableRow, { borderBottomWidth: 0 }]}>
+                  <Text style={styles.infoTableLabel}>Last Updated</Text>
+                  <Text style={styles.infoTableValue}>{formData.modifiedDate}</Text>
+                </View>
+              )}
             </View>
           </ScrollView>
 
           <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onClose}
-              disabled={isUpdating}
-            >
+            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
               <Text style={styles.cancelBtnText}>Close</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.updateBtn, isUpdating && { opacity: 0.6 }]}
-              onPress={handleUpdate}
-              disabled={isUpdating}
+              style={styles.saveBtn}
+              onPress={() => { onUpdate(formData); onClose(); }}
             >
-              <Ionicons name="checkmark" size={18} color="#FFF" />
-              <Text style={styles.updateBtnText}>
-                {isUpdating ? 'Updating...' : 'Save Changes'}
-              </Text>
+              <Ionicons name="checkmark" size={16} color="#FFF" />
+              <Text style={styles.saveBtnText}>Save Changes</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -416,209 +356,173 @@ function IncidentDetailModal({
   );
 }
 
-// ─── Main Dashboard ─────────────────────────────────────────
+// ─── Stat Card ───────────────────────────────────────────────
+function StatCard({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
+  return (
+    <View style={[styles.statCard, styles.cardShadow, { borderTopColor: color, borderTopWidth: 3 }]}>
+      <View style={[styles.statCardIcon, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon as any} size={22} color={color} />
+      </View>
+      <Text style={[styles.statCardValue, { color }]}>{value}</Text>
+      <Text style={styles.statCardLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Filter Chip ─────────────────────────────────────────────
+function FilterChip({ label, active, onPress, dotColor }: {
+  label: string; active: boolean; onPress: () => void; dotColor?: string;
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.filterChip,
+        active && { backgroundColor: (dotColor || colors.primary) + '18', borderColor: dotColor || colors.primary },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {dotColor && <View style={[styles.filterDot, { backgroundColor: dotColor, opacity: active ? 1 : 0.35 }]} />}
+      <Text style={[styles.filterChipText, active && { color: dotColor || colors.primary, fontWeight: '600' }]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────
 export function IncidentDashboardScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | Incident['type']>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | Incident['status']>('all');
-  const [searchText, setSearchText] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
-
-  const filteredIncidents = useMemo(() => {
-    let filtered = SAMPLE_INCIDENTS;
-
-    if (filterType !== 'all') {
-      filtered = filtered.filter(i => i.type === filterType);
-    }
-
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(i => i.status === filterStatus);
-    }
-
-    if (searchText) {
-      const search = searchText.toLowerCase();
-      filtered = filtered.filter(i =>
-        i.number.toLowerCase().includes(search) ||
-        i.worker.toLowerCase().includes(search) ||
-        i.description.toLowerCase().includes(search)
-      );
-    }
-
-    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [filterType, filterStatus, searchText]);
+  const [modalVisible, setModalVisible]         = useState(false);
+  const [filterType,   setFilterType]           = useState<'all' | Incident['type']>('all');
+  const [filterStatus, setFilterStatus]         = useState<'all' | Incident['status']>('all');
+  const [searchText,   setSearchText]           = useState('');
+  const [refreshing,   setRefreshing]           = useState(false);
 
   const stats = useMemo(() => ({
-    total: SAMPLE_INCIDENTS.length,
-    open: SAMPLE_INCIDENTS.filter(i => i.status !== 'closed').length,
-    lti: SAMPLE_INCIDENTS.filter(i => i.lti).length,
+    total:    SAMPLE_INCIDENTS.length,
+    open:     SAMPLE_INCIDENTS.filter(i => i.status !== 'closed').length,
+    lti:      SAMPLE_INCIDENTS.filter(i => i.lti).length,
     critical: SAMPLE_INCIDENTS.filter(i => i.severity === 'critical').length,
   }), []);
 
+  const filteredIncidents = useMemo(() => {
+    let list = [...SAMPLE_INCIDENTS];
+    if (filterType   !== 'all') list = list.filter(i => i.type   === filterType);
+    if (filterStatus !== 'all') list = list.filter(i => i.status === filterStatus);
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      list = list.filter(i =>
+        i.number.toLowerCase().includes(q) ||
+        i.worker.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q),
+      );
+    }
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [filterType, filterStatus, searchText]);
+
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+    setTimeout(() => setRefreshing(false), 1200);
   }, []);
 
-  const handleUpdateIncident = (data: Incident) => {
-    Alert.alert('Success', `Incident ${data.number} updated successfully`);
+  const openDetail = (incident: Incident) => {
+    setSelectedIncident(incident);
+    setModalVisible(true);
   };
 
   return (
     <View style={styles.container}>
+
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Incident Dashboard</Text>
-        <Text style={styles.headerSubtitle}>Track and manage workplace incidents</Text>
+        <View>
+          <Text style={styles.headerTitle}>Incident Dashboard</Text>
+          <Text style={styles.headerSubtitle}>Track and manage workplace incidents</Text>
+        </View>
+        <TouchableOpacity style={styles.newBtn}>
+          <Ionicons name="add" size={18} color="#FFF" />
+          <Text style={styles.newBtnText}>Report</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Stats Row */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.statsRow}
-        scrollEventThrottle={16}
-      >
-        <View style={[styles.statBox, styles.cardShadow]}>
-          <View style={[styles.statIcon, { backgroundColor: colors.primary + '20' }]}>
-            <Ionicons name="list-outline" size={24} color={colors.primary} />
-          </View>
-          <Text style={styles.statValue}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total</Text>
-        </View>
-        <View style={[styles.statBox, styles.cardShadow]}>
-          <View style={[styles.statIcon, { backgroundColor: '#F59E0B' + '20' }]}>
-            <Ionicons name="alert-circle" size={24} color="#F59E0B" />
-          </View>
-          <Text style={[styles.statValue, { color: '#F59E0B' }]}>{stats.open}</Text>
-          <Text style={styles.statLabel}>Open</Text>
-        </View>
-        <View style={[styles.statBox, styles.cardShadow]}>
-          <View style={[styles.statIcon, { backgroundColor: '#DC2626' + '20' }]}>
-            <Ionicons name="alert" size={24} color="#DC2626" />
-          </View>
-          <Text style={[styles.statValue, { color: '#DC2626' }]}>{stats.lti}</Text>
-          <Text style={styles.statLabel}>LTI</Text>
-        </View>
-        <View style={[styles.statBox, styles.cardShadow]}>
-          <View style={[styles.statIcon, { backgroundColor: '#EF4444' + '20' }]}>
-            <Ionicons name="warning" size={24} color="#EF4444" />
-          </View>
-          <Text style={[styles.statValue, { color: '#EF4444' }]}>{stats.critical}</Text>
-          <Text style={styles.statLabel}>Critical</Text>
-        </View>
-      </ScrollView>
+      {/* Stats grid — 2×2 mobile, 1×4 desktop */}
+      <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
+        <StatCard icon="list-outline"         label="Total"    value={stats.total}    color={colors.primary} />
+        <StatCard icon="alert-circle-outline" label="Open"     value={stats.open}     color="#F59E0B" />
+        <StatCard icon="alert-outline"        label="LTI"      value={stats.lti}      color="#DC2626" />
+        <StatCard icon="warning-outline"      label="Critical" value={stats.critical} color="#EF4444" />
+      </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color={colors.textSecondary} />
+      {/* Search */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search incidents..."
+          placeholder="Search by number, worker, description..."
           placeholderTextColor={colors.textSecondary}
           value={searchText}
           onChangeText={setSearchText}
         />
-        {searchText ? (
+        {!!searchText && (
           <TouchableOpacity onPress={() => setSearchText('')}>
-            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+            <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
-        ) : null}
+        )}
       </View>
 
       {/* Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        scrollEventThrottle={16}
-      >
-        <TouchableOpacity
-          style={[styles.filterChip, filterType === 'all' && styles.filterChipActive]}
-          onPress={() => setFilterType('all')}
-        >
-          <Text style={[styles.filterChipText, filterType === 'all' && { color: colors.primary }]}>
-            All Types
-          </Text>
-        </TouchableOpacity>
-        {['injury', 'near_miss', 'medical_treatment', 'property_damage', 'environmental'].map((type) => (
-          <TouchableOpacity
-            key={type}
-            style={[styles.filterChip, filterType === type && styles.filterChipActive]}
-            onPress={() => setFilterType(type as any)}
-          >
-            <Text style={[styles.filterChipText, filterType === type && { color: colors.primary }]}>
-              {type === 'injury' ? '🤕 Injury' :
-               type === 'near_miss' ? '⚠️ Near Miss' :
-               type === 'medical_treatment' ? '⚕️ Medical' :
-               type === 'property_damage' ? '🔨 Property' :
-               '🌍 Environmental'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.filtersWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+          <FilterChip label="All types" active={filterType === 'all'} onPress={() => setFilterType('all')} />
+          {(Object.entries(TYPE_CONFIG) as [Incident['type'], typeof TYPE_CONFIG[Incident['type']]][]).map(([k, v]) => (
+            <FilterChip key={k} label={v.label} active={filterType === k} onPress={() => setFilterType(k)} dotColor={v.color} />
+          ))}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filterRow, styles.filterRowBordered]}>
+          <FilterChip label="All status" active={filterStatus === 'all'} onPress={() => setFilterStatus('all')} />
+          {(Object.entries(STATUS_CONFIG) as [Incident['status'], typeof STATUS_CONFIG[Incident['status']]][]).map(([k, v]) => (
+            <FilterChip key={k} label={v.label} active={filterStatus === k} onPress={() => setFilterStatus(k)} dotColor={v.color} />
+          ))}
+        </ScrollView>
+      </View>
 
-      {/* Status Filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        scrollEventThrottle={16}
-      >
-        <TouchableOpacity
-          style={[styles.filterChip, filterStatus === 'all' && styles.filterChipActive]}
-          onPress={() => setFilterStatus('all')}
-        >
-          <Text style={[styles.filterChipText, filterStatus === 'all' && { color: colors.primary }]}>
-            All Status
-          </Text>
-        </TouchableOpacity>
-        {['reported', 'under_investigation', 'investigation_complete', 'closed'].map((status) => (
-          <TouchableOpacity
-            key={status}
-            style={[styles.filterChip, filterStatus === status && styles.filterChipActive]}
-            onPress={() => setFilterStatus(status as any)}
-          >
-            <Text style={[styles.filterChipText, filterStatus === status && { color: colors.primary }]}>
-              {status === 'reported' ? '🚩 Reported' :
-               status === 'under_investigation' ? '🔍 Investigating' :
-               status === 'investigation_complete' ? '✓ Complete' :
-               '✓ Closed'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Results */}
+      <View style={styles.resultsBar}>
+        <Text style={styles.resultsText}>
+          {filteredIncidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
+        </Text>
+      </View>
 
-      {/* Incidents List */}
+      {/* List */}
       <FlatList
-        data={filteredIncidents}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <IncidentCard
-            incident={item}
-            onPress={() => {
-              setSelectedIncident(item);
-              setDetailModalVisible(true);
-            }}
-          />
+        data={filteredIncidents as any[]}
+        keyExtractor={(item: any) => item.id}
+        renderItem={({ item }: { item: any }) => (
+          <IncidentCard incident={item as Incident} onPress={() => openDetail(item as Incident)} />
         )}
         contentContainerStyle={styles.listContent}
-        scrollEnabled={true}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyStateText}>No incidents found</Text>
+            <View style={styles.emptyIconBox}>
+              <Ionicons name="checkmark-circle-outline" size={40} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>No incidents found</Text>
+            <Text style={styles.emptySubtitle}>Try adjusting your filters or search</Text>
           </View>
         }
       />
 
-      {/* Detail Modal */}
       <IncidentDetailModal
-        visible={detailModalVisible}
+        visible={modalVisible}
         incident={selectedIncident}
-        onClose={() => setDetailModalVisible(false)}
-        onUpdate={handleUpdateIncident}
+        onClose={() => setModalVisible(false)}
+        onUpdate={(data) => Alert.alert('Saved', `${data.number} updated`)}
+        isDesktop={isDesktop}
       />
     </View>
   );
@@ -626,406 +530,340 @@ export function IncidentDashboardScreen() {
 
 // ─── Styles ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+
   header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  statsRow: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  statBox: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginRight: spacing.md,
-    width: 90,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
   },
-  statIcon: {
-    width: 44,
-    height: 44,
+  headerTitle:    { fontSize: 22, fontWeight: '700', color: colors.text },
+  headerSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  newBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    gap: 4,
+  },
+  newBtnText: { fontSize: 13, fontWeight: '600', color: '#FFF' },
+
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  statsGridDesktop: { flexWrap: 'nowrap' },
+  statCard: {
+    flex: 1,
+    minWidth: '44%',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  statCardIcon: {
+    width: 40, height: 40,
     borderRadius: borderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  cardShadow: {
-    ...shadows.md,
-  },
-  searchBar: {
+  statCardValue: { fontSize: 26, fontWeight: '800' },
+  statCardLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  cardShadow: { ...shadows.sm },
+
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.md,
+    height: 40,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
+    ...shadows.sm,
+  },
+  searchInput: { flex: 1, fontSize: 13, color: colors.text },
+
+  filtersWrapper: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.surface,
+  },
+  filterRow:        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  filterRowBordered:{ borderTopWidth: 1, borderTopColor: colors.outline },
+  filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 40,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: spacing.sm,
-    fontSize: 14,
-    color: colors.text,
-  },
-  filterBar: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.surfaceSecondary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: borderRadius.full,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
     borderWidth: 1,
     borderColor: 'transparent',
+    backgroundColor: colors.surfaceVariant,
+    gap: 5,
   },
-  filterChipActive: {
-    backgroundColor: colors.primary + '20',
-    borderColor: colors.primary,
-    borderWidth: 1,
-  },
-  filterChipText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  listContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-  },
+  filterDot:      { width: 7, height: 7, borderRadius: 4 },
+  filterChipText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+
+  resultsBar: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  resultsText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+
+  listContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
+
   incidentCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     marginBottom: spacing.md,
+    borderLeftWidth: 4,
   },
-  cardHeader: {
-    marginBottom: spacing.md,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  typeIcon: {
-    width: 44,
-    height: 44,
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
+  typeIconBox: {
+    width: 40, height: 40,
     borderRadius: borderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  incidentNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  incidentDate: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  incidentNumber: { fontSize: 14, fontWeight: '700', color: colors.text },
+  incidentDate:   { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  badgeStack:     { gap: 4, alignItems: 'flex-end' },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 4,
-    gap: 4,
+    gap: 3,
   },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  severityText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  cardContent: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  contentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  contentText: {
-    fontSize: 12,
-    color: colors.text,
-  },
-  description: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    lineHeight: 16,
-  },
-  ltiAlert: {
+  badgeText:     { fontSize: 10, fontWeight: '600' },
+  severityBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4 },
+  severityText:  { fontSize: 10, fontWeight: '700', color: '#FFF' },
+
+  metaRow:  { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  metaText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
+
+  description: { fontSize: 12, color: colors.text, lineHeight: 17, marginBottom: spacing.sm },
+
+  alertPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEE2E2',
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    gap: 5,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
   },
-  ltiText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#DC2626',
-  },
-  deadlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBEB',
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  deadlineText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#92400E',
-  },
+  alertPillAmber: { backgroundColor: '#FEF3C7' },
+  alertPillText:  { fontSize: 11, fontWeight: '600', color: '#991B1B' },
+
   cardFooter: {
     flexDirection: 'row',
-    gap: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTopWidth: spacing.md,
+    borderTopColor: colors.outline,
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
   },
-  footerBtn: {
-    flex: 1,
+  typeLabelPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 4,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
   },
-  footerBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyState: {
+  typeLabelText: { fontSize: 11, fontWeight: '600' },
+  footerBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.xl,
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
   },
-  emptyStateText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: spacing.md,
+  footerBtnText: { fontSize: 12, fontWeight: '600' },
+
+  emptyState:    { alignItems: 'center', paddingVertical: 60 },
+  emptyIconBox: {
+    width: 72, height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primary + '12',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  // Modal Styles
+  emptyTitle:    { fontSize: 16, fontWeight: '600', color: colors.text },
+  emptySubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15,27,66,0.55)',
     justifyContent: 'flex-end',
   },
+  modalOverlayDesktop: { justifyContent: 'center', alignItems: 'center' },
   modalContent: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: borderRadius.xl,
     borderTopRightRadius: borderRadius.xl,
-    maxHeight: '90%',
+    maxHeight: '92%',
     ...shadows.lg,
+  },
+  modalContentDesktop: {
+    width: '52%',
+    maxWidth: 640,
+    borderRadius: borderRadius.xl,
+    maxHeight: '88%',
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
+    gap: spacing.sm,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
+  modalTitle:    { fontSize: 17, fontWeight: '700', color: colors.text },
+  modalSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  closeBtn: {
+    width: 32, height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceVariant,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  modalSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
+  modalBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, maxHeight: 520 },
+
+  metricsGrid: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+  metricTile: {
+    flex: 1,
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    alignItems: 'center',
   },
-  modalBody: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    maxHeight: 500,
+  metricLabel: { fontSize: 10, color: colors.textSecondary, fontWeight: '500', marginBottom: 4 },
+  metricValue: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+
+  modalSection: { marginBottom: spacing.lg },
+  modalSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
   },
+  modalSectionTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
+  modalBodyText:     { fontSize: 13, color: colors.text, lineHeight: 19 },
+
+  infoTable: {
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+  },
+  infoTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+  },
+  infoTableLabel: { fontSize: 12, color: colors.textSecondary },
+  infoTableValue: { fontSize: 12, fontWeight: '600', color: colors.text },
+
+  ltiBanner: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626',
+  },
+  ltiBannerTitle:   { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
+  ltiBannerHeading: { fontSize: 13, fontWeight: '700', color: '#DC2626' },
+  ltiBannerText:    { fontSize: 12, color: '#7F1D1D' },
+
+  capaBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#FEF3C7',
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: '#D97706',
+  },
+  capaBannerText: { fontSize: 12, fontWeight: '600', color: '#92400E' },
+
+  rootCauseBox: {
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: 4,
+  },
+
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    marginRight: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.surfaceVariant,
+  },
+  statusChipText: { fontSize: 12, color: colors.textSecondary },
+
   modalFooter: {
     flexDirection: 'row',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  statusGrid: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  statusCard: {
-    flex: 1,
-    backgroundColor: colors.surfaceSecondary,
-    borderLeftWidth: 3,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-  },
-  statusLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
-    marginBottom: spacing.sm,
-  },
-  statusValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  section: {
-    marginBottom: spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  formGroup: {
-    marginBottom: spacing.lg,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  infoBox: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  infoText: {
-    fontSize: 13,
-    color: colors.text,
-    lineHeight: 18,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: 12,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  ltiDetailText: {
-    fontSize: 13,
-    color: '#92400E',
-    lineHeight: 18,
-  },
-  statusOption: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
-    marginRight: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statusOptionActive: {
-    backgroundColor: colors.primary + '20',
-    borderColor: colors.primary,
-  },
-  statusOptionText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
+    borderTopColor: colors.outline,
   },
   cancelBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     borderRadius: borderRadius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  cancelBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  updateBtn: {
+  cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  saveBtn: {
     flex: 1,
     backgroundColor: colors.primary,
     borderRadius: borderRadius.md,
     paddingVertical: spacing.md,
-    alignItems: 'center',
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  updateBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-  },
+  saveBtnText: { fontSize: 14, fontWeight: '600', color: '#FFF' },
 });

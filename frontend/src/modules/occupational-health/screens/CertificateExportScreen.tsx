@@ -109,7 +109,7 @@ function PDFPreview({ certificate, format }: { certificate: Certificate; format:
               <Text style={styles.dateLabel}>Issue Date</Text>
               <Text style={styles.dateValue}>{certificate.examDate}</Text>
             </View>
-            <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: colors.border, paddingLeft: spacing.md }}>
+            <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.md }}>
               <Text style={styles.dateLabel}>Expiry Date</Text>
               <Text style={styles.dateValue}>{certificate.expiryDate}</Text>
             </View>
@@ -261,7 +261,7 @@ function PDFPreview({ certificate, format }: { certificate: Certificate; format:
           <Text style={styles.signatureLabel}>Dr. {certificate.examiner}</Text>
           <Text style={styles.signatureTitle}>Certifying Physician</Text>
         </View>
-        <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: colors.border, paddingLeft: spacing.lg }}>
+        <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.lg }}>
           <Text style={styles.stampText}>Official Stamp</Text>
           <Text style={styles.stampSubtext}>/ Seal of Authority</Text>
         </View>
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   modalTitle: {
     fontSize: 18,
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   formatTitle: {
     fontSize: 16,
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
   },
   formatCardActive: {
     backgroundColor: colors.primary + '10',
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     padding: spacing.lg,
     ...shadows.sm,
   },
@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    paddingTopWidth: spacing.md,
+    paddingTop: spacing.md,
   },
   dateLabel: {
     fontSize: 11,
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     marginTop: spacing.lg,
-    paddingTopWidth: spacing.lg,
+    paddingTop: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
@@ -730,15 +730,15 @@ const styles = StyleSheet.create({
   },
   signatureArea: {
     alignItems: 'center',
-    marginTopWidth: spacing.lg,
-    paddingTopWidth: spacing.lg,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
   },
   signatureAreaDetailed: {
     flexDirection: 'row',
     marginTop: spacing.lg,
     paddingTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.outline,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
   },
@@ -804,12 +804,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.outline,
   },
   cancelBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     borderRadius: borderRadius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',

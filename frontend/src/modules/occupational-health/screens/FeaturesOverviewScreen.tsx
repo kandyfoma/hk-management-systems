@@ -392,7 +392,7 @@ function CategorySection({
         </View>
         <View style={styles.categoryProgress}>
           <Text style={styles.progressText}>{complete}/{total}</Text>
-          <View style={[styles.progressBar, { backgroundColor: colors.surfaceSecondary }]}>
+          <View style={[styles.progressBar, { backgroundColor: colors.surfaceVariant }]}>
             <View
               style={[
                 styles.progressFill,
@@ -601,13 +601,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginRight: spacing.md,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.full,
     flexDirection: 'row',
     alignItems: 'center',
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   categoryIcon: {
     width: 50,
@@ -725,7 +725,7 @@ const styles = StyleSheet.create({
   },
   metric: {
     flex: 1,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
   },
   subFeaturesBox: {
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.outline,
     paddingTop: spacing.md,
     gap: spacing.xs,
   },

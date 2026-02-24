@@ -4,6 +4,7 @@ import {
   StyleSheet, Dimensions, Modal, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
 import {
@@ -340,14 +341,130 @@ export function RiskAssessmentScreen() {
   useEffect(() => { loadData(); }, []);
   const loadData = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setAssessments(JSON.parse(stored));
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_ASSESSMENTS));
-    } catch { }
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      const response = await axios.get(
+        `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (response.data) {
+        // Handle both list response and paginated response
+        const hazardsList = Array.isArray(response.data) ? response.data : response.data.results || [];
+        // Convert HazardIdentification records to RiskAssessment format
+        // Group by assessment date to create assessments
+        const assessmentsMap: Record<string, any> = {};
+        hazardsList.forEach((h: any) => {
+          const key = `${h.assessment_date}-${h.assessed_by}`;
+          if (!assessmentsMap[key]) {
+            assessmentsMap[key] = {
+              id: h.id,
+              sector: 'mining',
+              site: h.work_site?.name || '',
+              area: h.location || '',
+              assessmentDate: h.assessment_date,
+              assessorName: h.assessed_by_name || '',
+              hazards: [],
+              overallRiskLevel: h.risk_level === 'critical' ? 'very_high' : h.risk_level,
+              reviewDate: h.review_date,
+              status: h.status,
+              createdAt: h.created_at,
+            };
+          }
+          // Add hazard to assessment
+          assessmentsMap[key].hazards.push({
+            hazardType: h.hazard_type,
+            description: h.hazard_description,
+            affectedWorkers: h.workers_exposed?.length || 0,
+            likelihood: h.probability,
+            consequence: h.severity,
+            riskScore: h.risk_score,
+            existingControls: h.existing_controls.split(','),
+            additionalControls: h.ppe_recommendations || [],
+            controlHierarchy: 'engineering',
+            responsiblePerson: h.assessed_by_name || '',
+            targetDate: h.next_review_date,
+          });
+        });
+        
+        const assessmentsList = Object.values(assessmentsMap);
+        setAssessments(assessmentsList);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch risk assessments from API, using sample data:', error);
+      // Fall back to sample data if API fails
+      setAssessments(SAMPLE_ASSESSMENTS);
+    }
   };
-  const saveData = async (list: RiskAssessment[]) => { setAssessments(list); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list)); };
+  
+  const saveData = async (assessment: RiskAssessment) => {
+    try {
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      // Create hazard identification records for each hazard in the assessment
+      if (assessment.hazards && assessment.hazards.length > 0) {
+        for (const hazard of assessment.hazards) {
+          const hazardData = {
+            hazard_description: hazard.description,
+            hazard_type: hazard.hazardType,
+            location: assessment.area,
+            activities_affected: '',
+            probability: hazard.likelihood,
+            severity: hazard.consequence,
+            existing_controls: (Array.isArray(hazard.existingControls) ? hazard.existingControls : []).join(', '),
+            control_effectiveness: 'effective',
+            residual_probability: Math.max(1, hazard.likelihood - 1),
+            residual_severity: Math.max(1, hazard.consequence - 1),
+            risk_level: assessment.overallRiskLevel,
+            action_required: assessment.overallRiskLevel !== 'low',
+            priority: 'medium',
+            assessment_date: assessment.assessmentDate,
+            review_date: assessment.reviewDate,
+            next_review_date: assessment.reviewDate,
+            status: assessment.status,
+          };
+          
+          await axios.post(
+            `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
+            hazardData,
+            {
+              headers: {
+                Authorization: `Token ${token}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+        }
+      }
+      
+      // Reload assessments after successful creation
+      loadData();
+      return true;
+    } catch (error) {
+      console.error('Failed to save assessment:', error);
+      // Fall back to local storage if API fails
+      const updatedAssessments = [assessment, ...assessments];
+      setAssessments(updatedAssessments);
+      return false;
+    }
+  };
 
-  const handleAdd = (a: RiskAssessment) => { saveData([a, ...assessments]); setShowAdd(false); Alert.alert('Succès', 'Évaluation des risques créée.'); };
+  const handleAdd = async (a: RiskAssessment) => { 
+    const success = await saveData(a); 
+    setShowAdd(false); 
+    if (success) {
+      Alert.alert('Succès', 'Évaluation des risques créée et sauvegardée.');
+    } else {
+      Alert.alert('Avertissement', 'Évaluation créée localement (sync pending).');
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();

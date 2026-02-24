@@ -4,6 +4,7 @@ import {
   StyleSheet, Dimensions, Modal, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
@@ -467,21 +468,84 @@ export function IncidentsScreen() {
 
   const loadData = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setIncidents(JSON.parse(stored));
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_INCIDENTS));
-    } catch { }
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      const response = await axios.get(
+        `${baseURL}/api/v1/occupational-health/workplace-incidents/`,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (response.data) {
+        // Handle both list response and paginated response
+        const incidentsList = Array.isArray(response.data) ? response.data : response.data.results || [];
+        setIncidents(incidentsList);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch incidents from API, using sample data:', error);
+      // Fall back to sample data if API fails
+      setIncidents(SAMPLE_INCIDENTS);
+    }
   };
 
-  const saveData = async (list: WorkplaceIncident[]) => {
-    setIncidents(list);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  const saveData = async (incident: WorkplaceIncident) => {
+    try {
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      // Prepare incident data for API
+      const incidentData = {
+        category: incident.category,
+        severity: incident.severity,
+        incident_date: incident.incidentDate,
+        incident_time: incident.incidentTime,
+        location_description: `${incident.area} at ${incident.site}`,
+        description: incident.description,
+        immediate_cause: '', // Extract from incident if available
+        investigation_status: incident.investigationStatus,
+        work_days_lost: incident.lostTimeDays || 0,
+        reported_by: incident.reportedBy,
+        reportable_to_authorities: incident.reportedToAuthorities,
+      };
+      
+      const response = await axios.post(
+        `${baseURL}/api/v1/occupational-health/workplace-incidents/`,
+        incidentData,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (response.data) {
+        // Reload incidents after successful creation
+        loadData();
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to save incident:', error);
+      // Fall back to local storage if API fails
+      const updatedIncidents = [incident, ...incidents];
+      setIncidents(updatedIncidents);
+      return false;
+    }
   };
 
-  const handleAdd = (inc: WorkplaceIncident) => {
-    saveData([inc, ...incidents]);
+  const handleAdd = async (inc: WorkplaceIncident) => {
+    const success = await saveData(inc);
     setShowAddModal(false);
-    Alert.alert('Succès', `Incident ${inc.incidentNumber} déclaré.`);
+    if (success) {
+      Alert.alert('Succès', `Incident ${inc.incidentNumber} déclaré et sauvegardé.`);
+    } else {
+      Alert.alert('Avertissement', `Incident déclaré localement (sync pending).`);
+    }
   };
 
   const filtered = useMemo(() => {

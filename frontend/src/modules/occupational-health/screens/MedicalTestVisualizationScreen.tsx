@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
   Dimensions, FlatList,
@@ -9,7 +9,7 @@ import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-// ─── Types ──────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface TestResult {
   id: string;
   date: string;
@@ -19,7 +19,7 @@ interface TestResult {
   status: 'normal' | 'abnormal' | 'critical';
 }
 
-// ─── Medical Tests Visualization Screens ──────────────────────
+// â”€â”€â”€ Medical Tests Visualization Screens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function MedicalTestVisualizationScreen() {
   const [selectedTest, setSelectedTest] = useState<string | null>(null);
 
@@ -69,7 +69,7 @@ export function MedicalTestVisualizationScreen() {
   );
 }
 
-// ─── Test Detail Modal ──────────────────────────────────────────
+// â”€â”€â”€ Test Detail Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TestDetailModal({
   testId,
   onClose,
@@ -134,11 +134,11 @@ function TestDetailModal({
       name: 'Heavy Metals - Occupational Exposure Panel',
       description: 'Monitors 10 metal types for occupational exposure',
       parameters: [
-        { label: 'Lead', value: 12, normal: '<25', unit: 'µg/dL', status: 'normal' },
-        { label: 'Cadmium', value: 1.2, normal: '<5', unit: 'µg/L', status: 'normal' },
-        { label: 'Cobalt', value: 2.8, normal: '<5', unit: 'µg/L', status: 'normal' },
-        { label: 'Manganese', value: 8.5, normal: '<15', unit: 'µg/L', status: 'normal' },
-        { label: 'Nickel', value: 4.2, normal: '<10', unit: 'µg/L', status: 'normal' },
+        { label: 'Lead', value: 12, normal: '<25', unit: 'Âµg/dL', status: 'normal' },
+        { label: 'Cadmium', value: 1.2, normal: '<5', unit: 'Âµg/L', status: 'normal' },
+        { label: 'Cobalt', value: 2.8, normal: '<5', unit: 'Âµg/L', status: 'normal' },
+        { label: 'Manganese', value: 8.5, normal: '<15', unit: 'Âµg/L', status: 'normal' },
+        { label: 'Nickel', value: 4.2, normal: '<10', unit: 'Âµg/L', status: 'normal' },
       ],
       trend: {
         labels: ['6mo ago', '5mo ago', '4mo ago', '3mo ago', '2mo ago', 'Now'],
@@ -325,7 +325,7 @@ function TestDetailModal({
   );
 }
 
-// ─── Exit Exam Screen ───────────────────────────────────────────
+// â”€â”€â”€ Exit Exam Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function ExitExamScreen() {
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
 
@@ -376,7 +376,7 @@ export function ExitExamScreen() {
   );
 }
 
-// ─── Helper Functions ────────────────────────────────────────────
+// â”€â”€â”€ Helper Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getStatusColor(status: string) {
   if (status === 'normal') return { backgroundColor: '#22C55E' + '20' };
   if (status === 'abnormal') return { backgroundColor: '#F59E0B' + '20' };
@@ -389,7 +389,7 @@ function getStatusTextColor(status: string) {
   return '#DC2626';
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md },
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
     paddingBottom: spacing.md,
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   paramLabel: { fontSize: 13, fontWeight: '600', color: colors.text },
   paramRange: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },

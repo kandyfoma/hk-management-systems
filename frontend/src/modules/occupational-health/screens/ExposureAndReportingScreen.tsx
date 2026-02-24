@@ -217,7 +217,7 @@ function ExposureDetailModal({
                       data: Array(6).fill(exp.limit),
                       color: () => '#EF4444',
                       strokeWidth: 2,
-                      strokeDasharray: [5, 5],
+                      strokeDashArray: [5, 5],
                     },
                   ],
                 }}
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
     paddingBottom: spacing.md,
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: colors.text },

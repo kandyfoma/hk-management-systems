@@ -1,16 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, Switch, Dimensions,
+  TextInput, Modal, Switch, Dimensions, ActivityIndicator, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import { OccHealthApiService } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 
 // ─── Types ──────────────────────────────────────────────────────
+interface Worker {
+  id: string;
+  firstName: string;
+  lastName: string;
+  employeeId: string;
+  department?: string;
+  fullName?: string;
+}
+
 interface OccupationalDisease {
   id: string;
+  workerId: string;
   workerName: string;
   diseaseType: string;
   iloCode: string;
@@ -24,10 +35,37 @@ export function DiseaseRegistryScreen() {
   const [searchText, setSearchText] = useState('');
   const [selectedDisease, setSelectedDisease] = useState<OccupationalDisease | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(true);
+
+  // Load workers on mount
+  useEffect(() => {
+    const loadWorkers = async () => {
+      try {
+        const result = await OccHealthApiService.getInstance().listWorkers({ page: 1 });
+        if (result.data && result.data.length > 0) {
+          setWorkers(result.data.map((w: any) => ({
+            id: w.id,
+            firstName: w.firstName || w.first_name || '',
+            lastName: w.lastName || w.last_name || '',
+            employeeId: w.employeeId || w.employee_id || w.id,
+            department: w.department || 'N/A',
+            fullName: `${w.firstName || w.first_name || ''} ${w.lastName || w.last_name || ''}`.trim(),
+          })));
+        }
+      } catch (error) {
+        console.error('Error loading workers:', error);
+      } finally {
+        setLoadingWorkers(false);
+      }
+    };
+    loadWorkers();
+  }, []);
 
   const mockDiseases: OccupationalDisease[] = [
     {
       id: '1',
+      workerId: 'w001',
       workerName: 'Kabamba Mutombo',
       diseaseType: 'Silicosis',
       iloCode: 'ILO-1601',
@@ -37,6 +75,7 @@ export function DiseaseRegistryScreen() {
     },
     {
       id: '2',
+      workerId: 'w002',
       workerName: 'Tshisekedi Ilunga',
       diseaseType: 'Occupational Hearing Loss',
       iloCode: 'ILO-1602',
@@ -46,6 +85,7 @@ export function DiseaseRegistryScreen() {
     },
     {
       id: '3',
+      workerId: 'w003',
       workerName: 'Mukendi Kasongo',
       diseaseType: 'Work-Related Asthma',
       iloCode: 'ILO-1610',
@@ -162,6 +202,8 @@ export function DiseaseRegistryScreen() {
           disease={selectedDisease}
           isVisible={isModalVisible}
           onClose={() => setIsModalVisible(false)}
+          workers={workers}
+          loadingWorkers={loadingWorkers}
         />
       )}
     </View>
@@ -173,11 +215,29 @@ function DiseaseDetailModal({
   disease,
   isVisible,
   onClose,
+  workers,
+  loadingWorkers,
 }: {
   disease: OccupationalDisease;
   isVisible: boolean;
   onClose: () => void;
+  workers: Worker[];
+  loadingWorkers: boolean;
 }) {
+  const [selectedWorkerId, setSelectedWorkerId] = useState(disease.workerId);
+  const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
+  const [workerSearchText, setWorkerSearchText] = useState('');
+  const selectedWorker = workers.find(w => w.id === selectedWorkerId || w.employeeId === selectedWorkerId);
+  
+  // Filter workers based on search text (name or employee ID)
+  const filteredWorkers = workers.filter(worker => {
+    const searchLower = workerSearchText.toLowerCase();
+    return (
+      (worker.fullName || '').toLowerCase().includes(searchLower) ||
+      (worker.employeeId || '').toLowerCase().includes(searchLower)
+    );
+  });
+
   return (
     <Modal visible={isVisible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -190,10 +250,82 @@ function DiseaseDetailModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: spacing.lg }}>
+            {/* Worker Selection */}
+            <View style={[styles.section, styles.cardShadow]}>
+              <Text style={styles.sectionTitle}>Worker Assignment</Text>
+              
+              {loadingWorkers ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.workerSelectorBtn, showWorkerDropdown && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}
+                    onPress={() => setShowWorkerDropdown(!showWorkerDropdown)}
+                  >
+                    <View>
+                      <Text style={styles.workerSelectorLabel}>Selected Worker</Text>
+                      <Text style={styles.workerSelectorValue}>
+                        {selectedWorker ? `${selectedWorker.fullName} (${selectedWorker.employeeId})` : 'Select worker...'}
+                      </Text>
+                    </View>
+                    <Ionicons 
+                      name={showWorkerDropdown ? 'chevron-up' : 'chevron-down'} 
+                      size={20} 
+                      color={colors.textSecondary} 
+                    />
+                  </TouchableOpacity>
+
+                  {showWorkerDropdown && (
+                    <View style={styles.workerDropdownList}>
+                      <TextInput
+                        style={styles.workerSearchInput}
+                        placeholder="Search by name or employee ID..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={workerSearchText}
+                        onChangeText={setWorkerSearchText}
+                      />
+                      
+                      <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                        {filteredWorkers.length > 0 ? (
+                          filteredWorkers.map(worker => (
+                            <TouchableOpacity
+                              key={worker.id}
+                              style={[
+                                styles.workerDropdownItem,
+                                selectedWorkerId === worker.id && styles.workerDropdownItemSelected,
+                              ]}
+                              onPress={() => {
+                                setSelectedWorkerId(worker.id);
+                                setShowWorkerDropdown(false);
+                                setWorkerSearchText('');
+                              }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.workerDropdownName, selectedWorkerId === worker.id && { color: colors.primary, fontWeight: '700' }]}>
+                                  {worker.fullName}
+                                </Text>
+                                <Text style={styles.workerDropdownMeta}>{worker.employeeId} • {worker.department}</Text>
+                              </View>
+                              {selectedWorkerId === worker.id && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                              )}
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={{ padding: spacing.md, alignItems: 'center' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>No workers found</Text>
+                          </View>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+
             {/* Info */}
             <View style={[styles.section, styles.cardShadow]}>
               <Text style={styles.sectionTitle}>Case Information</Text>
-              <InfoRow label="Worker" value={disease.workerName} />
               <InfoRow label="ILO Classification" value={disease.iloCode} />
               <InfoRow label="Date Reported" value={disease.dateReported} />
               <InfoRow label="Severity" value={disease.severity} />
@@ -241,6 +373,134 @@ function DiseaseDetailModal({
 // ─── Health Screening Forms ─────────────────────────────────────
 export function HealthScreeningFormScreen() {
   const [activeForm, setActiveForm] = useState<'ergonomic' | 'mental' | 'cardio' | 'msk' | null>(null);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(true);
+  const [completedScreenings, setCompletedScreenings] = useState<Array<{
+    id: string;
+    workerId: string;
+    workerName: string;
+    screeningType: string;
+    screeningTypeDisplay: string;
+    completedDate: string;
+    status: 'completed' | 'pending';
+    details?: Record<string, any>;
+  }>>([]);
+  const [selectedScreening, setSelectedScreening] = useState<(typeof completedScreenings)[0] | null>(null);
+  const [loadingScreenings, setLoadingScreenings] = useState(false);
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'worker'>('date-desc');
+  const [filterType, setFilterType] = useState<'all' | 'ergonomic' | 'mental' | 'cardio' | 'msk'>('all');
+
+  // Load workers on mount
+  useEffect(() => {
+    const loadWorkers = async () => {
+      try {
+        const result = await OccHealthApiService.getInstance().listWorkers({ page: 1 });
+        if (result.data && result.data.length > 0) {
+          setWorkers(result.data.map((w: any) => ({
+            id: w.id,
+            firstName: w.firstName || w.first_name || '',
+            lastName: w.lastName || w.last_name || '',
+            employeeId: w.employeeId || w.employee_id || w.id,
+            department: w.department || 'N/A',
+            fullName: `${w.firstName || w.first_name || ''} ${w.lastName || w.last_name || ''}`.trim(),
+          })));
+        }
+      } catch (error) {
+        console.error('Error loading workers:', error);
+      } finally {
+        setLoadingWorkers(false);
+      }
+    };
+    loadWorkers();
+
+    // Load completed screenings from storage
+    loadCompletedScreenings();
+  }, []);
+
+  const loadCompletedScreenings = async () => {
+    setLoadingScreenings(true);
+    try {
+      // Try to fetch from API - replace with actual endpoint when backend is ready
+      try {
+        const result = await OccHealthApiService.getInstance().listWorkers({ page: 1 });
+        // API call logic here - for now using mock data
+      } catch (apiError) {
+        console.log('API not ready, using mock data');
+      }
+      
+      // Mock data - replace with actual API response
+      const mockScreenings = [
+        {
+          id: 'screen-001',
+          workerId: 'w1',
+          workerName: 'Jean-Pierre Kabongo',
+          screeningType: 'ergonomic',
+          screeningTypeDisplay: 'Ergonomic Assessment',
+          completedDate: '2026-02-20T10:30:00Z',
+          status: 'completed' as const,
+          details: {
+            workstationType: 'Desk Work',
+            posture: 'Neutral',
+            riskLevel: 'Low',
+            recommendations: ['Use ergonomic chair', 'Position monitor at eye level'],
+            score: 8.5,
+          },
+        },
+        {
+          id: 'screen-002',
+          workerId: 'w2',
+          workerName: 'Grace Mwamba',
+          screeningType: 'mental',
+          screeningTypeDisplay: 'Mental Health Assessment',
+          completedDate: '2026-02-19T14:15:00Z',
+          status: 'completed' as const,
+          details: {
+            stressLevel: 'Moderate',
+            wellbeingScore: 7.2,
+            recommendations: ['Regular breaks needed', 'Consider stress management program'],
+            flagged: false,
+          },
+        },
+        {
+          id: 'screen-003',
+          workerId: 'w3',
+          workerName: 'Patrick Lukusa',
+          screeningType: 'cardio',
+          screeningTypeDisplay: 'Cardiovascular Risk',
+          completedDate: '2026-02-18T09:45:00Z',
+          status: 'completed' as const,
+          details: {
+            riskCategory: 'Low',
+            bmi: 24.5,
+            bloodPressure: '120/80',
+            recommendations: ['Maintain current exercise routine'],
+            nextCheckupDate: '2026-08-18',
+          },
+        },
+      ];
+      setCompletedScreenings(mockScreenings);
+    } catch (error) {
+      console.error('Error loading completed screenings:', error);
+    } finally {
+      setLoadingScreenings(false);
+    }
+  };
+
+  // Filter and sort completed screenings
+  const filteredAndSortedScreenings = completedScreenings
+    .filter(s => filterType === 'all' || s.screeningType === filterType)
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'date-asc':
+          return new Date(a.completedDate).getTime() - new Date(b.completedDate).getTime();
+        case 'date-desc':
+          return new Date(b.completedDate).getTime() - new Date(a.completedDate).getTime();
+        case 'worker':
+          return a.workerName.localeCompare(b.workerName);
+        default:
+          return 0;
+      }
+    });
 
   const screenings = [
     { id: 'ergonomic', name: 'Ergonomic Assessment', icon: 'desktop-outline', color: '#3B82F6' },
@@ -258,6 +518,7 @@ export function HealthScreeningFormScreen() {
         </View>
 
         <View style={{ paddingHorizontal: spacing.md, paddingBottom: 40 }}>
+          {/* Available Screenings */}
           {screenings.map(screening => (
             <TouchableOpacity
               key={screening.id}
@@ -274,6 +535,43 @@ export function HealthScreeningFormScreen() {
               <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           ))}
+
+          {/* Completed Health Screenings History */}
+          {completedScreenings.length > 0 && (
+            <>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: spacing.lg, marginBottom: spacing.md, textTransform: 'uppercase' }}>
+                Screening History
+              </Text>
+              {completedScreenings.map(screening => {
+                const screeningType = screenings.find(s => s.id === screening.screeningType);
+                return (
+                  <View
+                    key={screening.id}
+                    style={[styles.screeningCard, styles.cardShadow, { backgroundColor: colors.surface, borderLeftWidth: 4, borderLeftColor: screeningType?.color || colors.primary }]}
+                  >
+                    <View style={[styles.screeningIcon, { backgroundColor: (screeningType?.color || colors.primary) + '20' }]}>
+                      <Ionicons name={(screeningType?.icon as any) || 'checkmark-circle-outline'} size={28} color={screeningType?.color || colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.screeningName}>{screening.screeningTypeDisplay}</Text>
+                      <Text style={styles.screeningDesc}>{screening.workerName}</Text>
+                      <Text style={[styles.screeningDesc, { fontSize: 11, marginTop: spacing.xs }]}>
+                        {new Date(screening.completedDate).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <View style={{ backgroundColor: colors.primary + '20', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 4, marginBottom: spacing.xs }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: colors.primary, textTransform: 'uppercase' }}>
+                          {screening.status}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                    </View>
+                  </View>
+                );
+              })}
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -281,6 +579,8 @@ export function HealthScreeningFormScreen() {
         <ScreeningFormModal
           formType={activeForm}
           onClose={() => setActiveForm(null)}
+          workers={workers}
+          loadingWorkers={loadingWorkers}
         />
       )}
     </View>
@@ -291,11 +591,28 @@ export function HealthScreeningFormScreen() {
 function ScreeningFormModal({
   formType,
   onClose,
+  workers,
+  loadingWorkers,
 }: {
   formType: 'ergonomic' | 'mental' | 'cardio' | 'msk';
   onClose: () => void;
+  workers: Worker[];
+  loadingWorkers: boolean;
 }) {
   const [responses, setResponses] = useState<Record<string, any>>({});
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
+  const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
+  const [workerSearchText, setWorkerSearchText] = useState('');
+  const selectedWorker = workers.find(w => w.id === selectedWorkerId || w.employeeId === selectedWorkerId);
+  
+  // Filter workers based on search text (name or employee ID)
+  const filteredWorkers = workers.filter(worker => {
+    const searchLower = workerSearchText.toLowerCase();
+    return (
+      (worker.fullName || '').toLowerCase().includes(searchLower) ||
+      (worker.employeeId || '').toLowerCase().includes(searchLower)
+    );
+  });
 
   const formConfigs: Record<string, any> = {
     ergonomic: {
@@ -354,8 +671,80 @@ function ScreeningFormModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: spacing.lg }}>
+            {/* Worker Selection */}
+            <View style={[styles.section, styles.cardShadow, { marginTop: spacing.lg }]}>
+              <Text style={styles.sectionTitle}>Select Worker</Text>
+              
+              {loadingWorkers ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.workerSelectorBtn, showWorkerDropdown && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}
+                    onPress={() => setShowWorkerDropdown(!showWorkerDropdown)}
+                  >
+                    <View>
+                      <Text style={styles.workerSelectorLabel}>Worker</Text>
+                      <Text style={styles.workerSelectorValue}>
+                        {selectedWorker ? `${selectedWorker.fullName} (${selectedWorker.employeeId})` : 'Select worker...'}
+                      </Text>
+                    </View>
+                    <Ionicons 
+                      name={showWorkerDropdown ? 'chevron-up' : 'chevron-down'} 
+                      size={20} 
+                      color={colors.textSecondary} 
+                    />
+                  </TouchableOpacity>
+
+                  {showWorkerDropdown && (
+                    <View style={styles.workerDropdownList}>
+                      <TextInput
+                        style={styles.workerSearchInput}
+                        placeholder="Search by name or employee ID..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={workerSearchText}
+                        onChangeText={setWorkerSearchText}
+                      />
+                      
+                      <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                        {filteredWorkers.length > 0 ? (
+                          filteredWorkers.map(worker => (
+                            <TouchableOpacity
+                              key={worker.id}
+                              style={[
+                                styles.workerDropdownItem,
+                                selectedWorkerId === worker.id && styles.workerDropdownItemSelected,
+                              ]}
+                              onPress={() => {
+                                setSelectedWorkerId(worker.id);
+                                setShowWorkerDropdown(false);
+                                setWorkerSearchText('');
+                              }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.workerDropdownName, selectedWorkerId === worker.id && { color: colors.primary, fontWeight: '700' }]}>
+                                  {worker.fullName}
+                                </Text>
+                                <Text style={styles.workerDropdownMeta}>{worker.employeeId} • {worker.department}</Text>
+                              </View>
+                              {selectedWorkerId === worker.id && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                              )}
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={{ padding: spacing.md, alignItems: 'center' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>No workers found</Text>
+                          </View>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
             {config.questions.map((q: any, idx: number) => (
-              <View key={q.id} style={[styles.formQuestion, idx < config.questions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+              <View key={q.id} style={[styles.formQuestion, idx < config.questions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.outline }]}>
                 <Text style={styles.questionLabel}>{idx + 1}. {q.label}</Text>
 
                 {q.type === 'yesno' && (
@@ -411,7 +800,17 @@ function ScreeningFormModal({
               </View>
             ))}
 
-            <TouchableOpacity style={[styles.submitBtn, styles.cardShadow]}>
+            <TouchableOpacity 
+              style={[styles.submitBtn, styles.cardShadow, !selectedWorkerId && { opacity: 0.5 }]}
+              onPress={() => {
+                if (selectedWorkerId) {
+                  // Save screening with worker ID
+                  console.log(`Screening for worker: ${selectedWorkerId}`, { formType, responses });
+                  onClose();
+                }
+              }}
+              disabled={!selectedWorkerId}
+            >
               <Ionicons name="send" size={20} color="#FFF" />
               <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Submit Assessment</Text>
             </TouchableOpacity>
@@ -484,7 +883,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
     paddingBottom: spacing.md,
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
@@ -521,14 +920,14 @@ const styles = StyleSheet.create({
   questionLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
 
   yesnoButtons: { flexDirection: 'row', gap: spacing.md },
-  optionBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: borderRadius.lg, backgroundColor: colors.surfaceSecondary, alignItems: 'center' },
+  optionBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: borderRadius.lg, backgroundColor: colors.surfaceVariant, alignItems: 'center' },
   optionBtnSelected: { backgroundColor: colors.primary },
   optionText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
   optionTextSelected: { color: '#FFF' },
 
   numberInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     borderRadius: borderRadius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
@@ -537,7 +936,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
     borderRadius: borderRadius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
@@ -547,7 +946,7 @@ const styles = StyleSheet.create({
   },
 
   scaleContainer: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' },
-  scaleBtn: { width: '18%', aspectRatio: 1, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
+  scaleBtn: { width: '18%', aspectRatio: 1, borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
   scaleBtnSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   scaleBtnText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
   scaleBtnTextSelected: { color: '#FFF' },
@@ -563,6 +962,68 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginBottom: spacing.lg,
     marginTop: spacing.lg,
+  },
+
+  // Worker Selector Styles
+  workerSelectorBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.background,
+  },
+  workerSelectorLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  workerSelectorValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  workerDropdownList: {
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: colors.outline,
+    borderBottomLeftRadius: borderRadius.lg,
+    borderBottomRightRadius: borderRadius.lg,
+    backgroundColor: colors.background,
+    overflow: 'hidden',
+  },
+  workerSearchInput: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 13,
+    color: colors.text,
+    backgroundColor: colors.surface,
+  },
+  workerDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+  },
+  workerDropdownItemSelected: {
+    backgroundColor: colors.primary + '10',
+  },
+  workerDropdownName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  workerDropdownMeta: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
 
   cardShadow: shadows.sm,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+﻿import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal,
   StyleSheet, Dimensions, Alert, TextInput, FlatList,
@@ -68,11 +68,11 @@ const RCA_METHODS: Record<string, RCAMethod> = {
     description: 'Iterative questioning to reach root cause',
     icon: 'help-buoy-outline',
     steps: [
-      'Why did the failure occur? →',
-      'Why did that cause occur? →',
-      'Why did that happen? →',
-      'Why did that cause happen? →',
-      'Why did the root cause occur? ✓',
+      'Why did the failure occur? â†’',
+      'Why did that cause occur? â†’',
+      'Why did that happen? â†’',
+      'Why did that cause happen? â†’',
+      'Why did the root cause occur? âœ“',
     ],
   },
   fault_tree: {
@@ -122,10 +122,10 @@ const SAMPLE_INVESTIGATIONS: IncidentInvestigation[] = [
     investigator: 'Dr. Mutombo',
     startDate: '2025-01-10',
     rcaMethod: 'fishbone',
-    rootCauses: ['Absence de garde-corps sur plateforme', 'Défaut d\'inspection pré-travail'],
-    contributingFactors: ['Éclairage insuffisant', 'Personnel insuffisamment formé'],
+    rootCauses: ['Absence de garde-corps sur plateforme', 'DÃ©faut d\'inspection prÃ©-travail'],
+    contributingFactors: ['Ã‰clairage insuffisant', 'Personnel insuffisamment formÃ©'],
     immediateCauses: ['Chute de 3m sans retenue'],
-    rcaFindings: 'L\'inspection pré-travail n\'a pas identifié les lacunes de sécurité. Les guards-corps manquaient.',
+    rcaFindings: 'L\'inspection prÃ©-travail n\'a pas identifiÃ© les lacunes de sÃ©curitÃ©. Les guards-corps manquaient.',
     capaList: [
       {
         id: 'ca1',
@@ -145,7 +145,7 @@ const SAMPLE_INVESTIGATIONS: IncidentInvestigation[] = [
         completedDate: '2025-01-22',
       },
     ],
-    analysisNotes: 'Investigation complétée. Causes racines identifiées. Actions correctives en cours.',
+    analysisNotes: 'Investigation complÃ©tÃ©e. Causes racines identifiÃ©es. Actions correctives en cours.',
     evidenceAttachments: ['photo_1.jpg', 'report_eng.pdf', 'interview_notes.docx'],
   },
   {
@@ -158,14 +158,14 @@ const SAMPLE_INVESTIGATIONS: IncidentInvestigation[] = [
     completedDate: '2025-01-20',
     rcaMethod: 'five_why',
     rootCauses: ['Recapuchonnage d\'aiguille (pratique interdite)'],
-    contributingFactors: ['Conteneur à aiguilles plein', 'Surcharge temporaire'],
-    immediateCauses: ['Piqûre accidentelle lors du recapuchonnage'],
-    rcaFindings: 'L\'agent n\'a pas respecté le protocole. Conteneur à proximité était plein.',
+    contributingFactors: ['Conteneur Ã  aiguilles plein', 'Surcharge temporaire'],
+    immediateCauses: ['PiqÃ»re accidentelle lors du recapuchonnage'],
+    rcaFindings: 'L\'agent n\'a pas respectÃ© le protocole. Conteneur Ã  proximitÃ© Ã©tait plein.',
     capaList: [
       {
         id: 'ca3',
-        action: 'Remplacement quotidien des conteneurs à aiguilles',
-        responsible: 'Infirmière Chef',
+        action: 'Remplacement quotidien des conteneurs Ã  aiguilles',
+        responsible: 'InfirmiÃ¨re Chef',
         dueDate: '2025-01-15',
         status: 'completed',
         effectiveness: 'effective',
@@ -173,7 +173,7 @@ const SAMPLE_INVESTIGATIONS: IncidentInvestigation[] = [
       },
       {
         id: 'ca4',
-        action: 'Rappel formation AES à tout le personnel',
+        action: 'Rappel formation AES Ã  tout le personnel',
         responsible: 'Direction Nursing',
         dueDate: '2025-02-01',
         status: 'completed',
@@ -181,22 +181,22 @@ const SAMPLE_INVESTIGATIONS: IncidentInvestigation[] = [
         completedDate: '2025-01-28',
       },
     ],
-    analysisNotes: 'Investigation 100% complétée. Toutes les actions correctives vérifiées efficaces.',
+    analysisNotes: 'Investigation 100% complÃ©tÃ©e. Toutes les actions correctives vÃ©rifiÃ©es efficaces.',
     evidenceAttachments: ['protocol_checklist.pdf'],
     nextReviewDate: '2025-04-12',
   },
 ];
 
-// ─── Investigation Status Timeline ──────────────────────────
+// â”€â”€â”€ Investigation Status Timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function InvestigationTimeline({ status }: { status: IncidentInvestigation['status'] }) {
   const steps = [
-    { id: 'reported', label: 'Signalé', icon: 'alert-circle' },
+    { id: 'reported', label: 'SignalÃ©', icon: 'alert-circle' },
     { id: 'under_investigation', label: 'En Investigation', icon: 'search' },
-    { id: 'root_cause_identified', label: 'Cause Identifiée', icon: 'checkmark-circle' },
-    { id: 'corrective_action_planned', label: 'Actions Planifiées', icon: 'clipboard' },
-    { id: 'corrective_action_implemented', label: 'Actions Mises en Œuvre', icon: 'construct' },
-    { id: 'effectiveness_verified', label: 'Efficacité Vérifiée', icon: 'checkmark' },
-    { id: 'closed', label: 'Fermé', icon: 'checkmark-done' },
+    { id: 'root_cause_identified', label: 'Cause IdentifiÃ©e', icon: 'checkmark-circle' },
+    { id: 'corrective_action_planned', label: 'Actions PlanifiÃ©es', icon: 'clipboard' },
+    { id: 'corrective_action_implemented', label: 'Actions Mises en Å’uvre', icon: 'construct' },
+    { id: 'effectiveness_verified', label: 'EfficacitÃ© VÃ©rifiÃ©e', icon: 'checkmark' },
+    { id: 'closed', label: 'FermÃ©', icon: 'checkmark-done' },
   ];
 
   const statusIndex = steps.findIndex(s => s.id === status);
@@ -223,20 +223,20 @@ function InvestigationTimeline({ status }: { status: IncidentInvestigation['stat
   );
 }
 
-// ─── CAPA Item ──────────────────────────────────────────────
+// â”€â”€â”€ CAPA Item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function CAPAItem({ capa, onPress }: { capa: CAPA; onPress: () => void }) {
   const statusConfig = {
     pending: { color: '#94A3B8', label: 'En attente' },
     in_progress: { color: '#F59E0B', label: 'En cours' },
-    completed: { color: '#22C55E', label: 'Complétée' },
-    cancelled: { color: '#EF4444', label: 'Annulée' },
+    completed: { color: '#22C55E', label: 'ComplÃ©tÃ©e' },
+    cancelled: { color: '#EF4444', label: 'AnnulÃ©e' },
   };
   const effectivenessConfig = {
-    not_assessed: { color: '#94A3B8', label: 'Non évaluée' },
+    not_assessed: { color: '#94A3B8', label: 'Non Ã©valuÃ©e' },
     ineffective: { color: '#EF4444', label: 'Inefficace' },
     partially_effective: { color: '#F59E0B', label: 'Partiellement efficace' },
     effective: { color: '#22C55E', label: 'Efficace' },
-    highly_effective: { color: '#16A34A', label: 'Très efficace' },
+    highly_effective: { color: '#16A34A', label: 'TrÃ¨s efficace' },
   };
 
   const statusCfg = statusConfig[capa.status];
@@ -278,7 +278,7 @@ function CAPAItem({ capa, onPress }: { capa: CAPA; onPress: () => void }) {
   );
 }
 
-// ─── Investigation Detail Modal ──────────────────────────────
+// â”€â”€â”€ Investigation Detail Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function InvestigationDetailModal({
   investigation,
   visible,
@@ -425,7 +425,7 @@ function InvestigationDetailModal({
   );
 }
 
-// ─── Main Screen ─────────────────────────────────────────────
+// â”€â”€â”€ Main Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function IncidentInvestigationScreen() {
   const [selectedInvestigation, setSelectedInvestigation] = useState<IncidentInvestigation | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -450,7 +450,7 @@ export function IncidentInvestigationScreen() {
       </View>
 
       {/* Filter Tabs */}
-      <scrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar}>
         {['all', 'reported', 'under_investigation', 'root_cause_identified', 'closed'].map(status => (
           <TouchableOpacity
             key={status}
@@ -462,7 +462,7 @@ export function IncidentInvestigationScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-      </scrollView>
+      </ScrollView>
 
       {/* Investigations List */}
       <FlatList
@@ -523,7 +523,7 @@ export function IncidentInvestigationScreen() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -548,14 +548,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   filterTab: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginRight: 8,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
   },
   filterTabActive: {
     backgroundColor: colors.primaryFaded,
@@ -614,11 +614,11 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: colors.border,
+    borderColor: colors.outline,
   },
   timelineNodeActive: {
     backgroundColor: colors.primaryFaded,
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
   timelineConnector: {
     width: 20,
     height: 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.outline,
     marginHorizontal: 4,
   },
   timelineConnectorActive: {
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,
     padding: spacing.md,
   },
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.outline,
   },
   metaItem: {
     flexDirection: 'row',
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   modalTitle: {
     fontSize: 18,
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   rcaMethodCard: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,
     padding: spacing.md,
   },
@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   capaCard: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
@@ -882,7 +882,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   findingsBox: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     borderLeftWidth: 3,
@@ -896,7 +896,7 @@ const styles = StyleSheet.create({
   attachmentCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     marginBottom: spacing.md,

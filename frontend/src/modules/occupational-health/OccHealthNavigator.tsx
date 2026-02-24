@@ -21,11 +21,14 @@ import { MedicalExamManagementScreen } from './screens/MedicalExamManagementScre
 import { CertificateExportModal } from './screens/CertificateExportScreen';
 import { IncidentDashboardScreen } from './screens/IncidentDashboardScreen';
 import { FeaturesOverviewScreen } from './screens/FeaturesOverviewScreen';
-import { WorkerAndEnterpriseScreen, EnterpriseManagementScreen } from './screens/WorkerAndEnterpriseScreen';
+import { WorkerRegistrationScreen, EnterpriseManagementScreen } from './screens/WorkerAndEnterpriseScreen';
 import { MedicalTestVisualizationScreen, ExitExamScreen } from './screens/MedicalTestVisualizationScreen';
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from './screens/DiseaseRegistryAndHealthScreeningScreen';
 import { ExposureMonitoringDashboard, RegulatoryReportsScreen } from './screens/ExposureAndReportingScreen';
 import { ISO45001DashboardScreen, ISO27001DashboardScreen } from './screens/ComplianceDashboardsScreen';
+import { WorkerRiskProfileScreen } from './screens/WorkerRiskProfileScreen';
+import { OverexposureAlertScreen } from './screens/OverexposureAlertScreen';
+import { PPEComplianceRecordScreen } from './screens/PPEComplianceRecordScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 
@@ -279,6 +282,9 @@ export function OccHealthNavigator() {
         { id: 'risk-assessment', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
         { id: 'exposure-monitoring', label: 'Monitoring Expositions', icon: 'water-outline', iconActive: 'water' },
         { id: 'ppe-management', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
+        { id: 'worker-risk-profiles', label: 'Profils de Risque', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
+        { id: 'overexposure-alerts', label: 'Alertes Surexposition', icon: 'alert-outline', iconActive: 'alert' },
+        { id: 'ppe-compliance', label: 'Conformité EPI', icon: 'checkmark-outline', iconActive: 'checkmark' },
       ],
     },
     {
@@ -326,11 +332,15 @@ export function OccHealthNavigator() {
     }
 
     if (activeScreen === 'worker-management') {
-      return <WorkerAndEnterpriseScreen />;
+      return <WorkerRegistrationScreen />;
     }
 
     if (activeScreen === 'enterprise-management') {
       return <EnterpriseManagementScreen />;
+    }
+
+    if (activeScreen === 'patients') {
+      return <OHPatientsScreen />;
     }
 
     if (activeScreen === 'intake') {
@@ -420,6 +430,18 @@ export function OccHealthNavigator() {
 
     if (activeScreen === 'ppe-management') {
       return <PPEManagementScreen />;
+    }
+
+    if (activeScreen === 'worker-risk-profiles') {
+      return <WorkerRiskProfileScreen />;
+    }
+
+    if (activeScreen === 'overexposure-alerts') {
+      return <OverexposureAlertScreen />;
+    }
+
+    if (activeScreen === 'ppe-compliance') {
+      return <PPEComplianceRecordScreen />;
     }
 
     if (activeScreen === 'reports') {

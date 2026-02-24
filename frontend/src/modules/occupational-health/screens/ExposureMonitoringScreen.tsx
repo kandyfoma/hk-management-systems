@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator,
   StyleSheet, Dimensions, Modal, Alert, Platform, RefreshControl,
@@ -46,7 +46,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     id: 'silica',
     name: 'Silica',
     fullName: 'Crystalline Silica (Respirable)',
-    unit: 'mg/m³',
+    unit: 'mg/mÂ³',
     osha_limit: 0.025,
     acgih_limit: 0.025,
     icon: 'water-outline',
@@ -57,7 +57,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     id: 'cobalt',
     name: 'Cobalt',
     fullName: 'Cobalt & Cobalt Compounds',
-    unit: 'µg/m³',
+    unit: 'Âµg/mÂ³',
     osha_limit: 100,
     acgih_limit: 5,
     icon: 'sparkles-outline',
@@ -68,7 +68,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     id: 'dust',
     name: 'Dust',
     fullName: 'Total Inhalable Dust',
-    unit: 'mg/m³',
+    unit: 'mg/mÂ³',
     osha_limit: 5,
     acgih_limit: 3,
     icon: 'cloud-outline',
@@ -90,7 +90,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     id: 'vibration',
     name: 'Vibration',
     fullName: 'Hand-Arm Vibration',
-    unit: 'm/s²',
+    unit: 'm/sÂ²',
     osha_limit: 5,
     acgih_limit: 2.2,
     icon: 'radio-outline',
@@ -101,7 +101,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     id: 'heat',
     name: 'Heat',
     fullName: 'Wet Bulb Globe Temperature',
-    unit: '°C',
+    unit: 'Â°C',
     osha_limit: 32.2,
     acgih_limit: 28,
     icon: 'flame-outline',
@@ -114,17 +114,17 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
 const SAMPLE_READINGS: ExposureReading[] = [
   {
     id: 'r1', date: '2025-01-24', time: '09:30', worker: 'Jean-Charles Mulinga', workerId: 'w001',
-    area: 'Main Shaft Extraction', value: 0.032, unit: 'mg/m³', limit: 0.025, status: 'exceeded',
+    area: 'Main Shaft Extraction', value: 0.032, unit: 'mg/mÂ³', limit: 0.025, status: 'exceeded',
     equipment: 'Gravimetric Sampler #02', calibrationDate: '2025-01-20'
   },
   {
     id: 'r2', date: '2025-01-24', time: '10:00', worker: 'Marie Lusaka', workerId: 'w002',
-    area: 'Grinding Mill', value: 255, unit: 'µg/m³', limit: 100, status: 'exceeded',
+    area: 'Grinding Mill', value: 255, unit: 'Âµg/mÂ³', limit: 100, status: 'exceeded',
     equipment: 'Real-Time Aerosol Monitor', calibrationDate: '2025-01-18'
   },
   {
     id: 'r3', date: '2025-01-24', time: '11:15', worker: 'Pierre Kabamba', workerId: 'w003',
-    area: 'Crushing Plant', value: 4.2, unit: 'mg/m³', limit: 5, status: 'safe',
+    area: 'Crushing Plant', value: 4.2, unit: 'mg/mÂ³', limit: 5, status: 'safe',
     equipment: 'Dust Monitor DM-100', calibrationDate: '2025-01-22'
   },
   {
@@ -134,12 +134,12 @@ const SAMPLE_READINGS: ExposureReading[] = [
   },
   {
     id: 'r5', date: '2025-01-24', time: '09:45', worker: 'Sandra Tshilombo', workerId: 'w005',
-    area: 'Drill Operation', value: 3.8, unit: 'm/s²', limit: 2.2, status: 'exceeded',
+    area: 'Drill Operation', value: 3.8, unit: 'm/sÂ²', limit: 2.2, status: 'exceeded',
     equipment: 'Vibration Meter VM-50'
   }
 ];
 
-// ─── Status Badge ────────────────────────────────────────────
+// â”€â”€â”€ Status Badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function StatusBadge({ status }: { status: 'safe' | 'warning' | 'critical' | 'exceeded' }) {
   const config = {
     safe: { color: '#22C55E', label: 'Safe', icon: 'checkmark-circle' },
@@ -156,7 +156,7 @@ function StatusBadge({ status }: { status: 'safe' | 'warning' | 'critical' | 'ex
   );
 }
 
-// ─── Exposure Type Card ──────────────────────────────────────
+// â”€â”€â”€ Exposure Type Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ExposureTypeCard({ 
   exposure, 
   readings, 
@@ -221,7 +221,7 @@ function ExposureTypeCard({
             />
           </View>
           <Text style={styles.limitText}>
-            {latestReading.worker} • {latestReading.area} • {latestReading.date}
+            {latestReading.worker} â€¢ {latestReading.area} â€¢ {latestReading.date}
           </Text>
         </View>
       )}
@@ -229,7 +229,7 @@ function ExposureTypeCard({
   );
 }
 
-// ─── Detailed Exposure View ──────────────────────────────────
+// â”€â”€â”€ Detailed Exposure View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ExposureDetailModal({ 
   exposure, 
   readings, 
@@ -360,7 +360,7 @@ function ExposureDetailModal({
   );
 }
 
-// ─── Main Screen ─────────────────────────────────────────────
+// â”€â”€â”€ Main Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function ExposureMonitoringScreen() {
   const [selectedExposure, setSelectedExposure] = useState<ExposureType | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -515,7 +515,7 @@ export function ExposureMonitoringScreen() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -540,14 +540,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   filterBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginRight: 8,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
   },
   filterBadgeActive: {
     backgroundColor: colors.primaryFaded,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
   },
   limitBar: {
     height: 6,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.full,
     overflow: 'hidden',
   },
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.outline,
   },
   modalTitleRow: {
     flexDirection: 'row',
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 0.5,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceVariant,
     borderTopWidth: 3,
     borderRadius: borderRadius.md,
     padding: spacing.md,
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
   },
   tableHeader: {
     flexDirection: 'row',
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.outline,
   },
   tableCell: {
     fontSize: 12,

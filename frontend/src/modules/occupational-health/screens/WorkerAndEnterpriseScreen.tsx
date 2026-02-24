@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, FlatList, Modal, Dimensions,
@@ -8,7 +8,7 @@ import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-// ─── Types ──────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface Worker {
   id: string;
   name: string;
@@ -37,7 +37,7 @@ interface RiskProfile {
   recommendations: string[];
 }
 
-// ─── Worker Registration & Risk Profiling ──────────────────────
+// â”€â”€â”€ Worker Registration & Risk Profiling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function WorkerRegistrationScreen() {
   const [searchText, setSearchText] = useState('');
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
@@ -207,7 +207,7 @@ export function WorkerRegistrationScreen() {
   );
 }
 
-// ─── Worker Detail Modal ────────────────────────────────────────
+// â”€â”€â”€ Worker Detail Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function WorkerDetailModal({
   worker,
   isVisible,
@@ -320,7 +320,7 @@ function WorkerDetailModal({
   );
 }
 
-// ─── Enterprise & Multi-Site Management ─────────────────────────
+// â”€â”€â”€ Enterprise & Multi-Site Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function EnterpriseManagementScreen() {
   const [selectedTab, setSelectedTab] = useState<'enterprises' | 'sites'>('enterprises');
 
@@ -417,7 +417,7 @@ export function EnterpriseManagementScreen() {
   );
 }
 
-// ─── Helper Functions ────────────────────────────────────────────
+// â”€â”€â”€ Helper Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getRiskColor(score: number): string {
   if (score < 30) return '#22C55E';
   if (score < 50) return '#F59E0B';
@@ -431,7 +431,7 @@ function complianceColor(score: number) {
   return styles.complianceRed;
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.outline,
   },
   searchInput: {
     flex: 1,
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 4 },
 
   filterRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm, marginBottom: spacing.lg },
-  filterTab: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: colors.surfaceSecondary },
+  filterTab: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: colors.surfaceVariant },
   filterTabActive: { backgroundColor: colors.primary + '20', borderWidth: 1, borderColor: colors.primary },
   filterTabText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
 
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   riskBadge: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full },
   riskScore: { fontSize: 13, fontWeight: '700' },
 
-  workerDetails: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  workerDetails: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
   detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   detailText: { fontSize: 11, color: colors.textSecondary },
 
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, paddingTop: spacing.lg, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.md },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline, paddingBottom: spacing.md },
   modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
 
   riskSection: { marginHorizontal: spacing.md, marginBottom: spacing.lg, backgroundColor: colors.background, borderRadius: borderRadius.lg, padding: spacing.lg },
@@ -511,12 +511,12 @@ const styles = StyleSheet.create({
   complianceYellow: { backgroundColor: '#F59E0B' + '20' },
   complianceRed: { backgroundColor: '#EF4444' + '20' },
 
-  enterpriseStats: { flexDirection: 'row', gap: spacing.lg, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  enterpriseStats: { flexDirection: 'row', gap: spacing.lg, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
   statBarItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statBarText: { fontSize: 11, color: colors.textSecondary },
 
   // Tabs
-  tabBar: { flexDirection: 'row', paddingHorizontal: spacing.md, spacing: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  tabBar: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.outline },
   tab: { flex: 1, paddingVertical: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' },
   tabActive: { borderBottomColor: colors.primary },
   tabText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },

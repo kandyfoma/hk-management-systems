@@ -169,7 +169,7 @@ export function ISO45001DashboardScreen() {
               {selectedSection === section.id && (
                 <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: colors.background, marginBottom: spacing.md, borderRadius: borderRadius.lg }}>
                   {section.requirements.map(req => (
-                    <View key={req.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <View key={req.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline }}>
                       <View
                         style={{
                           width: 28,
@@ -310,7 +310,7 @@ export function ISO27001DashboardScreen() {
               </View>
 
               {selectedControl === control.id && (
-                <View style={{ marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <View style={{ marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.outline }}>
                   {control.items.map(item => (
                     <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md }}>
                       <Ionicons name={item.implemented ? 'checkmark-circle' : 'close-circle'} size={18} color={item.implemented ? '#22C55E' : '#EF4444'} />

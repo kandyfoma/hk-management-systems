@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Alert,
+  StyleSheet, Dimensions, Modal, Alert, ActivityIndicator, FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -269,12 +269,53 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 // ─── Add Disease Modal ───────────────────────────────────────
 function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClose: () => void; onSave: (d: OccupationalDisease) => void }) {
-  const [workerName, setWorkerName] = useState('');
+  const [selectedWorkerId, setSelectedWorkerId] = useState('');
+  const [selectedWorkerName, setSelectedWorkerName] = useState('');
+  const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
+  const [workerSearchText, setWorkerSearchText] = useState('');
+  const [workers, setWorkers] = useState<Array<{ id: string; firstName: string; lastName: string; employeeId: string; department?: string }>>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(true);
+  
   const [disease, setDisease] = useState<OccupationalDiseaseType>('musculoskeletal_disorder');
   const [severity, setSeverity] = useState<'mild' | 'moderate' | 'severe'>('mild');
   const [sector, setSector] = useState<IndustrySector>('mining');
   const [exposureDuration, setExposureDuration] = useState('');
   const [treatmentPlan, setTreatmentPlan] = useState('');
+
+  // Load workers on mount
+  useEffect(() => {
+    if (visible) {
+      loadWorkers();
+    }
+  }, [visible]);
+
+  const loadWorkers = async () => {
+    try {
+      setLoadingWorkers(true);
+      // TODO: Replace with actual API call to fetch workers
+      // For now, using sample data
+      const sampleWorkers = [
+        { id: 'w1', firstName: 'Jean-Pierre', lastName: 'Kabongo', employeeId: 'E001', department: 'Mining' },
+        { id: 'w3', firstName: 'Patrick', lastName: 'Lukusa', employeeId: 'E003', department: 'Manufacturing' },
+        { id: 'w2', firstName: 'Grace', lastName: 'Mwamba', employeeId: 'E002', department: 'Finance' },
+        { id: 'w4', firstName: 'Nadine', lastName: 'Tshilombo', employeeId: 'E004', department: 'Healthcare' },
+      ];
+      setWorkers(sampleWorkers);
+    } catch (error) {
+      console.error('Error loading workers:', error);
+    } finally {
+      setLoadingWorkers(false);
+    }
+  };
+
+  // Filter workers based on search text
+  const filteredWorkers = workers.filter(worker => {
+    const searchLower = workerSearchText.toLowerCase();
+    const fullName = `${worker.firstName} ${worker.lastName}`.toLowerCase();
+    return fullName.includes(searchLower) || worker.employeeId.toLowerCase().includes(searchLower);
+  });
+
+  const selectedWorker = workers.find(w => w.id === selectedWorkerId);
 
   const diseaseOptions: { value: OccupationalDiseaseType; label: string }[] = [
     { value: 'silicosis', label: 'Silicose' },
@@ -290,20 +331,20 @@ function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClo
   ];
 
   const handleSave = () => {
-    if (!workerName.trim()) { Alert.alert('Erreur', 'Le nom du patient est obligatoire.'); return; }
+    if (!selectedWorkerId) { Alert.alert('Erreur', 'Le choix du patient est obligatoire.'); return; }
     const sectorProfile = SECTOR_PROFILES[sector];
     const newDisease: OccupationalDisease = {
-      id: `od-${Date.now()}`, workerId: `w-${Date.now()}`, workerName: workerName.trim(),
+      id: `od-${Date.now()}`, workerId: selectedWorkerId, workerName: selectedWorkerName,
       workerSector: sector, disease, diagnosisDate: new Date().toISOString().split('T')[0],
       diagnosedBy: 'Dr. Non spécifié', severity,
       exposureType: sectorProfile.typicalRisks[0] as ExposureRisk || 'ergonomic',
       exposureDuration: exposureDuration.trim() || 'Non spécifié',
-      treatmentPlan: treatmentPlan.trim() || 'À définir', medications: [],
+      treatmentPlan: treatmentPlan.trim() || 'À définir',  medications: [],
       followUpSchedule: 'À planifier', workRestrictions: [], compensation: false,
       status: 'active', createdAt: new Date().toISOString(),
     };
     onSave(newDisease);
-    setWorkerName(''); setExposureDuration(''); setTreatmentPlan('');
+    setSelectedWorkerId(''); setSelectedWorkerName(''); setExposureDuration(''); setTreatmentPlan(''); setWorkerSearchText('');
   };
 
   return (
@@ -315,10 +356,73 @@ function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClo
               <Text style={styles.modalTitle}>Nouvelle Maladie Professionnelle</Text>
               <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
+            
+            {/* Worker Selection */}
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Nom du Patient *</Text>
-              <TextInput style={styles.formInput} value={workerName} onChangeText={setWorkerName} placeholder="Nom complet" />
+              <Text style={styles.formLabel}>Patient *</Text>
+              {loadingWorkers ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
+              ) : (
+                <View>
+                  <TouchableOpacity
+                    style={[styles.formInput, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderColor: colors.outline, borderWidth: 1, borderRadius: borderRadius.lg, justifyContent: 'center', flexDirection: 'row', alignItems: 'center' }, showWorkerDropdown && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}
+                    onPress={() => setShowWorkerDropdown(!showWorkerDropdown)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: selectedWorkerId ? colors.text : colors.textSecondary }}>
+                        {selectedWorker ? `${selectedWorker.firstName} ${selectedWorker.lastName} (${selectedWorker.employeeId})` : 'Sélectionner un patient...'}
+                      </Text>
+                    </View>
+                    <Ionicons name={showWorkerDropdown ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  {showWorkerDropdown && (
+                    <View style={[styles.formInput, { paddingHorizontal: 0, paddingVertical: 0, marginTop: -1, borderTopWidth: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0, maxHeight: 200 }]}>
+                      <TextInput
+                        style={[styles.formInput, { marginBottom: 0, borderBottomWidth: 1, borderBottomColor: colors.outline, borderTopWidth: 0, borderLeftWidth: 0, borderRightWidth: 0 }]}
+                        placeholder="Chercher par nom ou ID..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={workerSearchText}
+                        onChangeText={setWorkerSearchText}
+                      />
+                      <ScrollView style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
+                        {filteredWorkers.length > 0 ? (
+                          filteredWorkers.map(worker => (
+                            <TouchableOpacity
+                              key={worker.id}
+                              style={[styles.formInput, { marginBottom: 0, borderWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.outline, borderRadius: 0, paddingVertical: spacing.sm, backgroundColor: selectedWorkerId === worker.id ? colors.primary + '10' : 'transparent' }]}
+                              onPress={() => {
+                                setSelectedWorkerId(worker.id);
+                                setSelectedWorkerName(`${worker.firstName} ${worker.lastName}`);
+                                setShowWorkerDropdown(false);
+                                setWorkerSearchText('');
+                              }}
+                            >
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View>
+                                  <Text style={[{ fontSize: 13, fontWeight: '500', color: colors.text }, selectedWorkerId === worker.id && { color: colors.primary, fontWeight: '700' }]}>
+                                    {worker.firstName} {worker.lastName}
+                                  </Text>
+                                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                                    {worker.employeeId} • {worker.department}
+                                  </Text>
+                                </View>
+                                {selectedWorkerId === worker.id && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                              </View>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={{ padding: spacing.md, alignItems: 'center' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Aucun patient trouvé</Text>
+                          </View>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
+
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Maladie</Text>
               <View style={styles.chipGrid}>

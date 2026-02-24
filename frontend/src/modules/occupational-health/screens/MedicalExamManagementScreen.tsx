@@ -122,6 +122,14 @@ function StatusBadge({ status, type }: { status: string; type?: 'schedule' | 'fi
 }
 
 // ─── Exam Type Card ───────────────────────────────────────────
+const EXAM_TYPE_COLORS: Record<string, string> = {
+  pre_employment: '#3B82F6',
+  periodic: ACCENT,
+  return_to_work: '#22C55E',
+  exit: '#F59E0B',
+  follow_up: '#8B5CF6',
+};
+
 function ExamTypeCard({
   type,
   label,
@@ -139,23 +147,28 @@ function ExamTypeCard({
   completedCount: number;
   onPress: () => void;
 }) {
+  const typeColor = EXAM_TYPE_COLORS[type] || ACCENT;
   return (
-    <TouchableOpacity style={[styles.typeCard, styles.cardShadow]} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.typeCardIcon, { backgroundColor: ACCENT + '20' }]}>
-        <Ionicons name={icon as any} size={28} color={ACCENT} />
+    <TouchableOpacity
+      style={[styles.typeCard, styles.cardShadow, { borderLeftColor: typeColor, borderLeftWidth: 3 }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.typeCardIcon, { backgroundColor: typeColor + '18' }]}>
+        <Ionicons name={icon as any} size={26} color={typeColor} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.typeCardLabel}>{label}</Text>
-        <Text style={styles.typeCardDesc} numberOfLines={2}>{description}</Text>
+        <Text style={styles.typeCardDesc} numberOfLines={1}>{description}</Text>
       </View>
-      <View style={styles.typeCardStats}>
-        <View style={styles.statBadge}>
-          <Text style={styles.statNumber}>{scheduleCount}</Text>
-          <Text style={styles.statLabel}>Scheduled</Text>
+      <View style={styles.typeCardCounters}>
+        <View style={styles.typeCounter}>
+          <Text style={[styles.typeCounterValue, { color: typeColor }]}>{scheduleCount}</Text>
+          <Text style={styles.typeCounterLabel}>Sched.</Text>
         </View>
-        <View style={[styles.statBadge, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
-          <Text style={styles.statNumber}>{completedCount}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
+        <View style={[styles.typeCounter, { borderLeftWidth: 1, borderLeftColor: colors.outline }]}>
+          <Text style={[styles.typeCounterValue, { color: '#22C55E' }]}>{completedCount}</Text>
+          <Text style={styles.typeCounterLabel}>Done</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -181,9 +194,10 @@ function ScheduleCard({
   const days = Math.ceil((new Date(schedule.scheduledDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   const isDue = days <= 0;
   const isUpcoming = days > 0 && days <= 7;
+  const typeColor = EXAM_TYPE_COLORS[schedule.examType] || ACCENT;
 
   return (
-    <TouchableOpacity style={[styles.scheduleCard, styles.cardShadow]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.scheduleCard, styles.cardShadow, { borderLeftColor: typeColor }]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.scheduleCardHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.scheduleWorker}>{schedule.workerName}</Text>
@@ -239,8 +253,16 @@ function ExamResultCard({
     follow_up: 'Follow-up',
   };
 
+  const fitnessColors: Record<string, string> = {
+    fit: '#22C55E',
+    fit_with_restrictions: '#F59E0B',
+    unfit: '#EF4444',
+    unfit_pending_review: '#DC2626',
+  };
+  const fitnessColor = fitnessColors[result.fitnessStatus] || colors.primary;
+
   return (
-    <TouchableOpacity style={[styles.resultCard, styles.cardShadow]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.resultCard, styles.cardShadow, { borderLeftColor: fitnessColor }]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.resultCardHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.resultWorker}>{result.workerName}</Text>
@@ -367,7 +389,7 @@ function ScheduleModal({
                 <Text style={styles.label}>Scheduled Date *</Text>
                 <DateInput
                   value={formData.scheduledDate}
-                  onChange={(date) => setFormData({ ...formData, scheduledDate: date })}
+                  onChangeText={(date) => setFormData({ ...formData, scheduledDate: date })}
                   minimumDate={new Date()}
                 />
               </View>
@@ -636,29 +658,30 @@ export function MedicalExamManagementScreen() {
         <Text style={styles.headerSubtitle}>Schedule and manage occupational health examinations</Text>
       </View>
 
-      {/* Stats Row */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
-        style={styles.statsRow}
-        scrollEventThrottle={16}
-      >
-        <View style={[styles.statCard, styles.cardShadow]}>
-          <Ionicons name="calendar" size={24} color={ACCENT} />
-          <Text style={styles.statValue}>{examStats.scheduled}</Text>
+      {/* Stats Grid */}
+      <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
+        <View style={[styles.statCard, styles.cardShadow, { borderLeftColor: ACCENT }]}>
+          <View style={[styles.statCardIcon, { backgroundColor: ACCENT + '15' }]}>
+            <Ionicons name="calendar-outline" size={22} color={ACCENT} />
+          </View>
+          <Text style={[styles.statValue, { color: ACCENT }]}>{examStats.scheduled}</Text>
           <Text style={styles.statLabel}>Scheduled</Text>
         </View>
-        <View style={[styles.statCard, styles.cardShadow]}>
-          <Ionicons name="checkmark-circle" size={24} color="#22C55E" />
+        <View style={[styles.statCard, styles.cardShadow, { borderLeftColor: '#22C55E' }]}>
+          <View style={[styles.statCardIcon, { backgroundColor: '#22C55E15' }]}>
+            <Ionicons name="checkmark-circle-outline" size={22} color="#22C55E" />
+          </View>
           <Text style={[styles.statValue, { color: '#22C55E' }]}>{examStats.completed}</Text>
           <Text style={styles.statLabel}>Completed</Text>
         </View>
-        <View style={[styles.statCard, styles.cardShadow]}>
-          <Ionicons name="document" size={24} color="#8B5CF6" />
+        <View style={[styles.statCard, styles.cardShadow, { borderLeftColor: '#8B5CF6' }]}>
+          <View style={[styles.statCardIcon, { backgroundColor: '#8B5CF615' }]}>
+            <Ionicons name="document-text-outline" size={22} color="#8B5CF6" />
+          </View>
           <Text style={[styles.statValue, { color: '#8B5CF6' }]}>{examStats.results}</Text>
           <Text style={styles.statLabel}>Results</Text>
         </View>
-      </ScrollView>
+      </View>
 
       {/* Exam Type Cards */}
       <View style={styles.typeCardsSection}>
@@ -730,9 +753,9 @@ export function MedicalExamManagementScreen() {
 
       {/* Content */}
       <FlatList
-        data={activeTab === 'schedule' ? SAMPLE_SCHEDULES : SAMPLE_RESULTS}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) =>
+        data={(activeTab === 'schedule' ? SAMPLE_SCHEDULES : SAMPLE_RESULTS) as any[]}
+        keyExtractor={(item: any) => item.id}
+        renderItem={({ item }: { item: any }) =>
           activeTab === 'schedule' ? (
             <ScheduleCard
               schedule={item as ExamSchedule}
@@ -802,556 +825,156 @@ export function MedicalExamManagementScreen() {
 
 // ─── Styles ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  statsRow: {
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  headerSubtitle: { fontSize: 13, color: colors.textSecondary },
+  // Stats Grid
+  statsGrid: {
+    flexDirection: 'row',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    flexGrow: 0,
+    gap: spacing.md,
   },
+  statsGridDesktop: { flexWrap: 'nowrap' },
   statCard: {
-    width: 100,
+    flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     padding: spacing.md,
-    marginRight: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
+    borderLeftWidth: 3,
   },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: spacing.sm,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  badge: {
-    flexDirection: 'row',
+  statCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    gap: 4,
+    marginBottom: spacing.sm,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  typeCardsSection: {
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-  },
+  statValue: { fontSize: 22, fontWeight: '700', color: colors.primary },
+  statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  // Badges
+  badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, gap: 4 },
+  badgeText: { fontSize: 11, fontWeight: '600' },
+  // Exam Type Cards
+  typeCardsSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
   typeCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    padding: spacing.sm,
     marginRight: spacing.md,
-    width: 280,
+    width: 220,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
-  typeCardIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: borderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  typeCardLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  typeCardDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  typeCardStats: {
-    position: 'absolute',
-    right: spacing.md,
-    flexDirection: 'row',
-    gap: 0,
-  },
-  statBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: spacing.sm,
   },
-  tabActive: {
-    borderBottomWidth: 3,
-    borderBottomColor: colors.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  listContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-  },
+  typeCardIcon: { width: 38, height: 38, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
+  typeCardLabel: { fontSize: 13, fontWeight: '600', color: colors.text },
+  typeCardDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  typeCardCounters: { flexDirection: 'row', gap: 0, marginLeft: 'auto' },
+  typeCounter: { paddingHorizontal: spacing.sm, alignItems: 'center' },
+  typeCounterValue: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  typeCounterLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+  // kept for compatibility
+  statBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, alignItems: 'center' },
+  statNumber: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  // Tab Bar
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.outline },
+  tab: { flex: 1, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  tabActive: { borderBottomWidth: 3, borderBottomColor: colors.primary },
+  tabText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
+  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  // Schedule Card
   scheduleCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 4,
   },
-  scheduleCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  scheduleWorker: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  scheduleType: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  scheduleDetails: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  detailText: {
-    fontSize: 13,
-    color: colors.text,
-    flex: 1,
-  },
-  dueBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  dueBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  upcomingBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  upcomingBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#F59E0B',
-  },
-  scheduleFooter: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
-  },
-  scheduleAction: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  scheduleCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
+  scheduleWorker: { fontSize: 14, fontWeight: '600', color: colors.text },
+  scheduleType: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  scheduleDetails: { gap: 4, marginBottom: spacing.sm },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  detailText: { fontSize: 12, color: colors.text, flex: 1 },
+  dueBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  dueBadgeText: { fontSize: 10, fontWeight: '700', color: '#DC2626' },
+  upcomingBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  upcomingBadgeText: { fontSize: 10, fontWeight: '700', color: '#F59E0B' },
+  scheduleFooter: { flexDirection: 'row', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: spacing.sm },
+  scheduleAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  actionText: { fontSize: 11, fontWeight: '600' },
+  // Result Card
   resultCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  resultCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  resultWorker: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  resultType: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  restrictionsBox: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  restrictionsText: {
-    fontSize: 12,
-    color: '#92400E',
-    flex: 1,
-  },
-  testResultsSummary: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  testResult: {
-    flex: 1,
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
     padding: spacing.sm,
-    alignItems: 'center',
+    marginBottom: spacing.sm,
+    borderLeftWidth: 4,
   },
-  testLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  testValue: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 2,
-  },
-  resultFooter: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
-  },
-  resultAction: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: spacing.md,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    right: spacing.lg,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardShadow: {
-    ...shadows.md,
-  },
+  resultCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
+  resultWorker: { fontSize: 14, fontWeight: '600', color: colors.text },
+  resultType: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  restrictionsBox: { backgroundColor: '#FEF3C7', borderRadius: borderRadius.md, paddingHorizontal: spacing.sm, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  restrictionsText: { fontSize: 11, color: '#92400E', flex: 1 },
+  testResultsSummary: { flexDirection: 'row', gap: 4, marginBottom: spacing.sm },
+  testResult: { flex: 1, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, padding: 6, alignItems: 'center' },
+  testLabel: { fontSize: 10, color: colors.textSecondary, fontWeight: '500' },
+  testValue: { fontSize: 11, fontWeight: '600', color: colors.text, marginTop: 2 },
+  resultFooter: { flexDirection: 'row', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: spacing.sm },
+  resultAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  // Empty State
+  emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
+  emptyStateText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
+  // FAB
+  fab: { position: 'absolute', bottom: spacing.lg, right: spacing.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  cardShadow: { ...shadows.md },
   // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    maxHeight: '90%',
-    ...shadows.lg,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  modalBody: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    maxHeight: 500,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  section: {
-    marginBottom: spacing.lg,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  infoBox: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  infoLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  formGroup: {
-    marginBottom: spacing.lg,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  selectBox: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  selectText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  input: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 14,
-    color: colors.text,
-    minHeight: 44,
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  cancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  cancelBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  saveBtn: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  saveBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, maxHeight: '90%', ...shadows.lg },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
+  modalBody: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, maxHeight: 500 },
+  modalFooter: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  section: { marginBottom: spacing.lg },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
+  infoBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  infoLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  infoValue: { fontSize: 13, color: colors.text, fontWeight: '600', marginTop: 2 },
+  formGroup: { marginBottom: spacing.lg },
+  label: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
+  selectBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 44, justifyContent: 'center' },
+  selectText: { fontSize: 14, color: colors.text },
+  input: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 14, color: colors.text, minHeight: 44 },
+  textArea: { minHeight: 100, textAlignVertical: 'top' },
+  cancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  saveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
+  saveBtnText: { fontSize: 14, fontWeight: '600', color: '#FFF' },
   // Result Detail Modal
-  resultDetailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.lg,
-    paddingBottom: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  resultName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  resultDate: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  restrictionsList: {
-    gap: spacing.md,
-  },
-  restrictionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  restrictionText: {
-    fontSize: 13,
-    color: '#92400E',
-    flex: 1,
-  },
-  testResultBox: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  testHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  testTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  testParams: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  param: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  paramLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  paramValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: 4,
-  },
-  testInterpretation: {
-    fontSize: 12,
-    color: colors.text,
-    fontStyle: 'italic',
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  recommendationsList: {
-    gap: spacing.md,
-  },
-  recommendationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  recommendationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primary,
-    marginTop: 7,
-  },
-  recommendationText: {
-    fontSize: 13,
-    color: colors.text,
-    flex: 1,
-  },
-  followUpText: {
-    fontSize: 13,
-    color: '#92400E',
-    fontWeight: '500',
-  },
-  actionBtn: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  btnText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  resultDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  resultName: { fontSize: 18, fontWeight: '700', color: colors.text },
+  resultDate: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
+  restrictionsList: { gap: spacing.md },
+  restrictionItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  restrictionText: { fontSize: 13, color: '#92400E', flex: 1 },
+  testResultBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md },
+  testHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  testTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  testParams: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  param: { flex: 1, alignItems: 'center' },
+  paramLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  paramValue: { fontSize: 16, fontWeight: '700', color: colors.primary, marginTop: 4 },
+  testInterpretation: { fontSize: 12, color: colors.text, fontStyle: 'italic', paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  recommendationsList: { gap: spacing.md },
+  recommendationItem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  recommendationDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary, marginTop: 7 },
+  recommendationText: { fontSize: 13, color: colors.text, flex: 1 },
+  followUpText: { fontSize: 13, color: '#92400E', fontWeight: '500' },
+  actionBtn: { borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
+  btnText: { fontSize: 13, fontWeight: '600' },
 });

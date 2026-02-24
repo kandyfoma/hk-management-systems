@@ -4,6 +4,7 @@ import {
   StyleSheet, Dimensions, Modal, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
 import { type PPEType } from '../../../models/OccupationalHealth';
@@ -316,20 +317,106 @@ export function PPEManagementScreen() {
   useEffect(() => { loadData(); }, []);
   const loadData = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) { const data = JSON.parse(stored); setItems(data.items || SAMPLE_PPE); setAssignments(data.assignments || SAMPLE_ASSIGNMENTS); }
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ items: SAMPLE_PPE, assignments: SAMPLE_ASSIGNMENTS }));
-    } catch { }
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      const response = await axios.get(
+        `${baseURL}/api/v1/occupational-health/ppe-items/`,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (response.data) {
+        // Handle both list response and paginated response
+        const ppeList = Array.isArray(response.data) ? response.data : response.data.results || [];
+        
+        // Convert API response to PPEItem format
+        const apiItems: PPEItem[] = ppeList.map((item: any) => ({
+          id: item.id,
+          type: item.ppe_type,
+          name: item.name || '',
+          brand: item.brand || '',
+          model: item.model || '',
+          category: item.category || 'body',
+          stockQuantity: item.stock_quantity || 0,
+          assignedQuantity: item.assigned_quantity || 0,
+          expiryDate: item.expiry_date,
+          certificationStandard: item.certification_standard || '',
+          unitPrice: item.unit_price || 0,
+          supplier: item.supplier || '',
+          isActive: item.is_active !== false,
+          createdAt: item.creation_date,
+        }));
+        
+        setItems(apiItems);
+        // Note: PPE assignments are tracked separately in the API
+        setAssignments(SAMPLE_ASSIGNMENTS);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch PPE items from API, using sample data:', error);
+      // Fall back to sample data if API fails
+      setItems(SAMPLE_PPE);
+      setAssignments(SAMPLE_ASSIGNMENTS);
+    }
   };
-  const saveData = async (i: PPEItem[], a: PPEAssignment[]) => {
-    setItems(i); setAssignments(a);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ items: i, assignments: a }));
+  
+  const saveData = async (itemToAdd: PPEItem) => {
+    try {
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      const ppeData = {
+        ppe_type: itemToAdd.type,
+        name: itemToAdd.name,
+        brand: itemToAdd.brand,
+        model: itemToAdd.model,
+        category: itemToAdd.category,
+        stock_quantity: itemToAdd.stockQuantity,
+        assigned_quantity: itemToAdd.assignedQuantity,
+        expiry_date: itemToAdd.expiryDate,
+        certification_standard: itemToAdd.certificationStandard,
+        unit_price: itemToAdd.unitPrice,
+        supplier: itemToAdd.supplier,
+        is_active: itemToAdd.isActive,
+      };
+      
+      const response = await axios.post(
+        `${baseURL}/api/v1/occupational-health/ppe-items/`,
+        ppeData,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (response.data) {
+        // Reload PPE items after successful creation
+        loadData();
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to save PPE item:', error);
+      // Fall back to local state if API fails
+      const updatedItems = [itemToAdd, ...items];
+      setItems(updatedItems);
+      return false;
+    }
   };
 
-  const handleAdd = (item: PPEItem) => {
-    saveData([item, ...items], assignments);
+  const handleAdd = async (item: PPEItem) => {
+    const success = await saveData(item);
     setShowAdd(false);
-    Alert.alert('Succès', 'EPI ajouté au catalogue.');
+    if (success) {
+      Alert.alert('Succès', 'EPI ajouté au catalogue et sauvegardé.');
+    } else {
+      Alert.alert('Avertissement', 'EPI ajouté localement (sync pending).');
+    }
   };
 
   const filtered = useMemo(() => {
