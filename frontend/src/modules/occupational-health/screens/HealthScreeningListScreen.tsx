@@ -1,50 +1,67 @@
-import React, { useState } from 'react';
-import { Alert, Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
+  Modal, Alert, ActivityIndicator, RefreshControl, SafeAreaView
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
-import { SearchableList } from '../components/SearchableList';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
 
-interface HealthScreeningResult {
+interface ScreeningResult {
   id: string;
+  worker_id: string;
   worker_name: string;
-  worker_id?: string;
   employee_id?: string;
   screening_date: string;
-  status: string;
-  cholesterol_level?: string;
-  blood_pressure?: string;
-  heart_rate?: string;
+  screening_type: string;
+  responses: string;
   notes?: string;
+  status: 'normal' | 'warning' | 'critical';
+  created_at: string;
 }
 
-export function HealthScreeningListScreen({ navigation }: any) {
-  const [results, setResults] = useState<HealthScreeningResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<HealthScreeningResult | null>(null);
+export function HealthScreeningListScreen() {
+  const [results, setResults] = useState<ScreeningResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ScreeningResult | null>(null);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'normal' | 'warning' | 'critical'>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'name' | 'status'>('recent');
+  
+  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [formData, setFormData] = useState({
+    screening_date: new Date().toISOString().split('T')[0],
+    screening_type: '',
+    responses: '',
+    notes: '',
+  });
+  
   const [editFormData, setEditFormData] = useState({
     screening_date: '',
-    cholesterol_level: '',
-    blood_pressure: '',
-    heart_rate: '',
+    screening_type: '',
+    responses: '',
     notes: '',
   });
 
-  // Load results on component mount
   React.useEffect(() => {
     loadResults();
   }, []);
 
   const loadResults = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const api = ApiService.getInstance();
       const response = await api.get('/occupational-health/health-screening-results/');
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
-        // Sort by screening_date descending (most recent first)
-        data = data.sort((a: any, b: any) => new Date(b.screening_date).getTime() - new Date(a.screening_date).getTime());
+        data = data
+          .sort((a: any, b: any) => new Date(b.screening_date).getTime() - new Date(a.screening_date).getTime())
+          .slice(0, 5);
         setResults(data);
       }
     } catch (error) {
@@ -54,244 +71,357 @@ export function HealthScreeningListScreen({ navigation }: any) {
     }
   };
 
-  const handleDelete = async (item: HealthScreeningResult) => {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadResults();
+    setRefreshing(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedWorker) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      return;
+    }
+    if (!formData.screening_date || !formData.screening_type || !formData.responses) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
     try {
       const api = ApiService.getInstance();
-      const response = await api.delete(`/occupational-health/health-screening-results/${item.id}/`);
+      const payload = {
+        worker_id: selectedWorker.id,
+        screening_date: formData.screening_date,
+        screening_type: formData.screening_type,
+        responses: formData.responses,
+        notes: formData.notes,
+      };
+
+      const response = await api.post('/occupational-health/health-screening-results/', payload);
       if (response.success) {
-        setResults(results.filter(r => r.id !== item.id));
-        Alert.alert('Succès', 'Résultat supprimé avec succès');
+        Alert.alert('Succès', 'Dépistage santé enregistré');
+        setShowAddModal(false);
+        setSelectedWorker(null);
+        setFormData({
+          screening_date: new Date().toISOString().split('T')[0],
+          screening_type: '',
+          responses: '',
+          notes: '',
+        });
+        await loadResults();
       } else {
-        Alert.alert('Erreur', 'Impossible de supprimer le résultat');
+        Alert.alert('Erreur', response.message || 'Erreur lors de la création');
       }
     } catch (error) {
-      console.error('Error deleting health screening result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la suppression');
+      console.error('Error creating screening result:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue');
     }
   };
 
-  const handleOpenEditModal = (item: HealthScreeningResult) => {
+  const handleOpenEdit = (item: ScreeningResult) => {
     setSelectedItem(item);
     setEditFormData({
       screening_date: item.screening_date || '',
-      cholesterol_level: item.cholesterol_level || '',
-      blood_pressure: item.blood_pressure || '',
-      heart_rate: item.heart_rate || '',
+      screening_type: item.screening_type || '',
+      responses: item.responses || '',
       notes: item.notes || '',
     });
-    setEditModalVisible(true);
+    setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
     if (!selectedItem) return;
-    
+
     try {
       const api = ApiService.getInstance();
-      const response = await api.patch(`/occupational-health/health-screening-results/${selectedItem.id}/`, editFormData);
-      
+      const patchData = {
+        screening_date: editFormData.screening_date,
+        screening_type: editFormData.screening_type,
+        responses: editFormData.responses,
+        notes: editFormData.notes,
+      };
+
+      const response = await api.patch(
+        `/occupational-health/health-screening-results/${selectedItem.id}/`,
+        patchData
+      );
+
       if (response.success) {
-        setResults(results.map(r => r.id === selectedItem.id ? { ...r, ...editFormData } : r));
-        setEditModalVisible(false);
-        Alert.alert('Succès', 'Résultat mis à jour avec succès');
+        setResults(
+          results.map(r =>
+            r.id === selectedItem.id ? { ...r, ...patchData } : r
+          )
+        );
+        setShowEditModal(false);
+        setSelectedItem(null);
+        Alert.alert('Succès', 'Dépistage mis à jour');
       } else {
-        Alert.alert('Erreur', 'Impossible de mettre à jour le résultat');
+        Alert.alert('Erreur', 'Impossible de mettre à jour');
       }
     } catch (error) {
-      console.error('Error updating health screening result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la mise à jour');
+      console.error('Error updating:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue');
     }
   };
 
+  const handleDelete = async (item: ScreeningResult) => {
+    Alert.alert(
+      'Confirmer la suppression',
+      'Êtes-vous sûr de vouloir supprimer ce dépistage ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const api = ApiService.getInstance();
+              const response = await api.delete(`/occupational-health/health-screening-results/${item.id}/`);
+              if (response.success) {
+                setResults(results.filter(r => r.id !== item.id));
+                Alert.alert('Succès', 'Dépistage supprimé');
+              }
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de supprimer');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getStatusColor = (status: string) => {
+    return status === 'normal' ? '#22C55E' : status === 'warning' ? '#F59E0B' : '#EF4444';
+  };
+
+  const getStatusLabel = (status: string) => {
+    return status === 'normal' ? 'Normal' : status === 'warning' ? 'Attention' : 'Critique';
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let result = results.filter(item => {
+      const matchSearch = !searchQuery ||
+        item.worker_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.employee_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.screening_type?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchFilter = filterStatus === 'all' || item.status === filterStatus;
+      return matchSearch && matchFilter;
+    });
+
+    result.sort((a, b) => {
+      if (sortBy === 'name') {
+        return a.worker_name.localeCompare(b.worker_name);
+      } else if (sortBy === 'status') {
+        const statusOrder = { critical: 0, warning: 1, normal: 2 };
+        return statusOrder[a.status as keyof typeof statusOrder] - statusOrder[b.status as keyof typeof statusOrder];
+      } else {
+        return new Date(b.screening_date).getTime() - new Date(a.screening_date).getTime();
+      }
+    });
+
+    return result;
+  }, [results, searchQuery, filterStatus, sortBy]);
+
   const styles = StyleSheet.create({
-    modalContainer: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
-    modalContent: {
-      backgroundColor: '#FFFFFF',
-      borderTopLeftRadius: borderRadius.lg,
-      borderTopRightRadius: borderRadius.lg,
-      padding: spacing.lg,
-      maxHeight: '80%',
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: spacing.lg,
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: '#1F2937',
-    },
-    closeButton: {
-      padding: spacing.sm,
-    },
-    formGroup: {
-      marginBottom: spacing.lg,
-    },
-    formLabel: {
-      fontSize: 14,
-      fontWeight: '500',
-      color: '#374151',
-      marginBottom: spacing.sm,
-    },
-    formInput: {
-      borderWidth: 1,
-      borderColor: '#D1D5DB',
-      borderRadius: borderRadius.md,
-      padding: spacing.md,
-      fontSize: 14,
-      backgroundColor: '#F9FAFB',
-    },
-    buttonContainer: {
-      flexDirection: 'row',
-      gap: spacing.md,
-      marginTop: spacing.lg,
-    },
-    button: {
-      flex: 1,
-      padding: spacing.md,
-      borderRadius: borderRadius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    saveButton: {
-      backgroundColor: '#14B8A6',
-    },
-    cancelButton: {
-      backgroundColor: '#E5E7EB',
-    },
-    saveButtonText: {
-      color: '#FFFFFF',
-      fontWeight: '600',
-      fontSize: 14,
-    },
-    cancelButtonText: {
-      color: '#374151',
-      fontWeight: '600',
-      fontSize: 14,
-    },
+    container: { flex: 1, backgroundColor: colors.background },
+    header: { padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.outline },
+    title: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    addButton: { padding: spacing.md, borderRadius: borderRadius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    searchSection: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.outline },
+    searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, marginBottom: spacing.md },
+    searchInput: { flex: 1, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, color: colors.text },
+    filterRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', marginBottom: spacing.md },
+    filterButton: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.outline },
+    filterButtonActive: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+    filterText: { fontSize: 12, fontWeight: '500', color: colors.text },
+    filterTextActive: { color: '#FFF' },
+    sortRow: { flexDirection: 'row', gap: spacing.md },
+    sortButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.outline },
+    sortButtonActive: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+    sortText: { fontSize: 12, fontWeight: '500', color: colors.text },
+    sortTextActive: { color: '#FFF' },
+    contentSection: { flex: 1, padding: spacing.lg },
+    resultCard: { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', ...shadows.sm },
+    resultCardLeft: { marginRight: spacing.md },
+    statusIcon: { width: 50, height: 50, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
+    resultCardCenter: { flex: 1 },
+    resultWorkerName: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
+    resultDate: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+    resultInfo: { fontSize: 12, color: colors.textSecondary },
+    resultCardRight: { alignItems: 'flex-end', gap: spacing.sm },
+    statusBadge: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: borderRadius.md },
+    statusBadgeText: { fontSize: 12, fontWeight: '600' },
+    cardActions: { flexDirection: 'row', gap: spacing.sm },
+    actionButton: { padding: spacing.sm },
+    emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xl },
+    emptyStateText: { fontSize: 16, color: colors.textSecondary, marginTop: spacing.md },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.lg, maxHeight: '90%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+    modalTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
+    formSection: { marginBottom: spacing.lg },
+    formLabel: { fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: spacing.sm, marginTop: spacing.md },
+    input: { borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, padding: spacing.md, fontSize: 14, color: colors.text, backgroundColor: colors.background },
+    submitButton: { marginTop: spacing.lg, marginBottom: spacing.md, paddingVertical: spacing.md, borderRadius: borderRadius.md, alignItems: 'center' },
+    submitButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+    buttonRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+    button: { flex: 1, paddingVertical: spacing.md, borderRadius: borderRadius.md, alignItems: 'center' },
+    saveButton: { backgroundColor: colors.secondary },
+    cancelButton: { backgroundColor: colors.outline },
+    buttonText: { fontWeight: '600', fontSize: 14 },
+    cancelButtonText: { color: colors.text },
+    saveButtonText: { color: '#FFF' },
   });
 
   return (
-    <>
-      <SearchableList
-        title="Dépistages Santé"
-        icon="document-text-outline"
-        accentColor={colors.secondary}
-        items={results}
-        loading={loading}
-        searchFields={['worker_name', 'worker_id', 'employee_id']}
-        sortOptions={[
-          { label: 'Nom (A-Z)', key: 'worker_name' },
-          { label: 'Date (Récent)', key: 'screening_date' },
-          { label: 'Statut', key: 'status' },
-        ]}
-        filterOptions={[
-          { label: 'Tout', value: 'all' },
-          { label: 'Normal', value: 'normal' },
-          { label: 'À risque', value: 'at_risk' },
-          { label: 'Critique', value: 'critical' },
-        ]}
-        onAddNew={() => navigation.navigate('oh-health-screening' as never)}
-        onItemPress={(item) => {
-          navigation.navigate('oh-health-screening' as never, { resultId: item.id } as never);
-        }}
-        onDelete={(item: any) => handleDelete(item as HealthScreeningResult)}
-        onEdit={(item: any) => handleOpenEditModal(item as HealthScreeningResult)}
-      />
-      
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Dépistages Santé</Text>
+            <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.secondary }]} onPress={() => setShowAddModal(true)} activeOpacity={0.8}>
+              <Ionicons name="add" size={20} color="#FFF" />
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>Ajouter</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.searchSection}>
+          <View style={styles.searchBox}>
+            <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Rechercher par nom, type..."
+              placeholderTextColor={colors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+
+          <Text style={{ fontSize: 12, fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.sm }}>Filtrer par statut:</Text>
+          <View style={styles.filterRow}>
+            {(['all', 'normal', 'warning', 'critical'] as const).map(status => (
+              <TouchableOpacity key={status} style={[styles.filterButton, filterStatus === status && styles.filterButtonActive]} onPress={() => setFilterStatus(status)}>
+                <Text style={[styles.filterText, filterStatus === status && styles.filterTextActive]}>
+                  {status === 'all' ? 'Tous' : status === 'normal' ? 'Normal' : status === 'warning' ? 'Attention' : 'Critique'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={{ fontSize: 12, fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.sm, marginTop: spacing.md }}>Trier par:</Text>
+          <View style={styles.sortRow}>
+            {(['recent', 'name', 'status'] as const).map(sort => (
+              <TouchableOpacity key={sort} style={[styles.sortButton, sortBy === sort && styles.sortButtonActive]} onPress={() => setSortBy(sort)}>
+                <Text style={[styles.sortText, sortBy === sort && styles.sortTextActive]}>
+                  {sort === 'recent' ? 'Récent' : sort === 'name' ? 'Nom' : 'Statut'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.contentSection}>
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.secondary} style={{ marginVertical: 40 }} />
+          ) : filteredAndSorted.length > 0 ? (
+            filteredAndSorted.map(result => (
+              <View key={result.id} style={[styles.resultCard, shadows.sm]}>
+                <View style={styles.resultCardLeft}>
+                  <View style={[styles.statusIcon, { backgroundColor: getStatusColor(result.status) + '20' }]}>
+                    <Ionicons name="heart-outline" size={24} color={getStatusColor(result.status)} />
+                  </View>
+                </View>
+                <View style={styles.resultCardCenter}>
+                  <Text style={styles.resultWorkerName}>{result.worker_name}</Text>
+                  <Text style={styles.resultDate}>{new Date(result.screening_date).toLocaleDateString('fr-FR')}</Text>
+                  <Text style={styles.resultInfo}>{result.screening_type}</Text>
+                </View>
+                <View style={styles.resultCardRight}>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(result.status) + '20' }]}>
+                    <Text style={[styles.statusBadgeText, { color: getStatusColor(result.status) }]}>{getStatusLabel(result.status)}</Text>
+                  </View>
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity style={styles.actionButton} onPress={() => handleOpenEdit(result)}>
+                      <Ionicons name="pencil" size={18} color={colors.secondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(result)}>
+                      <Ionicons name="trash" size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="heart-outline" size={48} color={colors.textSecondary + '40'} />
+              <Text style={styles.emptyStateText}>Aucun dépistage santé</Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ajouter un dépistage santé</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.formSection}>
+              <WorkerSelectDropdown value={selectedWorker} onChange={setSelectedWorker} label="Travailleur" placeholder="Sélectionnez un travailleur" error={selectedWorker === null ? 'Travailleur requis' : undefined} />
+              <Text style={styles.formLabel}>Date du dépistage</Text>
+              <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={formData.screening_date} onChangeText={(text) => setFormData({ ...formData, screening_date: text })} placeholderTextColor={colors.textSecondary} />
+              <Text style={styles.formLabel}>Type de dépistage</Text>
+              <TextInput style={styles.input} placeholder="Ex: Cardiaque, Pulmonaire..." value={formData.screening_type} onChangeText={(text) => setFormData({ ...formData, screening_type: text })} placeholderTextColor={colors.textSecondary} />
+              <Text style={styles.formLabel}>Réponses/Résultats</Text>
+              <TextInput style={[styles.input, { minHeight: 80 }]} placeholder="Détails des réponses..." multiline value={formData.responses} onChangeText={(text) => setFormData({ ...formData, responses: text })} placeholderTextColor={colors.textSecondary} />
+              <Text style={styles.formLabel}>Notes</Text>
+              <TextInput style={[styles.input, { minHeight: 80 }]} placeholder="Remarques supplémentaires..." multiline value={formData.notes} onChangeText={(text) => setFormData({ ...formData, notes: text })} placeholderTextColor={colors.textSecondary} />
+              <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.secondary }]} onPress={handleSubmit}>
+                <Text style={styles.submitButtonText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
+        <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Modifier le dépistage</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color="#1F2937" />
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Date du dépistage</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="YYYY-MM-DD"
-                  value={editFormData.screening_date}
-                  onChangeText={(text) => setEditFormData({ ...editFormData, screening_date: text })}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Cholestérol</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Niveau de cholestérol"
-                  value={editFormData.cholesterol_level}
-                  onChangeText={(text) => setEditFormData({ ...editFormData, cholesterol_level: text })}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Tension artérielle</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Tension artérielle"
-                  value={editFormData.blood_pressure}
-                  onChangeText={(text) => setEditFormData({ ...editFormData, blood_pressure: text })}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Fréquence cardiaque</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Fréquence cardiaque"
-                  value={editFormData.heart_rate}
-                  onChangeText={(text) => setEditFormData({ ...editFormData, heart_rate: text })}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Notes</Text>
-                <TextInput
-                  style={[styles.formInput, { height: 100, textAlignVertical: 'top' }]}
-                  placeholder="Notes supplémentaires"
-                  multiline={true}
-                  value={editFormData.notes}
-                  onChangeText={(text) => setEditFormData({ ...editFormData, notes: text })}
-                />
-              </View>
-              
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={[styles.button, styles.cancelButton]}
-                  onPress={() => setEditModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Annuler</Text>
+
+            <ScrollView style={styles.formSection}>
+              <Text style={styles.formLabel}>Date du dépistage</Text>
+              <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={editFormData.screening_date} onChangeText={(text) => setEditFormData({ ...editFormData, screening_date: text })} />
+              <Text style={styles.formLabel}>Type de dépistage</Text>
+              <TextInput style={styles.input} placeholder="Ex: Cardiaque, Pulmonaire..." value={editFormData.screening_type} onChangeText={(text) => setEditFormData({ ...editFormData, screening_type: text })} />
+              <Text style={styles.formLabel}>Réponses/Résultats</Text>
+              <TextInput style={[styles.input, { minHeight: 80 }]} placeholder="Détails des réponses..." multiline value={editFormData.responses} onChangeText={(text) => setEditFormData({ ...editFormData, responses: text })} />
+              <Text style={styles.formLabel}>Notes</Text>
+              <TextInput style={[styles.input, { minHeight: 80 }]} placeholder="Remarques supplémentaires..." multiline value={editFormData.notes} onChangeText={(text) => setEditFormData({ ...editFormData, notes: text })} />
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => setShowEditModal(false)}>
+                  <Text style={[styles.buttonText, styles.cancelButtonText]}>Annuler</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.button, styles.saveButton]}
-                  onPress={handleSaveEdit}
-                >
-                  <Text style={styles.saveButtonText}>Enregistrer</Text>
+                <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveEdit}>
+                  <Text style={[styles.buttonText, styles.saveButtonText]}>Enregistrer</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
-    </>
+    </SafeAreaView>
   );
 }

@@ -1015,6 +1015,8 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.pdfgen import canvas
+            from reportlab.lib import colors
+            from reportlab.lib.utils import ImageReader
         except Exception:
             return Response(
                 {
@@ -1032,17 +1034,20 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
 
         pdf = canvas.Canvas(response, pagesize=A4)
         width, height = A4
+        y = height - 40
 
-        y = height - 50
         pdf.setTitle(f"Certificat {certificate.certificate_number}")
 
+        # ═══════════════════════════════════════════════════════════════
+        # HELPER FUNCTIONS
+        # ═══════════════════════════════════════════════════════════════
         def ensure_space(lines_needed=1):
             nonlocal y
-            if y - (lines_needed * 14) < 70:
+            if y - (lines_needed * 14) < 60:
                 pdf.showPage()
-                y = height - 50
+                y = height - 40
 
-        def draw_wrapped(text, font_name="Helvetica", font_size=10, leading=14, max_width=510):
+        def draw_wrapped(text, font_name="Helvetica", font_size=10, leading=14, max_width=500):
             nonlocal y
             pdf.setFont(font_name, font_size)
             words = (text or '').split()
@@ -1063,96 +1068,169 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
             pdf.drawString(40, y, line)
             y -= leading
 
-        decision = certificate.fitness_decision
-        if decision in ['fit', 'fit_with_restrictions']:
-            certificate_title = "CERTIFICAT D'APTITUDE AU TRAVAIL"
-        else:
-            certificate_title = "AVIS MÉDICAL D'INAPTITUDE AU POSTE"
+        def draw_section_box(title, items, color_hex='#122056'):
+            nonlocal y
+            ensure_space(2)
+            # Title bar
+            color_rgb = tuple(int(color_hex.lstrip('#')[i:i+2], 16)/255.0 for i in (0, 2, 4))
+            pdf.setFillColorRGB(*color_rgb)
+            pdf.rect(40, y - 22, width - 80, 22, fill=True)
+            pdf.setFillColorRGB(1, 1, 1)
+            pdf.setFont("Helvetica-Bold", 11)
+            pdf.drawString(50, y - 16, title)
+            y -= 30
+            # Content
+            pdf.setFillColorRGB(0.97, 0.97, 0.98)
+            pdf.rect(40, y - (len(items) * 16 + 8), width - 80, len(items) * 16 + 8, fill=True)
+            pdf.setFillColorRGB(0, 0, 0)
+            for item_text in items:
+                pdf.setFont("Helvetica", 9.5)
+                draw_wrapped(item_text, font_size=9.5, leading=14, max_width=500)
+            y -= 4
 
+        # ═══════════════════════════════════════════════════════════════
+        # HEADER - COLORED TOP BAR
+        # ═══════════════════════════════════════════════════════════════
+        pdf.setFillColorRGB(0.07, 0.13, 0.33)  # Hospital blue #122056
+        pdf.rect(0, height - 40, width, 40, fill=True)
+        pdf.setFillColorRGB(1, 1, 1)
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(40, height - 22, "CERTIFICAT DE SANTÉ AU TRAVAIL")
+        y = height - 50
+
+        # ═══════════════════════════════════════════════════════════════
+        # ORGANIZATION INFO
+        # ═══════════════════════════════════════════════════════════════
         enterprise_name = getattr(worker.enterprise, 'name', '-')
         enterprise_address = getattr(worker.enterprise, 'address', '') or ''
         enterprise_phone = getattr(worker.enterprise, 'phone', '') or ''
         enterprise_email = getattr(worker.enterprise, 'email', '') or ''
 
+        org_items = [f"Organisation: {enterprise_name}"]
+        if enterprise_address:
+            org_items.append(f"Adresse: {enterprise_address}")
+        if enterprise_phone or enterprise_email:
+            contact = f"Contact: {enterprise_phone or 'N/A'} | {enterprise_email or 'N/A'}"
+            org_items.append(contact)
+
+        draw_section_box("ÉTABLISSEMENT", org_items, '#122056')
+
+        # ═════════════════════════════════════════════════════════════════
+        # DOCUMENT REFERENCES (2-column layout)
+        # ═════════════════════════════════════════════════════════════════
+        ensure_space(2)
+        pdf.setFillColorRGB(0.35, 0.40, 0.85)  # Hospital secondary purple
+        pdf.rect(40, y - 22, (width - 80) / 2 - 5, 22, fill=True)
+        pdf.rect(40 + (width - 80) / 2 + 5, y - 22, (width - 80) / 2 - 5, 22, fill=True)
+        pdf.setFillColorRGB(1, 1, 1)
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(50, y - 16, "RÉFÉRENCES")
+        pdf.drawString(50 + (width - 80) / 2 + 5, y - 16, "VALIDITÉ")
+        y -= 30
+
+        pdf.setFillColorRGB(0.97, 0.97, 0.98)
+        pdf.rect(40, y - 38, (width - 80) / 2 - 5, 38, fill=True)
+        pdf.rect(40 + (width - 80) / 2 + 5, y - 38, (width - 80) / 2 - 5, 38, fill=True)
+
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(50, y - 14, f"N° Certificat: {certificate.certificate_number}")
+        pdf.drawString(50, y - 28, f"Émis le: {certificate.issue_date.strftime('%d/%m/%Y')}")
+
+        pdf.drawString(50 + (width - 80) / 2 + 5, y - 14, f"Valide jusqu'au: {certificate.valid_until.strftime('%d/%m/%Y')}")
+        validity_days = (certificate.valid_until - certificate.issue_date).days
+        pdf.drawString(50 + (width - 80) / 2 + 5, y - 28, f"Durée: {validity_days} jours")
+        y -= 42
+
+        # ═════════════════════════════════════════════════════════════════
+        # WORKER INFORMATION
+        # ═════════════════════════════════════════════════════════════════
+        worker_items = [
+            f"Nom: {worker.full_name}",
+            f"Matricule: {worker.employee_id or 'Non renseigné'}",
+            f"Entreprise: {enterprise_name}",
+            f"Poste: {worker.job_title or 'Non renseigné'}",
+            f"Type de visite: {certificate.examination.get_exam_type_display()} — Date: {certificate.examination.exam_date.strftime('%d/%m/%Y')}",
+        ]
+        draw_section_box("TRAVAILLEUR", worker_items, '#5B65DC')
+
+        # ═════════════════════════════════════════════════════════════════
+        # FITNESS DECISION (PROMINENT BOX WITH COLOR)
+        # ═════════════════════════════════════════════════════════════════
+        decision = certificate.fitness_decision
+        if decision == 'fit':
+            status_text = "APTE AU TRAVAIL"
+            status_color = '#22C55E'
+            status_rgb = (0.13, 0.77, 0.37)
+        elif decision == 'fit_with_restrictions':
+            status_text = "APTE AVEC RESTRICTIONS"
+            status_color = '#F59E0B'
+            status_rgb = (0.96, 0.62, 0.04)
+        else:
+            status_text = "INAPTE"
+            status_color = '#EF4444'
+            status_rgb = (0.94, 0.27, 0.27)
+
+        ensure_space(3)
+        # Large colored box for fitness status
+        pdf.setFillColorRGB(*status_rgb)
+        pdf.rect(40, y - 50, width - 80, 50, fill=True)
+        pdf.setFillColorRGB(1, 1, 1)
+        pdf.setFont("Helvetica-Bold", 20)
+        text_width = pdf.stringWidth(status_text, "Helvetica-Bold", 20)
+        pdf.drawString((width - text_width) / 2, y - 32, status_text)
+        y -= 58
+
+        # ═════════════════════════════════════════════════════════════════
+        # MEDICAL DECISION DETAILS
+        # ═════════════════════════════════════════════════════════════════
+        medical_items = []
+        if certificate.decision_rationale:
+            medical_items.append(f"Justification: {certificate.decision_rationale.strip()}")
+        if certificate.restrictions:
+            medical_items.append(f"Restrictions: {certificate.restrictions.strip()}")
+        if certificate.work_limitations:
+            medical_items.append(f"Limitations de travail: {certificate.work_limitations.strip()}")
+        if certificate.requires_follow_up:
+            follow_up_text = certificate.follow_up_instructions or "Suivi médical selon prescription"
+            medical_items.append(f"Suivi requis: Oui — {follow_up_text.strip()}")
+
+        if medical_items:
+            draw_section_box("DÉCISION MÉDICALE", medical_items, status_color)
+
+        # ═════════════════════════════════════════════════════════════════
+        # EXAMINER INFO
+        # ═════════════════════════════════════════════════════════════════
         doctor_name = certificate.issued_by.get_full_name() if certificate.issued_by else 'Médecin non renseigné'
         doctor_license = getattr(certificate.issued_by, 'professional_license', '') if certificate.issued_by else ''
 
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(40, y, certificate_title)
-        y -= 20
-        pdf.setFont("Helvetica", 10)
-        pdf.drawString(40, y, f"Organisation: {enterprise_name}")
-        y -= 14
-        if enterprise_address:
-            draw_wrapped(f"Adresse: {enterprise_address}")
-        if enterprise_phone or enterprise_email:
-            draw_wrapped(f"Contact: {enterprise_phone or '-'}  |  Email: {enterprise_email or '-'}")
+        examiner_items = [
+            f"Médecin: {doctor_name}",
+            f"Licence: {doctor_license or 'Non renseignée'}",
+        ]
+        draw_section_box("MÉDECIN ÉVALUATEUR", examiner_items, '#122056')
 
-        ensure_space(3)
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(40, y, "Références du document")
-        y -= 16
-        pdf.setFont("Helvetica", 10)
-        pdf.drawString(40, y, f"N° Document: {certificate.certificate_number}")
-        y -= 14
-        pdf.drawString(40, y, f"Date d'émission: {certificate.issue_date}")
-        y -= 14
-        pdf.drawString(40, y, f"Valide jusqu'au: {certificate.valid_until}")
-        y -= 18
-
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(40, y, "Informations du travailleur")
-        y -= 16
-        pdf.setFont("Helvetica", 10)
-        draw_wrapped(f"Nom: {worker.full_name}")
-        draw_wrapped(f"Matricule: {worker.employee_id}")
-        draw_wrapped(f"Entreprise: {enterprise_name}")
-        draw_wrapped(f"Poste: {worker.job_title or '-'}")
-        draw_wrapped(f"Type de visite: {certificate.examination.get_exam_type_display()}  |  Date examen: {certificate.examination.exam_date}")
-
-        ensure_space(3)
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(40, y, "Décision médicale")
-        y -= 16
-        pdf.setFont("Helvetica", 10)
-        draw_wrapped(f"Décision: {certificate.get_fitness_decision_display()}")
-        draw_wrapped(f"Justification: {(certificate.decision_rationale or '').strip() or '-'}")
-        draw_wrapped(f"Restrictions: {(certificate.restrictions or '').strip() or 'Aucune restriction déclarée'}")
-        draw_wrapped(f"Limitations de travail: {(certificate.work_limitations or '').strip() or 'Aucune limitation supplémentaire'}")
-        if certificate.requires_follow_up:
-            draw_wrapped(f"Suivi requis: Oui. Instructions: {(certificate.follow_up_instructions or '').strip() or 'Suivi médical selon prescription.'}")
-        else:
-            draw_wrapped("Suivi requis: Non")
-
-        ensure_space(5)
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(40, y, "Médecin évaluateur")
-        y -= 16
-        pdf.setFont("Helvetica", 10)
-        draw_wrapped(f"Nom: {doctor_name}")
-        draw_wrapped(f"N° d'autorisation / licence: {doctor_license or 'Non renseigné'}")
-
+        # ═════════════════════════════════════════════════════════════════
+        # LEGAL FOOTER
+        # ═════════════════════════════════════════════════════════════════
         ensure_space(8)
-        pdf.setFont("Helvetica-Bold", 10)
-        pdf.drawString(40, y, "Mentions légales")
-        y -= 14
-        pdf.setFont("Helvetica", 9)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.setFillColorRGB(0.3, 0.3, 0.3)
+        pdf.drawString(40, y, "MENTIONS LÉGALES")
+        y -= 12
+        pdf.setFont("Helvetica", 8)
         draw_wrapped(
-            "Ce document est établi dans le cadre de la médecine du travail. La décision médicale s'applique au poste évalué, "
-            "à la date d'examen, et sous réserve de l'exactitude des informations déclarées et des résultats disponibles.",
-            font_size=9,
-            leading=12,
+            "Ce certificat est établi conformément aux dispositions de la médecine du travail. La décision s'applique au poste évalué "
+            "à la date d'examen, sous réserve de l'exactitude des informations déclarées.",
+            font_size=8, leading=11, max_width=500
         )
         draw_wrapped(
-            "L'employeur est tenu de respecter les restrictions et aménagements prescrits. Toute modification du poste, de l'exposition "
-            "ou de l'état de santé impose une réévaluation médicale.",
-            font_size=9,
-            leading=12,
+            "L'employeur doit respecter les restrictions et aménagements prescrits. Tout changement de poste ou d'exposition requiert une réévaluation.",
+            font_size=8, leading=11, max_width=500
         )
         draw_wrapped(
-            "Document généré par le système de Médecine du Travail. Signature électronique/numérique selon politique interne.",
-            font_size=9,
-            leading=12,
+            f"Document généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')} — Certificat n° {certificate.certificate_number}",
+            font_size=7, leading=10, max_width=500
         )
 
         pdf.showPage()
@@ -1301,14 +1379,14 @@ class PPEItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
-        'enterprise', 'ppe_type', 'condition', 'is_assigned'
+        'ppe_type', 'condition', 'training_provided', 'replaced', 'compliance_checked'
     ]
-    search_fields = ['name', 'serial_number', 'certification_standard']
-    ordering = ['-creation_date']
+    search_fields = ['serial_number', 'brand_model', 'worker__user__first_name', 'worker__user__last_name']
+    ordering = ['-created_at']
     serializer_class = PPEItemSerializer
     
     def get_queryset(self):
-        return PPEItem.objects.select_related('enterprise', 'assigned_by', 'worker')
+        return PPEItem.objects.select_related('assigned_by', 'worker')
     
     def perform_create(self, serializer):
         serializer.save(assigned_by=self.request.user)
@@ -1317,15 +1395,21 @@ class PPEItemViewSet(viewsets.ModelViewSet):
     def statistics(self, request):
         """Get PPE inventory and compliance statistics"""
         queryset = self.get_queryset()
-        expired_items = queryset.filter(is_expired=True).count()
-        needs_inspection = queryset.filter(needs_inspection=True).count()
+        expired_items = queryset.filter(created_at__isnull=True).count() if hasattr(PPEItem, 'is_expired') else 0
+        needs_inspection_count = queryset.filter(created_at__isnull=True).count() if hasattr(PPEItem, 'needs_inspection') else 0
+        
+        # Count items by their property-based status
+        expired_items = sum(1 for item in queryset if item.is_expired)
+        needs_inspection_count = sum(1 for item in queryset if item.needs_inspection)
         
         stats = {
             'total_ppe_items': queryset.count(),
-            'assigned_items': queryset.filter(is_assigned=True).count(),
-            'unassigned_items': queryset.filter(is_assigned=False).count(),
+            'trained_workers': queryset.filter(training_provided=True).count(),
+            'untrained_workers': queryset.filter(training_provided=False).count(),
+            'replaced_items': queryset.filter(replaced=True).count(),
+            'active_items': queryset.filter(replaced=False).count(),
             'expired_items': expired_items,
-            'items_needing_inspection': needs_inspection,
+            'items_needing_inspection': needs_inspection_count,
             'by_type': dict(queryset.values_list('ppe_type').annotate(count=Count('id'))),
             'by_condition': dict(queryset.values_list('condition').annotate(count=Count('id')))
         }
@@ -2569,7 +2653,7 @@ class DrugAlcoholScreeningViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
-        'test_type', 'overall_result', 'fit_for_duty',
+        'test_type', 'fit_for_duty',
         'examination__worker__enterprise'
     ]
     search_fields = [

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { ExamSelectDropdown, Exam } from '../components/ExamSelectDropdown';
 const ACCENT = colors.primary;
 const themeColors = { border: '#E2E8F0' };
 
@@ -48,6 +49,7 @@ export function XrayImagingScreen() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'normal' | 'abnormal' | 'pending'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<XrayImagingResult | null>(null);
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [formData, setFormData] = useState({
     exam_type: '',
@@ -97,6 +99,7 @@ export function XrayImagingScreen() {
 
       const newResult = {
         worker_id_input: selectedWorker.id,
+        examination: selectedExam?.id ?? null,
         exam_type: formData.exam_type,
         exam_date: formData.exam_date,
         imaging_findings: formData.imaging_findings,
@@ -109,6 +112,7 @@ export function XrayImagingScreen() {
         setResults([...results, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
+        setSelectedExam(null);
         setFormData({
           exam_type: '',
           exam_date: new Date().toISOString().split('T')[0],
@@ -261,6 +265,14 @@ export function XrayImagingScreen() {
                 label="Travailleur"
                 placeholder="Sélectionnez un travailleur"
                 error={selectedWorker === null ? 'Travailleur requis' : undefined}
+              />
+
+              <ExamSelectDropdown
+                value={selectedExam}
+                onChange={setSelectedExam}
+                label="Lier à une visite médicale (optionnel)"
+                placeholder="Choisir un examen..."
+                workerId={selectedWorker?.id ?? null}
               />
 
               <Text style={styles.formLabel}>Type d'examen</Text>

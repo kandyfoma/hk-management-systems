@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
-  Dimensions, ActivityIndicator, Alert,
+  Dimensions, ActivityIndicator, Modal, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -51,24 +51,29 @@ export function SearchableList({
   const [sortBy, setSortBy] = useState(sortOptions[0]?.key || 'worker_name');
   const [filterBy, setFilterBy] = useState('all');
   const [currentPage, setCurrentPage] = useState(0);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<ListItem | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => setToastMsg(null));
+  };
 
   const handleDeleteWithConfirmation = (item: ListItem) => {
-    Alert.alert(
-      'Confirmer la suppression',
-      `Êtes-vous sûr de vouloir supprimer l'enregistrement de ${item.worker_name}?`,
-      [
-        {
-          text: 'Annuler',
-          onPress: () => {},
-          style: 'cancel',
-        },
-        {
-          text: 'Supprimer',
-          onPress: () => onDelete?.(item),
-          style: 'destructive',
-        },
-      ]
-    );
+    setConfirmDeleteItem(item);
+  };
+
+  const confirmDelete = () => {
+    if (confirmDeleteItem) {
+      onDelete?.(confirmDeleteItem);
+      setConfirmDeleteItem(null);
+      showToast('Enregistrement supprimé');
+    }
   };
 
   const filteredAndSorted = useMemo(() => {
@@ -123,19 +128,43 @@ export function SearchableList({
   const getStatusColor = (status: string) => {
     const statusLower = status.toLowerCase();
     if (statusLower.includes('normal') || statusLower.includes('négatif') || statusLower.includes('conforme')) {
-      return '#22C55E';
+      return colors.success;
     }
     if (statusLower.includes('warning') || statusLower.includes('léger') || statusLower.includes('attention')) {
-      return '#F59E0B';
+      return colors.warning;
     }
     if (statusLower.includes('critical') || statusLower.includes('sévère') || statusLower.includes('positif')) {
-      return '#EF4444';
+      return colors.error;
     }
     return colors.textSecondary;
   };
 
   return (
     <View style={styles.container}>
+      {/* Delete Confirmation Modal */}
+      <Modal visible={confirmDeleteItem !== null} transparent animationType="fade" onRequestClose={() => setConfirmDeleteItem(null)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmModal}>
+            <Text style={styles.confirmTitle}>Confirmer la suppression</Text>
+            <Text style={styles.confirmText}>Êtes-vous sûr de vouloir supprimer l'enregistrement de {confirmDeleteItem?.worker_name}?</Text>
+            <View style={styles.confirmButtons}>
+              <TouchableOpacity style={[styles.confirmButton, { borderColor: '#E2E8F0', borderWidth: 1 }]} onPress={() => setConfirmDeleteItem(null)}>
+                <Text style={styles.confirmButtonText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.confirmButton, { backgroundColor: '#EF4444' }]} onPress={confirmDelete}>
+                <Text style={[styles.confirmButtonText, { color: 'white' }]}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Toast */}
+      {toastMsg && (
+        <Animated.View style={[styles.toast, { backgroundColor: toastMsg.type === 'success' ? '#22C55E' : '#EF4444', opacity: toastAnim }]}>
+          <Text style={styles.toastText}>{toastMsg.text}</Text>
+        </Animated.View>
+      )}
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -318,7 +347,7 @@ export function SearchableList({
                       onPress={() => handleDeleteWithConfirmation(item)}
                       activeOpacity={0.6}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={18} color={colors.error} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -372,6 +401,62 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmModal: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    maxWidth: 400,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  confirmText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 32,
+    left: 24,
+    right: 24,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  toastText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
   },
   header: {
     flexDirection: 'row',

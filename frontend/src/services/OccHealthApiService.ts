@@ -18,7 +18,7 @@ import type { OccupationalHealthPatient } from '../models/OccupationalHealth';
 import { PatientUtils } from '../models/Patient';
 
 // ─── API base path for occupational health ───────────────────
-const OH = '/occupational-health/api';
+const OH = '/occupational-health';
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -1113,6 +1113,105 @@ export class OccHealthApiService {
     try {
       const res = await this.api.get(`${OH}/health-screening/${id}/`);
       if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // REGULATORY REPORTS — CNSS
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/cnss-reports/ */
+  async listCNSSReports(params: { status?: string; report_type?: string } = {}): Promise<{ data: any[]; error?: string }> {
+    try {
+      const query = new URLSearchParams();
+      if (params.status) query.append('status', params.status);
+      if (params.report_type) query.append('report_type', params.report_type);
+      const qs = query.toString();
+      const res = await this.api.get(`${OH}/cnss-reports/${qs ? `?${qs}` : ''}`);
+      if (!res.success) return { data: [], error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: raw };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/cnss-reports/ */
+  async createCNSSReport(payload: {
+    report_type: string;
+    report_period_start: string;
+    report_period_end: string;
+    notes?: string;
+    submission_method?: string;
+    related_incident?: number | null;
+    related_disease?: number | null;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/cnss-reports/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/cnss-reports/{id}/ */
+  async patchCNSSReport(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/cnss-reports/${id}/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // REGULATORY REPORTS — DRC (RDC)
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/drc-reports/ */
+  async listDRCReports(params: { status?: string; report_type?: string } = {}): Promise<{ data: any[]; error?: string }> {
+    try {
+      const query = new URLSearchParams();
+      if (params.status) query.append('status', params.status);
+      if (params.report_type) query.append('report_type', params.report_type);
+      const qs = query.toString();
+      const res = await this.api.get(`${OH}/drc-reports/${qs ? `?${qs}` : ''}`);
+      if (!res.success) return { data: [], error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: raw };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/drc-reports/ */
+  async createDRCReport(payload: {
+    report_type: string;
+    report_period_start: string;
+    report_period_end: string;
+    submission_method?: string;
+    submission_recipient?: string;
+    required_actions?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/drc-reports/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/drc-reports/{id}/ */
+  async patchDRCReport(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/drc-reports/${id}/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };

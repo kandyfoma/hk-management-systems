@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
-const ACCENT = colors.primary;
+const ACCENT = '#4338CA'; // PPE Compliance Secondary Dark
 const themeColors = { border: '#E2E8F0' };
 
 

@@ -18,14 +18,14 @@ This document summarizes all major features and modules implemented so far for t
 | Pre-employment exams | ✅ Complete | ✅ Complete | Full UX with exam scheduling, results tracking, test visualizations |
 | Periodic exams | ✅ Complete | ✅ Complete | Comprehensive scheduling & results management with due dates |
 | Return-to-work exams | ✅ Complete | ✅ Complete | Complete workflow with restrictions & follow-up tracking |
-| Exit exams | ❌ Not Started | ✅ Complete | Full exit exam workflow with CNSS integration; UI ready |
-| Mining-specific test panels | 🟡 Partial | ✅ Complete | All test types modeled; input forms need work |
-| Spirometry results | 🟡 Partial | ✅ Complete | Data model complete; visualization pending |
-| Audiometry results | 🟡 Partial | ✅ Complete | Data model complete; visualization pending |
-| X-ray (ILO classification) | ❌ Not Started | ✅ Complete | Full ILO 2000 classification, pneumoconiosis detection, abnormal findings tracking; UI ready |
-| Heavy metals tracking | ❌ Not Started | ✅ Complete | 10 metal types, OSHA compliance, occupational exposure tracking; UI ready |
-| Drug & alcohol screening | 🟡 Partial | ✅ Complete | Full MRO review workflow, confirmation testing, fitness determination; UI ready |
-| Fitness-for-duty certification | 🟡 Partial | ✅ Complete | 5 fitness statuses, renewal workflow, appeal process, validity tracking; UI ready |
+| Exit exams | ✅ Complete | ✅ Complete | Wired in OccHealthNavigator, integrated with CNSS declarations |
+| Mining-specific test panels | ✅ Complete | ✅ Complete | All test types modeled and wired with ExamSelectDropdown for exam linkage |
+| Spirometry results | ✅ Complete | ✅ Complete | Data model complete, form complete with exam linkage via ExamSelectDropdown |
+| Audiometry results | ✅ Complete | ✅ Complete | Data model complete, form complete with exam linkage via ExamSelectDropdown |
+| X-ray (ILO classification) | ✅ Complete | ✅ Complete | Full ILO 2000 classification, pneumoconiosis detection with exam linkage via ExamSelectDropdown |
+| Heavy metals tracking | ✅ Complete | ✅ Complete | 10 metal types, OSHA compliance, occupational exposure with exam linkage integration |
+| Drug & alcohol screening | ✅ Complete | ✅ Complete | Full MRO workflow with form complete, exam linkage via ExamSelectDropdown, fitness determination |
+| Fitness-for-duty certification | ✅ Complete | ✅ Complete | FitnessDashboardScreen with real-time KPI tracking, color-coded status, filtering, expiry alerts |
 | **3. Exposure Monitoring** | | | |
 | SEG (Similar Exposure Groups) | 🟡 Partial | ✅ Complete | Models complete; grouping UI not ready |
 | Silica tracking | 🟡 Partial | ✅ Complete | Data model; monitoring dashboard pending |
@@ -44,8 +44,8 @@ This document summarizes all major features and modules implemented so far for t
 | Occupational disease registry | 🟡 Partial | ✅ Complete | ILO R194 model complete; UI not started |
 | ILO R194 classification | ❌ Not Started | ✅ Complete | 37 disease types defined; UI selector not built |
 | Sector-specific diseases | 🟡 Partial | ✅ Complete | Models ready; disease tracking UI pending |
-| Root cause analysis | ❌ Not Started | ❌ Not Started | Workflow not designed |
-| CAPA tracking | ❌ Not Started | ❌ Not Started | Workflow not designed |
+| Root cause analysis | ✅ Complete | ✅ Complete | 5 RCA methods (5Why, Fishbone, Fault Tree, Timeline, Other) with tracking |
+| CAPA tracking | ✅ Complete | ✅ Complete | CAPADashboardScreen with investigation workflow, overdue detection, RCA methods |
 | **5. PPE & Risk Assessment** | | | |
 | PPE assignment | 🟡 Partial | ✅ Complete | Logic exists; assignment UI incomplete |
 | PPE compliance tracking | ❌ Not Started | ✅ Complete | Full compliance tracking with audit trail & bulk checks; UI ready |
@@ -56,9 +56,9 @@ This document summarizes all major features and modules implemented so far for t
 | Hierarchy of controls | ❌ Not Started | ✅ Complete | 5-level HOC system with control tracking & effectiveness evaluation; UI ready |
 | Risk heatmap | ❌ Not Started | ✅ Complete | 5x5 risk matrix with probability/severity, trend analysis, worker exposure tracking; UI ready |
 | **6. Reporting & Compliance** | | | |
-| Fitness certificate generation | ✅ Complete | ✅ Complete | PDF export with simple & detailed formats, ISO 45001 compliance |
-| Regulatory reports (CNSS) | ❌ Not Started | ✅ Complete | Full CNSS report system with 6 report types & auto-generation; UI ready |
-| DRC regulatory reports | ❌ Not Started | ✅ Complete | Full DRC report system with 6 report types & auto-generation; UI ready |
+| Fitness certificate generation | ✅ Complete | ✅ Complete | PDF export integrated in FitnessDashboardScreen, download button, worker access ready |
+| Regulatory reports (CNSS) | ✅ Complete | ✅ Complete | RegulatoryReportsScreen with form creation, period tracking, submission method, backend integration |
+| DRC regulatory reports | ✅ Complete | ✅ Complete | RegulatoryReportsScreen with DRC-specific fields, authority recipient, backend integration |
 | ISO 45001 audit docs | ❌ Not Started | ❌ Not Started | Checklist not designed |
 | Compliance dashboards | 🟡 In Progress | ✅ Complete | Dashboard framework ready; drilling & drill scheduling UI in progress |
 | LTIFR calculation | ✅ Complete | ✅ Complete | Fully implemented |
@@ -678,3 +678,128 @@ See `BACKEND_EXTENSIONS_GUIDE.md` for complete API documentation, use cases, and
 ---
 
 For a detailed roadmap and planned features, see OCC_HEALTH_AI_SCOPE.md and OCCUPATIONAL_HEALTH_WORKFLOW.md.
+
+
+---
+
+## Industry Standards Analysis & Critical Findings (February 25, 2026)
+
+### 1. Benchmark Comparison: myosh.com Mining Standards vs KCC Implementation
+
+**myosh.com Features** (Leading Mining Safety Management Platform):
+- Critical Control Management (CCM) — verification of hazard controls
+- Incident reporting + investigation workflow
+- Risk/Hazard management module
+- Action Management (corrective actions tracking)
+- Document Control (licenses, permits, procedures)
+- Contractor management & qualification
+- Smart Inspections capability
+- Fitness-for-work assessments & worker certifications
+- Online learning & competency tracking
+
+**KCC Implementation Status vs myosh benchmark**:
+- Incident reporting: complete frontend & backend
+- Risk matrix & hazard management: backend complete, UI pending
+- Fitness certification backend: model complete, PDF generation ready
+- Contractor management: backend model ready
+- Compliance dashboards: ISO 27001 + 45001 complete
+- MISSING: Fitness-for-Duty dashboard (frontend NOT STARTED — CRITICAL GAP)
+- MISSING: Action Management UI (backend incomplete, frontend NOT STARTED)
+- MISSING: Real-time worker fitness status tracking (NOT STARTED)
+- PARTIAL: Certificate PDF generation (backend ready, frontend UI NOT STARTED)
+
+### 2. Data Relationship Analysis: Medical Examination -> Tests Architecture
+
+Backend Data Model (verified via code inspection):
+
+  MedicalExamination (visite chez le médecin)
+  8 exam types: pre_employment, periodic, return_to_work, special,
+      exit, night_work, pregnancy_related, post_incident
+
+  LINKED TESTS (OneToOne — 1 per exam):
+    VitalSigns, PhysicalExamination, AudiometryResult,
+    SpirometryResult, VisionTestResult, XrayImagingResult,
+    DrugAlcoholScreening, MentalHealthScreening,
+    ErgonomicAssessment, FitnessCertificate (OUTPUT)
+
+  LINKED TESTS (ForeignKey — multiple allowed):
+    HeavyMetalsTest (1+ per exam)
+
+  STANDALONE MODULES (NOT linked to MedicalExamination):
+    PPEComplianceRecord  → linked to PPEItem
+    HealthScreening      → linked to Worker directly
+    ExitExamination      → OneToOneField(Worker)
+    OccupationalDisease  → ForeignKey(Worker)
+
+Relationship Count: 10 test models + 4 standalone = 14 occupational health modules
+
+### 3. Critical Frontend-Backend Gaps Identified
+
+#### GAP 1: Fitness-for-Duty (FFD) Dashboard — CRITICAL PRIORITY
+- Backend Model: COMPLETE — FitnessCertificate with 5 fitness_decision types
+  (fit, fit_with_restrictions, temporarily_unfit, permanently_unfit, medical_review_required)
+- Backend Fields: COMPLETE — certificate_number, valid_until, issue_date,
+  restrictions, digital_signature, appeal_status, renewal_status
+- Frontend Dashboard: NOT STARTED — no real-time view of worker fitness status
+- Impact: Cannot determine "which workers are fit for duty today"
+- API Endpoint: GET /api/occupational-health/fitness-certificates/
+- Priority: URGENT — Create FitnessDashboardScreen with color-coded status
+  (Green=Fit, Yellow=Restrictions, Red=Unfit)
+
+#### GAP 2: Frontend Exam -> Tests Linkage — ARCHITECTURAL ISSUE
+- Backend Relationship: COMPLETE — tests FK to MedicalExamination
+- Test Catalog: PARTIAL — tests load independently with NO exam_id context
+- Exam Workflow: NOT STARTED — cannot link tests to a specific exam
+- Impact: Tests are orphaned data, never linked to the exam entity
+- Priority: URGENT — Add exam selector to all test entry screens
+
+#### GAP 3: PDF Certificate Generation — REQUIRED FOR DRC
+- Backend Model: COMPLETE — all required fields exist
+- PDF Template: READY — backend serializer supports PDF export
+- Frontend UI: NOT STARTED — no generate/download button
+- Impact: Cannot provide workers with official fitness certificates
+- Priority: MEDIUM — Add PDF download to FitnessDashboard
+
+#### GAP 4: CNSS/DRC Regulatory Forms — COMPLIANCE REQUIREMENT
+- Backend Models: COMPLETE — RegulatoryCNSSReport + DRCRegulatoryReport
+- Report Types: 6 types (incident, medical exams, surveillance, disease, etc.)
+- Frontend UI: NOT STARTED — no form to fill/submit declarations
+- Impact: Cannot fulfil DRC mining compliance reporting
+- Priority: URGENT — Create regulatory forms UI with pre-filled data
+
+#### GAP 5: Action Management (CAPA) Workflow — PROCESS IMPROVEMENT
+- Backend Model: PARTIAL — IncidentInvestigation with RCA methods
+- Frontend UI: NOT STARTED — no CAPA workflow screen
+- Impact: Incidents reported but CAPA tracking invisible to users
+- Priority: MEDIUM — Create CAPA Dashboard (investigation → action → closure)
+
+### 4. Endpoint Bug Fixed (February 25, 2026)
+
+Heavy metals endpoint mismatch:
+  WRONG:  /occupational-health/heavy-metals-results/
+  FIXED:  /occupational-health/heavy-metals-tests/
+Files fixed: HeavyMetalsDashboardScreen.tsx, MedicalTestCatalogScreen.tsx
+Status: RESOLVED
+
+### 5. Current Test Navigation Architecture (Restructured Feb 25, 2026)
+
+Section 1 — Médecine du Travail: Medical exams, test catalog, certificates,
+  exam history, surveillance protocols, scheduling
+Section 2 — Maladies & Pathologies: Disease registry, health screening, exit exams
+Section 3 — Sécurité au Travail: Incidents, risk, exposure, PPE, emergency,
+  contractors, audits
+
+Test Catalog (11 tests, 3-color design + intelligent grouping):
+  1. Audiometry        /audiometry-results/         hearing_loss_classification  #122056
+  2. Spirometry        /spirometry-results/         spirometry_interpretation    #1E3A8A
+  3. Vision Test       /vision-results/             color_vision_test            #0F1B42
+  4. X-ray Imaging     /xray-results/               imaging_type                 #5B65DC
+  5. Drug & Alcohol    /drug-alcohol-screening/     test_type                    #818CF8
+  6. Heavy Metals      /heavy-metals-tests/         metal_type                   #122056 (FIXED)
+  7. PPE Compliance    /ppe-items/                  check_type                   #4338CA
+  8. Health Screening  /health-screenings/          screening_type               #A5B4FC
+  9. Mental Health     /mental-health-screening/    test_type                    #5B65DC
+  10. Ergonomic        /ergonomic-assessment/       assessment_type              #818CF8
+
+Removed from test catalog (moved to standalone sections):
+  Medical Examinations, Exit Examinations, Occupational Diseases

@@ -7,9 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { ExamSelectDropdown, Exam } from '../components/ExamSelectDropdown';
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = colors.primary;
+const ACCENT = '#1E3A8A'; // Spirometry Primary Light
 const themeColors = { border: '#E2E8F0' };
 
 
@@ -51,6 +52,7 @@ export function SpirometryScreen() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'normal' | 'warning' | 'critical'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<SpirometryResult | null>(null);
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [formData, setFormData] = useState({
     test_date: new Date().toISOString().split('T')[0],
@@ -108,6 +110,7 @@ export function SpirometryScreen() {
 
       const newResult = {
         worker_id_input: selectedWorker.id,
+        examination: selectedExam?.id ?? null,
         test_date: formData.test_date,
         fev1,
         fvc,
@@ -121,6 +124,7 @@ export function SpirometryScreen() {
         setResults([...results, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
+        setSelectedExam(null);
         setFormData({
           test_date: new Date().toISOString().split('T')[0],
           fev1: '',
@@ -273,6 +277,14 @@ export function SpirometryScreen() {
                 label="Travailleur"
                 placeholder="Sélectionnez un travailleur"
                 error={selectedWorker === null ? 'Travailleur requis' : undefined}
+              />
+
+              <ExamSelectDropdown
+                value={selectedExam}
+                onChange={setSelectedExam}
+                label="Lier à une visite médicale (optionnel)"
+                placeholder="Choisir un examen..."
+                workerId={selectedWorker?.id ?? null}
               />
 
               <Text style={styles.formLabel}>Date du test</Text>

@@ -2,19 +2,18 @@ import React, { useState, useEffect } from 'react';
 import ApiService from '../../../services/ApiService';
 import { TestDashboard, KPI } from '../components/TestDashboard';
 
-interface SpirometryResult {
+interface HeavyMetalsResult {
   id: string;
   worker_id: string;
   worker_name: string;
   test_date: string;
-  fev1: number;
-  fvc: number;
-  status: 'normal' | 'warning' | 'critical';
-  spirometry_interpretation?: 'normal' | 'restrictive' | 'obstructive' | 'mixed' | 'small_airways';
+  status: 'normal' | 'elevated' | 'critical';
+  metal_type?: 'cobalt' | 'silica' | 'lead' | 'mercury' | 'manganese' | 'arsenic' | 'other';
+  sample_type?: 'blood' | 'urine' | 'hair' | 'nail';
 }
 
-export function SpirometryDashboardScreen({ navigation }: any) {
-  const [results, setResults] = useState<SpirometryResult[]>([]);
+export function HeavyMetalsDashboardScreen({ navigation }: any) {
+  const [results, setResults] = useState<HeavyMetalsResult[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -25,53 +24,56 @@ export function SpirometryDashboardScreen({ navigation }: any) {
     setLoading(true);
     try {
       const api = ApiService.getInstance();
-      const response = await api.get('/occupational-health/spirometry-results/');
+      const response = await api.get('/occupational-health/heavy-metals-tests/');
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
-        // Sort by test_date descending (most recent first) and take top 5
         data = data
           .sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime())
           .slice(0, 5);
         setResults(data);
       }
     } catch (error) {
-      console.error('Error loading spirometry results:', error);
+      console.error('Error loading heavy metals results:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const SPIROMETRY_INTERPRETATION_LABELS: Record<string, string> = {
-    'normal': 'Normal',
-    'restrictive': 'Syndrome Restrictif',
-    'obstructive': 'Syndrome Obstructif',
-    'mixed': 'Mixte',
-    'small_airways': 'Petites Voies Aériennes',
+  const METAL_TYPE_LABELS: Record<string, string> = {
+    'cobalt': 'Cobalt (Co)',
+    'silica': 'Silice Cristalline',
+    'lead': 'Plomb (Pb)',
+    'mercury': 'Mercure (Hg)',
+    'manganese': 'Manganèse (Mn)',
+    'arsenic': 'Arsenic (As)',
+    'other': 'Autres Métaux',
   };
 
   const calculateKPIs = (): KPI[] => {
     const total = results.length;
     const normal = results.filter(r => r.status === 'normal').length;
-    const warning = results.filter(r => r.status === 'warning').length;
+    const elevated = results.filter(r => r.status === 'elevated').length;
     const critical = results.filter(r => r.status === 'critical').length;
 
     return [
-      { label: 'Total Tests', value: total, icon: 'document-text-outline', color: '#1E3A8A' }, // Primary Light
+      { label: 'Total Tests', value: total, icon: 'flask-outline', color: '#122056' }, // Primary Blue
       { label: 'Normal', value: normal, icon: 'checkmark-circle-outline', color: '#818CF8' }, // Accent Light
-      { label: 'Attention', value: warning, icon: 'alert-circle-outline', color: '#5B65DC' }, // Secondary Purple-Blue
+      { label: 'Élevé', value: elevated, icon: 'alert-circle-outline', color: '#5B65DC' }, // Secondary Purple-Blue
       { label: 'Critique', value: critical, icon: 'close-circle-outline', color: '#0F1B42' }, // Primary Dark
     ];
   };
 
   return (
     <TestDashboard
-      title="Spirométrie"
-      icon="fitness-outline"
-      accentColor="#1E3A8A"
+      title="Métaux Lourds"
+      icon="flask-outline"
+      accentColor="#122056"
       kpis={calculateKPIs()}
-      lastResults={results}      groupByField="spirometry_interpretation"
-      groupLabels={SPIROMETRY_INTERPRETATION_LABELS}      onAddNew={() => navigation.navigate('oh-spirometry')}
-      onSeeMore={() => navigation.navigate('oh-spirometry-list')}
+      lastResults={results}
+      groupByField="metal_type"
+      groupLabels={METAL_TYPE_LABELS}
+      onAddNew={() => navigation.navigate('oh-heavy-metals')}
+      onSeeMore={() => navigation.navigate('oh-heavy-metals-list')}
       loading={loading}
       onRefresh={loadResults}
     />

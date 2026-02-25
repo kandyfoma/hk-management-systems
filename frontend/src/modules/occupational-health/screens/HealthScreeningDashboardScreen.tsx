@@ -8,6 +8,7 @@ interface HealthScreeningResult {
   worker_name: string;
   screening_date: string;
   status: 'normal' | 'at_risk' | 'critical';
+  screening_type?: 'ergonomic' | 'mental' | 'cardio' | 'msk';
 }
 
 export function HealthScreeningDashboardScreen({ navigation }: any) {
@@ -38,6 +39,13 @@ export function HealthScreeningDashboardScreen({ navigation }: any) {
     }
   };
 
+  const SCREENING_TYPE_LABELS: Record<string, string> = {
+    'ergonomic': 'Dépistage Ergonomique',
+    'mental': 'Dépistage Santé Mentale',
+    'cardio': 'Dépistage Cardiaque',
+    'msk': 'Dépistage Troubles Musculo-Squelettiques',
+  };
+
   const calculateKPIs = (): KPI[] => {
     const total = results.length;
     const normal = results.filter(r => r.status === 'normal').length;
@@ -45,10 +53,10 @@ export function HealthScreeningDashboardScreen({ navigation }: any) {
     const critical = results.filter(r => r.status === 'critical').length;
 
     return [
-      { label: 'Total Dépistage', value: total, icon: 'document-text-outline', color: '#14B8A6' },
-      { label: 'Normal', value: normal, icon: 'checkmark-circle-outline', color: '#22C55E' },
-      { label: 'À risque', value: atRisk, icon: 'alert-circle-outline', color: '#F59E0B' },
-      { label: 'Critique', value: critical, icon: 'close-circle-outline', color: '#EF4444' },
+      { label: 'Total Dépistage', value: total, icon: 'document-text-outline', color: '#A5B4FC' }, // Accent Lighter
+      { label: 'Normal', value: normal, icon: 'checkmark-circle-outline', color: '#818CF8' }, // Accent Light
+      { label: 'À risque', value: atRisk, icon: 'alert-circle-outline', color: '#5B65DC' }, // Secondary Purple-Blue
+      { label: 'Critique', value: critical, icon: 'close-circle-outline', color: '#0F1B42' }, // Primary Dark
     ];
   };
 
@@ -56,9 +64,11 @@ export function HealthScreeningDashboardScreen({ navigation }: any) {
     <TestDashboard
       title="Dépistage Santé"
       icon="document-text-outline"
-      accentColor="#14B8A6"
+      accentColor="#A5B4FC"
       kpis={calculateKPIs()}
       lastResults={results}
+      groupByField="screening_type"
+      groupLabels={SCREENING_TYPE_LABELS}
       onAddNew={() => navigation.navigate('oh-health-screening')}
       onSeeMore={() => navigation.navigate('oh-health-screening-list')}
       loading={loading}

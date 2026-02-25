@@ -420,67 +420,39 @@ export function HealthScreeningFormScreen() {
   const loadCompletedScreenings = async () => {
     setLoadingScreenings(true);
     try {
-      // Try to fetch from API - replace with actual endpoint when backend is ready
-      try {
-        const result = await OccHealthApiService.getInstance().listWorkers({ page: 1 });
-        // API call logic here - for now using mock data
-      } catch (apiError) {
-        console.log('API not ready, using mock data');
-      }
+      // Fetch real data from API
+      const result = await OccHealthApiService.getInstance().listHealthScreenings();
       
-      // Mock data - replace with actual API response
-      const mockScreenings = [
-        {
-          id: 'screen-001',
-          workerId: 'w1',
-          workerName: 'Jean-Pierre Kabongo',
-          screeningType: 'ergonomic',
-          screeningTypeDisplay: 'Ergonomic Assessment',
-          completedDate: '2026-02-20T10:30:00Z',
-          status: 'completed' as const,
-          details: {
-            workstationType: 'Desk Work',
-            posture: 'Neutral',
-            riskLevel: 'Low',
-            recommendations: ['Use ergonomic chair', 'Position monitor at eye level'],
-            score: 8.5,
-          },
-        },
-        {
-          id: 'screen-002',
-          workerId: 'w2',
-          workerName: 'Grace Mwamba',
-          screeningType: 'mental',
-          screeningTypeDisplay: 'Mental Health Assessment',
-          completedDate: '2026-02-19T14:15:00Z',
-          status: 'completed' as const,
-          details: {
-            stressLevel: 'Moderate',
-            wellbeingScore: 7.2,
-            recommendations: ['Regular breaks needed', 'Consider stress management program'],
-            flagged: false,
-          },
-        },
-        {
-          id: 'screen-003',
-          workerId: 'w3',
-          workerName: 'Patrick Lukusa',
-          screeningType: 'cardio',
-          screeningTypeDisplay: 'Cardiovascular Risk',
-          completedDate: '2026-02-18T09:45:00Z',
-          status: 'completed' as const,
-          details: {
-            riskCategory: 'Low',
-            bmi: 24.5,
-            bloodPressure: '120/80',
-            recommendations: ['Maintain current exercise routine'],
-            nextCheckupDate: '2026-08-18',
-          },
-        },
-      ];
-      setCompletedScreenings(mockScreenings);
+      if (result.data && result.data.length > 0) {
+        // Map API response to component format
+        const screenings = result.data.map((screening: any) => {
+          const typeLabels: Record<string, string> = {
+            ergonomic: 'Ergonomic Assessment',
+            mental: 'Mental Health Assessment',
+            cardio: 'Cardiovascular Risk',
+            msk: 'Musculoskeletal Complaints',
+          };
+          
+          return {
+            id: screening.id?.toString() || '',
+            workerId: screening.worker?.toString() || '',
+            workerName: `${screening.worker_first_name || ''} ${screening.worker_last_name || ''}`.trim() || 'Unknown',
+            screeningType: screening.screening_type || '',
+            screeningTypeDisplay: typeLabels[screening.screening_type] || screening.screening_type,
+            completedDate: screening.created_at || new Date().toISOString(),
+            status: 'completed' as const,
+            details: screening.responses || {},
+          };
+        });
+        setCompletedScreenings(screenings);
+      } else {
+        // No data from API, use mock data
+        setCompletedScreenings([]);
+      }
     } catch (error) {
       console.error('Error loading completed screenings:', error);
+      // Silently fail - show empty state instead of mock data
+      setCompletedScreenings([]);
     } finally {
       setLoadingScreenings(false);
     }

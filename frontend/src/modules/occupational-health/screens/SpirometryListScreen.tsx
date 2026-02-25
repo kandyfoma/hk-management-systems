@@ -379,19 +379,3 @@ export function SpirometryListScreen() {
     </SafeAreaView>
   );
 }
-        filterOptions={[
-          { label: 'Tout', value: 'all' },
-          { label: 'Normal', value: 'normal' },
-          { label: 'Attention', value: 'warning' },
-          { label: 'Critique', value: 'critical' },
-        ]}
-        onAddNew={() => navigation.navigate('oh-audiometry' as never)}
-        onItemPress={(item) => {
-          navigation.navigate('oh-spirometry' as never, { resultId: item.id } as never);
-        }}
-        onEdit={(item: any) => handleOpenEditModal(item as SpirometryResult)}
-        onDelete={(item: any) => handleDelete(item as SpirometryResult)}
-      />
-    </>
-  );
-}

@@ -975,9 +975,10 @@ class XrayImagingResultSerializer(serializers.ModelSerializer):
         source='examination.worker.full_name',
         read_only=True
     )
-    worker_id = serializers.CharField(
-        source='examination.worker.employee_id',
-        read_only=True
+    worker_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     exam_type = serializers.CharField(
         source='examination.exam_type',
@@ -1006,6 +1007,28 @@ class XrayImagingResultSerializer(serializers.ModelSerializer):
         else:  # 'mild' or empty
             return 'normal'
     
+    def create(self, validated_data):
+        """Create new X-ray imaging result with auto-created examination"""
+        worker_id = validated_data.pop('worker_id', None)
+        
+        # If worker_id is provided, create/get the examination record
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                # Create a MedicalExamination record for this X-ray result
+                examination = MedicalExamination.objects.create(
+                    worker=worker,
+                    exam_type='xray',
+                    status='completed'
+                )
+                validated_data['examination'] = examination
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError({'worker_id': 'Worker not found'})
+        elif 'examination' not in validated_data:
+            raise serializers.ValidationError({'examination': 'This field is required.'})
+        
+        return super().create(validated_data)
+    
     class Meta:
         model = XrayImagingResult
         fields = [
@@ -1022,7 +1045,7 @@ class XrayImagingResultSerializer(serializers.ModelSerializer):
             'clinical_notes', 'created', 'updated', 'status'
         ]
         read_only_fields = [
-            'id', 'worker_name', 'worker_id', 'exam_type',
+            'id', 'examination', 'worker_name', 'exam_type',
             'imaging_type_display', 'ilo_classification_display',
             'profusion_display', 'created', 'updated', 'status'
         ]
@@ -1035,9 +1058,10 @@ class HeavyMetalsTestSerializer(serializers.ModelSerializer):
         source='examination.worker.full_name',
         read_only=True
     )
-    worker_id = serializers.CharField(
-        source='examination.worker.employee_id',
-        read_only=True
+    worker_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     heavy_metal_display = serializers.CharField(
         source='get_heavy_metal_display',
@@ -1056,6 +1080,26 @@ class HeavyMetalsTestSerializer(serializers.ModelSerializer):
     def get_is_abnormal(self, obj):
         return obj.status in ['elevated', 'high', 'critical']
     
+    def create(self, validated_data):
+        """Create new heavy metals test result with auto-created examination"""
+        worker_id = validated_data.pop('worker_id', None)
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                examination = MedicalExamination.objects.create(
+                    worker=worker,
+                    exam_type='heavy_metals_test',
+                    status='completed'
+                )
+                validated_data['examination'] = examination
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError({'worker_id': 'Worker not found'})
+        elif 'examination' not in validated_data:
+            raise serializers.ValidationError({'examination': 'This field is required.'})
+        
+        return super().create(validated_data)
+    
     class Meta:
         model = HeavyMetalsTest
         fields = [
@@ -1070,7 +1114,7 @@ class HeavyMetalsTestSerializer(serializers.ModelSerializer):
             'is_abnormal', 'created', 'updated'
         ]
         read_only_fields = [
-            'id', 'worker_name', 'worker_id',
+            'id', 'examination', 'worker_name',
             'heavy_metal_display', 'specimen_type_display',
             'status_display', 'exceeds_osha_limit', 'created', 'updated'
         ]
@@ -1083,9 +1127,10 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
         source='examination.worker.full_name',
         read_only=True
     )
-    worker_id = serializers.CharField(
-        source='examination.worker.id',
-        read_only=True
+    worker_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     employee_id = serializers.CharField(
         source='examination.worker.employee_id',
@@ -1126,6 +1171,26 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
         else:  # 'negative'
             return 'normal'
     
+    def create(self, validated_data):
+        """Create new drug/alcohol screening result with auto-created examination"""
+        worker_id = validated_data.pop('worker_id', None)
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                examination = MedicalExamination.objects.create(
+                    worker=worker,
+                    exam_type='drug_alcohol_screening',
+                    status='completed'
+                )
+                validated_data['examination'] = examination
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError({'worker_id': 'Worker not found'})
+        elif 'examination' not in validated_data:
+            raise serializers.ValidationError({'examination': 'This field is required.'})
+        
+        return super().create(validated_data)
+    
     class Meta:
         model = DrugAlcoholScreening
         fields = [
@@ -1158,7 +1223,12 @@ class HealthScreeningSerializer(serializers.ModelSerializer):
         source='worker.full_name',
         read_only=True
     )
-    worker_id = serializers.CharField(
+    worker_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
+    worker_id_read = serializers.CharField(
         source='worker.id',
         read_only=True
     )
@@ -1191,10 +1261,25 @@ class HealthScreeningSerializer(serializers.ModelSerializer):
         else:  # 'archived'
             return 'normal'
     
+    def create(self, validated_data):
+        """Create new health screening with auto-resolved worker"""
+        worker_id = validated_data.pop('worker_id', None)
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                validated_data['worker'] = worker
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError({'worker_id': 'Worker not found'})
+        elif 'worker' not in validated_data:
+            raise serializers.ValidationError({'worker': 'This field is required.'})
+        
+        return super().create(validated_data)
+    
     class Meta:
         model = HealthScreening
         fields = [
-            'id', 'worker', 'worker_name', 'worker_id', 'employee_id',
+            'id', 'worker', 'worker_name', 'worker_id', 'worker_id_read', 'employee_id',
             'screening_type', 'screening_type_display',
             'responses', 'status', 'notes',
             'conducted_by', 'conducted_by_name',
@@ -1202,7 +1287,7 @@ class HealthScreeningSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'worker_name', 'worker_id', 'employee_id',
+            'id', 'worker', 'worker_name', 'worker_id_read', 'employee_id',
             'screening_type_display', 'conducted_by_name', 'reviewed_by_name',
             'created_at', 'updated_at', 'status'
         ]

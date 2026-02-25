@@ -8,8 +8,7 @@ import {
   StyleSheet,
   Dimensions,
   Modal,
-  Alert,
-  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -53,12 +52,14 @@ function CertificateCard({
   certificate, 
   onPress, 
   onDownload,
-  onRevoke
+  onRevoke,
+  isDownloading = false
 }: { 
   certificate: Certificate; 
   onPress: () => void;
   onDownload: () => void;
   onRevoke: () => void;
+  isDownloading?: boolean;
 }) {
   const isExpired = new Date(certificate.expiryDate) < new Date();
   const isExpiringSoon = !isExpired && new Date(certificate.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
@@ -66,85 +67,96 @@ function CertificateCard({
   const fitnessColor = OccHealthUtils.getFitnessStatusColor(certificate.fitnessDecision);
 
   return (
-    <TouchableOpacity 
-      style={[
-        styles.certificateCard,
-        isExpired && styles.certificateCardExpired,
-        isExpiringSoon && styles.certificateCardExpiring
-      ]} 
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      {/* Header */}
-      <View style={styles.certificateCardHeader}>
-        <View style={[styles.certificateAvatar, { backgroundColor: sectorProfile.color + '14' }]}>
-          <Ionicons name="shield-checkmark" size={20} color={sectorProfile.color} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={styles.certificateNumber}>{certificate.certificateNumber}</Text>
-            {isExpired && (
-              <View style={styles.expiredBadge}>
-                <Text style={styles.expiredBadgeText}>EXPIRÉ</Text>
-              </View>
-            )}
-            {isExpiringSoon && !isExpired && (
-              <View style={styles.expiringSoonBadge}>
-                <Text style={styles.expiringSoonBadgeText}>EXPIRE BIENTÔT</Text>
-              </View>
-            )}
+    <View style={[
+      styles.certificateCard,
+      isExpired && styles.certificateCardExpired,
+      isExpiringSoon && styles.certificateCardExpiring
+    ]}>
+      {/* Pressable Content Area */}
+      <TouchableOpacity 
+        style={{ flex: 1 }}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        {/* Header */}
+        <View style={styles.certificateCardHeader}>
+          <View style={[styles.certificateAvatar, { backgroundColor: sectorProfile.color + '14' }]}>
+            <Ionicons name="shield-checkmark" size={20} color={sectorProfile.color} />
           </View>
-          <Text style={styles.certificatePatientName}>{certificate.patientName}</Text>
-          <Text style={styles.certificateCompany}>{certificate.company} • {certificate.jobTitle}</Text>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.certificateNumber}>{certificate.certificateNumber}</Text>
+              {isExpired && (
+                <View style={styles.expiredBadge}>
+                  <Text style={styles.expiredBadgeText}>EXPIRÉ</Text>
+                </View>
+              )}
+              {isExpiringSoon && !isExpired && (
+                <View style={styles.expiringSoonBadge}>
+                  <Text style={styles.expiringSoonBadgeText}>EXPIRE BIENTÔT</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.certificatePatientName}>{certificate.patientName}</Text>
+            <Text style={styles.certificateCompany}>{certificate.company} • {certificate.jobTitle}</Text>
+          </View>
+          <View style={styles.certificateCardActions}>
+            <Text style={styles.certificateDate}>{new Date(certificate.examDate).toLocaleDateString('fr-CD')}</Text>
+            <View style={[styles.fitnessChip, { backgroundColor: fitnessColor + '14' }]}>
+              <Text style={[styles.fitnessChipText, { color: fitnessColor }]}>
+                {OccHealthUtils.getFitnessStatusLabel(certificate.fitnessDecision)}
+              </Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.certificateCardActions}>
-          <Text style={styles.certificateDate}>{new Date(certificate.examDate).toLocaleDateString('fr-CD')}</Text>
-          <View style={[styles.fitnessChip, { backgroundColor: fitnessColor + '14' }]}>
-            <Text style={[styles.fitnessChipText, { color: fitnessColor }]}>
-              {OccHealthUtils.getFitnessStatusLabel(certificate.fitnessDecision)}
+
+        {/* Details */}
+        <View style={styles.certificateCardDetails}>
+          <View style={styles.certificateDetail}>
+            <Ionicons name="clipboard" size={14} color={colors.textSecondary} />
+            <Text style={styles.certificateDetailText}>{OccHealthUtils.getExamTypeLabel(certificate.examType)}</Text>
+          </View>
+          <View style={styles.certificateDetail}>
+            <Ionicons name="calendar" size={14} color={colors.textSecondary} />
+            <Text style={styles.certificateDetailText}>
+              Expire: {new Date(certificate.expiryDate).toLocaleDateString('fr-CD')}
             </Text>
           </View>
+          <View style={styles.certificateDetail}>
+            <Ionicons name="person" size={14} color={colors.textSecondary} />
+            <Text style={styles.certificateDetailText}>{certificate.examinerName}</Text>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
-      {/* Details */}
-      <View style={styles.certificateCardDetails}>
-        <View style={styles.certificateDetail}>
-          <Ionicons name="clipboard" size={14} color={colors.textSecondary} />
-          <Text style={styles.certificateDetailText}>{OccHealthUtils.getExamTypeLabel(certificate.examType)}</Text>
-        </View>
-        <View style={styles.certificateDetail}>
-          <Ionicons name="calendar" size={14} color={colors.textSecondary} />
-          <Text style={styles.certificateDetailText}>
-            Expire: {new Date(certificate.expiryDate).toLocaleDateString('fr-CD')}
-          </Text>
-        </View>
-        <View style={styles.certificateDetail}>
-          <Ionicons name="person" size={14} color={colors.textSecondary} />
-          <Text style={styles.certificateDetailText}>{certificate.examinerName}</Text>
-        </View>
-      </View>
-
-      {/* Bottom Actions */}
+      {/* Bottom Actions - SEPARATE from pressable content */}
       <View style={styles.certificateCardFooter}>
         <TouchableOpacity 
           style={styles.actionBtn}
           onPress={onDownload}
           activeOpacity={0.7}
+          disabled={isDownloading}
         >
-          <Ionicons name="download" size={16} color={colors.primary} />
-          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Télécharger</Text>
+          {isDownloading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <>
+              <Ionicons name="download" size={16} color={colors.primary} />
+              <Text style={[styles.actionBtnText, { color: colors.primary }]}>Télécharger</Text>
+            </>
+          )}
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.actionBtn, { borderColor: colors.error + '40' }]}
           onPress={onRevoke}
           activeOpacity={0.7}
+          disabled={isDownloading}
         >
           <Ionicons name="ban" size={16} color={colors.error} />
           <Text style={[styles.actionBtnText, { color: colors.error }]}>Révoquer</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -158,9 +170,18 @@ export function CertificatesScreen({
 }) {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState<Certificate | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'expired' | 'expiring_soon'>('all');
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   const mapApiCertificate = (item: any): Certificate => {
     const restrictionList = String(item.restrictions || '')
@@ -202,7 +223,7 @@ export function CertificatesScreen({
       setCertificates(mapped);
     } catch (error) {
       console.error('Error loading certificates:', error);
-      Alert.alert('Erreur', 'Impossible de charger les certificats depuis le backend.');
+      showToast('Impossible de charger les certificats.', 'error');
     } finally {
       setLoading(false);
     }
@@ -266,58 +287,53 @@ export function CertificatesScreen({
     setSelectedCertificate(certificate);
   };
 
-  const handleDownload = (certificate: Certificate) => {
-    Alert.alert(
-      'Télécharger Certificat',
-      `Télécharger le certificat ${certificate.certificateNumber} pour ${certificate.patientName}?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Télécharger', onPress: async () => {
-          const result = await occHealthApi.downloadFitnessCertificatePdf(certificate.id);
-          if (result.error || !result.blob) {
-            Alert.alert('Erreur', result.error || 'Impossible de télécharger le PDF.');
-            return;
-          }
+  const handleDownload = async (certificate: Certificate) => {
+    try {
+      setDownloading(certificate.id);
+      const result = await occHealthApi.downloadFitnessCertificatePdf(certificate.id);
 
-          if (Platform.OS === 'web' && typeof window !== 'undefined') {
-            const url = window.URL.createObjectURL(result.blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = result.fileName || `${certificate.certificateNumber}.pdf`;
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-            window.URL.revokeObjectURL(url);
-            return;
-          }
+      if (result.error || !result.blob) {
+        showToast(result.error || 'Impossible de générer le PDF.', 'error');
+        return;
+      }
 
-          Alert.alert('Info', 'Téléchargement PDF disponible sur la version web.');
-        }}
-      ]
-    );
+      // Web download
+      const url = window.URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = result.fileName || `${certificate.certificateNumber}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(url);
+      showToast('PDF téléchargé avec succès');
+    } catch (error) {
+      console.error('Download error:', error);
+      showToast('Erreur lors du téléchargement.', 'error');
+    } finally {
+      setDownloading(null);
+    }
   };
 
   const handleRevoke = (certificate: Certificate) => {
-    Alert.alert(
-      'Révoquer Certificat',
-      `Êtes-vous sûr de vouloir révoquer le certificat ${certificate.certificateNumber}?\n\nCette action est irréversible.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Révoquer', style: 'destructive', onPress: async () => {
-          try {
-            const revokeRes = await occHealthApi.revokeFitnessCertificate(certificate.id, 'Révoqué via interface certificats');
-            if (revokeRes.error) {
-              throw new Error(revokeRes.error);
-            }
-            await loadCertificates();
-            Alert.alert('Succès', 'Certificat révoqué avec succès');
-          } catch (error) {
-            console.error('Error revoking certificate:', error);
-            Alert.alert('Erreur', 'Impossible de révoquer le certificat');
-          }
-        }}
-      ]
-    );
+    setConfirmRevoke(certificate);
+  };
+
+  const confirmRevokeAction = async () => {
+    if (!confirmRevoke) return;
+    try {
+      setRevoking(true);
+      const res = await occHealthApi.revokeFitnessCertificate(confirmRevoke.id, 'Révoqué via interface certificats');
+      if (res.error) throw new Error(res.error);
+      setConfirmRevoke(null);
+      await loadCertificates();
+      showToast('Certificat révoqué avec succès');
+    } catch (error) {
+      console.error('Revoke error:', error);
+      showToast('Impossible de révoquer le certificat.', 'error');
+    } finally {
+      setRevoking(false);
+    }
   };
 
   if (loading) {
@@ -436,6 +452,7 @@ export function CertificatesScreen({
             onPress={() => handleCertificatePress(certificate)}
             onDownload={() => handleDownload(certificate)}
             onRevoke={() => handleRevoke(certificate)}
+            isDownloading={downloading === certificate.id}
           />
         ))}
         
@@ -516,6 +533,63 @@ export function CertificatesScreen({
           </View>
         </View>
       </Modal>
+
+      {/* ── Revoke Confirmation Modal ── */}
+      <Modal visible={!!confirmRevoke} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, { maxHeight: 'auto' as any }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Révoquer le Certificat</Text>
+              <TouchableOpacity onPress={() => setConfirmRevoke(null)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 20 }}>
+              <Text style={[styles.modalText, { marginBottom: 8 }]}>
+                Êtes-vous sûr de vouloir révoquer le certificat{' '}
+                <Text style={{ fontWeight: '700' }}>{confirmRevoke?.certificateNumber}</Text> ?
+              </Text>
+              <Text style={[styles.modalSubtext, { color: colors.error, marginBottom: 20 }]}>
+                Cette action est irréversible.
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { paddingHorizontal: 20, paddingVertical: 10 }]}
+                  onPress={() => setConfirmRevoke(null)}
+                  disabled={revoking}
+                >
+                  <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.error, borderColor: colors.error }]}
+                  onPress={confirmRevokeAction}
+                  disabled={revoking}
+                >
+                  {revoking
+                    ? <ActivityIndicator size="small" color="#FFF" />
+                    : <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Révoquer</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Toast ── */}
+      {toastMsg && (
+        <View style={[
+          styles.toast,
+          { backgroundColor: toastMsg.type === 'error' ? colors.error : colors.primary },
+        ]}>
+          <Ionicons
+            name={toastMsg.type === 'error' ? 'alert-circle' : 'checkmark-circle'}
+            size={18}
+            color="#FFF"
+          />
+          <Text style={styles.toastText}>{toastMsg.text}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -679,4 +753,14 @@ const styles = StyleSheet.create({
   restrictionItem: { 
     flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4,
   },
+
+  // Toast
+  toast: {
+    position: 'absolute', bottom: 32, alignSelf: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 20, paddingVertical: 12,
+    borderRadius: borderRadius.lg, ...shadows.lg,
+    maxWidth: 400,
+  },
+  toastText: { fontSize: 14, color: '#FFF', fontWeight: '600', flexShrink: 1 },
 });

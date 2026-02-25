@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
-  Modal, Alert, ActivityIndicator, RefreshControl, Switch,
+  Modal, ActivityIndicator, RefreshControl, Switch, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { ExamSelectDropdown, Exam } from '../components/ExamSelectDropdown';
 
 const ACCENT = colors.primary;
 const themeColors = { border: '#E2E8F0' };
@@ -51,7 +52,11 @@ export function DrugAlcoholScreeningScreen() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'negative' | 'positive' | 'inconclusive'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<DrugAlcoholScreeningResult | null>(null);
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
   const [formData, setFormData] = useState({
     screening_date: new Date().toISOString().split('T')[0],
     alcohol_test: true,
@@ -60,6 +65,15 @@ export function DrugAlcoholScreeningScreen() {
     drug_result: '',
     notes: '',
   });
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => setToastMsg(null));
+  };
 
   useEffect(() => {
     loadResults();
@@ -93,15 +107,17 @@ export function DrugAlcoholScreeningScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker || (!formData.alcohol_test && !formData.drug_test)) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs requis');
+      showToast('Veuillez sélectionner un travailleur et au moins un test', 'error');
       return;
     }
 
+    setSubmitting(true);
     try {
       const api = ApiService.getInstance();
 
       const newResult = {
         worker_id_input: selectedWorker.id,
+        examination: selectedExam?.id ?? null,
         screening_date: formData.screening_date,
         alcohol_test: formData.alcohol_test,
         drug_test: formData.drug_test,
@@ -114,9 +130,9 @@ export function DrugAlcoholScreeningScreen() {
 
       const response = await api.post('/occupational-health/drug-alcohol-screening/', newResult);
       if (response.success) {
-        setResults([...results, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
+        setSelectedExam(null);
         setFormData({
           screening_date: new Date().toISOString().split('T')[0],
           alcohol_test: true,
@@ -125,12 +141,16 @@ export function DrugAlcoholScreeningScreen() {
           drug_result: '',
           notes: '',
         });
-        Alert.alert('Succès', 'Résultat de dépistage ajouté');
+        showToast('Résultat de dépistage enregistré avec succès');
         loadResults();
+      } else {
+        showToast('Impossible d\'enregistrer le résultat', 'error');
       }
     } catch (error) {
       console.error('Error creating drug/alcohol screening result:', error);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer le résultat');
+      showToast('Impossible d\'enregistrer le résultat', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -289,6 +309,14 @@ export function DrugAlcoholScreeningScreen() {
                 error={selectedWorker === null ? 'Travailleur requis' : undefined}
               />
 
+              <ExamSelectDropdown
+                value={selectedExam}
+                onChange={setSelectedExam}
+                label="Lier à une visite médicale (optionnel)"
+                placeholder="Choisir un examen..."
+                workerId={selectedWorker?.id ?? null}
+              />
+
               <Text style={styles.formLabel}>Date du dépistage</Text>
               <TextInput
                 style={styles.input}
@@ -351,8 +379,16 @@ export function DrugAlcoholScreeningScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: ACCENT }]} onPress={handleSubmit}>
-                <Text style={styles.submitButtonText}>Enregistrer</Text>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: submitting ? 0.7 : 1 }]}
+                onPress={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Enregistrer</Text>
+                )}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -456,6 +492,18 @@ export function DrugAlcoholScreeningScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Toast */}
+      {toastMsg && (
+        <Animated.View
+          style={[
+            styles.toast,
+            { backgroundColor: toastMsg.type === 'success' ? '#22C55E' : '#EF4444', opacity: toastAnim },
+          ]}
+        >
+          <Text style={styles.toastText}>{toastMsg.text}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -464,6 +512,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 32,
+    left: 24,
+    right: 24,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  toastText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
   },
   header: {
     flexDirection: 'row',

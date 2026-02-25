@@ -1,7 +1,7 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Alert, ActivityIndicator, FlatList,
+  StyleSheet, Dimensions, Modal, ActivityIndicator, FlatList, Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,7 @@ import {
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = colors.primary;
+const ACCENT = '#1E3A8A'; // Diseases Primary Light
 const STORAGE_KEY = '@occhealth_diseases';
 
 // ─── Disease Labels ──────────────────────────────────────────
@@ -330,8 +330,20 @@ function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClo
     { value: 'low_back_disorder', label: 'Lombalgie' },
   ];
 
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => setToastMsg(null));
+  };
+
   const handleSave = () => {
-    if (!selectedWorkerId) { Alert.alert('Erreur', 'Le choix du patient est obligatoire.'); return; }
+    if (!selectedWorkerId) { showToast('Le choix du patient est obligatoire.', 'error'); return; }
     const sectorProfile = SECTOR_PROFILES[sector];
     const newDisease: OccupationalDisease = {
       id: `od-${Date.now()}`, workerId: selectedWorkerId, workerName: selectedWorkerName,
@@ -344,6 +356,7 @@ function AddDiseaseModal({ visible, onClose, onSave }: { visible: boolean; onClo
       status: 'active', createdAt: new Date().toISOString(),
     };
     onSave(newDisease);
+    showToast('Maladie professionnelle enregistrée avec succès');
     setSelectedWorkerId(''); setSelectedWorkerName(''); setExposureDuration(''); setTreatmentPlan(''); setWorkerSearchText('');
   };
 
@@ -480,6 +493,17 @@ export function DiseasesScreen() {
   const [selectedDisease, setSelectedDisease] = useState<OccupationalDisease | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => setToastMsg(null));
+  };
 
   useEffect(() => { loadData(); }, []);
   const loadData = async () => {
@@ -497,7 +521,7 @@ export function DiseasesScreen() {
   const handleAdd = (d: OccupationalDisease) => {
     saveData([d, ...diseases]);
     setShowAdd(false);
-    Alert.alert('Succès', 'Maladie professionnelle enregistrée.');
+    showToast('Maladie professionnelle enregistrée avec succès');
   };
 
   const filtered = useMemo(() => {

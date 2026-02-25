@@ -83,11 +83,11 @@ export function XrayImagingListScreen() {
       const api = ApiService.getInstance();
       const response = await api.post('/occupational-health/xray-imaging-results/', {
         worker_id: selectedWorker.id,
-        test_date: formData.test_date,
-        exam_type: formData.exam_type,
-        imaging_findings: formData.imaging_findings,
-        radiologist_notes: formData.radiologist_notes,
-        notes: formData.notes,
+        imaging_date: formData.test_date,
+        imaging_type: formData.exam_type,
+        other_findings: formData.imaging_findings,
+        radiologist: formData.radiologist_notes,
+        clinical_notes: formData.notes,
       });
       if (response.success) {
         Alert.alert('Succès', 'Résultat enregistré');
@@ -118,11 +118,11 @@ export function XrayImagingListScreen() {
     try {
       const api = ApiService.getInstance();
       const response = await api.patch(`/occupational-health/xray-imaging-results/${selectedItem.id}/`, {
-        test_date: editFormData.test_date,
-        exam_type: editFormData.exam_type,
-        imaging_findings: editFormData.imaging_findings,
-        radiologist_notes: editFormData.radiologist_notes,
-        notes: editFormData.notes,
+        imaging_date: editFormData.test_date,
+        imaging_type: editFormData.exam_type,
+        other_findings: editFormData.imaging_findings,
+        radiologist: editFormData.radiologist_notes,
+        clinical_notes: editFormData.notes,
       });
       if (response.success) {
         setResults(results.map(r => r.id === selectedItem.id ? { ...r, ...editFormData } : r));

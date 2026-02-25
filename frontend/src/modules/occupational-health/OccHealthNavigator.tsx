@@ -23,6 +23,7 @@ import { IncidentDashboardScreen } from './screens/IncidentDashboardScreen';
 import { FeaturesOverviewScreen } from './screens/FeaturesOverviewScreen';
 import { WorkerRegistrationScreen, EnterpriseManagementScreen } from './screens/WorkerAndEnterpriseScreen';
 import { MedicalTestVisualizationScreen, ExitExamScreen } from './screens/MedicalTestVisualizationScreen';
+import { MedicalTestCatalogScreen } from './screens/MedicalTestCatalogScreen';
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from './screens/DiseaseRegistryAndHealthScreeningScreen';
 import { ExposureMonitoringDashboard, RegulatoryReportsScreen } from './screens/ExposureAndReportingScreen';
 import { ISO45001DashboardScreen, ISO27001DashboardScreen } from './screens/ComplianceDashboardsScreen';
@@ -30,6 +31,31 @@ import { WorkerRiskProfileScreen } from './screens/WorkerRiskProfileScreen';
 import { OverexposureAlertScreen } from './screens/OverexposureAlertScreen';
 import { PPEComplianceRecordScreen } from './screens/PPEComplianceRecordScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
+import { FitnessDashboardScreen } from './screens/FitnessDashboardScreen';
+import { CAPADashboardScreen } from './screens/CAPADashboardScreen';
+// Test dashboard screens
+import { AudiometryDashboardScreen } from './screens/AudiometryDashboardScreen';
+import { SpirometryDashboardScreen } from './screens/SpirometryDashboardScreen';
+import { VisionDashboardScreen } from './screens/VisionDashboardScreen';
+import { XrayDashboardScreen } from './screens/XrayDashboardScreen';
+import { DrugAlcoholDashboardScreen } from './screens/DrugAlcoholDashboardScreen';
+import { PPEComplianceDashboardScreen } from './screens/PPEComplianceDashboardScreen';
+import { HealthScreeningDashboardScreen } from './screens/HealthScreeningDashboardScreen';
+import { HeavyMetalsDashboardScreen } from './screens/HeavyMetalsDashboardScreen';
+// Test form screens
+import { AudiometryScreen } from './screens/AudiometryScreen';
+import { SpirometryScreen } from './screens/SpirometryScreen';
+import { XrayImagingScreen } from './screens/XrayImagingScreen';
+import { DrugAlcoholScreeningScreen } from './screens/DrugAlcoholScreeningScreen';
+import { PPEComplianceScreen } from './screens/PPEComplianceScreen';
+// Test list screens
+import { AudiometryListScreen } from './screens/AudiometryListScreen';
+import { SpirometryListScreen } from './screens/SpirometryListScreen';
+import { VisionTestListScreen } from './screens/VisionTestListScreen';
+import { XrayImagingListScreen } from './screens/XrayImagingListScreen';
+import { DrugAlcoholScreeningListScreen } from './screens/DrugAlcoholScreeningListScreen';
+import { PPEComplianceListScreen } from './screens/PPEComplianceListScreen';
+import { HealthScreeningListScreen } from './screens/HealthScreeningListScreen';
 import { colors } from '../../theme/theme';
 
 // Occupational Health accent color
@@ -259,26 +285,27 @@ export function OccHealthNavigator() {
       title: 'Médecine du Travail',
       items: [
         { id: 'medical-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit', badge: pendingCount > 0 ? pendingCount : undefined },
-        { id: 'medical-tests', label: 'Tests Médicaux', icon: 'flask-outline', iconActive: 'flask' },
-        { id: 'exam-management', label: 'Gestion Examens', icon: 'document-outline', iconActive: 'document' },
-        { id: 'exit-exams', label: 'Examens de Départ', icon: 'log-out-outline', iconActive: 'log-out' },
+        { id: 'medical-tests', label: 'Catalogue des Tests', icon: 'flask-outline', iconActive: 'flask' },
         { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
-        { id: 'protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
+        { id: 'oh-fitness-dashboard', label: 'Aptitude au Travail (FFD)', icon: 'shield-half-outline', iconActive: 'shield-half' },
         { id: 'previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
         { id: 'surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
-        { id: 'health-screening', label: 'Dépistage Santé', icon: 'pulse-outline', iconActive: 'pulse' },
+        { id: 'protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
       ],
     },
     {
-      title: 'Maladies Professionnelles',
+      title: 'Maladies & Pathologies',
       items: [
-        { id: 'diseases', label: 'Registre Maladies', icon: 'fitness-outline', iconActive: 'fitness' },
+        { id: 'diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
+        { id: 'health-screening', label: 'Dépistage Santé', icon: 'pulse-outline', iconActive: 'pulse' },
+        { id: 'exit-exams', label: 'Examens de Départ', icon: 'log-out-outline', iconActive: 'log-out' },
       ],
     },
     {
       title: 'Sécurité au Travail',
       items: [
         { id: 'incident-dashboard', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
+        { id: 'oh-capa-dashboard', label: 'Actions CAPA', icon: 'construct-outline', iconActive: 'construct' },
         { id: 'risk-assessment', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
         { id: 'exposure-monitoring', label: 'Monitoring Expositions', icon: 'water-outline', iconActive: 'water' },
         { id: 'ppe-management', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
@@ -364,8 +391,40 @@ export function OccHealthNavigator() {
     }
 
     if (activeScreen === 'medical-tests') {
-      return <MedicalTestVisualizationScreen />;
+      return <MedicalTestCatalogScreen navigation={{ navigate: setActiveScreen }} />;
     }
+
+    // ── Test Dashboards (from catalog) ───────────────────────
+    if (activeScreen === 'oh-audiometry-dashboard') return <AudiometryDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-spirometry-dashboard') return <SpirometryDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-vision-dashboard') return <VisionDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-xray-dashboard') return <XrayDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-drug-alcohol-dashboard') return <DrugAlcoholDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-ppe-compliance-dashboard') return <PPEComplianceDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-health-screening-dashboard') return <HealthScreeningDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-heavy-metals-dashboard') return <HeavyMetalsDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-fitness-dashboard') return <FitnessDashboardScreen navigation={{ navigate: setActiveScreen }} />;
+    if (activeScreen === 'oh-capa-dashboard') return <CAPADashboardScreen navigation={{ navigate: setActiveScreen }} />;
+
+    // ── Test Entry Forms ─────────────────────────────────────
+    if (activeScreen === 'oh-audiometry') return <AudiometryScreen />;
+    if (activeScreen === 'oh-spirometry') return <SpirometryScreen />;
+    if (activeScreen === 'oh-xray-imaging') return <XrayImagingScreen />;
+    if (activeScreen === 'oh-drug-alcohol-screening') return <DrugAlcoholScreeningScreen />;
+    if (activeScreen === 'oh-ppe-compliance-new') return <PPEComplianceScreen />;
+    if (activeScreen === 'oh-vision-tests') return <PlaceholderScreen title="Tests de Vision" icon="eye-outline" />;
+    if (activeScreen === 'oh-heavy-metals') return <PlaceholderScreen title="Métaux Lourds — Dosage" icon="flask-outline" />;
+
+    // ── Test Lists ───────────────────────────────────────────
+    if (activeScreen === 'oh-audiometry-list') return <AudiometryListScreen />;
+    if (activeScreen === 'oh-spirometry-list') return <SpirometryListScreen />;
+    if (activeScreen === 'oh-vision-list') return <VisionTestListScreen />;
+    if (activeScreen === 'oh-xray-list') return <XrayImagingListScreen />;
+    if (activeScreen === 'oh-drug-alcohol-list') return <DrugAlcoholScreeningListScreen />;
+    if (activeScreen === 'oh-ppe-list') return <PPEComplianceListScreen />;
+    if (activeScreen === 'oh-health-screening-list') return <HealthScreeningListScreen />;
+    if (activeScreen === 'oh-heavy-metals-list') return <PlaceholderScreen title="Liste — Métaux Lourds" icon="list-outline" />;
+    if (activeScreen === 'oh-medical-test-catalog') return <MedicalTestCatalogScreen navigation={{ navigate: setActiveScreen }} />;
 
     if (activeScreen === 'exit-exams') {
       return <ExitExamScreen />;

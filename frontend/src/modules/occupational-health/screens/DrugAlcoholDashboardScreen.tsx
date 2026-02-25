@@ -8,6 +8,7 @@ interface DrugAlcoholResult {
   worker_name: string;
   screening_date: string;
   status: 'negative' | 'positive' | 'inconclusive';
+  test_type?: 'urine' | 'breath' | 'blood' | 'oral_fluid';
 }
 
 export function DrugAlcoholDashboardScreen({ navigation }: any) {
@@ -38,6 +39,13 @@ export function DrugAlcoholDashboardScreen({ navigation }: any) {
     }
   };
 
+  const TEST_TYPE_LABELS: Record<string, string> = {
+    'urine': 'Analyse d\'Urine',
+    'breath': 'Test d\'Haleine',
+    'blood': 'Analyse Sanguin',
+    'oral_fluid': 'Fluide Oral',
+  };
+
   const calculateKPIs = (): KPI[] => {
     const total = results.length;
     const negative = results.filter(r => r.status === 'negative').length;
@@ -45,10 +53,10 @@ export function DrugAlcoholDashboardScreen({ navigation }: any) {
     const inconclusive = results.filter(r => r.status === 'inconclusive').length;
 
     return [
-      { label: 'Total Tests', value: total, icon: 'document-text-outline', color: '#8B5CF6' },
-      { label: 'Négatif', value: negative, icon: 'checkmark-circle-outline', color: '#22C55E' },
-      { label: 'Positif', value: positive, icon: 'close-circle-outline', color: '#EF4444' },
-      { label: 'Inconc.', value: inconclusive, icon: 'help-circle-outline', color: '#F59E0B' },
+      { label: 'Total Tests', value: total, icon: 'document-text-outline', color: '#818CF8' }, // Accent Light
+      { label: 'Négatif', value: negative, icon: 'checkmark-circle-outline', color: '#818CF8' }, // Accent Light
+      { label: 'Positif', value: positive, icon: 'close-circle-outline', color: '#0F1B42' }, // Primary Dark
+      { label: 'Inconc.', value: inconclusive, icon: 'help-circle-outline', color: '#5B65DC' }, // Secondary Purple-Blue
     ];
   };
 
@@ -56,10 +64,12 @@ export function DrugAlcoholDashboardScreen({ navigation }: any) {
     <TestDashboard
       title="Dépistage D/A"
       icon="alert-circle-outline"
-      accentColor="#8B5CF6"
+      accentColor="#818CF8"
       kpis={calculateKPIs()}
       lastResults={results}
-      onAddNew={() => navigation.navigate('oh-drug-alcohol')}
+      groupByField="test_type"
+      groupLabels={TEST_TYPE_LABELS}
+      onAddNew={() => navigation.navigate('oh-drug-alcohol-screening')}
       onSeeMore={() => navigation.navigate('oh-drug-alcohol-list')}
       loading={loading}
       onRefresh={loadResults}

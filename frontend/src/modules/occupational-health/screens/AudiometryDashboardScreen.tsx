@@ -14,6 +14,7 @@ interface AudiometryResult {
   right_ear_db: number;
   frequency: number;
   status: 'normal' | 'warning' | 'critical';
+  hearing_loss_classification?: 'normal' | 'mild' | 'moderate' | 'severe' | 'profound';
   notes?: string;
 }
 
@@ -45,6 +46,14 @@ export function AudiometryDashboardScreen({ navigation }: any) {
     }
   };
 
+  const HEARING_LOSS_LABELS: Record<string, string> = {
+    'normal': 'Normal (≤25 dB HL)',
+    'mild': 'Légère (26-40 dB HL)',
+    'moderate': 'Modérée (41-55 dB HL)',
+    'severe': 'Sévère (56-70 dB HL)',
+    'profound': 'Profonde (>70 dB HL)',
+  };
+
   const calculateKPIs = (): KPI[] => {
     const total = results.length;
     const normal = results.filter(r => r.status === 'normal').length;
@@ -56,25 +65,25 @@ export function AudiometryDashboardScreen({ navigation }: any) {
         label: 'Total Tests',
         value: total,
         icon: 'document-text-outline',
-        color: '#3B82F6',
+        color: '#122056', // Primary Blue
       },
       {
         label: 'Normal',
         value: normal,
         icon: 'checkmark-circle-outline',
-        color: '#22C55E',
+        color: '#818CF8', // Accent Light
       },
       {
         label: 'Attention',
         value: warning,
         icon: 'alert-circle-outline',
-        color: '#F59E0B',
+        color: '#5B65DC', // Secondary Purple-Blue
       },
       {
         label: 'Critique',
         value: critical,
         icon: 'close-circle-outline',
-        color: '#EF4444',
+        color: '#0F1B42', // Primary Blue Dark
       },
     ];
   };
@@ -91,9 +100,11 @@ export function AudiometryDashboardScreen({ navigation }: any) {
     <TestDashboard
       title="Audiométrie"
       icon="volume-high-outline"
-      accentColor="#3B82F6"
+      accentColor="#122056"
       kpis={calculateKPIs()}
       lastResults={results}
+      groupByField="hearing_loss_classification"
+      groupLabels={HEARING_LOSS_LABELS}
       onAddNew={handleAddNew}
       onSeeMore={handleSeeMore}
       loading={loading}

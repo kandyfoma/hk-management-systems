@@ -7,10 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { ExamSelectDropdown, Exam } from '../components/ExamSelectDropdown';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
-const ACCENT = colors.primary;
+const ACCENT = '#122056'; // Audiometry Primary Blue
 
 interface AudiometryResult {
   id: string;
@@ -47,6 +48,7 @@ export function AudiometryScreen() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'normal' | 'warning' | 'critical'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<AudiometryResult | null>(null);
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [formData, setFormData] = useState({
     test_date: new Date().toISOString().split('T')[0],
@@ -97,6 +99,7 @@ export function AudiometryScreen() {
       
       const newResult = {
         worker_id_input: selectedWorker.id,
+        examination: selectedExam?.id ?? null,
         test_date: formData.test_date,
         left_ear_500hz: parseInt(formData.left_ear_db),
         right_ear_500hz: parseInt(formData.right_ear_db),
@@ -108,6 +111,7 @@ export function AudiometryScreen() {
         setResults([...results, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
+        setSelectedExam(null);
         setFormData({
           test_date: new Date().toISOString().split('T')[0],
           left_ear_db: '',
@@ -260,6 +264,14 @@ export function AudiometryScreen() {
                 label="Travailleur"
                 placeholder="Sélectionnez un travailleur"
                 error={selectedWorker === null ? 'Travailleur requis' : undefined}
+              />
+
+              <ExamSelectDropdown
+                value={selectedExam}
+                onChange={setSelectedExam}
+                label="Lier à une visite médicale (optionnel)"
+                placeholder="Choisir un examen..."
+                workerId={selectedWorker?.id ?? null}
               />
 
               <Text style={styles.formLabel}>Date du test</Text>

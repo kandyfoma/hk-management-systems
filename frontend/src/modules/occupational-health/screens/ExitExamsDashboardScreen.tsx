@@ -8,6 +8,7 @@ interface ExitExamResult {
   worker_name: string;
   exam_date: string;
   status: 'completed' | 'pending' | 'cancelled';
+  reason_for_exit?: 'retirement' | 'resignation' | 'termination' | 'contract_end' | 'transfer' | 'other';
 }
 
 export function ExitExamsDashboardScreen({ navigation }: any) {
@@ -38,6 +39,15 @@ export function ExitExamsDashboardScreen({ navigation }: any) {
     }
   };
 
+  const REASON_FOR_EXIT_LABELS: Record<string, string> = {
+    'retirement': 'Retraite',
+    'resignation': 'Démission',
+    'termination': 'Licenciement',
+    'contract_end': 'Fin de Contrat',
+    'transfer': 'Transfert',
+    'other': 'Autres',
+  };
+
   const calculateKPIs = (): KPI[] => {
     const total = results.length;
     const completed = results.filter(r => r.status === 'completed').length;
@@ -45,10 +55,10 @@ export function ExitExamsDashboardScreen({ navigation }: any) {
     const cancelled = results.filter(r => r.status === 'cancelled').length;
 
     return [
-      { label: 'Total Départ', value: total, icon: 'document-text-outline', color: '#F97316' },
-      { label: 'Complété', value: completed, icon: 'checkmark-circle-outline', color: '#22C55E' },
-      { label: 'En attente', value: pending, icon: 'hourglass-outline', color: '#F59E0B' },
-      { label: 'Annulé', value: cancelled, icon: 'close-circle-outline', color: '#EF4444' },
+      { label: 'Total Départ', value: total, icon: 'document-text-outline', color: '#5B65DC' }, // Secondary Purple-Blue
+      { label: 'Complété', value: completed, icon: 'checkmark-circle-outline', color: '#818CF8' }, // Accent Light
+      { label: 'En attente', value: pending, icon: 'hourglass-outline', color: '#5B65DC' }, // Secondary Purple-Blue
+      { label: 'Annulé', value: cancelled, icon: 'close-circle-outline', color: '#0F1B42' }, // Primary Dark
     ];
   };
 
@@ -56,9 +66,11 @@ export function ExitExamsDashboardScreen({ navigation }: any) {
     <TestDashboard
       title="Examens de Départ"
       icon="log-out-outline"
-      accentColor="#F97316"
+      accentColor="#5B65DC"
       kpis={calculateKPIs()}
       lastResults={results}
+      groupByField="reason_for_exit"
+      groupLabels={REASON_FOR_EXIT_LABELS}
       onAddNew={() => navigation.navigate('oh-exit-exams')}
       onSeeMore={() => navigation.navigate('oh-exit-exams-list')}
       loading={loading}

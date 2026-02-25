@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Dimensions,
-  Modal, Alert, ActivityIndicator, RefreshControl, SafeAreaView, Switch
+  Modal, ActivityIndicator, RefreshControl, SafeAreaView, Switch, Animated
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
@@ -42,6 +42,20 @@ export function DrugAlcoholScreeningListScreen() {
   
   // Add form state
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState<DrugAlcoholScreeningResult | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => setToastMsg(null));
+  };
+
   const [formData, setFormData] = useState({
     test_date: new Date().toISOString().split('T')[0],
     test_type: 'Breath' as 'Breath' | 'Blood' | 'Urine',
@@ -66,6 +80,22 @@ export function DrugAlcoholScreeningListScreen() {
   React.useEffect(() => {
     loadResults();
   }, []);
+
+  React.useEffect(() => {
+    // Reset form when modal opens
+    if (showAddModal) {
+      setSelectedWorker(null);
+      setFormData({
+        test_date: new Date().toISOString().split('T')[0],
+        test_type: 'Breath',
+        alcohol_result: 'Negative',
+        drug_result: 'Negative',
+        fit_for_duty: true,
+        specimens_tested: '',
+        notes: '',
+      });
+    }
+  }, [showAddModal]);
 
   const loadResults = async () => {
     setLoading(true);
@@ -94,30 +124,31 @@ export function DrugAlcoholScreeningListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      showToast('Veuillez sélectionner un travailleur', 'error');
       return;
     }
-    if (!formData.test_date) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+    if (!formData.test_date || !formData.test_type || !formData.alcohol_result || !formData.drug_result) {
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
 
+    setSubmitting(true);
     try {
       const api = ApiService.getInstance();
       const payload = {
         worker_id: selectedWorker.id,
         test_date: formData.test_date,
-        test_type: formData.test_type,
-        alcohol_result: formData.alcohol_result,
-        drug_result: formData.drug_result,
+        test_type: formData.test_type.toLowerCase(),
+        alcohol_result: formData.alcohol_result.toLowerCase(),
+        drug_result: formData.drug_result.toLowerCase(),
         fit_for_duty: formData.fit_for_duty,
-        specimens_tested: formData.specimens_tested,
-        notes: formData.notes,
+        substances_tested: formData.specimens_tested || undefined,
+        notes: formData.notes || undefined,
       };
 
       const response = await api.post('/occupational-health/drug-alcohol-screening-results/', payload);
       if (response.success) {
-        Alert.alert('Succès', 'Résultat de dépistage enregistré');
+        showToast('Résultat de dépistage enregistré avec succès');
         setShowAddModal(false);
         setSelectedWorker(null);
         setFormData({
@@ -131,11 +162,13 @@ export function DrugAlcoholScreeningListScreen() {
         });
         await loadResults();
       } else {
-        Alert.alert('Erreur', response.message || 'Erreur lors de la création');
+        showToast('Erreur lors de la création du résultat', 'error');
       }
     } catch (error) {
       console.error('Error creating screening result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -156,15 +189,16 @@ export function DrugAlcoholScreeningListScreen() {
   const handleSaveEdit = async () => {
     if (!selectedItem) return;
 
+    setSubmitting(true);
     try {
       const api = ApiService.getInstance();
       const patchData = {
         test_date: editFormData.test_date,
-        test_type: editFormData.test_type,
-        alcohol_result: editFormData.alcohol_result,
-        drug_result: editFormData.drug_result,
+        test_type: editFormData.test_type.toLowerCase(),
+        alcohol_result: editFormData.alcohol_result.toLowerCase(),
+        drug_result: editFormData.drug_result.toLowerCase(),
         fit_for_duty: editFormData.fit_for_duty,
-        specimens_tested: editFormData.specimens_tested,
+        substances_tested: editFormData.specimens_tested,
         notes: editFormData.notes,
       };
 
@@ -179,43 +213,53 @@ export function DrugAlcoholScreeningListScreen() {
             r.id === selectedItem.id
               ? {
                   ...r,
-                  ...patchData,
+                  test_date: editFormData.test_date,
+                  test_type: editFormData.test_type as 'Breath' | 'Blood' | 'Urine',
+                  alcohol_result: editFormData.alcohol_result as 'Negative' | 'Presumptive' | 'Positive',
+                  drug_result: editFormData.drug_result as 'Negative' | 'Presumptive' | 'Positive',
+                  fit_for_duty: editFormData.fit_for_duty,
+                  substances_tested: editFormData.specimens_tested,
+                  notes: editFormData.notes,
                 }
               : r
           )
         );
         setShowEditModal(false);
         setSelectedItem(null);
-        Alert.alert('Succès', 'Résultat mis à jour');
+        showToast('Résultat mis à jour avec succès');
       } else {
-        Alert.alert('Erreur', 'Impossible de mettre à jour');
+        showToast('Impossible de mettre à jour', 'error');
       }
     } catch (error) {
       console.error('Error updating:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async (item: DrugAlcoholScreeningResult) => {
-    Alert.alert('Confirmer', 'Supprimer ce résultat ?', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const api = ApiService.getInstance();
-            const response = await api.delete(`/occupational-health/drug-alcohol-screening-results/${item.id}/`);
-            if (response.success) {
-              setResults(results.filter(r => r.id !== item.id));
-              Alert.alert('Succès', 'Résultat supprimé');
-            }
-          } catch (error) {
-            Alert.alert('Erreur', 'Impossible de supprimer');
-          }
-        },
-      },
-    ]);
+    setDeleteConfirmItem(item);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmItem) return;
+    setSubmitting(true);
+    try {
+      const api = ApiService.getInstance();
+      const response = await api.delete(`/occupational-health/drug-alcohol-screening-results/${deleteConfirmItem.id}/`);
+      if (response.success) {
+        setResults(results.filter(r => r.id !== deleteConfirmItem.id));
+        showToast('Résultat supprimé avec succès');
+      } else {
+        showToast('Impossible de supprimer', 'error');
+      }
+    } catch (error) {
+      showToast('Impossible de supprimer', 'error');
+    } finally {
+      setDeleteConfirmItem(null);
+      setSubmitting(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -250,6 +294,62 @@ export function DrugAlcoholScreeningListScreen() {
   }, [results, searchQuery, filterStatus, sortBy]);
 
   const styles = StyleSheet.create({
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmModal: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    maxWidth: 400,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  confirmText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 32,
+    left: 24,
+    right: 24,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  toastText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
     container: { flex: 1, backgroundColor: colors.background },
     header: { padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.outline },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -266,6 +366,8 @@ export function DrugAlcoholScreeningListScreen() {
     sortRow: { flexDirection: 'row', gap: spacing.md },
     sortButton: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.outline },
     sortButtonActive: { backgroundColor: '#122056', borderColor: '#122056' },
+    sortText: { fontSize: 12, fontWeight: '500', color: colors.text },
+    sortTextActive: { color: '#FFF' },
     contentSection: { flex: 1, padding: spacing.lg },
     resultCard: { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', ...shadows.sm },
     resultCardLeft: { marginRight: spacing.md },

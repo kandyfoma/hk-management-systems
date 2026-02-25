@@ -8,6 +8,7 @@ interface MedicalExamResult {
   worker_name: string;
   exam_date: string;
   status: 'normal' | 'abnormal' | 'pending';
+  exam_type?: 'pre_employment' | 'periodic' | 'return_to_work' | 'special' | 'exit' | 'night_work' | 'pregnancy_related' | 'post_incident';
 }
 
 export function ExamsDashboardScreen({ navigation }: any) {
@@ -38,6 +39,17 @@ export function ExamsDashboardScreen({ navigation }: any) {
     }
   };
 
+  const EXAM_TYPE_LABELS: Record<string, string> = {
+    'pre_employment': 'Visite Pré-embauché',
+    'periodic': 'Visite Périodique',
+    'return_to_work': 'Visite de Reprise du Travail',
+    'special': 'Visite Spéciale',
+    'exit': 'Visite de Sortie',
+    'night_work': 'Visite Travail de Nuit',
+    'pregnancy_related': 'Visite Grossesse',
+    'post_incident': 'Visite Post-Incident',
+  };
+
   const calculateKPIs = (): KPI[] => {
     const total = results.length;
     const normal = results.filter(r => r.status === 'normal').length;
@@ -45,10 +57,10 @@ export function ExamsDashboardScreen({ navigation }: any) {
     const pending = results.filter(r => r.status === 'pending').length;
 
     return [
-      { label: 'Total Visites', value: total, icon: 'document-text-outline', color: '#EC4899' },
-      { label: 'Normal', value: normal, icon: 'checkmark-circle-outline', color: '#22C55E' },
-      { label: 'Anormal', value: abnormal, icon: 'alert-circle-outline', color: '#F59E0B' },
-      { label: 'En attente', value: pending, icon: 'hourglass-outline', color: '#3B82F6' },
+      { label: 'Total Visites', value: total, icon: 'document-text-outline', color: '#818CF8' }, // Accent Light
+      { label: 'Normal', value: normal, icon: 'checkmark-circle-outline', color: '#818CF8' }, // Accent Light
+      { label: 'Anormal', value: abnormal, icon: 'alert-circle-outline', color: '#5B65DC' }, // Secondary Purple-Blue
+      { label: 'En attente', value: pending, icon: 'hourglass-outline', color: '#A5B4FC' }, // Accent Lighter
     ];
   };
 
@@ -56,9 +68,11 @@ export function ExamsDashboardScreen({ navigation }: any) {
     <TestDashboard
       title="Visite Médicale"
       icon="medkit-outline"
-      accentColor="#EC4899"
+      accentColor="#818CF8"
       kpis={calculateKPIs()}
       lastResults={results}
+      groupByField="exam_type"
+      groupLabels={EXAM_TYPE_LABELS}
       onAddNew={() => navigation.navigate('oh-exams')}
       onSeeMore={() => navigation.navigate('oh-exams-list')}
       loading={loading}

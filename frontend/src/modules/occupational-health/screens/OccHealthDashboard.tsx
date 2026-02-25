@@ -193,7 +193,7 @@ export function OccHealthDashboardContent({ onNavigate }: OccHealthDashboardProp
         }
         
         const response = await axios.get(
-          `${baseURL}/api/v1/occupational-health/api/dashboard/stats/`,
+          `${baseURL}/api/v1/occupational-health/dashboard/stats/`,
           {
             headers: {
               Authorization: `Token ${token}`,

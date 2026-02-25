@@ -55,6 +55,9 @@ import { ExamsDashboardScreen } from '../modules/occupational-health/screens/Exa
 import { HealthScreeningDashboardScreen } from '../modules/occupational-health/screens/HealthScreeningDashboardScreen';
 import { ExitExamsDashboardScreen } from '../modules/occupational-health/screens/ExitExamsDashboardScreen';
 import { DiseasesDashboardScreen } from '../modules/occupational-health/screens/DiseasesDashboardScreen';
+import { HeavyMetalsDashboardScreen } from '../modules/occupational-health/screens/HeavyMetalsDashboardScreen';
+import { FitnessDashboardScreen } from '../modules/occupational-health/screens/FitnessDashboardScreen';
+import { CAPADashboardScreen } from '../modules/occupational-health/screens/CAPADashboardScreen';
 import { AudiometryListScreen } from '../modules/occupational-health/screens/AudiometryListScreen';
 import { SpirometryListScreen } from '../modules/occupational-health/screens/SpirometryListScreen';
 import { VisionTestListScreen } from '../modules/occupational-health/screens/VisionTestListScreen';
@@ -318,11 +321,13 @@ const createDynamicSections = (
       items: [
         { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' },
         { id: 'oh-intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
+        { id: 'oh-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit' },
         { id: 'oh-medical-test-catalog', label: 'Catalogue Évaluations Médicales', icon: 'grid-outline', iconActive: 'grid' },
         { id: 'oh-exam-management', label: 'Gestion Examens', icon: 'document-outline', iconActive: 'document' },
         { id: 'oh-protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
         { id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
         { id: 'oh-certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
+        { id: 'oh-fitness-dashboard', label: 'Aptitude au Travail (FFD)', icon: 'shield-half-outline', iconActive: 'shield-half' },
         { id: 'oh-surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
       ],
     });
@@ -340,6 +345,7 @@ const createDynamicSections = (
         { id: 'oh-worker-risk-profiles', label: 'Profils de Risque', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
         { id: 'oh-overexposure-alerts', label: 'Alertes Surexposition', icon: 'alert-outline', iconActive: 'alert' },
         { id: 'oh-ppe-compliance', label: 'Conformité EPI', icon: 'checkmark-outline', iconActive: 'checkmark' },
+        { id: 'oh-capa-dashboard', label: 'Actions CAPA', icon: 'construct-outline', iconActive: 'construct' },
       ],
     });
 
@@ -568,6 +574,10 @@ function DesktopApp() {
       'oh-health-screening-dashboard': 'OCCUPATIONAL_HEALTH',
       'oh-exit-exams-dashboard': 'OCCUPATIONAL_HEALTH',
       'oh-diseases-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-heavy-metals-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-heavy-metals': 'OCCUPATIONAL_HEALTH',
+      'oh-fitness-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-capa-dashboard': 'OCCUPATIONAL_HEALTH',
       'oh-medical-tests': 'OCCUPATIONAL_HEALTH',
       'oh-exam-management': 'OCCUPATIONAL_HEALTH',
       'oh-exit-exams': 'OCCUPATIONAL_HEALTH',
@@ -872,6 +882,9 @@ function DesktopApp() {
     if (activeScreen === 'oh-health-screening-dashboard') return <HealthScreeningDashboardScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-exit-exams-dashboard') return <ExitExamsDashboardScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-diseases-dashboard') return <DiseasesDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-heavy-metals-dashboard') return <HeavyMetalsDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-fitness-dashboard') return <FitnessDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-capa-dashboard') return <CAPADashboardScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-audiometry-list') return <AudiometryListScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-spirometry-list') return <SpirometryListScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-vision-list') return <VisionTestListScreen navigation={customNavigation} />;
