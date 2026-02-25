@@ -4,7 +4,7 @@ Médecine du Travail Views - DRF API Views
 Comprehensive Django REST Framework API views for multi-sector
 occupational medicine management system with sector-specific functionality.
 """
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, status, viewsets, serializers
 from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -3231,6 +3231,186 @@ class RiskHeatmapReportViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(report)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ==================== MEDICAL EXAMINATION SPECIFIC TEST RESULTS VIEWSETS ====================
+
+class AudiometryResultViewSet(viewsets.ModelViewSet):
+    """API endpoints for audiometry test results"""
+    queryset = AudiometryResult.objects.all().order_by('-test_date')
+    serializer_class = AudiometryResultSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['examination__worker', 'examination__worker__enterprise']
+    search_fields = ['examination__worker__first_name', 'examination__worker__last_name', 'examination__worker__employee_id']
+    ordering_fields = ['test_date', 'examination__exam_date']
+    
+    def perform_create(self, serializer):
+        """Create AudiometryResult with automatic MedicalExamination"""
+        request = self.request
+        worker_id = request.data.get('worker_id') or request.data.get('worker_id_input')
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                exam_date = request.data.get('test_date', timezone.now().date())
+                examination, _ = MedicalExamination.objects.get_or_create(
+                    worker=worker,
+                    exam_date=exam_date,
+                    exam_type='periodic',
+                    defaults={'examining_doctor': request.user}
+                )
+                serializer.save(examination=examination, tested_by=request.user)
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError('Worker not found')
+        else:
+            raise serializers.ValidationError('worker_id is required')
+
+
+class SpirometryResultViewSet(viewsets.ModelViewSet):
+    """API endpoints for spirometry test results"""
+    queryset = SpirometryResult.objects.all().order_by('-test_date')
+    serializer_class = SpirometryResultSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['examination__worker', 'examination__worker__enterprise']
+    search_fields = ['examination__worker__first_name', 'examination__worker__last_name', 'examination__worker__employee_id']
+    ordering_fields = ['test_date', 'examination__exam_date']
+    
+    def perform_create(self, serializer):
+        """Create SpirometryResult with automatic MedicalExamination"""
+        request = self.request
+        worker_id = request.data.get('worker_id') or request.data.get('worker_id_input')
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                exam_date = request.data.get('test_date', timezone.now().date())
+                examination, _ = MedicalExamination.objects.get_or_create(
+                    worker=worker,
+                    exam_date=exam_date,
+                    exam_type='periodic',
+                    defaults={'examining_doctor': request.user}
+                )
+                serializer.save(examination=examination, tested_by=request.user)
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError('Worker not found')
+        else:
+            raise serializers.ValidationError('worker_id is required')
+
+
+class VisionTestResultViewSet(viewsets.ModelViewSet):
+    """API endpoints for vision test results"""
+    queryset = VisionTestResult.objects.all().order_by('-test_date')
+    serializer_class = VisionTestResultSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['examination__worker', 'examination__worker__enterprise']
+    search_fields = ['examination__worker__first_name', 'examination__worker__last_name', 'examination__worker__employee_id']
+    ordering_fields = ['test_date', 'examination__exam_date']
+    
+    def perform_create(self, serializer):
+        """Create VisionTestResult with automatic MedicalExamination"""
+        request = self.request
+        worker_id = request.data.get('worker_id') or request.data.get('worker_id_input')
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                exam_date = request.data.get('test_date', timezone.now().date())
+                examination, _ = MedicalExamination.objects.get_or_create(
+                    worker=worker,
+                    exam_date=exam_date,
+                    exam_type='periodic',
+                    defaults={'examining_doctor': request.user}
+                )
+                serializer.save(examination=examination, tested_by=request.user)
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError('Worker not found')
+        else:
+            raise serializers.ValidationError('worker_id is required')
+
+
+class MentalHealthScreeningViewSet(viewsets.ModelViewSet):
+    """API endpoints for mental health screening results"""
+    queryset = MentalHealthScreening.objects.all().order_by('-assessment_date')
+    serializer_class = MentalHealthScreeningSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['examination__worker', 'examination__worker__enterprise', 'burnout_risk']
+    search_fields = ['examination__worker__first_name', 'examination__worker__last_name', 'examination__worker__employee_id']
+    ordering_fields = ['assessment_date', 'examination__exam_date']
+    
+    def perform_create(self, serializer):
+        """Create MentalHealthScreening with automatic MedicalExamination"""
+        request = self.request
+        worker_id = request.data.get('worker_id') or request.data.get('worker_id_input')
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                exam_date = request.data.get('test_date', timezone.now().date())
+                examination, _ = MedicalExamination.objects.get_or_create(
+                    worker=worker,
+                    exam_date=exam_date,
+                    exam_type='periodic',
+                    defaults={'examining_doctor': request.user}
+                )
+                serializer.save(examination=examination, assessed_by=request.user)
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError('Worker not found')
+        else:
+            raise serializers.ValidationError('worker_id is required')
+
+
+class ErgonomicAssessmentViewSet(viewsets.ModelViewSet):
+    """API endpoints for ergonomic assessment results"""
+    queryset = ErgonomicAssessment.objects.all().order_by('-assessment_date')
+    serializer_class = ErgonomicAssessmentSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['examination__worker', 'examination__worker__enterprise', 'ergonomic_risk_level']
+    search_fields = ['examination__worker__first_name', 'examination__worker__last_name', 'examination__worker__employee_id']
+    ordering_fields = ['assessment_date', 'examination__exam_date']
+    
+    def perform_create(self, serializer):
+        """Create ErgonomicAssessment with automatic MedicalExamination"""
+        request = self.request
+        worker_id = request.data.get('worker_id') or request.data.get('worker_id_input')
+        
+        if worker_id:
+            try:
+                worker = Worker.objects.get(id=worker_id)
+                exam_date = request.data.get('test_date', timezone.now().date())
+                examination, _ = MedicalExamination.objects.get_or_create(
+                    worker=worker,
+                    exam_date=exam_date,
+                    exam_type='periodic',
+                    defaults={'examining_doctor': request.user}
+                )
+                serializer.save(examination=examination, assessed_by=request.user)
+            except Worker.DoesNotExist:
+                raise serializers.ValidationError('Worker not found')
+        else:
+            raise serializers.ValidationError('worker_id is required')
+
+
+class EnterpriseUsersViewSet(viewsets.ViewSet):
+    """API endpoint for listing enterprise workers"""
+    permission_classes = [IsAuthenticated]
+    
+    def list(self, request):
+        """Get all workers, optionally filtered by enterprise"""
+        enterprise_id = request.query_params.get('enterprise_id')
+        
+        if enterprise_id:
+            workers = Worker.objects.filter(enterprise_id=enterprise_id).select_related('enterprise', 'work_site')
+        else:
+            # If no enterprise specified, return all workers
+            workers = Worker.objects.all().select_related('enterprise', 'work_site')
+        
+        serializer = WorkerListSerializer(workers, many=True)
+        return Response(serializer.data)
 
 
 # ==================== ISO 27001 & ISO 45001 VIEWSETS ====================

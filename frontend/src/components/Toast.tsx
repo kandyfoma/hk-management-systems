@@ -334,7 +334,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {/* Toast container — top */}
-      <View style={ts.containerTop} pointerEvents="box-none">
+      <View style={ts.containerTop}>
         {toasts
           .filter((t) => (t.position ?? 'top') === 'top')
           .map((item) => (
@@ -343,7 +343,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       </View>
 
       {/* Toast container — bottom */}
-      <View style={ts.containerBottom} pointerEvents="box-none">
+      <View style={ts.containerBottom}>
         {toasts
           .filter((t) => t.position === 'bottom')
           .map((item) => (

@@ -23,6 +23,12 @@ from .views import (
     HierarchyOfControlsViewSet,
     RiskHeatmapDataViewSet,
     RiskHeatmapReportViewSet,
+    AudiometryResultViewSet,
+    SpirometryResultViewSet,
+    VisionTestResultViewSet,
+    MentalHealthScreeningViewSet,
+    ErgonomicAssessmentViewSet,
+    EnterpriseUsersViewSet,
 )
 
 # Create router for ViewSets
@@ -39,14 +45,18 @@ router.register(r'protocols/visit-protocols', views.ExamVisitProtocolViewSet, ba
 router.register(r'enterprises', views.EnterpriseViewSet, basename='enterprise')
 router.register(r'work-sites', views.WorkSiteViewSet, basename='worksite')  
 router.register(r'workers', views.WorkerViewSet, basename='worker')
+router.register(r'enterprise-users', EnterpriseUsersViewSet, basename='enterprise-users')
 
 # Medical examination endpoints
 router.register(r'examinations', views.MedicalExaminationViewSet, basename='examination')
+router.register(r'medical-exams', views.MedicalExaminationViewSet, basename='medical-exams')
+router.register(r'medical-exams-results', views.MedicalExaminationViewSet, basename='medical-exams-results')
 router.register(r'vital-signs', views.VitalSignsViewSet, basename='vitalsigns')
 router.register(r'fitness-certificates', views.FitnessCertificateViewSet, basename='fitnesscertificate')
 
 # Disease and incident endpoints
 router.register(r'occupational-diseases', views.OccupationalDiseaseViewSet, basename='occupationaldisease')
+router.register(r'occupational-diseases-results', views.OccupationalDiseaseViewSet, basename='occupational-diseases-results')
 router.register(r'workplace-incidents', views.WorkplaceIncidentViewSet, basename='workplaceincident')
 router.register(r'hazard-identifications', views.HazardIdentificationViewSet, basename='hazard-identification')
 router.register(r'ppe-items', views.PPEItemViewSet, basename='ppe-item')
@@ -60,6 +70,7 @@ router.register(r'overexposure-alerts', OverexposureAlertViewSet, basename='over
 
 # Exit examinations
 router.register(r'exit-exams', ExitExaminationViewSet, basename='exit-examination')
+router.register(r'exit-exams-results', ExitExaminationViewSet, basename='exit-exams-results')
 
 # Regulatory reporting
 router.register(r'cnss-reports', RegulatoryCNSSReportViewSet, basename='cnss-report')
@@ -67,19 +78,43 @@ router.register(r'drc-reports', DRCRegulatoryReportViewSet, basename='drc-report
 
 # PPE compliance tracking
 router.register(r'ppe-compliance', PPEComplianceRecordViewSet, basename='ppe-compliance')
+router.register(r'ppe-compliance-results', PPEComplianceRecordViewSet, basename='ppe-compliance-results')
 
 # ==================== MEDICAL EXAMINATION EXTENDED ENDPOINTS ====================
 # X-ray imaging with ILO classification
 router.register(r'xray-imaging', XrayImagingResultViewSet, basename='xray-imaging')
+router.register(r'xray-imaging-results', XrayImagingResultViewSet, basename='xray-imaging-results')
 
 # Heavy metals testing
 router.register(r'heavy-metals-tests', HeavyMetalsTestViewSet, basename='heavy-metals-test')
 
+# Audiometry results
+router.register(r'audiometry', AudiometryResultViewSet, basename='audiometry')
+router.register(r'audiometry-results', AudiometryResultViewSet, basename='audiometry-results')
+
+# Spirometry results
+router.register(r'spirometry', SpirometryResultViewSet, basename='spirometry')
+router.register(r'spirometry-results', SpirometryResultViewSet, basename='spirometry-results')
+
+# Vision test results
+router.register(r'vision-test', VisionTestResultViewSet, basename='vision-test')
+router.register(r'vision-test-results', VisionTestResultViewSet, basename='vision-test-results')
+
+# Mental health screening
+router.register(r'mental-health-screening', MentalHealthScreeningViewSet, basename='mental-health-screening')
+router.register(r'mental-health-screening-results', MentalHealthScreeningViewSet, basename='mental-health-screening-results')
+
+# Ergonomic assessment
+router.register(r'ergonomic-assessment', ErgonomicAssessmentViewSet, basename='ergonomic-assessment')
+router.register(r'ergonomic-assessment-results', ErgonomicAssessmentViewSet, basename='ergonomic-assessment-results')
+
 # Drug & alcohol screening
 router.register(r'drug-alcohol-screening', DrugAlcoholScreeningViewSet, basename='drug-alcohol-screening')
+router.register(r'drug-alcohol-screening-results', DrugAlcoholScreeningViewSet, basename='drug-alcohol-screening-results')
 
 # Health screenings (ergonomic, mental, cardio, musculoskeletal)
 router.register(r'health-screening', HealthScreeningViewSet, basename='health-screening')
+router.register(r'health-screening-results', HealthScreeningViewSet, basename='health-screening-results')
 
 # Fitness certification decisions
 router.register(r'fitness-decisions', FitnessCertificationDecisionViewSet, basename='fitness-decision')
@@ -134,16 +169,16 @@ router.register(r'ohs/worker-feedback', WorkerFeedbackViewSet, basename='worker-
 
 urlpatterns = [
     # ViewSet URLs (REST API)
-    path('api/', include(router.urls)),
+    path('', include(router.urls)),
     
     # ==================== SURVEILLANCE PROGRAMS ====================
-    path('api/surveillance/', include('apps.occupational_health.urls_surveillance')),
+    path('surveillance/', include('apps.occupational_health.urls_surveillance')),
     
     # ==================== DASHBOARD & ANALYTICS ====================
-    path('api/dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
-    path('api/choices/', views.choices_data, name='choices-data'),
-    path('api/sector-analysis/', views.sector_analysis, name='sector-analysis'),
-    path('api/generate-metrics/', views.generate_site_metrics, name='generate-metrics'),
+    path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
+    path('choices/', views.choices_data, name='choices-data'),
+    path('sector-analysis/', views.sector_analysis, name='sector-analysis'),
+    path('generate-metrics/', views.generate_site_metrics, name='generate-metrics'),
     
     # ==================== ENTERPRISE-SPECIFIC ENDPOINTS ====================
     # These are handled by the ViewSet actions:

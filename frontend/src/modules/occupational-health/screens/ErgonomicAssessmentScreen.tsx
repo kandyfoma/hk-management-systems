@@ -1,9 +1,9 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Dimensions, Modal, Alert, FlatList } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
+import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -40,13 +40,14 @@ export function ErgonomicAssessmentScreen() {
 
   const loadAssessments = async () => {
     try {
-      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-      const token = await AsyncStorage.getItem('auth_token');
-      const response = await axios.get(`${baseURL}/api/v1/occupational-health/hierarchy-of-controls/`,
-        { headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' } });
-      if (response.data) setAssessments(Array.isArray(response.data) ? response.data : response.data.results || []);
+      const api = ApiService.getInstance();
+      const response = await api.get('/occupational-health/ergonomic-assessments/');
+      if (response.success && response.data) {
+        const data = Array.isArray(response.data) ? response.data : response.data.results || [];
+        setAssessments(data);
+      }
     } catch (error) {
-      setAssessments(SAMPLE_ASSESSMENTS);
+      console.error('Error loading ergonomic assessments:', error);
     }
   };
 

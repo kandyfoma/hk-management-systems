@@ -155,7 +155,7 @@ class OccHealthApiService {
     limit: number = 50
   ): Promise<ExamSchedule[]> {
     try {
-      const params = { limit };
+      const params: Record<string, any> = { limit };
       if (status) params.status = status;
       if (examType) params.exam_type = examType;
 
@@ -181,7 +181,7 @@ class OccHealthApiService {
   // ─── Certificates ───────────────────────────────────────────
   async getCertificates(status?: string, limit: number = 50): Promise<Certificate[]> {
     try {
-      const params = { limit };
+      const params: Record<string, any> = { limit };
       if (status) params.status = status;
 
       const response = await this.api.get<Certificate[]>('/certificates/', { params });
@@ -207,7 +207,7 @@ class OccHealthApiService {
   // ─── Incidents ──────────────────────────────────────────────
   async getIncidents(status?: string, type?: string, limit: number = 50): Promise<Incident[]> {
     try {
-      const params = { limit };
+      const params: Record<string, any> = { limit };
       if (status) params.status = status;
       if (type) params.type = type;
 
@@ -232,7 +232,7 @@ class OccHealthApiService {
   // ─── Compliance ─────────────────────────────────────────────
   async getComplianceMetrics(framework?: 'iso-27001' | 'iso-45001'): Promise<ComplianceMetrics> {
     try {
-      const params = {};
+      const params: Record<string, any> = {};
       if (framework) params.framework = framework;
 
       const response = await this.api.get<ComplianceMetrics>('/compliance/metrics/', { params });

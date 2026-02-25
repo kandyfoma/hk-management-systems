@@ -359,7 +359,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {visible && config && (
-        <View style={ms.overlay} pointerEvents="auto">
+        <View style={[ms.overlay, { pointerEvents: 'auto' }]}>
           {/* Backdrop */}
           <Animated.View style={[ms.backdrop, { opacity: backdropAnim }]}>
             <Pressable
@@ -371,8 +371,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
           {/* Modal */}
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={ms.modalCenter}
-            pointerEvents="box-none"
+            style={[ms.modalCenter, { pointerEvents: 'box-none' }]}
           >
             <Animated.View
               style={[
@@ -449,6 +448,7 @@ const ms = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 99998,
+    pointerEvents: 'auto',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -459,6 +459,7 @@ const ms = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
+    pointerEvents: 'box-none',
   },
   modal: {
     backgroundColor: '#FFFFFF',

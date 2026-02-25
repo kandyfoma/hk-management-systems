@@ -130,7 +130,6 @@ export function ConnectivityBanner() {
           opacity: opacityAnim,
         },
       ]}
-      pointerEvents="none"
     >
       <View style={s.bannerContent}>
         <View style={s.bannerLeft}>
@@ -201,6 +200,7 @@ const s = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 99990,
+    pointerEvents: 'none',
     ...shadows.md,
   },
   bannerContent: {

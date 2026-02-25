@@ -38,6 +38,33 @@ import { MedicalExamManagementScreen } from '../modules/occupational-health/scre
 import { WorkerRiskProfileScreen } from '../modules/occupational-health/screens/WorkerRiskProfileScreen';
 import { OverexposureAlertScreen } from '../modules/occupational-health/screens/OverexposureAlertScreen';
 import { PPEComplianceRecordScreen } from '../modules/occupational-health/screens/PPEComplianceRecordScreen';
+import { AudiometryScreen } from '../modules/occupational-health/screens/AudiometryScreen';
+import { SpirometryScreen } from '../modules/occupational-health/screens/SpirometryScreen';
+import { VisionTestScreen } from '../modules/occupational-health/screens/VisionTestScreen';
+import { PPEComplianceScreen } from '../modules/occupational-health/screens/PPEComplianceScreen';
+import { XrayImagingScreen } from '../modules/occupational-health/screens/XrayImagingScreen';
+import { DrugAlcoholScreeningScreen } from '../modules/occupational-health/screens/DrugAlcoholScreeningScreen';
+import { MedicalTestCatalogScreen } from '../modules/occupational-health/screens/MedicalTestCatalogScreen';
+import { AudiometryDashboardScreen } from '../modules/occupational-health/screens/AudiometryDashboardScreen';
+import { SpirometryDashboardScreen } from '../modules/occupational-health/screens/SpirometryDashboardScreen';
+import { VisionDashboardScreen } from '../modules/occupational-health/screens/VisionDashboardScreen';
+import { XrayDashboardScreen } from '../modules/occupational-health/screens/XrayDashboardScreen';
+import { DrugAlcoholDashboardScreen } from '../modules/occupational-health/screens/DrugAlcoholDashboardScreen';
+import { PPEComplianceDashboardScreen } from '../modules/occupational-health/screens/PPEComplianceDashboardScreen';
+import { ExamsDashboardScreen } from '../modules/occupational-health/screens/ExamsDashboardScreen';
+import { HealthScreeningDashboardScreen } from '../modules/occupational-health/screens/HealthScreeningDashboardScreen';
+import { ExitExamsDashboardScreen } from '../modules/occupational-health/screens/ExitExamsDashboardScreen';
+import { DiseasesDashboardScreen } from '../modules/occupational-health/screens/DiseasesDashboardScreen';
+import { AudiometryListScreen } from '../modules/occupational-health/screens/AudiometryListScreen';
+import { SpirometryListScreen } from '../modules/occupational-health/screens/SpirometryListScreen';
+import { VisionTestListScreen } from '../modules/occupational-health/screens/VisionTestListScreen';
+import { XrayImagingListScreen } from '../modules/occupational-health/screens/XrayImagingListScreen';
+import { DrugAlcoholScreeningListScreen } from '../modules/occupational-health/screens/DrugAlcoholScreeningListScreen';
+import { PPEComplianceListScreen } from '../modules/occupational-health/screens/PPEComplianceListScreen';
+import { ExamsListScreen } from '../modules/occupational-health/screens/ExamsListScreen';
+import { HealthScreeningListScreen } from '../modules/occupational-health/screens/HealthScreeningListScreen';
+import { ExitExamsListScreen } from '../modules/occupational-health/screens/ExitExamsListScreen';
+import { DiseasesListScreen } from '../modules/occupational-health/screens/DiseasesListScreen';
 import { PlaceholderScreen } from '../modules/shared/PlaceholderScreen';
 import { StaffManagementScreen } from '../screens/StaffManagementScreen';
 import { POSScreen } from '../modules/pharmacy/screens/POSScreen';
@@ -291,16 +318,12 @@ const createDynamicSections = (
       items: [
         { id: 'oh-dashboard', label: 'Vue d\'Ensemble', icon: 'construct-outline', iconActive: 'construct' },
         { id: 'oh-intake', label: 'Accueil Patient', icon: 'person-add-outline', iconActive: 'person-add' },
-        { id: 'oh-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit' },
-        { id: 'oh-medical-tests', label: 'Tests Médicaux', icon: 'flask-outline', iconActive: 'flask' },
+        { id: 'oh-medical-test-catalog', label: 'Catalogue Évaluations Médicales', icon: 'grid-outline', iconActive: 'grid' },
         { id: 'oh-exam-management', label: 'Gestion Examens', icon: 'document-outline', iconActive: 'document' },
-        { id: 'oh-exit-exams', label: 'Examens de Départ', icon: 'log-out-outline', iconActive: 'log-out' },
         { id: 'oh-protocol', label: 'Protocoles', icon: 'document-text-outline', iconActive: 'document-text' },
         { id: 'oh-previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
         { id: 'oh-certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
         { id: 'oh-surveillance', label: 'Prog. Surveillance', icon: 'eye-outline', iconActive: 'eye' },
-        { id: 'oh-health-screening', label: 'Dépistage Santé', icon: 'pulse-outline', iconActive: 'pulse' },
-        { id: 'oh-diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
       ],
     });
 
@@ -404,6 +427,11 @@ function DesktopApp() {
   const [pendingConsultationToLoad, setPendingConsultationToLoad] = useState<string | null>(null);
   const [ohExamsScreenKey, setOhExamsScreenKey] = useState(0);
   const [expirationSoonCount, setExpirationSoonCount] = useState<number>(0);
+
+  // Custom navigation wrapper for screen-based navigation
+  const customNavigation = {
+    navigate: (screenName: string) => setActiveScreen(screenName),
+  };
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatientId(patient.id);
@@ -515,6 +543,12 @@ function DesktopApp() {
       'oh-worker-risk-profiles': 'OCCUPATIONAL_HEALTH',
       'oh-overexposure-alerts': 'OCCUPATIONAL_HEALTH',
       'oh-ppe-compliance': 'OCCUPATIONAL_HEALTH',
+      'oh-audiometry': 'OCCUPATIONAL_HEALTH',
+      'oh-spirometry': 'OCCUPATIONAL_HEALTH',
+      'oh-vision-tests': 'OCCUPATIONAL_HEALTH',
+      'oh-ppe-compliance-new': 'OCCUPATIONAL_HEALTH',
+      'oh-xray-imaging': 'OCCUPATIONAL_HEALTH',
+      'oh-drug-alcohol-screening': 'OCCUPATIONAL_HEALTH',
       'oh-regulatory-reports': 'OCCUPATIONAL_HEALTH',
       'oh-iso45001': 'OCCUPATIONAL_HEALTH',
       'oh-iso27001': 'OCCUPATIONAL_HEALTH',
@@ -523,6 +557,17 @@ function DesktopApp() {
       'oh-analytics': 'OCCUPATIONAL_HEALTH',
       'oh-worker-management': 'OCCUPATIONAL_HEALTH',
       'oh-enterprise-management': 'OCCUPATIONAL_HEALTH',
+      'oh-medical-test-catalog': 'OCCUPATIONAL_HEALTH',
+      'oh-audiometry-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-spirometry-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-vision-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-xray-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-drug-alcohol-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-ppe-compliance-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-exams-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-health-screening-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-exit-exams-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-diseases-dashboard': 'OCCUPATIONAL_HEALTH',
       'oh-medical-tests': 'OCCUPATIONAL_HEALTH',
       'oh-exam-management': 'OCCUPATIONAL_HEALTH',
       'oh-exit-exams': 'OCCUPATIONAL_HEALTH',
@@ -803,6 +848,12 @@ function DesktopApp() {
     if (activeScreen === 'oh-worker-risk-profiles') return <WorkerRiskProfileScreen />;
     if (activeScreen === 'oh-overexposure-alerts') return <OverexposureAlertScreen />;
     if (activeScreen === 'oh-ppe-compliance') return <PPEComplianceRecordScreen />;
+    if (activeScreen === 'oh-audiometry') return <AudiometryScreen />;
+    if (activeScreen === 'oh-spirometry') return <SpirometryScreen />;
+    if (activeScreen === 'oh-vision-tests') return <VisionTestScreen />;
+    if (activeScreen === 'oh-ppe-compliance-new') return <PPEComplianceScreen />;
+    if (activeScreen === 'oh-xray-imaging') return <XrayImagingScreen />;
+    if (activeScreen === 'oh-drug-alcohol-screening') return <DrugAlcoholScreeningScreen />;
     if (activeScreen === 'oh-regulatory-reports') return <RegulatoryReportsScreen />;
     if (activeScreen === 'oh-iso45001') return <ISO45001DashboardScreen />;
     if (activeScreen === 'oh-iso27001') return <ISO27001DashboardScreen />;
@@ -810,6 +861,27 @@ function DesktopApp() {
     if (activeScreen === 'oh-compliance') return <ComplianceScreen />;
     if (activeScreen === 'oh-analytics') return <AnalyticsScreen />;
     if (activeScreen === 'oh-enterprise-management') return <EnterpriseManagementScreen />;
+    if (activeScreen === 'oh-medical-test-catalog') return <MedicalTestCatalogScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-audiometry-dashboard') return <AudiometryDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-spirometry-dashboard') return <SpirometryDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-vision-dashboard') return <VisionDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-xray-dashboard') return <XrayDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-drug-alcohol-dashboard') return <DrugAlcoholDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-ppe-compliance-dashboard') return <PPEComplianceDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-exams-dashboard') return <ExamsDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-health-screening-dashboard') return <HealthScreeningDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-exit-exams-dashboard') return <ExitExamsDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-diseases-dashboard') return <DiseasesDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-audiometry-list') return <AudiometryListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-spirometry-list') return <SpirometryListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-vision-list') return <VisionTestListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-xray-list') return <XrayImagingListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-drug-alcohol-list') return <DrugAlcoholScreeningListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-ppe-list') return <PPEComplianceListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-exams-list') return <ExamsListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-health-screening-list') return <HealthScreeningListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-exit-exams-list') return <ExitExamsListScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-diseases-list') return <DiseasesListScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-medical-tests') return <MedicalTestVisualizationScreen />;
     if (activeScreen === 'oh-exam-management') return <MedicalExamManagementScreen />;
     if (activeScreen === 'oh-exit-exams') return <ExitExamScreen />;

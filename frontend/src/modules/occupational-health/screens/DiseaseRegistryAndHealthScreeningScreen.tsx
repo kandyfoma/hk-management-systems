@@ -503,18 +503,18 @@ export function HealthScreeningFormScreen() {
     });
 
   const screenings = [
-    { id: 'ergonomic', name: 'Ergonomic Assessment', icon: 'desktop-outline', color: '#3B82F6' },
-    { id: 'mental', name: 'Mental Health Assessment', icon: 'happy-outline', color: '#8B5CF6' },
-    { id: 'cardio', name: 'Cardiovascular Risk', icon: 'heart-outline', color: '#EC4899' },
-    { id: 'msk', name: 'Musculoskeletal Screening', icon: 'body-outline', color: '#F59E0B' },
+    { id: 'ergonomic', name: 'Évaluation Ergonomique', icon: 'desktop-outline', color: '#3B82F6' },
+    { id: 'mental', name: 'Évaluation Santé Mentale', icon: 'happy-outline', color: '#8B5CF6' },
+    { id: 'cardio', name: 'Risque Cardiovasculaire', icon: 'heart-outline', color: '#EC4899' },
+    { id: 'msk', name: 'Dépistage Musculo-squelettique', icon: 'body-outline', color: '#F59E0B' },
   ];
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Health Screening Forms</Text>
-          <Text style={styles.subtitle}>Occupational health assessments</Text>
+          <Text style={styles.title}>Formulaires de Dépistage</Text>
+          <Text style={styles.subtitle}>Évaluations de santé occupationnelle</Text>
         </View>
 
         <View style={{ paddingHorizontal: spacing.md, paddingBottom: 40 }}>
@@ -530,7 +530,7 @@ export function HealthScreeningFormScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.screeningName}>{screening.name}</Text>
-                <Text style={styles.screeningDesc}>Start assessment</Text>
+                <Text style={styles.screeningDesc}>Commencer l'évaluation</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -542,7 +542,7 @@ export function HealthScreeningFormScreen() {
               <View style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' }}>
-                    Screening History
+                    Historique de Dépistage
                   </Text>
                 </View>
 
@@ -550,7 +550,7 @@ export function HealthScreeningFormScreen() {
                 <View style={{ gap: spacing.md }}>
                   {/* Filter Buttons */}
                   <View style={{ gap: spacing.xs }}>
-                    <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' }}>Filter by Type</Text>
+                    <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' }}>Filtrer par Type</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         {['all', 'ergonomic', 'mental', 'cardio', 'msk'].map((type) => (
@@ -578,12 +578,12 @@ export function HealthScreeningFormScreen() {
 
                   {/* Sort Controls */}
                   <View style={{ gap: spacing.xs }}>
-                    <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' }}>Sort By</Text>
+                    <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' }}>Trier par</Text>
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                       {[
-                        { value: 'date-desc' as const, label: 'Newest' },
-                        { value: 'date-asc' as const, label: 'Oldest' },
-                        { value: 'worker' as const, label: 'Worker' },
+                        { value: 'date-desc' as const, label: 'Plus récent' },
+                        { value: 'date-asc' as const, label: 'Plus ancien' },
+                        { value: 'worker' as const, label: 'Travailleur' },
                       ].map((option) => (
                         <TouchableOpacity
                           key={option.value}
@@ -645,7 +645,7 @@ export function HealthScreeningFormScreen() {
               ) : (
                 <View style={{ paddingVertical: spacing.lg, alignItems: 'center' }}>
                   <Ionicons name="filter-outline" size={40} color={colors.textSecondary + '40'} />
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: spacing.md }}>No screenings found</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: spacing.md }}>Aucun dépistage trouvé</Text>
                 </View>
               )}
             </>
@@ -709,43 +709,43 @@ function ScreeningFormModal({
 
   const formConfigs: Record<string, any> = {
     ergonomic: {
-      title: 'Ergonomic Assessment Form',
+      title: 'Formulaire d\'Évaluation Ergonomique',
       questions: [
-        { id: 'posture', label: 'Do you maintain proper posture throughout your workday?', type: 'yesno' },
-        { id: 'breaks', label: 'How often do you take breaks from your desk? (in minutes)', type: 'number' },
-        { id: 'neck', label: 'Do you experience neck or shoulder pain?', type: 'yesno' },
-        { id: 'wrist', label: 'Do you experience wrist or hand pain?', type: 'yesno' },
-        { id: 'back', label: 'Do you experience lower back pain?', type: 'yesno' },
+        { id: 'posture', label: 'Maintenez-vous une bonne posture tout au long de votre journée de travail ?', type: 'yesno' },
+        { id: 'breaks', label: 'Combien de fois prenez-vous des pauses à votre bureau ? (en minutes)', type: 'number' },
+        { id: 'neck', label: 'Ressentez-vous des douleurs au cou ou aux épaules ?', type: 'yesno' },
+        { id: 'wrist', label: 'Ressentez-vous des douleurs aux poignets ou aux mains ?', type: 'yesno' },
+        { id: 'back', label: 'Ressentez-vous des douleurs au bas du dos ?', type: 'yesno' },
       ],
     },
     mental: {
-      title: 'Mental Health Screening Form',
+      title: 'Formulaire de Dépistage de Santé Mentale',
       questions: [
-        { id: 'stress', label: 'How would you rate your current stress level? (1-10)', type: 'scale' },
-        { id: 'sleep', label: 'Are you experiencing sleep difficulties?', type: 'yesno' },
-        { id: 'mood', label: 'Have you felt persistently sad or anxious?', type: 'yesno' },
-        { id: 'support', label: 'Do you feel supported at work?', type: 'yesno' },
-        { id: 'worklife', label: 'How satisfied are you with your work-life balance? (1-10)', type: 'scale' },
+        { id: 'stress', label: 'Comment évaluez-vous votre niveau de stress actuel ? (1-10)', type: 'scale' },
+        { id: 'sleep', label: 'Avez-vous des difficultés de sommeil ?', type: 'yesno' },
+        { id: 'mood', label: 'Vous êtes-vous senti persistamment triste ou anxieux ?', type: 'yesno' },
+        { id: 'support', label: 'Vous sentez-vous soutenu au travail ?', type: 'yesno' },
+        { id: 'worklife', label: 'Êtes-vous satisfait de votre équilibre travail-vie personnelle ? (1-10)', type: 'scale' },
       ],
     },
     cardio: {
-      title: 'Cardiovascular Risk Assessment',
+      title: 'Évaluation du Risque Cardiovasculaire',
       questions: [
-        { id: 'history', label: 'Family history of heart disease?', type: 'yesno' },
-        { id: 'exercise', label: 'How many days per week do you exercise?', type: 'number' },
-        { id: 'smoking', label: 'Do you smoke?', type: 'yesno' },
-        { id: 'diet', label: 'How would you rate your diet? (Poor/Fair/Good/Excellent)', type: 'select' },
-        { id: 'chest', label: 'Do you experience chest discomfort during exercise?', type: 'yesno' },
+        { id: 'history', label: 'Avez-vous un antécédent familial de maladie cardiaque ?', type: 'yesno' },
+        { id: 'exercise', label: 'Combien de jours par semaine faites-vous de l\'exercice ?', type: 'number' },
+        { id: 'smoking', label: 'Fumez-vous ?', type: 'yesno' },
+        { id: 'diet', label: 'Comment évaluez-vous votre alimentation ? (Mauvaise/Passable/Bonne/Excellente)', type: 'select' },
+        { id: 'chest', label: 'Ressentez-vous une gêne thoracique pendant l\'exercice ?', type: 'yesno' },
       ],
     },
     msk: {
-      title: 'Musculoskeletal Screening',
+      title: 'Dépistage Musculo-squelettique',
       questions: [
-        { id: 'pain', label: 'Do you experience any joint or muscle pain?', type: 'yesno' },
-        { id: 'location', label: 'Location of pain (if applicable)', type: 'text' },
-        { id: 'duration', label: 'How long have you had this pain? (in weeks)', type: 'number' },
-        { id: 'lifting', label: 'Do you regularly lift or carry heavy objects?', type: 'yesno' },
-        { id: 'impact', label: 'How much does this affect your work? (1-10)', type: 'scale' },
+        { id: 'pain', label: 'Ressentez-vous une douleur articulaire ou musculaire ?', type: 'yesno' },
+        { id: 'location', label: 'Localisation de la douleur (le cas échéant)', type: 'text' },
+        { id: 'duration', label: 'Depuis combien de temps avez-vous cette douleur ? (en semaines)', type: 'number' },
+        { id: 'lifting', label: 'Portez-vous ou transportez-vous régulièrement des objets lourds ?', type: 'yesno' },
+        { id: 'impact', label: 'Quel impact cela a-t-il sur votre travail ? (1-10)', type: 'scale' },
       ],
     },
   };

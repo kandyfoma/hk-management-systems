@@ -335,30 +335,87 @@ class AudiometryResultSerializer(serializers.ModelSerializer):
     
     tested_by_name = serializers.CharField(source='tested_by.get_full_name', read_only=True)
     classification_display = serializers.CharField(source='get_hearing_loss_classification_display', read_only=True)
+    worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
+    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
+    test_date = serializers.DateTimeField(read_only=True)
+    status = serializers.SerializerMethodField(read_only=True)
+    
+    # Accept worker_id for creation
+    worker_id_input = serializers.CharField(write_only=True, required=False)
+    
+    def get_status(self, obj):
+        """Map hearing_loss_classification to status"""
+        classification = obj.hearing_loss_classification
+        if classification in ('mild', 'moderate'):
+            return 'warning'
+        elif classification in ('severe', 'profound'):
+            return 'critical'
+        else:  # 'normal'
+            return 'normal'
     
     class Meta:
         model = AudiometryResult
         fields = '__all__'
+        extra_kwargs = {
+            'examination': {'required': False}
+        }
 
 class SpirometryResultSerializer(serializers.ModelSerializer):
     """Spirometry test result serializer"""
     
     tested_by_name = serializers.CharField(source='tested_by.get_full_name', read_only=True)
     interpretation_display = serializers.CharField(source='get_spirometry_interpretation_display', read_only=True)
+    worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
+    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
+    test_date = serializers.DateTimeField(read_only=True)
+    status = serializers.SerializerMethodField(read_only=True)
+    
+    # Accept worker_id for creation
+    worker_id_input = serializers.CharField(write_only=True, required=False)
+    
+    def get_status(self, obj):
+        """Map spirometry_interpretation to status"""
+        interpretation = obj.spirometry_interpretation
+        if interpretation in ('restrictive', 'obstructive', 'mixed', 'small_airways'):
+            return 'warning' if interpretation in ('restrictive', 'small_airways') else 'critical'
+        else:  # 'normal'
+            return 'normal'
     
     class Meta:
         model = SpirometryResult
         fields = '__all__'
+        extra_kwargs = {
+            'examination': {'required': False}
+        }
 
 class VisionTestResultSerializer(serializers.ModelSerializer):
     """Vision test result serializer"""
     
     tested_by_name = serializers.CharField(source='tested_by.get_full_name', read_only=True)
     color_vision_display = serializers.CharField(source='get_color_vision_test_display', read_only=True)
+    worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
+    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
+    test_date = serializers.DateTimeField(read_only=True)
+    status = serializers.SerializerMethodField(read_only=True)
+    
+    # Accept worker_id for creation
+    worker_id_input = serializers.CharField(write_only=True, required=False)
+    
+    def get_status(self, obj):
+        """Compute status based on vision test findings"""
+        if obj.requires_correction or obj.computer_vision_syndrome:
+            return 'warning'
+        return 'normal'
     
     class Meta:
         model = VisionTestResult
         fields = '__all__'
+        extra_kwargs = {
+            'examination': {'required': False}
+        }
 
 class MentalHealthScreeningSerializer(serializers.ModelSerializer):
     """Mental health screening serializer"""
@@ -367,10 +424,19 @@ class MentalHealthScreeningSerializer(serializers.ModelSerializer):
     burnout_risk_display = serializers.CharField(source='get_burnout_risk_display', read_only=True)
     sleep_quality_display = serializers.CharField(source='get_sleep_quality_display', read_only=True)
     alcohol_risk_display = serializers.CharField(source='get_alcohol_risk_display', read_only=True)
+    worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
+    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
+    
+    # Accept worker_id for creation
+    worker_id_input = serializers.CharField(write_only=True, required=False)
     
     class Meta:
         model = MentalHealthScreening
         fields = '__all__'
+        extra_kwargs = {
+            'examination': {'required': False}
+        }
 
 class ErgonomicAssessmentSerializer(serializers.ModelSerializer):
     """Ergonomic assessment serializer"""
@@ -379,10 +445,19 @@ class ErgonomicAssessmentSerializer(serializers.ModelSerializer):
     workstation_type_display = serializers.CharField(source='get_workstation_type_display', read_only=True)
     keyboard_position_display = serializers.CharField(source='get_keyboard_position_display', read_only=True)
     risk_level_display = serializers.CharField(source='get_ergonomic_risk_level_display', read_only=True)
+    worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
+    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
+    
+    # Accept worker_id for creation
+    worker_id_input = serializers.CharField(write_only=True, required=False)
     
     class Meta:
         model = ErgonomicAssessment
         fields = '__all__'
+        extra_kwargs = {
+            'examination': {'required': False}
+        }
 
 class FitnessCertificateSerializer(serializers.ModelSerializer):
     """Fitness certificate serializer"""
@@ -761,6 +836,16 @@ class ExitExaminationSerializer(serializers.ModelSerializer):
     reason_display = serializers.CharField(source='get_reason_for_exit_display', read_only=True)
     examiner_name = serializers.CharField(source='examiner.get_full_name', read_only=True)
     days_until_exit = serializers.ReadOnlyField()
+    status = serializers.SerializerMethodField(read_only=True)
+    
+    def get_status(self, obj):
+        """Compute status based on exam completion and findings"""
+        if obj.occupational_disease_present:
+            return 'critical'
+        elif not obj.exam_completed:
+            return 'warning'
+        else:
+            return 'normal'
     
     class Meta:
         model = ExitExamination
@@ -851,6 +936,16 @@ class PPEComplianceRecordSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     checked_by_name = serializers.CharField(source='checked_by.get_full_name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    status_computed = serializers.SerializerMethodField(read_only=True)
+    
+    def get_status_computed(self, obj):
+        """Compute status for UI display based on compliance"""
+        if obj.status in ('expired', 'damaged', 'lost', 'non_compliant'):
+            return 'critical'
+        elif obj.status in ('in_use', 'replaced'):
+            return 'warning'
+        else:  # 'compliant'
+            return 'normal'
     
     class Meta:
         model = PPEComplianceRecord
@@ -900,6 +995,16 @@ class XrayImagingResultSerializer(serializers.ModelSerializer):
         source='get_profusion_display',
         read_only=True
     )
+    status = serializers.SerializerMethodField(read_only=True)
+    
+    def get_status(self, obj):
+        """Compute status based on X-ray findings severity"""
+        if obj.severity in ('severe', 'advanced'):
+            return 'critical'
+        elif obj.severity == 'moderate':
+            return 'warning'
+        else:  # 'mild' or empty
+            return 'normal'
     
     class Meta:
         model = XrayImagingResult
@@ -914,12 +1019,12 @@ class XrayImagingResultSerializer(serializers.ModelSerializer):
             'cardiac_enlargement', 'other_findings',
             'pneumoconiosis_detected', 'pneumoconiosis_type', 'severity',
             'follow_up_required', 'follow_up_interval_months',
-            'clinical_notes', 'created', 'updated'
+            'clinical_notes', 'created', 'updated', 'status'
         ]
         read_only_fields = [
             'id', 'worker_name', 'worker_id', 'exam_type',
             'imaging_type_display', 'ilo_classification_display',
-            'profusion_display', 'created', 'updated'
+            'profusion_display', 'created', 'updated', 'status'
         ]
 
 
@@ -979,6 +1084,10 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
         read_only=True
     )
     worker_id = serializers.CharField(
+        source='examination.worker.id',
+        read_only=True
+    )
+    employee_id = serializers.CharField(
         source='examination.worker.employee_id',
         read_only=True
     )
@@ -999,6 +1108,7 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
         read_only=True
     )
     overall_result = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField(read_only=True)
     
     def get_overall_result(self, obj):
         if obj.alcohol_result == 'positive' or obj.drug_result == 'positive':
@@ -1007,10 +1117,19 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
             return 'presumptive'
         return 'negative'
     
+    def get_status(self, obj):
+        """Map overall result to status for UI display"""
+        if obj.alcohol_result == 'positive' or obj.drug_result == 'positive':
+            return 'critical'
+        elif obj.alcohol_result == 'presumptive' or obj.drug_result == 'presumptive':
+            return 'warning'
+        else:  # 'negative'
+            return 'normal'
+    
     class Meta:
         model = DrugAlcoholScreening
         fields = [
-            'id', 'examination', 'worker_name', 'worker_id',
+            'id', 'examination', 'worker_name', 'worker_id', 'employee_id',
             'test_type', 'test_type_display', 'test_date',
             'testing_facility', 'collector',
             'alcohol_tested', 'alcohol_result', 'alcohol_result_display',
@@ -1022,10 +1141,10 @@ class DrugAlcoholScreeningSerializer(serializers.ModelSerializer):
             'mro_reviewed', 'mro_name', 'mro_comments',
             'fit_for_duty', 'restrictions',
             'chain_of_custody_verified', 'specimen_id', 'notes',
-            'overall_result', 'created', 'updated'
+            'overall_result', 'status', 'created', 'updated'
         ]
         read_only_fields = [
-            'id', 'worker_name', 'worker_id',
+            'id', 'worker_name', 'worker_id', 'employee_id',
             'test_type_display', 'alcohol_result_display',
             'drug_result_display', 'confirmation_result_display',
             'overall_result', 'created', 'updated'
@@ -1036,10 +1155,14 @@ class HealthScreeningSerializer(serializers.ModelSerializer):
     """Serializer for flexible health screenings (ergonomic, mental, cardio, musculoskeletal)"""
     
     worker_name = serializers.CharField(
-        source='worker.get_full_name',
+        source='worker.full_name',
         read_only=True
     )
     worker_id = serializers.CharField(
+        source='worker.id',
+        read_only=True
+    )
+    employee_id = serializers.CharField(
         source='worker.employee_id',
         read_only=True
     )
@@ -1057,11 +1180,21 @@ class HealthScreeningSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True
     )
+    status = serializers.SerializerMethodField(read_only=True)
+    
+    def get_status(self, obj):
+        """Map screening status to UI status"""
+        if obj.status in ('pending',):
+            return 'warning'
+        elif obj.status in ('completed', 'reviewed'):
+            return 'normal'
+        else:  # 'archived'
+            return 'normal'
     
     class Meta:
         model = HealthScreening
         fields = [
-            'id', 'worker', 'worker_name', 'worker_id',
+            'id', 'worker', 'worker_name', 'worker_id', 'employee_id',
             'screening_type', 'screening_type_display',
             'responses', 'status', 'notes',
             'conducted_by', 'conducted_by_name',
@@ -1069,9 +1202,9 @@ class HealthScreeningSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'worker_name', 'worker_id',
+            'id', 'worker_name', 'worker_id', 'employee_id',
             'screening_type_display', 'conducted_by_name', 'reviewed_by_name',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'status'
         ]
 
 
