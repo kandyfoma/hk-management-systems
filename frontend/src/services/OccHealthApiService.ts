@@ -345,6 +345,40 @@ export class OccHealthApiService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // ENTERPRISES & WORKSITES
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/enterprises/ — List all enterprises */
+  async listEnterprises(params: { search?: string; page?: number } = {}): Promise<{
+    data: any[];
+    count: number;
+    error?: string;
+  }> {
+    try {
+      const res = await this.api.get(`${OH}/enterprises/`, params);
+      if (!res.success) return { data: [], count: 0, error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return {
+        data: raw,
+        count: res.data?.count ?? raw.length,
+      };
+    } catch (e: any) {
+      return { data: [], count: 0, error: e?.message ?? 'Network error' };
+    }
+  }
+
+  /** GET /api/occupational-health/enterprises/{id}/ */
+  async getEnterprise(id: string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/enterprises/${id}/`);
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // MEDICAL EXAMINATIONS
   // ─────────────────────────────────────────────────────────────
 
@@ -353,7 +387,7 @@ export class OccHealthApiService {
     worker: number;
     exam_type: string;
     exam_date: string;
-    examining_doctor?: number;
+    examining_doctor?: number | null;
     chief_complaint?: string;
     medical_history_review?: string;
     results_summary?: string;
@@ -542,6 +576,74 @@ export class OccHealthApiService {
       };
     } catch (e: any) {
       return { blob: null, error: e?.message };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MEDICAL TEST RESULTS (Heavy Metals, Drug/Alcohol, X-ray, etc.)
+  // ─────────────────────────────────────────────────────────────
+
+  /** POST /api/heavy-metals-tests/ */
+  async createHeavyMetalsTest(payload: {
+    examination: number;
+    heavy_metal: string;
+    specimen_type: string;
+    test_date: string;
+    level_value: number;
+    unit: string;
+    reference_lower?: number | null;
+    reference_upper?: number | null;
+    osha_action_level?: number | null;
+    clinical_significance?: string;
+    occupational_exposure?: boolean;
+    follow_up_required?: boolean;
+    follow_up_recommendation?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/heavy-metals-tests/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/drug-alcohol-screening/ */
+  async createDrugAlcoholScreening(payload: {
+    examination: number;
+    test_type: string;
+    alcohol_tested?: boolean;
+    drug_tested?: boolean;
+    test_date: string;
+    testing_facility?: string;
+    alcohol_result?: string;
+    drug_result?: string;
+    fit_for_duty?: boolean;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/drug-alcohol-screening/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/xray-imaging-results/ */
+  async createXrayImagingResult(payload: {
+    examination: number;
+    imaging_type: string;
+    imaging_date: string;
+    ilo_classification?: string;
+    pneumoconiosis_detected?: boolean;
+    imaging_facility?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/xray-imaging-results/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
     }
   }
 

@@ -75,238 +75,16 @@ const parseRestrictions = (value?: string | null): string[] => {
     .filter(Boolean);
 };
 
-// ─── Sample previous medical examinations ────────────────────
-const SAMPLE_EXAMINATIONS: (MedicalExamination & { 
-  workerName: string; 
-  company: string;
-  sector: string;
-  jobTitle: string;
-  status: 'completed' | 'draft';
-})[] = [
-  {
-    id: 'EXAM-001',
-    patientId: 'W001',
-    workerName: 'Kabamba Mutombo',
-    company: 'Gécamines SA',
-    sector: 'Mining',
-    jobTitle: 'Mineur de fond',
-    workerSector: 'mining',
-    examType: 'periodic',
-    examDate: '2024-01-15',
-    examinerName: 'Dr. Mukendi',
-    vitals: {
-      temperature: 36.8,
-      bloodPressureSystolic: 135,
-      bloodPressureDiastolic: 85,
-      heartRate: 78,
-      weight: 72,
-      height: 175,
-    },
-    physicalExam: {
-      generalAppearance: 'normal',
-      cardiovascular: 'abnormal',
-      cardiovascularNotes: 'Souffle systolique léger',
-      respiratory: 'normal',
-      musculoskeletal: 'abnormal', 
-      musculoskeletalNotes: 'Douleur lombaire légère',
-      neurological: 'normal',
-      dermatological: 'normal',
-      ent: 'abnormal',
-      entNotes: 'Baisse auditive légère (exposition bruit)',
-      abdomen: 'normal',
-      mentalHealth: 'normal',
-      ophthalmological: 'normal',
-    },
-    fitnessDecision: 'fit_with_restrictions',
-    restrictions: ['Pas de travail en hauteur > 3m', 'Port obligatoire EPI auditif'],
-    recommendations: ['Suivi cardiovasculaire tous les 6 mois', 'Ergothérapie pour le dos'],
-    certificateNumber: 'CERT-2024-001',
-    notes: 'Travailleur expérimenté. Exposition prolongée au bruit et vibrations.',
-    createdAt: '2024-01-15T09:30:00Z',
-    status: 'completed',
-    expiryDate: '2024-07-15',
-    examinerDoctorId: 'DOC-001',
-    certificateIssued: true,
-  },
-  {
-    id: 'EXAM-002', 
-    patientId: 'W002',
-    workerName: 'Mwamba Kalala',
-    company: 'Rawbank',
-    sector: 'Banking',
-    jobTitle: 'Chargée de Clientèle',
-    workerSector: 'banking_finance',
-    examType: 'pre_employment',
-    examDate: '2024-01-10',
-    examinerName: 'Dr. Tshilombo',
-    vitals: {
-      temperature: 36.5,
-      bloodPressureSystolic: 115,
-      bloodPressureDiastolic: 75,
-      heartRate: 68,
-      weight: 58,
-      height: 165,
-    },
-    physicalExam: {
-      generalAppearance: 'normal',
-      cardiovascular: 'normal',
-      respiratory: 'normal', 
-      musculoskeletal: 'normal',
-      neurological: 'normal',
-      dermatological: 'normal',
-      ent: 'normal',
-      abdomen: 'normal',
-      mentalHealth: 'concern',
-      mentalHealthNotes: 'Stress léger lié à nouveau poste',
-      ophthalmological: 'normal',
-    },
-    fitnessDecision: 'fit',
-    recommendations: ['Aménagement ergonomique du poste', 'Pause régulière écran'],
-    certificateNumber: 'CERT-2024-002',
-    notes: 'Nouvelle employée. Profil compatible poste bureautique.',
-    createdAt: '2024-01-10T14:15:00Z',
-    status: 'completed',
-    expiryDate: '2025-01-10',
-    examinerDoctorId: 'DOC-002',
-    restrictions: [],
-    certificateIssued: true,
-  },
-  {
-    id: 'EXAM-003',
-    patientId: 'W003',
-    workerName: 'Tshisekedi Ilunga', 
-    company: 'Bâtiment Congo SARL',
-    sector: 'Construction',
-    jobTitle: 'Soudeur-Monteur',
-    workerSector: 'construction',
-    examType: 'return_to_work',
-    examDate: '2024-01-08',
-    examinerName: 'Dr. Mukendi',
-    vitals: {
-      temperature: 36.7,
-      bloodPressureSystolic: 142,
-      bloodPressureDiastolic: 88,
-      heartRate: 82,
-      weight: 78,
-      height: 172,
-    },
-    physicalExam: {
-      generalAppearance: 'normal',
-      cardiovascular: 'abnormal',
-      cardiovascularNotes: 'HTA légère contrôlée sous traitement',
-      respiratory: 'normal',
-      musculoskeletal: 'abnormal',
-      musculoskeletalNotes: 'Raideur épaule droite post-trauma',
-      neurological: 'normal',
-      dermatological: 'normal',
-      ent: 'normal',
-      abdomen: 'normal', 
-      mentalHealth: 'normal',
-      ophthalmological: 'normal',
-    },
-    fitnessDecision: 'fit_with_restrictions',
-    restrictions: ['Éviter soudure aérienne prolongée', 'Contrôle TA mensuel'],
-    recommendations: ['Kinésithérapie épaule', 'Surveillance cardiovasculaire'],
-    certificateNumber: 'CERT-2024-003',
-    notes: 'Reprise après accident travail. Amélioration épaule.',
-    createdAt: '2024-01-08T11:20:00Z',
-    status: 'completed',
-    expiryDate: '2024-04-08',
-    examinerDoctorId: 'DOC-001',
-    certificateIssued: true,
-  },
-  {
-    id: 'EXAM-004',
-    patientId: 'W004',
-    workerName: 'Lukusa Nzuzi',
-    company: 'Hôpital Général de Référence',
-    sector: 'Healthcare',
-    jobTitle: 'Infirmière',
-    workerSector: 'healthcare',
-    examType: 'periodic',
-    examDate: '2024-01-05',
-    examinerName: 'Dr. Tshilombo',
-    vitals: {
-      temperature: 36.4,
-      bloodPressureSystolic: 108,
-      bloodPressureDiastolic: 70,
-      heartRate: 72,
-      weight: 62,
-      height: 168,
-    },
-    physicalExam: {
-      generalAppearance: 'normal',
-      cardiovascular: 'normal',
-      respiratory: 'normal',
-      musculoskeletal: 'abnormal',
-      musculoskeletalNotes: 'TMS légers membres supérieurs',
-      neurological: 'normal',
-      dermatological: 'normal',
-      ent: 'normal',
-      abdomen: 'normal',
-      mentalHealth: 'concern',
-      mentalHealthNotes: 'Fatigue liée travail de nuit',
-      ophthalmological: 'normal',
-    },
-    fitnessDecision: 'fit',
-    recommendations: ['Rotation équipes nuit/jour', 'Exercices TMS'],
-    certificateNumber: 'CERT-2024-004',
-    notes: 'Bonne adaptation travail hospitalier.',
-    createdAt: '2024-01-05T10:45:00Z',
-    status: 'completed',
-    expiryDate: '2024-07-05',
-    examinerDoctorId: 'DOC-002',
-    restrictions: [],
-    certificateIssued: true,
-  },
-  {
-    id: 'EXAM-DRAFT-001',
-    patientId: 'W005',
-    workerName: 'Pongo Tshimanga',
-    company: 'Vodacom Congo',
-    sector: 'Telecom',
-    jobTitle: 'Ingénieur Logiciel',
-    workerSector: 'telecom_it',
-    examType: 'periodic',
-    examDate: '2024-01-20',
-    examinerName: 'Dr. Mukendi',
-    vitals: {
-      temperature: 36.6,
-      bloodPressureSystolic: 125,
-      bloodPressureDiastolic: 80,
-      heartRate: 75,
-    },
-    physicalExam: {
-      generalAppearance: 'normal',
-      cardiovascular: 'normal',
-      respiratory: 'normal',
-      musculoskeletal: 'normal',
-      neurological: 'normal',
-      dermatological: 'normal',
-      ent: 'normal',
-      abdomen: 'normal',
-      mentalHealth: 'normal',
-      ophthalmological: 'normal',
-    },
-    notes: 'Consultation en cours - données partielles',
-    createdAt: '2024-01-20T09:00:00Z',
-    status: 'draft',
-    expiryDate: '2024-07-20',
-    examinerDoctorId: 'DOC-001',
-    fitnessDecision: 'pending_evaluation',
-    restrictions: [],
-    recommendations: [],
-    certificateIssued: false,
-  },
-];
+// All medical examination data is now loaded from the API in the loadFromBackend() and loadDrafts() functions
+// Sample data has been removed to ensure the UI always shows real data or empty state
 
 // ─── Helper Components ───────────────────────────────────────
 function ExamCard({ 
-  exam, 
-  onPress, 
-  onResumeDraft 
-}: { 
-  exam: typeof SAMPLE_EXAMINATIONS[0]; 
+  exam,
+  onPress,
+  onResumeDraft
+}: {
+  exam: PreviousExamItem;
   onPress: () => void;
   onResumeDraft?: () => void;
 }) {
@@ -394,7 +172,9 @@ export function PreviousVisitsScreen({
 }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [examinations, setExaminations] = useState<PreviousExamItem[]>(SAMPLE_EXAMINATIONS);
+  const [examinations, setExaminations] = useState<PreviousExamItem[]>([]);
+  const [isBackendData, setIsBackendData] = useState(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterExamType, setFilterExamType] = useState<ExamType | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'draft'>('all');
@@ -402,26 +182,40 @@ export function PreviousVisitsScreen({
   const [selectedExam, setSelectedExam] = useState<PreviousExamItem | null>(null);
 
   const loadFromBackend = useCallback(async () => {
-    const [workersRes, examsRes] = await Promise.all([
-      occHealthApi.listWorkers({ page: 1 }),
-      occHealthApi.listMedicalExaminations({ page: 1 }),
-    ]);
+    try {
+      console.log('[PreviousVisits] Starting backend data fetch...');
+      
+      const [workersRes, examsRes] = await Promise.all([
+        occHealthApi.listWorkers({ page: 1 }),
+        occHealthApi.listMedicalExaminations({ page: 1 }),
+      ]);
 
-    if (workersRes.error || examsRes.error) {
-      throw new Error(workersRes.error || examsRes.error || 'Erreur de chargement backend');
-    }
+      console.log('[PreviousVisits] API responses:', {
+        workersError: workersRes.error,
+        workersCount: workersRes.data?.length,
+        examsError: examsRes.error,
+        examsCount: examsRes.data?.length,
+      });
 
-    const workersById = new Map<string, OccupationalHealthPatient>();
-    (workersRes.data || []).forEach((w) => workersById.set(String(w.id), w));
+      if (workersRes.error || examsRes.error) {
+        throw new Error(workersRes.error || examsRes.error || 'Erreur de chargement backend');
+      }
 
-    const detailed = await Promise.all(
-      (examsRes.data || []).map(async (e: any) => {
-        const detail = await occHealthApi.getMedicalExamination(e.id);
-        return detail.data || e;
-      })
-    );
+      const workersById = new Map<string, OccupationalHealthPatient>();
+      (workersRes.data || []).forEach((w) => workersById.set(String(w.id), w));
 
-    const mapped: PreviousExamItem[] = detailed.map((e: any) => {
+      console.log(`[PreviousVisits] Loaded ${workersRes.data?.length || 0} workers, fetching exam details...`);
+
+      const detailed = await Promise.all(
+        (examsRes.data || []).map(async (e: any) => {
+          const detail = await occHealthApi.getMedicalExamination(e.id);
+          return detail.data || e;
+        })
+      );
+
+      console.log(`[PreviousVisits] Successfully mapped ${detailed.length} examinations`);
+
+      const mapped: PreviousExamItem[] = detailed.map((e: any) => {
       const workerId = String(e.worker ?? '');
       const worker = workersById.get(workerId);
       const certificate = e.fitness_certificate;
@@ -493,7 +287,12 @@ export function PreviousVisitsScreen({
       };
     });
 
+    console.log(`[PreviousVisits] Backend fetch complete: ${mapped.length} exams ready to display`);
     return mapped;
+  } catch (error: any) {
+    console.error('[PreviousVisits] Backend fetch error:', error?.message || error);
+    throw error;
+  }
   }, []);
 
   const loadDrafts = useCallback(async (): Promise<PreviousExamItem[]> => {
@@ -551,21 +350,41 @@ export function PreviousVisitsScreen({
   const reloadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+    
+    setBackendError(null);
+    let backendFetchedData: PreviousExamItem[] = [];
+    let backendError: string | null = null;
 
     try {
       const [drafts, backend] = await Promise.all([
         loadDrafts(),
-        loadFromBackend().catch((e) => {
-          console.error('Backend load failed in PreviousVisitsScreen:', e);
+        loadFromBackend().catch((e: any) => {
+          const errorMsg = e?.message || 'Erreur lors du chargement du backend';
+          console.error('Backend load failed in PreviousVisitsScreen:', errorMsg);
+          backendError = errorMsg;
+          setBackendError(errorMsg);
           return [] as PreviousExamItem[];
         }),
       ]);
 
+      backendFetchedData = backend;
       const merged = [...drafts, ...backend];
+      
+      // Log what we got from backend
+      console.log(`Backend data: ${backend.length} examinations loaded`);
+      console.log(`Local drafts: ${drafts.length} drafts loaded`);
+      
       if (merged.length > 0) {
         setExaminations(merged);
+        setIsBackendData(backend.length > 0);
       } else {
-        setExaminations(SAMPLE_EXAMINATIONS);
+        console.warn('No completed examinations or drafts found');
+        // Show empty state instead of mocking data with samples
+        setExaminations([]);
+        setIsBackendData(false);
+        if (!backendError) {
+          setBackendError('Aucune donnée trouvée. Créez une nouvelle consultation.');
+        }
       }
     } finally {
       setLoading(false);
@@ -773,6 +592,39 @@ export function PreviousVisitsScreen({
         </Text>
       </View>
 
+      {/* Data Source Indicator */}
+      {!loading && (
+        <View style={[
+          styles.dataSourceBanner,
+          { backgroundColor: isBackendData ? '#D1FAE5' : '#FEF3C7' }
+        ]}>
+          <Ionicons 
+            name={isBackendData ? 'checkmark-circle' : 'alert-circle'} 
+            size={16} 
+            color={isBackendData ? '#059669' : '#D97706'}
+            style={{ marginRight: 8 }}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[
+              styles.dataSourceText,
+              { color: isBackendData ? '#059669' : '#D97706' }
+            ]}>
+              {isBackendData 
+                ? '✓ Données du serveur' 
+                : '⚠ Affichage des exemples (aucune donnée trouvée)'}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Error Banner */}
+      {backendError && !isBackendData && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="information-circle" size={16} color="#DC2626" style={{ marginRight: 8 }} />
+          <Text style={styles.errorText}>{backendError}</Text>
+        </View>
+      )}
+
       {/* Examinations List */}
       <ScrollView
         style={styles.examsList}
@@ -972,6 +824,39 @@ const styles = StyleSheet.create({
   // Results
   resultsHeader: { paddingHorizontal: isDesktop ? 32 : 16, paddingBottom: 8 },
   resultsCount: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+
+  // Data Source Indicator
+  dataSourceBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: isDesktop ? 32 : 16,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: borderRadius.md,
+  },
+  dataSourceText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  // Error Banner
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: isDesktop ? 32 : 16,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#FEE2E2',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '500',
+    flex: 1,
+  },
 
   // Exams List
   examsList: { flex: 1 },

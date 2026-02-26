@@ -354,6 +354,24 @@ class FitnessCertificateInline(admin.TabularInline):
     extra = 0
     readonly_fields = ['is_expired', 'days_until_expiry']
 
+class HeavyMetalsTestInline(admin.TabularInline):
+    model = HeavyMetalsTest
+    extra = 1
+    fields = ['heavy_metal', 'specimen_type', 'test_date', 'level_value', 'unit', 'status']
+    readonly_fields = ['status']
+
+class DrugAlcoholScreeningInline(admin.TabularInline):
+    model = DrugAlcoholScreening
+    extra = 1
+    fields = ['test_type', 'alcohol_result', 'drug_result', 'fit_for_duty', 'test_date']
+    readonly_fields = ['test_date']
+
+class XrayImagingResultInline(admin.TabularInline):
+    model = XrayImagingResult
+    extra = 1
+    fields = ['imaging_type', 'ilo_classification', 'pneumoconiosis_detected', 'imaging_date']
+    readonly_fields = ['imaging_date']
+
 @admin.register(MedicalExamination)
 class MedicalExaminationAdmin(admin.ModelAdmin):
     """Medical examination admin with inline components"""
@@ -369,7 +387,7 @@ class MedicalExaminationAdmin(admin.ModelAdmin):
     search_fields = ['exam_number', 'worker__first_name', 'worker__last_name', 'worker__employee_id']
     readonly_fields = ['created_at', 'updated_at']
     
-    inlines = [VitalSignsInline, PhysicalExaminationInline, FitnessCertificateInline]
+    inlines = [VitalSignsInline, PhysicalExaminationInline, FitnessCertificateInline, HeavyMetalsTestInline, DrugAlcoholScreeningInline, XrayImagingResultInline]
     
     fieldsets = (
         ('Informations Examen', {

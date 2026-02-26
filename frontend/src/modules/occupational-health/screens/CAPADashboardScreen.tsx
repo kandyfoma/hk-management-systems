@@ -209,7 +209,7 @@ export function CAPADashboardScreen({ navigation }: any) {
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Actions CAPA</Text>
           <Text style={styles.headerSubtitle}>
-            Correctives & PrÃ©ventives Â· {overdue > 0 ? `âš  ${overdue} en retard` : 'Ã€ jour'}
+            Correctives & Préventives · {overdue > 0 ? `⚠️  ${overdue} en retard` : 'À jour'}
           </Text>
         </View>
         <TouchableOpacity

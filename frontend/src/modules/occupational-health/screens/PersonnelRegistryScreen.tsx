@@ -262,43 +262,54 @@ function PersonnelDetailModal({
             {/* Professional Info */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Informations Professionnelles</Text>
-              <DetailRow label="Entreprise" value={record.company} />
-              <DetailRow label="Secteur" value={record.sector} />
-              <DetailRow label="Site" value={record.site} />
-              <DetailRow label="Département" value={record.department} />
-              <DetailRow label="Poste" value={record.jobTitle} />
+              <DetailRow label="Entreprise" value={record.company} icon="business" />
+              <DetailRow label="Secteur de Risque" value={record.sector} icon="warning" />
+              <DetailRow label="Site" value={record.site} icon="location" />
+              <DetailRow label="Catégorie d'Emploi" value={record.department} icon="briefcase" />
+              <DetailRow label="Poste" value={record.jobTitle} icon="construct" />
               {record.hireDate && (
                 <DetailRow 
                   label="Date d'embauche" 
                   value={new Date(record.hireDate).toLocaleDateString('fr-CD')} 
+                  icon="calendar"
                 />
               )}
             </View>
 
             {/* Occupational Health Info */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Santé au Travail</Text>
+              <Text style={styles.sectionTitle}>Santé Occupationnelle</Text>
               {record.lastMedicalExam && (
                 <DetailRow 
                   label="Dernier examen" 
                   value={new Date(record.lastMedicalExam).toLocaleDateString('fr-CD')} 
+                  icon="checkmark-done"
                 />
               )}
               {record.nextMedicalExam && (
                 <DetailRow 
                   label="Prochain examen" 
                   value={new Date(record.nextMedicalExam).toLocaleDateString('fr-CD')} 
+                  icon="calendar"
                 />
               )}
-              <DetailRow label="Niveau de risque" value={`${record.riskScore}%`} />
+              <DetailRow label="Aptitude" value={record.fitnessStatus === 'fit' ? 'Apte' : 'À vérifier'} icon="shield-checkmark" />
+              <DetailRow label="Niveau de risque" value={`${record.riskScore}%`} icon="warning" />
             </View>
 
             {/* Contact Info */}
-            {(record.phone || record.email) && (
+            {(record.phone || record.email || record.dateOfBirth) && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Coordonnées</Text>
-                {record.phone && <DetailRow label="Téléphone" value={record.phone} />}
-                {record.email && <DetailRow label="Email" value={record.email} />}
+                <Text style={styles.sectionTitle}>Coordonnées & Informations Personnelles</Text>
+                {record.dateOfBirth && (
+                  <DetailRow 
+                    label="Date de naissance" 
+                    value={new Date(record.dateOfBirth).toLocaleDateString('fr-CD')}
+                    icon="calendar"
+                  />
+                )}
+                {record.phone && <DetailRow label="Téléphone" value={record.phone} icon="call" />}
+                {record.email && <DetailRow label="Email" value={record.email} icon="mail" />}
               </View>
             )}
           </ScrollView>
@@ -331,11 +342,14 @@ function PersonnelDetailModal({
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, icon }: { label: string; value: string; icon?: string }) {
   return (
     <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+      {icon && <Ionicons name={icon as any} size={14} color={colors.primary} style={{ width: 20 }} />}
+      <View style={{ flex: 1 }}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -367,15 +381,15 @@ export function PersonnelRegistryScreen() {
           firstName: w.first_name || 'N/A',
           lastName: w.last_name || 'N/A',
           employeeId: w.employee_id || w.id,
-          company: w.enterprise?.name || 'N/A',
-          sector: w.enterprise?.sector || 'N/A',
-          site: w.site_name || 'N/A',
-          department: w.occ_department?.name || 'N/A',
+          company: w.enterprise_name || 'N/A',
+          sector: w.enterprise_sector || 'Non spécifié',
+          site: w.work_site_name || 'Non spécifié',
+          department: w.job_category_display || 'N/A',
           jobTitle: w.job_title || 'N/A',
-          status: 'active' as const,
+          status: (w.employment_status === 'active' ? 'active' : 'inactive') as const,
           riskScore: Math.floor(Math.random() * 100),
-          fitnessStatus: (w.fitness_status || 'pending_evaluation') as any,
-          nextMedicalExam: w.next_medical_exam,
+          fitnessStatus: (w.current_fitness_status || 'pending_evaluation') as any,
+          nextMedicalExam: w.next_exam_due,
           lastMedicalExam: w.last_medical_exam,
           dateOfBirth: w.date_of_birth,
           phone: w.phone,
@@ -435,10 +449,29 @@ export function PersonnelRegistryScreen() {
   }), [personnel]);
 
   const sectors = useMemo(() => {
+    const sectorLabels: { [key: string]: string } = {
+      'construction': '🏗️ Construction (BTP)',
+      'mining': '⛏️ Mining',
+      'oil_gas': '🛢️ Oil & Gas',
+      'manufacturing': '🏭 Manufacturing',
+      'agriculture': '🌾 Agriculture',
+      'healthcare': '🏥 Healthcare',
+      'transport_logistics': '🚛 Transport & Logistics',
+      'energy_utilities': '⚡ Energy & Utilities',
+      'hospitality': '🏨 Hospitality',
+      'retail_commerce': '🛒 Retail & Commerce',
+      'telecom_it': '📡 Telecom & IT',
+      'banking_finance': '🏦 Banking & Finance',
+      'education': '🎓 Education',
+      'government_admin': '🏛️ Government & Administration',
+      'ngo_international': '🤝 NGO & International',
+      'other': '📦 Other',
+    };
+    
     const unique = [...new Set(personnel.map(p => p.sector))];
     return [
       { value: 'all', label: 'Tous les secteurs' },
-      ...unique.map(s => ({ value: s, label: s })),
+      ...unique.map(s => ({ value: s, label: sectorLabels[s] || s })),
     ];
   }, [personnel]);
 
@@ -466,9 +499,9 @@ export function PersonnelRegistryScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.screenTitle}>Registre Personnel</Text>
+          <Text style={styles.screenTitle}>Gestion de Travailleurs</Text>
           <Text style={styles.screenSubtitle}>
-            Gestion des travailleurs et personnel historique
+            Registre personnel et historique occupationnel
           </Text>
         </View>
         <TouchableOpacity 
@@ -698,15 +731,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: spacing.lg,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primaryFaded,
   },
   screenTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: colors.text,
     marginBottom: spacing.xs,
   },
   screenSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
   },
   addButton: {
@@ -842,6 +878,13 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -971,23 +1014,29 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalContent: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderRadius: borderRadius.xl,
     maxHeight: '90%',
-    minWidth: isDesktop ? 500 : '100%',
+    minWidth: isDesktop ? 600 : '100%',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.outline,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+    backgroundColor: colors.surface,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
   },
@@ -1010,33 +1059,39 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.outline,
+    backgroundColor: colors.surface,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.primary,
     marginBottom: spacing.md,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   detailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
     marginBottom: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.outline,
   },
   detailLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
+    width: 100,
   },
   detailValue: {
     fontSize: 13,
     color: colors.text,
     fontWeight: '600',
-    textAlign: 'right',
     flex: 1,
-    marginLeft: spacing.md,
   },
   statsRow: {
     flexDirection: 'row',

@@ -383,7 +383,7 @@ class EnterpriseViewSet(viewsets.ModelViewSet):
     queryset = Enterprise.objects.select_related('created_by')
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['sector', 'is_active', 'risk_level']
+    filterset_fields = ['sector', 'is_active']
     search_fields = ['name', 'rccm', 'nif', 'contact_person']
     ordering_fields = ['name', 'created_at', 'contract_start_date']
     ordering = ['-created_at']
@@ -996,6 +996,10 @@ class VitalSignsViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return VitalSigns.objects.select_related('examination__worker', 'recorded_by')
 
+    def perform_create(self, serializer):
+        """Auto-set recorded_by to current user"""
+        serializer.save(recorded_by=self.request.user)
+
 class FitnessCertificateViewSet(viewsets.ModelViewSet):
     """Fitness certificate API with expiry tracking"""
     
@@ -1008,6 +1012,10 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return FitnessCertificate.objects.select_related('examination__worker', 'issued_by')
+
+    def perform_create(self, serializer):
+        """Auto-set issued_by to current user"""
+        serializer.save(issued_by=self.request.user)
 
     @action(detail=True, methods=['get'], url_path='download-pdf')
     def download_pdf(self, request, pk=None):
@@ -2498,7 +2506,7 @@ class XrayImagingResultViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'ilo_classification', 'pneumoconiosis_detected', 'imaging_type',
-        'examination__worker__enterprise'
+        'examination__worker', 'examination__worker__enterprise'
     ]
     search_fields = [
         'examination__worker__first_name', 
@@ -2577,7 +2585,7 @@ class HeavyMetalsTestViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'heavy_metal', 'status', 'exceeds_osha_limit',
-        'examination__worker__enterprise'
+        'examination__worker', 'examination__worker__enterprise'
     ]
     search_fields = [
         'examination__worker__first_name',
@@ -2654,7 +2662,7 @@ class DrugAlcoholScreeningViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'test_type', 'fit_for_duty',
-        'examination__worker__enterprise'
+        'examination__worker', 'examination__worker__enterprise'
     ]
     search_fields = [
         'examination__worker__first_name',

@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import DateInput from '../../../components/DateInput';
+import { OccHealthApiService } from '../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -49,49 +50,6 @@ interface MedicalExamResult {
   certificationId?: string;
   examiner: string;
 }
-
-// Sample Data
-const SAMPLE_SCHEDULES: ExamSchedule[] = [
-  {
-    id: 's1', workerId: 'w001', workerName: 'Jean-Charles Mulinga', 
-    examType: 'pre_employment', scheduledDate: '2025-02-01', 
-    status: 'scheduled', examiner: 'Dr. Habimana', location: 'KCC Health Center',
-    sector: 'Mining Operations'
-  },
-  {
-    id: 's2', workerId: 'w002', workerName: 'Marie Lusaka',
-    examType: 'periodic', scheduledDate: '2025-02-03',
-    status: 'scheduled', examiner: 'Dr. Habimana', location: 'KCC Health Center',
-    sector: 'Processing'
-  },
-  {
-    id: 's3', workerId: 'w003', workerName: 'Pierre Kabamba',
-    examType: 'return_to_work', scheduledDate: '2025-02-02',
-    status: 'completed', examiner: 'Dr. Nkulu', location: 'KCC Health Center',
-    sector: 'Maintenance', completedDate: '2025-02-02'
-  },
-];
-
-const SAMPLE_RESULTS: MedicalExamResult[] = [
-  {
-    id: 'r1', scheduleId: 's3', workerId: 'w003', workerName: 'Pierre Kabamba',
-    examType: 'return_to_work', examDate: '2025-02-02',
-    fitnessStatus: 'fit_with_restrictions',
-    restrictions: ['No heights work for 4 weeks', 'Avoid confined spaces'],
-    clinicalFindings: ['Mild ankle sprain', 'Good overall health'],
-    testResults: {
-      spirometry: { fev1: 92, fvc: 95, fev1_fvc: 97, interpretation: 'Normal' },
-      audiometry: { left_ear: 15, right_ear: 18, hearing_loss: 'None' },
-      vision: { left: '20/20', right: '20/20' },
-      bloodPressure: { systolic: 120, diastolic: 80 },
-    },
-    recommendations: ['Return with restrictions', 'Review in 4 weeks'],
-    followUpRequired: true,
-    followUpDate: '2025-03-02',
-    certificationId: 'CERT-2025-003',
-    examiner: 'Dr. Nkulu',
-  },
-];
 
 // ─── Status Badge Component ──────────────────────────────────
 function StatusBadge({ status, type }: { status: string; type?: 'schedule' | 'fitness' }) {
@@ -633,17 +591,60 @@ export function MedicalExamManagementScreen() {
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [schedules, setSchedules] = useState<ExamSchedule[]>([]);
+  const [results, setResults] = useState<MedicalExamResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const apiService = useMemo(() => OccHealthApiService.getInstance(), []);
+
+  // Load exam data from API
+  useEffect(() => {
+    const loadExamData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [schedulesData, resultsData] = await Promise.all([
+          apiService.getExamSchedules(),
+          apiService.getExamResults(''), // Note: This might need adjustment based on API
+        ]);
+        setSchedules(schedulesData);
+        setResults(resultsData);
+      } catch (err: any) {
+        console.error('Failed to load exam data:', err);
+        setError(err?.message || 'Failed to load exam data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadExamData();
+  }, [apiService]);
 
   const examStats = useMemo(() => ({
-    scheduled: SAMPLE_SCHEDULES.filter(s => s.status === 'scheduled').length,
-    completed: SAMPLE_SCHEDULES.filter(s => s.status === 'completed').length,
-    results: SAMPLE_RESULTS.length,
-  }), []);
+    scheduled: schedules.filter(s => s.status === 'scheduled').length,
+    completed: schedules.filter(s => s.status === 'completed').length,
+    results: results.length,
+  }), [schedules, results]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
-  }, []);
+    const loadExamData = async () => {
+      try {
+        const [schedulesData, resultsData] = await Promise.all([
+          apiService.getExamSchedules(),
+          apiService.getExamResults(''),
+        ]);
+        setSchedules(schedulesData);
+        setResults(resultsData);
+      } catch (err: any) {
+        console.error('Refresh failed:', err);
+      } finally {
+        setRefreshing(false);
+      }
+    };
+    loadExamData();
+  }, [apiService]);
 
   const handleSaveSchedule = (data: ExamSchedule) => {
     Alert.alert('Success', 'Schedule saved successfully');
@@ -752,38 +753,50 @@ export function MedicalExamManagementScreen() {
       </View>
 
       {/* Content */}
-      <FlatList
-        data={(activeTab === 'schedule' ? SAMPLE_SCHEDULES : SAMPLE_RESULTS) as any[]}
-        keyExtractor={(item: any) => item.id}
-        renderItem={({ item }: { item: any }) =>
-          activeTab === 'schedule' ? (
-            <ScheduleCard
-              schedule={item as ExamSchedule}
-              onPress={() => {
-                setSelectedSchedule(item as ExamSchedule);
-                setScheduleModalVisible(true);
-              }}
-            />
-          ) : (
-            <ExamResultCard
-              result={item as MedicalExamResult}
-              onPress={() => {
-                setSelectedResult(item as MedicalExamResult);
-                setResultModalVisible(true);
-              }}
-            />
-          )
-        }
-        contentContainerStyle={styles.listContent}
-        scrollEnabled={true}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyStateText}>No {activeTab === 'schedule' ? 'schedules' : 'results'} found</Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={ACCENT} />
+          <Text style={styles.loadingText}>Loading exams...</Text>
+        </View>
+      ) : error ? (
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error || '#EF4444'} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={(activeTab === 'schedule' ? schedules : results) as any[]}
+          keyExtractor={(item: any) => item.id}
+          renderItem={({ item }: { item: any }) =>
+            activeTab === 'schedule' ? (
+              <ScheduleCard
+                schedule={item as ExamSchedule}
+                onPress={() => {
+                  setSelectedSchedule(item as ExamSchedule);
+                  setScheduleModalVisible(true);
+                }}
+              />
+            ) : (
+              <ExamResultCard
+                result={item as MedicalExamResult}
+                onPress={() => {
+                  setSelectedResult(item as MedicalExamResult);
+                  setResultModalVisible(true);
+                }}
+              />
+            )
+          }
+          contentContainerStyle={styles.listContent}
+          scrollEnabled={true}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
+              <Text style={styles.emptyStateText}>No {activeTab === 'schedule' ? 'schedules' : 'results'} found</Text>
+            </View>
+          }
+        />
+      )}
 
       {/* FAB */}
       <TouchableOpacity
@@ -930,6 +943,8 @@ const styles = StyleSheet.create({
   // Empty State
   emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyStateText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
+  loadingText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
+  errorText: { fontSize: 14, color: colors.error || '#EF4444', marginTop: spacing.md, textAlign: 'center' },
   // FAB
   fab: { position: 'absolute', bottom: spacing.lg, right: spacing.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
   cardShadow: { ...shadows.md },

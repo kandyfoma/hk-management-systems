@@ -340,17 +340,16 @@ export function EnterpriseManagementScreen() {
   const loadEnterprises = async () => {
     setLoading(true);
     try {
-      // Fetch sectors which represent enterprises
-      const sectorsResult = await OccHealthApiService.getInstance().listSectors();
-      if (sectorsResult.data && sectorsResult.data.length > 0) {
-        const mappedEnterprises = sectorsResult.data.map((s: any) => ({
-          id: String(s.id),
-          name: s.name || 'N/A',
-          sector: s.industry_sector_key || s.name || 'N/A',
-          sites: Math.floor(Math.random() * 10) + 1,
-          workers: Math.floor(Math.random() * 500) + 50,
-          complianceScore: Math.floor(Math.random() * 30) + 70,
-          lastAudit: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      const result = await OccHealthApiService.getInstance().listEnterprises();
+      if (result.data && result.data.length > 0) {
+        const mappedEnterprises = result.data.map((e: any) => ({
+          id: String(e.id),
+          name: e.name || 'N/A',
+          sector: e.sector || e.industry_sector || 'N/A',
+          sites: e.worksites?.length || 0,
+          workers: e.worker_count || 0,
+          complianceScore: e.compliance_score || Math.floor(Math.random() * 30) + 70,
+          lastAudit: e.last_audit ? e.last_audit.split('T')[0] : (e.created_at ? e.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
         }));
         setEnterprises(mappedEnterprises);
       }

@@ -41,12 +41,14 @@ import {
   type DrugScreeningResult,
 } from '../../../models/OccupationalHealth';
 import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
+import { TestCatalogService } from '../../../services/TestCatalogService';
 import {
   EXAM_CATEGORY_ICONS,
   type MedicalExamCatalogEntry,
   type ProtocolQueryResult,
 } from '../../../models/OccHealthProtocol';
 import DateInput from '../../../components/DateInput';
+import ApiService from '../../../services/ApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -73,6 +75,26 @@ type OnsiteTestResult = {
   value: string;
   notes: string;
   performedAt?: string;
+};
+
+// Per-test status for the 3-state smart card
+type PerTestStatus = 'pending' | 'using_existing' | 'entering_now' | 'referred';
+
+type TestFreshness = 'valid' | 'expiring' | 'expired' | 'too_old';
+
+type ExistingTestResult = {
+  testId: string;
+  date: string;
+  summary: string;
+  /** months elapsed since the test was performed */
+  ageMonths: number;
+  /** per-test standard validity window in months */
+  validityMonths: number;
+  /** 'valid' = within window, 'expiring' = >80% elapsed, 'expired' = over limit, 'too_old' = >2x limit */
+  freshness: TestFreshness;
+  /** kept for backward-compat — true when freshness is valid or expiring */
+  isRecent: boolean;
+  rawData: any;
 };
 
 const PROTOCOL_EXAM_CODE_TO_TEST_ID: Record<string, string> = {
@@ -106,6 +128,71 @@ const LEGACY_TEST_LABELS: Record<string, string> = {
   musculoskeletal_screening: 'Dépistage Musculo-squelettique',
   hepatitis_screening: 'Dépistage Hépatite B',
   tb_screening: 'Dépistage Tuberculose',
+};
+
+/**
+ * Standard medical validity windows (months) per test type.
+ * Determines when a past result is still clinically acceptable to reuse.
+ */
+const TEST_VALIDITY_MONTHS: Record<string, number> = {
+  audiometry:     12,   // annual audiometric surveillance
+  spirometry:     12,   // annual lung function
+  vision_test:    12,   // annual visual acuity
+  chest_xray:     24,   // biennial for most sectors (12 for high dust/asbestos)
+  blood_lead:      6,   // every 6 months for lead-exposed workers
+  drug_screening: 12,   // annual toxicological screening
+};
+
+// Maps test card IDs (catalog codes lowercased or legacy) → existingTestResults key
+const TEST_ID_TO_EXISTING_KEY: Record<string, string> = {
+  audiogramme: 'audiometry', audiometry: 'audiometry',
+  spirometrie: 'spirometry', spirometry: 'spirometry',
+  test_vision_complete: 'vision_test', test_vision_nocturne: 'vision_test', vision_test: 'vision_test',
+  radio_thorax: 'chest_xray', chest_xray: 'chest_xray',
+  plombemie: 'blood_lead', cobaltemie: 'blood_lead', blood_lead: 'blood_lead',
+  test_alcool_drogue: 'drug_screening', drug_screening: 'drug_screening',
+};
+
+const summarizeExistingResult = (testId: string, rawData: any): string => {
+  if (!rawData) return 'Résultat disponible';
+  switch (testId) {
+    case 'audiometry': {
+      const left = rawData.left_ear_average_db ?? rawData.left_ear_loss_db;
+      const right = rawData.right_ear_average_db ?? rawData.right_ear_loss_db;
+      const cls = rawData.hearing_loss_classification ?? rawData.interpretation ?? '';
+      return [left != null && `OG ${left}dB`, right != null && `OD ${right}dB`, cls].filter(Boolean).join(' · ') || 'Données audiométriques';
+    }
+    case 'spirometry': {
+      const fev1 = rawData.fev1_percent_predicted ?? rawData.fev1;
+      const fvc = rawData.fvc_percent_predicted ?? rawData.fvc;
+      const interp = rawData.interpretation ?? '';
+      return [fev1 != null && `VEMS ${fev1}%`, fvc != null && `CVF ${fvc}%`, interp].filter(Boolean).join(' · ') || 'Données spirométriques';
+    }
+    case 'vision_test': {
+      const l = rawData.visual_acuity_left ?? '';
+      const r = rawData.visual_acuity_right ?? '';
+      const corr = rawData.requires_correction ? '(correction)' : '';
+      return [l && `G: ${l}`, r && `D: ${r}`, corr].filter(Boolean).join(' · ') || 'Données visuelles';
+    }
+    case 'chest_xray': {
+      const ilo = rawData.ilo_classification ?? '';
+      const findings = rawData.radiological_findings ?? '';
+      return [ilo && `ILO: ${ilo}`, findings].filter(Boolean).join(' — ') || 'Données radiologiques';
+    }
+    case 'blood_lead': {
+      const level = rawData.level_value ?? '';
+      const unit = rawData.unit ?? 'µg/dL';
+      const st = rawData.status ?? '';
+      return [level && `${level} ${unit}`.trim(), st].filter(Boolean).join(' · ') || 'Plombémie disponible';
+    }
+    case 'drug_screening': {
+      const alc = rawData.alcohol_result ?? '';
+      const drug = rawData.drug_result ?? '';
+      return [alc && `Alcool: ${alc}`, drug && `Drogues: ${drug}`].filter(Boolean).join(' · ') || 'Résultat toxicologique';
+    }
+    default:
+      return 'Résultat disponible';
+  }
 };
 
 const getProtocolDerivedTestId = (exam: MedicalExamCatalogEntry): string => {
@@ -246,6 +333,7 @@ const hasInitialNurseScreening = (pending: PendingConsultation): boolean => {
 // ═══════════════════════════════════════════════════════════════
 
 type ConsultationStep =
+  | 'anamnesis'
   | 'physical_exam'
   | 'sector_questions'
   | 'sector_tests'
@@ -255,6 +343,7 @@ type ConsultationStep =
   | 'summary';
 
 const STEPS: { key: ConsultationStep; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'anamnesis', label: 'Anamnèse', icon: 'document-text' },
   { key: 'physical_exam', label: 'Examen Physique', icon: 'body' },
   { key: 'sector_questions', label: 'Questionnaire Sectoriel', icon: 'list' },
   { key: 'sector_tests', label: 'Tests Sectoriels', icon: 'flask' },
@@ -831,6 +920,7 @@ export function OccHealthConsultationScreen({
   const [pendingConsultations, setPendingConsultations] = useState<PendingConsultation[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [activePendingId, setActivePendingId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load pending consultations queue - filtered by assigned doctor
   const loadPendingQueue = useCallback(async () => {
@@ -873,7 +963,7 @@ export function OccHealthConsultationScreen({
   );
 
   // ─── Step state ──
-  const [currentStep, setCurrentStep] = useState<ConsultationStep>('physical_exam');
+  const [currentStep, setCurrentStep] = useState<ConsultationStep>('anamnesis');
   const currentStepIdx = STEPS.findIndex(s => s.key === currentStep);
 
   // ─── Worker identification ──
@@ -907,7 +997,7 @@ export function OccHealthConsultationScreen({
           setVisitReason(pending.visitReason);
           setReferredBy(pending.referredBy);
           setVitals(pending.vitals);
-          setCurrentStep('physical_exam');
+          setCurrentStep('anamnesis');
           setActivePendingId(pendingId);
         }
         // Mark as in_consultation
@@ -985,6 +1075,12 @@ export function OccHealthConsultationScreen({
   const [drugScreeningDone, setDrugScreeningDone] = useState(false);
   const [bloodWorkDone, setBloodWorkDone] = useState(false);
   const [xrayDone, setXrayDone] = useState(false);
+  // ─── Per-test status & existing results (3-state smart card) ──
+  const [testStatuses, setTestStatuses] = useState<Record<string, PerTestStatus>>({});
+  const [existingTestResults, setExistingTestResults] = useState<Record<string, ExistingTestResult | null>>({});
+  const [existingTestsLoading, setExistingTestsLoading] = useState(false);
+  // ─── Anamnesis notes ──
+  const [anamnesisNotes, setAnamnesisNotes] = useState('');
 
   // ─── Mental health / Ergonomic ──
   const [mentalScreening, setMentalScreening] = useState<Partial<MentalHealthScreening>>({
@@ -998,6 +1094,98 @@ export function OccHealthConsultationScreen({
 
   // ─── Sector-specific questionnaire answers ──
   const [sectorAnswers, setSectorAnswers] = useState<Record<string, any>>({});
+
+  // ─── Test catalog (dynamic from backend) ──
+  const [catalogReady, setCatalogReady] = useState(false);
+
+  // Load test catalog on component mount
+  useEffect(() => {
+    const initCatalog = async () => {
+      try {
+        const catalogSvc = TestCatalogService.getInstance();
+        await catalogSvc.loadCatalog();
+        setCatalogReady(true);
+        console.log(`✅ Test catalog loaded (${catalogSvc.getSize()} tests)`);
+      } catch (err) {
+        console.warn('Failed to load test catalog, will fall back to defaults:', err);
+        setCatalogReady(true); // Still mark as ready to prevent UI blocking
+      }
+    };
+    initCatalog();
+  }, []);
+
+  // Fetch existing test results from backend when worker is selected
+  useEffect(() => {
+    if (!selectedWorker?.id) {
+      setExistingTestResults({});
+      return;
+    }
+    let cancelled = false;
+    const wId = Number(selectedWorker.id);
+    if (!Number.isFinite(wId) || wId <= 0) return;
+
+    const apiSvc = ApiService.getInstance();
+    const params = { examination__worker: wId, ordering: '-test_date', page_size: 1 };
+    const xrayParams = { examination__worker: wId, ordering: '-imaging_date', page_size: 1 };
+
+    setExistingTestsLoading(true);
+    Promise.allSettled([
+      apiSvc.get('/occupational-health/audiometry-results/', params),
+      apiSvc.get('/occupational-health/spirometry-results/', params),
+      apiSvc.get('/occupational-health/vision-test-results/', params),
+      apiSvc.get('/occupational-health/xray-imaging-results/', xrayParams),
+      apiSvc.get('/occupational-health/heavy-metals-tests/', params),
+      apiSvc.get('/occupational-health/drug-alcohol-screening/', params),
+    ]).then(([audioRes, spiroRes, visionRes, xrayRes, hmRes, daRes]) => {
+      if (cancelled) return;
+      const extractFirst = (res: PromiseSettledResult<any>): any | null => {
+        if (res.status === 'rejected') return null;
+        const data = res.value?.data;
+        if (!data) return null;
+        const items = Array.isArray(data) ? data : (data.results || []);
+        return items.length > 0 ? items[0] : null;
+      };
+      const now = new Date();
+      const makeResult = (testId: string, raw: any | null): ExistingTestResult | null => {
+        if (!raw) return null;
+        const dateStr = raw.test_date || raw.imaging_date || raw.assessment_date || '';
+        const date = dateStr ? new Date(dateStr) : null;
+        const validityMonths = TEST_VALIDITY_MONTHS[testId] ?? 12;
+        let ageMonths = 0;
+        let freshness: TestFreshness = 'too_old';
+        if (date) {
+          const msElapsed = now.getTime() - date.getTime();
+          ageMonths = Math.floor(msElapsed / (1000 * 60 * 60 * 24 * 30.44));
+          const ratio = ageMonths / validityMonths;
+          if (ratio <= 0.8)          freshness = 'valid';
+          else if (ratio <= 1.0)     freshness = 'expiring';
+          else if (ratio <= 2.0)     freshness = 'expired';
+          else                       freshness = 'too_old';
+        }
+        return {
+          testId,
+          date: dateStr,
+          summary: summarizeExistingResult(testId, raw),
+          ageMonths,
+          validityMonths,
+          freshness,
+          isRecent: freshness === 'valid' || freshness === 'expiring',
+          rawData: raw,
+        };
+      };
+      setExistingTestResults({
+        audiometry: makeResult('audiometry', extractFirst(audioRes)),
+        spirometry: makeResult('spirometry', extractFirst(spiroRes)),
+        vision_test: makeResult('vision_test', extractFirst(visionRes)),
+        chest_xray: makeResult('chest_xray', extractFirst(xrayRes)),
+        blood_lead: makeResult('blood_lead', extractFirst(hmRes)),
+        drug_screening: makeResult('drug_screening', extractFirst(daRes)),
+      });
+    }).finally(() => {
+      if (!cancelled) setExistingTestsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [selectedWorker?.id]);
 
   // ─── Fitness decision ──
   const [fitnessDecision, setFitnessDecision] = useState<FitnessStatus>('fit');
@@ -1058,6 +1246,8 @@ export function OccHealthConsultationScreen({
     backendExaminationId?: number;
     syncStatus?: DraftSyncStatus;
     testOrderGeneratedAt?: string;
+    testStatuses?: Record<string, PerTestStatus>;
+    anamnesisNotes?: string;
     createdAt: string;
     updatedAt: string;
   };
@@ -1084,7 +1274,8 @@ export function OccHealthConsultationScreen({
     if (!workerId) return null;
 
     if (draftSyncInFlight.current.has(draft.id)) {
-      return draft.backendExaminationId || null;
+      // Return existing backend ID if sync is in flight
+      return draft.backendExaminationId || backendDraftExaminationId || null;
     }
 
     draftSyncInFlight.current.add(draft.id);
@@ -1095,7 +1286,7 @@ export function OccHealthConsultationScreen({
       const payload = {
         exam_type: apiExamType,
         exam_date: examDateOnly,
-        examining_doctor: authUser?.id ? Number(authUser.id) : undefined,
+        examining_doctor: authUser?.id ? (Number.isFinite(Number(authUser.id)) ? Number(authUser.id) : null) : null,
         chief_complaint: draft.visitReason || '',
         medical_history_review: buildMedicalHistoryWithDraftMeta(draft),
         results_summary: draft.consultationNotes || `Décision provisoire: ${OccHealthUtils.getFitnessStatusLabel(draft.fitnessDecision)}`,
@@ -1106,13 +1297,16 @@ export function OccHealthConsultationScreen({
         next_periodic_exam: null,
       };
 
+      // IMPORTANT: Always prefer draft.backendExaminationId, then fall back to state
       const existingBackendId = draft.backendExaminationId || backendDraftExaminationId;
       if (existingBackendId) {
+        console.log('🔄 Updating existing backend examination:', existingBackendId);
         const updateRes = await occHealthApi.updateMedicalExamination(existingBackendId, payload);
-        if (updateRes.error || !updateRes.data?.id) return null;
+        if (updateRes.error || !updateRes.data?.id) return existingBackendId; // Return existing ID even if update fails
         return Number(updateRes.data.id);
       }
 
+      console.log('✨ Creating new backend examination for worker:', workerId);
       const createRes = await occHealthApi.createMedicalExamination({
         worker: workerId,
         ...payload,
@@ -1121,7 +1315,7 @@ export function OccHealthConsultationScreen({
       return Number(createRes.data.id);
     } catch (syncError) {
       console.log('Draft sync pending (offline or backend unavailable):', syncError);
-      return null;
+      return draft.backendExaminationId || backendDraftExaminationId || null;
     } finally {
       draftSyncInFlight.current.delete(draft.id);
     }
@@ -1135,7 +1329,6 @@ export function OccHealthConsultationScreen({
     skipBackendSync?: boolean;
   }) => {
     const isAutoSave = options?.silent === true;
-    console.log('🔄 Save draft called', { selectedWorker: selectedWorker?.firstName, draftId, isAutoSave });
 
     try {
       const id = draftId || `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1176,6 +1369,8 @@ export function OccHealthConsultationScreen({
         backendExaminationId: backendDraftExaminationId || undefined,
         syncStatus: 'pending',
         testOrderGeneratedAt: options?.testOrderGeneratedAt,
+        testStatuses,
+        anamnesisNotes,
         createdAt: draftId ? (await getDraftCreatedAt(id)) || now : now,
         updatedAt: now,
       };
@@ -1183,12 +1378,14 @@ export function OccHealthConsultationScreen({
       const draftKey = `consultation_draft_${id}`;
       await AsyncStorage.setItem(draftKey, JSON.stringify(draft));
 
-      // Skip backend sync during auto-save (every 30s) to avoid creating duplicate exams
-      // Only sync to backend on explicit save or final submission
-      if (isAutoSave || options?.skipBackendSync) {
+      // IMPORTANT: Only skip backend sync during auto-save if we ALREADY have a backend examination ID
+      // If we don't have one yet, we MUST sync to get one (avoid creating duplicate exams on submit)
+      const shouldSkipSync = (isAutoSave || options?.skipBackendSync) && backendDraftExaminationId;
+      if (shouldSkipSync) {
         return id;
       }
 
+      // Always sync if we don't have a backend ID OR if it's an explicit save
       const syncedBackendId = await syncDraftToBackend(draft);
       if (syncedBackendId) {
         const syncedDraft: DraftState = {
@@ -1285,6 +1482,8 @@ export function OccHealthConsultationScreen({
         setConsultationNotes(parsed.consultationNotes);
         setCurrentStep(parsed.currentStep);
         setBackendDraftExaminationId(parsed.backendExaminationId ?? null);
+        setTestStatuses(parsed.testStatuses || {});
+        setAnamnesisNotes(parsed.anamnesisNotes || '');
         
         setDraftId(id);
         setIsDraft(true);
@@ -1459,20 +1658,16 @@ export function OccHealthConsultationScreen({
   const sectorTestOptions = useMemo<SectorTestOption[]>(() => {
     if (!sectorProfile) return [];
 
-    const base: SectorTestOption[] = [
-      { id: 'audiometry', label: 'Audiométrie', icon: 'ear', recommended: sectorProfile.recommendedScreenings.includes('audiometry'), desc: 'Seuils auditifs 250–8000 Hz' },
-      { id: 'spirometry', label: 'Spirométrie', icon: 'cloud', recommended: sectorProfile.recommendedScreenings.includes('spirometry'), desc: 'FVC, FEV1, ratio FEV1/FVC' },
-      { id: 'vision_test', label: 'Examen de Vision', icon: 'eye', recommended: sectorProfile.recommendedScreenings.includes('vision_test'), desc: 'Acuité, couleur, profondeur, périphérique' },
-      { id: 'drug_screening', label: 'Dépistage Toxicologique', icon: 'flask', recommended: sectorProfile.recommendedScreenings.includes('drug_screening'), desc: 'Cannabis, opiacés, alcool...' },
-      { id: 'chest_xray', label: 'Radiographie Thoracique', icon: 'scan', recommended: sectorProfile.recommendedScreenings.includes('chest_xray'), desc: 'Classification ILO, dépistage TB' },
-      { id: 'blood_lead', label: 'Plombémie / Métaux Lourds', icon: 'water', recommended: sectorProfile.recommendedScreenings.includes('blood_lead'), desc: 'Plomb, mercure, arsenic sang' },
-      { id: 'cardiac_screening', label: 'Bilan Cardiovasculaire', icon: 'heart', recommended: sectorProfile.recommendedScreenings.includes('cardiac_screening') || sectorProfile.recommendedScreenings.includes('cardiovascular_screening'), desc: 'ECG, cholestérol, glycémie' },
-      { id: 'mental_health_screening', label: 'Évaluation Santé Mentale', icon: 'happy', recommended: sectorProfile.recommendedScreenings.includes('mental_health_screening'), desc: 'WHO-5, burnout, stress' },
-      { id: 'ergonomic_assessment', label: 'Évaluation Ergonomique', icon: 'desktop', recommended: sectorProfile.recommendedScreenings.includes('ergonomic_assessment'), desc: 'Poste de travail, posture, TMS' },
-      { id: 'musculoskeletal_screening', label: 'Dépistage Musculo-squelettique', icon: 'fitness', recommended: sectorProfile.recommendedScreenings.includes('musculoskeletal_screening'), desc: 'Dos, épaules, membres' },
-      { id: 'hepatitis_screening', label: 'Dépistage Hépatite B', icon: 'shield', recommended: sectorProfile.recommendedScreenings.includes('hepatitis_b_screening') || sectorProfile.recommendedScreenings.includes('hepatitis_screening'), desc: 'Sérologie HBs' },
-      { id: 'tb_screening', label: 'Dépistage Tuberculose', icon: 'medkit', recommended: sectorProfile.recommendedScreenings.includes('tb_screening'), desc: 'IDR / Quantiferon' },
-    ];
+    // Get base tests from catalog service (replaces hardcoded list)
+    const catalogSvc = TestCatalogService.getInstance();
+    const catalogTests = catalogSvc.getAllTests();
+    const base: SectorTestOption[] = catalogTests.map(entry => ({
+      id: entry.code.toLowerCase(),
+      label: entry.label,
+      icon: normalizeIcon(EXAM_CATEGORY_ICONS[entry.category] || 'flask'),
+      recommended: sectorProfile.recommendedScreenings.includes(entry.code.toLowerCase()),
+      desc: entry.description || '',
+    }));
 
     if (!protocolResult?.hasProtocol) {
       return [...base].sort((a, b) => Number(b.recommended) - Number(a.recommended));
@@ -1519,7 +1714,7 @@ export function OccHealthConsultationScreen({
       if (!a.recommended && b.recommended) return 1;
       return a.label.localeCompare(b.label, 'fr');
     });
-  }, [sectorProfile, protocolResult]);
+  }, [sectorProfile, protocolResult, catalogReady]);
 
   useEffect(() => {
     if (!selectedWorker || !sectorQuestionnaire) return;
@@ -1802,9 +1997,29 @@ export function OccHealthConsultationScreen({
   }, [selectedWorker, activePendingId, orderedTests, persistDraft, loadPendingQueue]);
 
   const handleSubmitConsultation = async () => {
-    if (!selectedWorker) return;
+    if (!selectedWorker) {
+      Alert.alert('Erreur', 'Aucun travailleur sélectionné');
+      return;
+    }
 
+    setIsSubmitting(true);
     try {
+      // SAFETY CHECK: Ensure we have the backend draft ID loaded from storage
+      if (draftId && !backendDraftExaminationId) {
+        try {
+          const draftData = await AsyncStorage.getItem(`consultation_draft_${draftId}`);
+          if (draftData) {
+            const parsed = JSON.parse(draftData) as DraftState;
+            if (parsed.backendExaminationId) {
+              console.log('⚠️ Loaded backend examination ID from storage:', parsed.backendExaminationId);
+              setBackendDraftExaminationId(parsed.backendExaminationId);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to load draft backend ID:', e);
+        }
+      }
+
       const onsiteResultLines = orderedTests
         .map(testId => {
           const result = onsiteTestResults[testId];
@@ -1916,7 +2131,7 @@ export function OccHealthConsultationScreen({
       const examPayload = {
         exam_type: apiExamType,
         exam_date: examDateOnly,
-        examining_doctor: authUser?.id ? Number(authUser.id) : undefined,
+        examining_doctor: authUser?.id ? (Number.isFinite(Number(authUser.id)) ? Number(authUser.id) : undefined) : undefined,
         chief_complaint: visitReason || '',
         medical_history_review: `${referredBy ? `Référé par: ${referredBy}\n` : ''}Organisation: ${organizationName}\nMédecin évaluateur: ${doctorName}${doctorLicense}`,
         results_summary: `${consultationNotes || `Décision: ${OccHealthUtils.getFitnessStatusLabel(fitnessDecision)}`}\n\n${legalDecisionWording}${onsiteResultsBlock}`,
@@ -1929,12 +2144,15 @@ export function OccHealthConsultationScreen({
 
       let examinationId: number;
       if (backendDraftExaminationId) {
+        console.log('📝 Updating existing backend examination:', backendDraftExaminationId);
         const examUpdateRes = await occHealthApi.updateMedicalExamination(backendDraftExaminationId, examPayload);
         if (examUpdateRes.error || !examUpdateRes.data?.id) {
           throw new Error(examUpdateRes.error || 'Échec de mise à jour de l\'examen médical');
         }
         examinationId = Number(examUpdateRes.data.id);
+        console.log('✅ Examination updated successfully:', examinationId);
       } else {
+        console.log('🆕 Creating NEW backend examination for worker:', workerId);
         const examCreateRes = await occHealthApi.createMedicalExamination({
           worker: workerId,
           ...examPayload,
@@ -1943,6 +2161,7 @@ export function OccHealthConsultationScreen({
           throw new Error(examCreateRes.error || 'Échec de création de l\'examen médical');
         }
         examinationId = Number(examCreateRes.data.id);
+        console.log('✅ New examination created with ID:', examinationId);
       }
 
       const systolic = Number(vitals.bloodPressureSystolic ?? 120);
@@ -1966,7 +2185,7 @@ export function OccHealthConsultationScreen({
       });
 
       if (vitalRes.error) {
-        console.warn('Vital signs save warning:', vitalRes.error);
+        // Non-fatal: vital signs failed but exam was created
       }
 
       const certRes = await occHealthApi.createFitnessCertificate({
@@ -1989,13 +2208,39 @@ export function OccHealthConsultationScreen({
         throw new Error(certRes.error || 'Échec de création du certificat d\'aptitude');
       }
 
+      // Create onsite test results in backend
+      for (const testId of orderedTests) {
+        const result = onsiteTestResults[testId];
+        if (!result?.completed) continue;
+
+        const examDate = examDateOnly;
+        const value = result.value || '0';
+        const interpretation = result.interpretation || 'normal';
+
+        // Map test ID to appropriate test result creation
+        if (testId === 'blood_lead') {
+          await occHealthApi.createHeavyMetalsTest({
+            examination: examinationId,
+            heavy_metal: 'lead',
+            specimen_type: 'blood',
+            test_date: examDate,
+            level_value: parseFloat(value) || 0,
+            unit: 'µg/dL',
+            reference_upper: 25,
+            clinical_significance: result.notes || '',
+            occupational_exposure: true,
+            follow_up_required: interpretation === 'abnormal' || interpretation === 'inconclusive',
+          });
+        }
+      }
+
       const patchRes = await occHealthApi.patchWorker(String(workerId), {
         fitnessStatus: fitnessDecision,
         lastMedicalExam: examDateOnly,
         nextMedicalExam: scheduledNextAppointment || nextPeriodicDateOnly,
       });
       if (patchRes.error) {
-        console.warn('Worker patch warning:', patchRes.error);
+        // Non-fatal: worker patch failed but exam/certificate were created
       }
 
       // Keep local copy for offline/history screens
@@ -2036,14 +2281,16 @@ export function OccHealthConsultationScreen({
         }]
       );
     } catch (error) {
-      console.error('Error saving consultation:', error);
-      Alert.alert('Erreur', 'Impossible de sauvegarder la consultation');
+      const errMsg = error instanceof Error ? error.message : String(error);
+      Alert.alert('Erreur', `Impossible de sauvegarder la consultation: ${errMsg}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Reset form to initial state
   const resetForm = () => {
-    setCurrentStep('physical_exam');
+    setCurrentStep('anamnesis');
     setSelectedWorker(null);
     setActivePendingId(null);
     setExamType('periodic');
@@ -2368,6 +2615,121 @@ export function OccHealthConsultationScreen({
             </View>
           </View>
         )}
+      </View>
+    );
+  };
+
+  // ─── Step 1: Anamnesis ──
+  const renderAnamnesis = () => {
+    if (!selectedWorker) return null;
+
+    return (
+      <View>
+        <StepHeader
+          title="Anamnèse"
+          subtitle="Motif de visite, profil médical et professionnel du travailleur."
+          icon="document-text"
+        />
+
+        {/* ── Motif de consultation ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="clipboard" size={20} color={ACCENT} />
+            <Text style={styles.sectionCardTitle}>Motif de Consultation</Text>
+          </View>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={visitReason}
+            onChangeText={setVisitReason}
+            placeholder="Décrivez le motif de cette visite médicale…"
+            placeholderTextColor={colors.placeholder}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+
+        {/* ── Profil médical ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="medkit" size={20} color={colors.error} />
+            <Text style={styles.sectionCardTitle}>Profil Médical</Text>
+          </View>
+          {selectedWorker.allergies.length === 0 && selectedWorker.chronicConditions.length === 0 && selectedWorker.currentMedications.length === 0 ? (
+            <Text style={[styles.helperText, { fontStyle: 'italic' }]}>Aucune donnée médicale enregistrée.</Text>
+          ) : (
+            <View style={{ gap: 6 }}>
+              {selectedWorker.allergies.length > 0 && (
+                <View style={[styles.alertBox, { backgroundColor: colors.errorLight + '80', borderColor: colors.error + '30' }]}>
+                  <Ionicons name="warning" size={14} color={colors.error} />
+                  <Text style={[styles.alertText, { marginLeft: 6, color: colors.errorDark }]}>
+                    <Text style={{ fontWeight: '700' }}>Allergies: </Text>{selectedWorker.allergies.join(', ')}
+                  </Text>
+                </View>
+              )}
+              {selectedWorker.chronicConditions.length > 0 && (
+                <View style={[styles.alertBox, { backgroundColor: colors.warningLight + '80', borderColor: colors.warning + '30' }]}>
+                  <Ionicons name="fitness" size={14} color={colors.warning} />
+                  <Text style={[styles.alertText, { marginLeft: 6, color: colors.warningDark }]}>
+                    <Text style={{ fontWeight: '700' }}>Conditions: </Text>{selectedWorker.chronicConditions.join(', ')}
+                  </Text>
+                </View>
+              )}
+              {selectedWorker.currentMedications.length > 0 && (
+                <View style={[styles.alertBox, { backgroundColor: colors.infoLight + '80', borderColor: colors.info + '30' }]}>
+                  <Ionicons name="flask" size={14} color={colors.infoDark} />
+                  <Text style={[styles.alertText, { marginLeft: 6, color: colors.infoDark }]}>
+                    <Text style={{ fontWeight: '700' }}>Médicaments: </Text>{selectedWorker.currentMedications.join(', ')}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* ── Profil professionnel ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="briefcase" size={20} color={colors.infoDark} />
+            <Text style={styles.sectionCardTitle}>Profil Professionnel</Text>
+          </View>
+          <View style={{ gap: 6 }}>
+            <DetailItem label="Poste" value={selectedWorker.jobTitle} icon="briefcase" />
+            <DetailItem label="Entreprise" value={selectedWorker.company} icon="business" />
+            <DetailItem label="Embauché le" value={formatDate(selectedWorker.hireDate)} icon="flag" />
+            {selectedWorker.positionCode ? (
+              <DetailItem label="Code poste" value={selectedWorker.positionCode} icon="barcode" />
+            ) : null}
+            {selectedWorker.exposureRisks && selectedWorker.exposureRisks.length > 0 && (
+              <View style={{ marginTop: 4 }}>
+                <Text style={[styles.fieldLabel, { marginBottom: 4 }]}>Risques d'exposition</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                  {selectedWorker.exposureRisks.map((risk: string) => (
+                    <View key={risk} style={[styles.recBadge, { backgroundColor: colors.warningLight }]}>
+                      <Text style={[styles.recBadgeText, { color: colors.warningDark }]}>{risk}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ── Notes libres d'anamnèse ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="pencil" size={20} color={colors.textSecondary} />
+            <Text style={styles.sectionCardTitle}>Notes d'Anamnèse</Text>
+          </View>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={anamnesisNotes}
+            onChangeText={setAnamnesisNotes}
+            placeholder="Antécédents, observations subjectives, plaintes fonctionnelles…"
+            placeholderTextColor={colors.placeholder}
+            multiline
+            numberOfLines={4}
+          />
+        </View>
       </View>
     );
   };
@@ -2705,6 +3067,10 @@ export function OccHealthConsultationScreen({
   const renderSectorTests = () => {
     if (!sectorProfile) return null;
 
+    const anyReferred = Object.values(testStatuses).some(s => s === 'referred');
+    const anyPending = sectorTestOptions.some(t => !testStatuses[t.id] || testStatuses[t.id] === 'pending');
+    const needsExternal = anyReferred || anyPending;
+
     return (
       <View>
         <StepHeader
@@ -2724,7 +3090,7 @@ export function OccHealthConsultationScreen({
         </View>
 
         {protocolResult?.hasProtocol && (
-          <View style={[styles.alertBox, { backgroundColor: ACCENT + '08', borderColor: ACCENT + '30', marginTop: 10 }]}> 
+          <View style={[styles.alertBox, { backgroundColor: ACCENT + '08', borderColor: ACCENT + '30', marginTop: 10 }]}>
             <Ionicons name="shield-checkmark" size={18} color={ACCENT} />
             <Text style={[styles.alertText, { marginLeft: 8, color: ACCENT }]}>
               Protocole actif: {protocolResult.protocol?.visitTypeLabel} · {protocolResult.requiredExams.length} requis / {protocolResult.recommendedExams.length} recommandés.
@@ -2732,88 +3098,53 @@ export function OccHealthConsultationScreen({
           </View>
         )}
 
-        <View style={[styles.sectionCard, { marginTop: 12 }]}> 
-          <Text style={styles.fieldLabel}>Comment les tests seront réalisés ?</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            <TouchableOpacity
-              style={[
-                styles.choiceChip,
-                { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 6 },
-                testExecutionMode === 'external' && styles.choiceChipActive,
-              ]}
-              onPress={() => setTestExecutionMode('external')}
-            >
-              <Ionicons name="business" size={14} color={testExecutionMode === 'external' ? '#FFF' : colors.textSecondary} />
-              <Text style={[styles.choiceChipText, testExecutionMode === 'external' && styles.choiceChipTextActive]}>Labo externe</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.choiceChip,
-                { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 6 },
-                testExecutionMode === 'onsite' && styles.choiceChipActive,
-              ]}
-              onPress={() => setTestExecutionMode('onsite')}
-            >
-              <Ionicons name="medkit" size={14} color={testExecutionMode === 'onsite' ? '#FFF' : colors.textSecondary} />
-              <Text style={[styles.choiceChipText, testExecutionMode === 'onsite' && styles.choiceChipTextActive]}>Réalisés sur place</Text>
-            </TouchableOpacity>
+        {existingTestsLoading && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <ActivityIndicator size="small" color={ACCENT} />
+            <Text style={[styles.helperText, { color: ACCENT }]}>Chargement des résultats existants…</Text>
           </View>
-          <Text style={[styles.helperText, { marginTop: 8 }]}>
-            {testExecutionMode === 'onsite'
-              ? `Les résultats sont saisis immédiatement dans la consultation (${completedOnsiteTestsCount}/${orderedTests.length} complétés).`
-              : 'Les examens sont prescrits puis la consultation est reprise quand les résultats reviennent.'}
-          </Text>
-        </View>
+        )}
 
         <View style={{ marginTop: 16 }}>
           {sectorTestOptions.map((test) => {
-            const isOrdered = orderedTests.includes(test.id);
-            const result = onsiteTestResults[test.id] || {
-              completed: false,
-              interpretation: null,
-              value: '',
-              notes: '',
+            const existingKey = TEST_ID_TO_EXISTING_KEY[test.id] || test.id;
+            const status: PerTestStatus = testStatuses[test.id] || 'pending';
+            const existing = existingTestResults[existingKey] ?? null;
+            const onsiteResult = onsiteTestResults[test.id] || { completed: false, interpretation: null, value: '', notes: '' };
+            const interpretationColor = getTestInterpretationColor(onsiteResult.interpretation);
+            const setStatus = (s: PerTestStatus) => {
+              setTestStatuses(prev => ({ ...prev, [test.id]: s }));
+              if (s === 'entering_now' || s === 'using_existing') {
+                setOrderedTests(prev => prev.includes(test.id) ? prev : [...prev, test.id]);
+              }
             };
-            const interpretationColor = getTestInterpretationColor(result.interpretation);
 
             return (
               <View
                 key={test.id}
                 style={[
                   styles.testCard,
-                  isOrdered && { borderColor: ACCENT, backgroundColor: ACCENT + '06' },
-                  testExecutionMode === 'onsite' && isOrdered && { flexDirection: 'column', alignItems: 'stretch', gap: 0 },
+                  status === 'using_existing' && { borderColor: colors.success, backgroundColor: colors.successLight + '30' },
+                  status === 'entering_now' && { borderColor: ACCENT, backgroundColor: ACCENT + '06' },
+                  status === 'referred' && { borderColor: colors.infoDark, backgroundColor: colors.infoLight + '30' },
+                  { flexDirection: 'column', alignItems: 'stretch' },
                 ]}
               >
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center' }}
-                  onPress={() => {
-                    if (testExecutionMode === 'onsite' && isOrdered) {
-                      setExpandedOnsiteTestId(prev => (prev === test.id ? null : test.id));
-                      return;
-                    }
-
-                    setOrderedTests(prev => {
-                      if (prev.includes(test.id)) {
-                        return prev.filter(t => t !== test.id);
-                      }
-                      if (testExecutionMode === 'onsite') {
-                        setExpandedOnsiteTestId(test.id);
-                      }
-                      return [...prev, test.id];
-                    });
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.testCheckbox, isOrdered && { backgroundColor: ACCENT, borderColor: ACCENT }]}>
-                    {isOrdered && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                  </View>
-                  <Ionicons name={test.icon} size={18} color={isOrdered ? ACCENT : colors.textSecondary} style={{ marginRight: 10, marginLeft: 10 }} />
+                {/* ── Card Header ── */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons
+                    name={test.icon}
+                    size={18}
+                    color={status === 'pending' ? colors.textSecondary : status === 'using_existing' ? colors.success : status === 'entering_now' ? ACCENT : colors.infoDark}
+                    style={{ marginRight: 10 }}
+                  />
                   <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={[styles.testLabel, isOrdered && { color: ACCENT }]}>{test.label}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={[styles.testLabel, status !== 'pending' && { color: status === 'using_existing' ? colors.success : status === 'entering_now' ? ACCENT : colors.infoDark }]}>
+                        {test.label}
+                      </Text>
                       {test.required && (
-                        <View style={[styles.recBadge, { backgroundColor: colors.errorLight }]}> 
+                        <View style={[styles.recBadge, { backgroundColor: colors.errorLight }]}>
                           <Text style={[styles.recBadgeText, { color: colors.errorDark }]}>🔒 Requis</Text>
                         </View>
                       )}
@@ -2822,32 +3153,162 @@ export function OccHealthConsultationScreen({
                           <Text style={[styles.recBadgeText, { color: sectorProfile.color }]}>★ Recommandé</Text>
                         </View>
                       )}
+                      {status === 'using_existing' && (
+                        <View style={[styles.recBadge, { backgroundColor: colors.successLight }]}>
+                          <Text style={[styles.recBadgeText, { color: colors.successDark }]}>✓ Résultat lié</Text>
+                        </View>
+                      )}
+                      {status === 'entering_now' && (
+                        <View style={[styles.recBadge, { backgroundColor: ACCENT + '14' }]}>
+                          <Text style={[styles.recBadgeText, { color: ACCENT }]}>Sur place</Text>
+                        </View>
+                      )}
+                      {status === 'referred' && (
+                        <View style={[styles.recBadge, { backgroundColor: colors.infoLight }]}>
+                          <Text style={[styles.recBadgeText, { color: colors.infoDark }]}>Référé</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.testDesc}>{test.desc}</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
 
-                {testExecutionMode === 'onsite' && isOrdered && expandedOnsiteTestId === test.id && (
+                {/* ── Pending: existing result info + action buttons ── */}
+                {status === 'pending' && (
+                  <View style={{ marginTop: 10 }}>
+                    {existing && existing.freshness !== 'too_old' && (() => {
+                      const freshnessConfig = {
+                        valid:    { bg: colors.successLight + '60', border: colors.success  + '30', icon: 'checkmark-circle'  as const, iconColor: colors.success,   textColor: colors.successDark, label: `Résultat valide (${existing.ageMonths} mois)` },
+                        expiring: { bg: colors.warningLight + '60', border: colors.warning  + '30', icon: 'time-outline'       as const, iconColor: colors.warning,   textColor: colors.warningDark, label: `Expire bientôt (${existing.ageMonths}/${existing.validityMonths} mois)` },
+                        expired:  { bg: colors.errorLight  + '60', border: colors.error    + '30', icon: 'alert-circle'       as const, iconColor: colors.error,     textColor: colors.errorDark,   label: `Expiré depuis ${existing.ageMonths - existing.validityMonths} mois` },
+                      }[existing.freshness] ?? null;
+                      if (!freshnessConfig) return null;
+                      return (
+                        <View style={[styles.alertBox, { backgroundColor: freshnessConfig.bg, borderColor: freshnessConfig.border, marginBottom: 8 }]}>
+                          <Ionicons name={freshnessConfig.icon} size={16} color={freshnessConfig.iconColor} />
+                          <View style={{ marginLeft: 8, flex: 1 }}>
+                            <Text style={[styles.alertText, { color: freshnessConfig.textColor, fontWeight: '700' }]}>
+                              {freshnessConfig.label} — {existing.date}
+                            </Text>
+                            <Text style={[styles.alertText, { color: freshnessConfig.textColor }]}>{existing.summary}</Text>
+                            {existing.freshness === 'expired' && (
+                              <Text style={[styles.helperText, { color: freshnessConfig.textColor, marginTop: 2 }]}>
+                                Validité standard: {existing.validityMonths} mois. Lier ce résultat engage votre responsabilité.
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })()}
+                    {/* too_old: show info banner but no link button */}
+                    {existing && existing.freshness === 'too_old' && (
+                      <View style={[styles.alertBox, { backgroundColor: colors.warningLight + '40', borderColor: colors.warning + '20', marginBottom: 8 }]}>
+                        <Ionicons name="ban" size={16} color={colors.textSecondary} />
+                        <View style={{ marginLeft: 8, flex: 1 }}>
+                          <Text style={[styles.alertText, { color: colors.textSecondary, fontWeight: '700' }]}>
+                            Résultat trop ancien ({existing.ageMonths} mois — limite {existing.validityMonths * 2} mois)
+                          </Text>
+                          <Text style={[styles.alertText, { color: colors.textSecondary }]}>Dernier: {existing.date} · {existing.summary}</Text>
+                          <Text style={[styles.helperText, { color: colors.textSecondary, marginTop: 2 }]}>
+                            Un nouveau test est obligatoire.
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {existing && existing.freshness !== 'too_old' && (
+                        <TouchableOpacity
+                          style={[
+                            styles.choiceChip,
+                            { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 },
+                            existing.freshness === 'valid'    && { borderColor: colors.success },
+                            existing.freshness === 'expiring' && { borderColor: colors.warning },
+                            existing.freshness === 'expired'  && { borderColor: colors.error },
+                          ]}
+                          onPress={() => setStatus('using_existing')}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons
+                            name="link"
+                            size={13}
+                            color={existing.freshness === 'expired' ? colors.error : existing.freshness === 'expiring' ? colors.warning : colors.success}
+                          />
+                          <Text style={[styles.choiceChipText, {
+                            color: existing.freshness === 'expired' ? colors.error : existing.freshness === 'expiring' ? colors.warning : colors.success,
+                          }]}>
+                            {existing.freshness === 'expired' ? 'Lier (expiré)' : 'Utiliser existant'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={[styles.choiceChip, { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+                        onPress={() => { setStatus('entering_now'); setExpandedOnsiteTestId(test.id); }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="create" size={13} color={ACCENT} />
+                        <Text style={[styles.choiceChipText, { color: ACCENT }]}>Saisir maintenant</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.choiceChip, { flex: 1, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+                        onPress={() => setStatus('referred')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="send" size={13} color={colors.textSecondary} />
+                        <Text style={styles.choiceChipText}>Référer / passer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* ── Using existing: show linked result + change link ── */}
+                {status === 'using_existing' && existing && (
+                  <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="calendar" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.testDesc, { flex: 1 }]}>{existing.date} · {existing.summary}</Text>
+                    <TouchableOpacity onPress={() => setStatus('pending')} activeOpacity={0.7}>
+                      <Text style={[styles.testDesc, { color: ACCENT, fontWeight: '700' }]}>Changer</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* ── Referred: show badge + change link ── */}
+                {status === 'referred' && (
+                  <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="send" size={14} color={colors.infoDark} />
+                    <Text style={[styles.testDesc, { flex: 1, color: colors.infoDark }]}>Examen référé à un labo ou spécialiste externe.</Text>
+                    <TouchableOpacity onPress={() => setStatus('pending')} activeOpacity={0.7}>
+                      <Text style={[styles.testDesc, { color: ACCENT, fontWeight: '700' }]}>Changer</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* ── Entering now: inline onsite form ── */}
+                {status === 'entering_now' && (
                   <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: 10 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Text style={[styles.testDesc, { fontWeight: '700' }]}>Résultat sur place</Text>
-                      <TouchableOpacity
-                        style={[styles.choiceChip, result.completed && styles.choiceChipActive]}
-                        onPress={() => {
-                          setOnsiteTestResults(prev => ({
-                            ...prev,
-                            [test.id]: {
-                              ...(prev[test.id] || result),
-                              completed: !(prev[test.id]?.completed),
-                              performedAt: !(prev[test.id]?.completed) ? new Date().toISOString() : prev[test.id]?.performedAt,
-                            },
-                          }));
-                        }}
-                      >
-                        <Text style={[styles.choiceChipText, result.completed && styles.choiceChipTextActive]}>
-                          {result.completed ? 'Fait' : 'Non fait'}
-                        </Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TouchableOpacity
+                          style={[styles.choiceChip, onsiteResult.completed && styles.choiceChipActive]}
+                          onPress={() => {
+                            setOnsiteTestResults(prev => ({
+                              ...prev,
+                              [test.id]: {
+                                ...(prev[test.id] || onsiteResult),
+                                completed: !(prev[test.id]?.completed),
+                                performedAt: !(prev[test.id]?.completed) ? new Date().toISOString() : prev[test.id]?.performedAt,
+                              },
+                            }));
+                          }}
+                        >
+                          <Text style={[styles.choiceChipText, onsiteResult.completed && styles.choiceChipTextActive]}>
+                            {onsiteResult.completed ? 'Fait' : 'Non fait'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setStatus('pending')} activeOpacity={0.7}>
+                          <Text style={[styles.testDesc, { color: colors.textSecondary }]}>Annuler</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
                     <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -2860,7 +3321,7 @@ export function OccHealthConsultationScreen({
                           key={option.key}
                           style={[
                             styles.choiceChip,
-                            result.interpretation === option.key && {
+                            onsiteResult.interpretation === option.key && {
                               borderColor: getTestInterpretationColor(option.key),
                               backgroundColor: getTestInterpretationColor(option.key) + '14',
                             },
@@ -2869,7 +3330,7 @@ export function OccHealthConsultationScreen({
                             setOnsiteTestResults(prev => ({
                               ...prev,
                               [test.id]: {
-                                ...(prev[test.id] || result),
+                                ...(prev[test.id] || onsiteResult),
                                 interpretation: option.key,
                                 completed: true,
                                 performedAt: prev[test.id]?.performedAt || new Date().toISOString(),
@@ -2879,7 +3340,7 @@ export function OccHealthConsultationScreen({
                         >
                           <Text style={[
                             styles.choiceChipText,
-                            result.interpretation === option.key && { color: getTestInterpretationColor(option.key), fontWeight: '700' },
+                            onsiteResult.interpretation === option.key && { color: getTestInterpretationColor(option.key), fontWeight: '700' },
                           ]}>
                             {option.label}
                           </Text>
@@ -2889,12 +3350,12 @@ export function OccHealthConsultationScreen({
 
                     <TextInput
                       style={[styles.input, { marginTop: 8 }]}
-                      value={result.value}
+                      value={onsiteResult.value}
                       onChangeText={(value) => {
                         setOnsiteTestResults(prev => ({
                           ...prev,
                           [test.id]: {
-                            ...(prev[test.id] || result),
+                            ...(prev[test.id] || onsiteResult),
                             value,
                             completed: true,
                             performedAt: prev[test.id]?.performedAt || new Date().toISOString(),
@@ -2906,12 +3367,12 @@ export function OccHealthConsultationScreen({
                     />
                     <TextInput
                       style={[styles.input, styles.textArea, { marginTop: 8 }]}
-                      value={result.notes}
+                      value={onsiteResult.notes}
                       onChangeText={(notes) => {
                         setOnsiteTestResults(prev => ({
                           ...prev,
                           [test.id]: {
-                            ...(prev[test.id] || result),
+                            ...(prev[test.id] || onsiteResult),
                             notes,
                             completed: true,
                             performedAt: prev[test.id]?.performedAt || new Date().toISOString(),
@@ -2924,13 +3385,49 @@ export function OccHealthConsultationScreen({
                       numberOfLines={2}
                     />
 
-                    {result.interpretation && (
+                    {onsiteResult.interpretation && (
                       <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}>
                         <Ionicons name="checkmark-circle" size={14} color={interpretationColor} />
                         <Text style={{ marginLeft: 6, fontSize: 12, color: interpretationColor, fontWeight: '600' }}>
-                          Interprétation: {getTestInterpretationLabel(result.interpretation)}
+                          Interprétation: {getTestInterpretationLabel(onsiteResult.interpretation)}
                         </Text>
                       </View>
+                    )}
+
+                    {onsiteResult.completed && backendDraftExaminationId && (
+                      <TouchableOpacity
+                        style={[styles.primaryBtn, { marginTop: 12 }]}
+                        onPress={async () => {
+                          try {
+                            const examDate = new Date().toISOString().split('T')[0];
+                            if (test.id === 'blood_lead') {
+                              const res = await occHealthApi.createHeavyMetalsTest({
+                                examination: backendDraftExaminationId,
+                                heavy_metal: 'lead',
+                                specimen_type: 'blood',
+                                test_date: examDate,
+                                level_value: parseFloat(onsiteResult.value) || 0,
+                                unit: 'µg/dL',
+                                reference_upper: 25,
+                                clinical_significance: onsiteResult.notes || '',
+                                occupational_exposure: true,
+                                follow_up_required: onsiteResult.interpretation === 'abnormal' || onsiteResult.interpretation === 'inconclusive',
+                              });
+                              if (!res.error) {
+                                Alert.alert('Succès', `Résultat de test créé avec succès`);
+                              } else {
+                                Alert.alert('Erreur', res.error);
+                              }
+                            }
+                          } catch (e) {
+                            Alert.alert('Erreur', String(e));
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="cloud-upload" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.primaryBtnText}>Créer le résultat</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 )}
@@ -2940,7 +3437,7 @@ export function OccHealthConsultationScreen({
         </View>
 
         <View style={styles.testActionsRow}>
-          {testExecutionMode === 'external' ? (
+          {needsExternal ? (
             <>
               <TouchableOpacity style={styles.secondaryActionBtn} onPress={handleDownloadTestOrderPdf} activeOpacity={0.8}>
                 <Ionicons name="download" size={16} color={ACCENT} />
@@ -2955,7 +3452,7 @@ export function OccHealthConsultationScreen({
             <View style={[styles.alertBox, { flex: 1, backgroundColor: colors.successLight, borderColor: colors.success + '30' }]}>
               <Ionicons name="checkmark-done" size={18} color={colors.success} />
               <Text style={[styles.alertText, { marginLeft: 8, color: colors.successDark }]}>
-                Mode sur place actif: complétez les résultats ci-dessus puis continuez vers la décision d'aptitude.
+                Tous les tests ont été traités. Continuez vers la décision d'aptitude.
               </Text>
             </View>
           )}
@@ -3336,9 +3833,11 @@ export function OccHealthConsultationScreen({
         const pieces = [
           result.interpretation ? getTestInterpretationLabel(result.interpretation) : null,
           result.value?.trim() || null,
-        ].filter(Boolean) as string[];
-        return `${label}: ${pieces.join(' · ') || 'résultat saisi'}`;
-      });
+        ].filter(Boolean);
+        const summary = pieces.length > 0 ? pieces.join(' · ') : 'résultat saisi';
+        return String(`${label}: ${summary}`);
+      })
+      .filter(Boolean) as string[];
 
     return (
       <View>
@@ -3385,14 +3884,22 @@ export function OccHealthConsultationScreen({
             `FC: ${vitals.heartRate || '—'} bpm · T: ${vitals.temperature || '—'}°C`,
             `IMC: ${calculateBMI(vitals.weight, vitals.height) || '—'} · SpO2: ${vitals.oxygenSaturation || '—'}%`,
           ]} />
-          <SummaryCard title="Tests Prescrits" icon="flask" color={colors.secondary} items={
-            orderedTests.length > 0
-              ? (testExecutionMode === 'onsite' ? onsiteSummaryItems : orderedTests.map(testId => {
-                  const fromOptions = sectorTestOptions.find(option => option.id === testId);
-                  return getTestDisplayLabel(testId, fromOptions?.label);
-                }))
-              : ['Aucun test prescrit']
-          } />
+          <SummaryCard 
+            title="Tests Prescrits" 
+            icon="flask" 
+            color={colors.secondary} 
+            items={
+              orderedTests.length > 0
+                ? (testExecutionMode === 'onsite' 
+                    ? onsiteSummaryItems 
+                    : orderedTests.map(testId => {
+                        const fromOptions = sectorTestOptions.find(option => option.id === testId);
+                        const label = getTestDisplayLabel(testId, fromOptions?.label);
+                        return String(label || testId);
+                      }))
+                : ['Aucun test prescrit']
+            } 
+          />
         </View>
 
         {/* Sector Questionnaire Alerts Summary */}
@@ -3468,9 +3975,23 @@ export function OccHealthConsultationScreen({
         )}
 
         {/* Submit */}
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitConsultation} activeOpacity={0.8}>
-          <Ionicons name="checkmark-circle" size={22} color="#FFF" />
-          <Text style={styles.submitBtnText}>Valider & Générer Certificat</Text>
+        <TouchableOpacity 
+          style={[styles.submitBtn, isSubmitting && { opacity: 0.5 }]} 
+          onPress={handleSubmitConsultation}
+          disabled={isSubmitting}
+          activeOpacity={0.8}
+        >
+          {isSubmitting ? (
+            <>
+              <ActivityIndicator size="small" color="#FFF" />
+              <Text style={styles.submitBtnText}>Enregistrement...</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={22} color="#FFF" />
+              <Text style={styles.submitBtnText}>Valider & Générer Certificat</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -3482,6 +4003,7 @@ export function OccHealthConsultationScreen({
 
   const renderStep = () => {
     switch (currentStep) {
+      case 'anamnesis': return renderAnamnesis();
       case 'physical_exam': return renderPhysicalExam();
       case 'sector_questions': return renderSectorQuestions();
       case 'sector_tests': return renderSectorTests();

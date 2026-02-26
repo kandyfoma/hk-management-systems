@@ -48,6 +48,8 @@ import { SpirometryScreen } from './screens/SpirometryScreen';
 import { XrayImagingScreen } from './screens/XrayImagingScreen';
 import { DrugAlcoholScreeningScreen } from './screens/DrugAlcoholScreeningScreen';
 import { PPEComplianceScreen } from './screens/PPEComplianceScreen';
+import { HeavyMetalsScreen } from './screens/HeavyMetalsScreen';
+import { VisionTestScreen } from './screens/VisionTestScreen';
 // Test list screens
 import { AudiometryListScreen } from './screens/AudiometryListScreen';
 import { SpirometryListScreen } from './screens/SpirometryListScreen';
@@ -411,9 +413,12 @@ export function OccHealthNavigator() {
     if (activeScreen === 'oh-spirometry') return <SpirometryScreen />;
     if (activeScreen === 'oh-xray-imaging') return <XrayImagingScreen />;
     if (activeScreen === 'oh-drug-alcohol-screening') return <DrugAlcoholScreeningScreen />;
+    if (activeScreen === 'oh-ppe') return <PPEComplianceScreen />;
     if (activeScreen === 'oh-ppe-compliance-new') return <PPEComplianceScreen />;
-    if (activeScreen === 'oh-vision-tests') return <PlaceholderScreen title="Tests de Vision" icon="eye-outline" />;
-    if (activeScreen === 'oh-heavy-metals') return <PlaceholderScreen title="Métaux Lourds — Dosage" icon="flask-outline" />;
+    if (activeScreen === 'oh-vision') return <VisionTestScreen />;
+    if (activeScreen === 'oh-vision-tests') return <VisionTestScreen />;
+    if (activeScreen === 'oh-heavy-metals') return <HeavyMetalsScreen />;
+    if (activeScreen === 'oh-health-screening') return <HealthScreeningFormScreen />;
 
     // ── Test Lists ───────────────────────────────────────────
     if (activeScreen === 'oh-audiometry-list') return <AudiometryListScreen />;
@@ -423,7 +428,7 @@ export function OccHealthNavigator() {
     if (activeScreen === 'oh-drug-alcohol-list') return <DrugAlcoholScreeningListScreen />;
     if (activeScreen === 'oh-ppe-list') return <PPEComplianceListScreen />;
     if (activeScreen === 'oh-health-screening-list') return <HealthScreeningListScreen />;
-    if (activeScreen === 'oh-heavy-metals-list') return <PlaceholderScreen title="Liste — Métaux Lourds" icon="list-outline" />;
+    if (activeScreen === 'oh-heavy-metals-list') return <HeavyMetalsScreen />;
     if (activeScreen === 'oh-medical-test-catalog') return <MedicalTestCatalogScreen navigation={{ navigate: setActiveScreen }} />;
 
     if (activeScreen === 'exit-exams') {

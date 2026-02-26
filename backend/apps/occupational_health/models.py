@@ -2050,16 +2050,16 @@ class HeavyMetalsTest(models.Model):
         return f"{self.get_heavy_metal_display()} test"
     
     def save(self, *args, **kwargs):
-        if self.reference_upper:
-            if self.level_value > self.reference_upper * 1.5:
+        if self.reference_upper and self.level_value:
+            if self.level_value > self.reference_upper * Decimal('1.5'):
                 self.status = 'critical'
             elif self.level_value > self.reference_upper:
                 self.status = 'high'
-            elif self.level_value > self.reference_upper * 0.8:
+            elif self.level_value > self.reference_upper * Decimal('0.8'):
                 self.status = 'elevated'
             else:
                 self.status = 'normal'
-        if self.osha_action_level and self.level_value > self.osha_action_level:
+        if self.osha_action_level and self.level_value and self.level_value > self.osha_action_level:
             self.exceeds_osha_limit = True
         super().save(*args, **kwargs)
 

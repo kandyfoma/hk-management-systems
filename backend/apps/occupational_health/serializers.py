@@ -6,6 +6,7 @@ occupational medicine management system.
 """
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from .models import (
     # Protocol hierarchy models
     MedicalExamCatalog, OccSector, OccDepartment, OccPosition,
@@ -266,6 +267,7 @@ class WorkerListSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     age = serializers.ReadOnlyField()
     enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    enterprise_sector = serializers.CharField(source='enterprise.sector', read_only=True)
     work_site_name = serializers.CharField(source='work_site.name', read_only=True, allow_null=True)
     sector_risk_level = serializers.ReadOnlyField()
     job_category_display = serializers.CharField(source='get_job_category_display', read_only=True)
@@ -276,7 +278,7 @@ class WorkerListSerializer(serializers.ModelSerializer):
         model = Worker
         fields = [
             'id', 'employee_id', 'first_name', 'last_name', 'full_name', 'age',
-            'gender', 'enterprise', 'enterprise_name', 'work_site', 'work_site_name',
+            'gender', 'enterprise', 'enterprise_name', 'enterprise_sector', 'work_site', 'work_site_name',
             'job_category', 'job_category_display', 'job_title', 'hire_date', 
             'employment_status', 'employment_status_display', 'phone', 
             'current_fitness_status', 'fitness_status_display', 'sector_risk_level', 
@@ -290,6 +292,7 @@ class WorkerDetailSerializer(serializers.ModelSerializer):
     age = serializers.ReadOnlyField()
     sector_risk_level = serializers.ReadOnlyField()
     enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    enterprise_sector = serializers.CharField(source='enterprise.sector', read_only=True)
     work_site_name = serializers.CharField(source='work_site.name', read_only=True)
     job_category_display = serializers.CharField(source='get_job_category_display', read_only=True)
     employment_status_display = serializers.CharField(source='get_employment_status_display', read_only=True)
@@ -320,6 +323,7 @@ class VitalSignsSerializer(serializers.ModelSerializer):
     class Meta:
         model = VitalSigns
         fields = '__all__'
+        read_only_fields = ['recorded_by', 'recorded_at']
 
 class PhysicalExaminationSerializer(serializers.ModelSerializer):
     """Physical examination serializer"""
@@ -477,6 +481,7 @@ class FitnessCertificateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FitnessCertificate
         fields = '__all__'
+        read_only_fields = ['certificate_number', 'created_at', 'updated_at', 'issued_by']
 
 class MedicalExaminationListSerializer(serializers.ModelSerializer):
     """List view serializer for medical examinations"""
@@ -733,12 +738,15 @@ class MedicalExaminationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicalExamination
         fields = [
+            'id', 'exam_number',
             'worker', 'exam_type', 'exam_date', 'examining_doctor',
             'chief_complaint', 'medical_history_review',
             'results_summary', 'recommendations',
             'examination_completed',
-            'follow_up_required', 'follow_up_date', 'next_periodic_exam'
+            'follow_up_required', 'follow_up_date', 'next_periodic_exam',
+            'created_at',
         ]
+        read_only_fields = ['id', 'exam_number', 'created_at']
 
     def validate(self, attrs):
         follow_up_required = attrs.get('follow_up_required', False)
@@ -1086,11 +1094,13 @@ class HeavyMetalsTestSerializer(serializers.ModelSerializer):
         
         if worker_id:
             try:
+                from django.utils import timezone as tz
                 worker = Worker.objects.get(id=worker_id)
                 examination = MedicalExamination.objects.create(
                     worker=worker,
-                    exam_type='heavy_metals_test',
-                    status='completed'
+                    exam_type='special',
+                    exam_date=validated_data.get('test_date') or tz.now().date(),
+                    examination_completed=True
                 )
                 validated_data['examination'] = examination
             except Worker.DoesNotExist:
@@ -1116,7 +1126,7 @@ class HeavyMetalsTestSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'examination', 'worker_name',
             'heavy_metal_display', 'specimen_type_display',
-            'status_display', 'exceeds_osha_limit', 'created', 'updated'
+            'status_display', 'status', 'exceeds_osha_limit', 'created', 'updated'
         ]
 
 
