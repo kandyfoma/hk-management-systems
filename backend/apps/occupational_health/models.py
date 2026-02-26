@@ -2367,6 +2367,204 @@ class RiskHeatmapReport(models.Model):
         return matrix
 
 
+# ==================== MEDICAL CONSULTATION MODELS ====================
+
+class OccConsultation(models.Model):
+    """
+    Occupational health consultation model linking worker, doctor, and medical examination.
+    Tracks the consultation lifecycle from intake to examination to fitness decision.
+    """
+    
+    STATUS_CHOICES = [
+        ('waiting', _('En Attente')),  # Patient is in waiting room, assigned to doctor
+        ('in_consultation', _('En Consultation')),  # Doctor is currently consulting
+        ('completed', _('Terminée')),  # Consultation finished
+        ('archived', _('Archivée')),  # Old record
+    ]
+    
+    FITNESS_CHOICES = [
+        ('fit', _('Apte')),
+        ('fit_with_restrictions', _('Apte avec Restrictions')),
+        ('temporarily_unfit', _('Inapte Temporaire')),
+        ('permanently_unfit', _('Inapte Définitif')),
+        ('pending', _('En Attente d\'Évaluation')),
+    ]
+    
+    # Identifiers
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation_number = models.CharField(_("Numéro Consultation"), max_length=50, unique=True)
+    
+    # Core relationships
+    worker = models.ForeignKey(
+        Worker,
+        on_delete=models.CASCADE,
+        related_name='occupational_consultations',
+        verbose_name=_("Travailleur")
+    )
+    doctor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='occupational_consultations',
+        limit_choices_to={'groups__name': 'Doctors'},
+        verbose_name=_("Médecin Assigné")
+    )
+    
+    # Consultation details
+    visit_type = models.CharField(
+        _("Type de Visite"),
+        max_length=30,
+        choices=VISIT_TYPE_CHOICES,
+        default='periodic'
+    )
+    exam_type = models.CharField(
+        _("Type Examen"),
+        max_length=50,
+        blank=True,
+        help_text=_("Ex: periodic, pre_employment, post_incident, etc.")
+    )
+    
+    # Vitals captured at intake
+    vitals = models.JSONField(
+        _("Signes Vitaux"),
+        default=dict,
+        blank=True,
+        help_text=_("Height, weight, BP, temperature, O2 sat, etc.")
+    )
+    
+    # Consultation workflow
+    status = models.CharField(
+        _("Statut"),
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='waiting'
+    )
+    
+    # Medical notes and findings
+    chief_complaint = models.TextField(_("Motif Principal"), blank=True)
+    medical_history = models.TextField(_("Antécédents Médicaux"), blank=True)
+    physical_examination_findings = models.TextField(_("Résultats Examen Physique"), blank=True)
+    
+    # Exams ordered
+    exams_ordered = models.JSONField(
+        _("Examens Commandés"),
+        default=list,
+        blank=True,
+        help_text=_("List of exam codes ordered during consultation")
+    )
+    
+    # Fitness decision
+    fitness_status = models.CharField(
+        _("Statut Aptitude"),
+        max_length=30,
+        choices=FITNESS_CHOICES,
+        default='pending'
+    )
+    fitness_decision_notes = models.TextField(
+        _("Notes Décision Aptitude"),
+        blank=True,
+        help_text=_("Reason for fitness decision, restrictions, recommendations")
+    )
+    
+    # Restrictions if applicable
+    restrictions = models.JSONField(
+        _("Restrictions"),
+        default=list,
+        blank=True,
+        help_text=_("List of job restrictions if fit_with_restrictions")
+    )
+    
+    # Certificate validity
+    certificate_valid_from = models.DateField(_("Certificat Valide À Partir De"), null=True, blank=True)
+    certificate_valid_until = models.DateField(_("Certificat Valide Jusqu'au"), null=True, blank=True)
+    certificate_issued = models.BooleanField(_("Certificat Émis"), default=False)
+    
+    # Follow-up
+    followup_required = models.BooleanField(_("Suivi Requis"), default=False)
+    followup_reason = models.TextField(_("Raison Suivi"), blank=True)
+    followup_date = models.DateField(_("Date Suivi Prévue"), null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(_("Créé"), auto_now_add=True)
+    started_at = models.DateTimeField(_("Démarré"), null=True, blank=True)
+    completed_at = models.DateTimeField(_("Terminé"), null=True, blank=True)
+    updated_at = models.DateTimeField(_("Mis à Jour"), auto_now=True)
+    
+    # Audit
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='consultations_created',
+        verbose_name=_("Créé Par")
+    )
+    
+    class Meta:
+        verbose_name = _("Consultation Santé Travail")
+        verbose_name_plural = _("Consultations Santé Travail")
+        ordering = ['-created_at']
+        index_together = [
+            ['worker', 'status'],
+            ['doctor', 'status'],
+            ['created_at'],
+        ]
+    
+    def __str__(self):
+        return f"[{self.consultation_number}] {self.worker.full_name} - {self.get_status_display()}"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate consultation number if not set"""
+        if not self.consultation_number:
+            # Format: CONS-YYYYMMDD-00001
+            from django.utils import timezone
+            date_str = timezone.now().strftime('%Y%m%d')
+            count = OccConsultation.objects.filter(
+                consultation_number__startswith=f'CONS-{date_str}'
+            ).count() + 1
+            self.consultation_number = f'CONS-{date_str}-{count:05d}'
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_ongoing(self):
+        """Check if consultation is currently active"""
+        return self.status == 'in_consultation'
+    
+    @property
+    def is_waiting(self):
+        """Check if consultation is in waiting room"""
+        return self.status == 'waiting'
+    
+    @property
+    def is_completed(self):
+        """Check if consultation is done"""
+        return self.status == 'completed'
+    
+    def assign_to_doctor(self, doctor_user):
+        """Assign this consultation to a doctor"""
+        self.doctor = doctor_user
+        self.status = 'waiting'
+        self.save()
+    
+    def start_consultation(self):
+        """Mark consultation as started"""
+        from django.utils import timezone
+        self.status = 'in_consultation'
+        self.started_at = timezone.now()
+        self.save()
+    
+    def complete_consultation(self, fitness_status, notes=''):
+        """Mark consultation as completed"""
+        from django.utils import timezone
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.fitness_status = fitness_status
+        if notes:
+            self.fitness_decision_notes = notes
+        self.save()
+
+
 # ==================== ISO 27001 MODELS ====================
 # Import ISO 27001 Information Security Management models
 from .models_iso27001 import (

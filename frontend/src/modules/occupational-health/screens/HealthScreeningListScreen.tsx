@@ -4,6 +4,8 @@ import {
   Modal, Alert, ActivityIndicator, RefreshControl, SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
@@ -22,6 +24,7 @@ interface ScreeningResult {
 }
 
 export function HealthScreeningListScreen() {
+  const authUser = useSelector((state: RootState) => state.auth.user);
   const [results, setResults] = useState<ScreeningResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,6 +98,7 @@ export function HealthScreeningListScreen() {
         screening_type: formData.screening_type,
         responses: formData.responses,
         notes: formData.notes,
+        performed_by: authUser?.id ? Number(authUser.id) : undefined,
       };
 
       const response = await api.post('/occupational-health/health-screening-results/', payload);

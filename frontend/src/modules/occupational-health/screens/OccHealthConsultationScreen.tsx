@@ -1,4 +1,5 @@
 ﻿import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -225,15 +226,18 @@ const dedupePendingQueue = (list: PendingConsultation[]): PendingConsultation[] 
   });
 };
 
+/** Returns true if at least one of the key vitals is recorded (used for visual badge only, NOT a gate). */
 const hasInitialNurseScreening = (pending: PendingConsultation): boolean => {
   const vitals = pending?.vitals || {};
-  // Allow consultation to start if ANY vital signs are present (matching hospital module pattern)
-  // This allows nurse to continue taking vitals during the consultation if incomplete
   return Boolean(
     vitals.temperature ||
     vitals.bloodPressureSystolic ||
     vitals.bloodPressureDiastolic ||
-    vitals.heartRate
+    vitals.heartRate ||
+    vitals.weight ||
+    vitals.height ||
+    vitals.oxygenSaturation ||
+    vitals.respiratoryRate,
   );
 };
 
@@ -819,24 +823,34 @@ export function OccHealthConsultationScreen({
 }) {
   console.log('🏥 OccHealthConsultationScreen mounted', { draftToLoad, pendingConsultationToLoad });
 
+  // Get current logged-in doctor from Redux
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+  const currentDoctorId = currentUser?.id;
+
   // ─── Waiting room state ──
   const [pendingConsultations, setPendingConsultations] = useState<PendingConsultation[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [activePendingId, setActivePendingId] = useState<string | null>(null);
 
-  // Load pending consultations queue
+  // Load pending consultations queue - filtered by assigned doctor
   const loadPendingQueue = useCallback(async () => {
     setLoadingQueue(true);
     try {
       const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
       if (stored) {
         const list: PendingConsultation[] = JSON.parse(stored);
-        const deduped = dedupePendingQueue(list).filter(c => c.status === 'waiting').filter(hasInitialNurseScreening);
-        setPendingConsultations(deduped);
-        // Persist cleaned queue to remove historical duplicates.
-        if (deduped.length !== list.filter(c => c.status === 'waiting' && hasInitialNurseScreening(c)).length) {
-          await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(deduped));
+        let filtered = list.filter(c => c.status === 'waiting');
+
+        // Show patients assigned to this doctor OR unassigned patients (no doctor selected yet)
+        if (currentDoctorId) {
+          filtered = filtered.filter(c =>
+            !c.assignedDoctor ||                                     // no doctor assigned → visible to all
+            String(c.assignedDoctor.id) === String(currentDoctorId) // assigned to current doctor
+          );
         }
+
+        // Dedup by patient, keep newest — display ALL waiting workers, vitals completeness is a visual badge only
+        setPendingConsultations(dedupePendingQueue(filtered));
       } else {
         setPendingConsultations([]);
       }
@@ -845,11 +859,18 @@ export function OccHealthConsultationScreen({
     } finally {
       setLoadingQueue(false);
     }
-  }, []);
+  }, [currentDoctorId]);
 
   useEffect(() => {
     loadPendingQueue();
   }, [loadPendingQueue]);
+
+  // Reload queue every time the screen comes into focus (e.g. returning from intake screen)
+  useFocusEffect(
+    useCallback(() => {
+      loadPendingQueue();
+    }, [loadPendingQueue])
+  );
 
   // ─── Step state ──
   const [currentStep, setCurrentStep] = useState<ConsultationStep>('physical_exam');
@@ -866,42 +887,58 @@ export function OccHealthConsultationScreen({
       const list: PendingConsultation[] = JSON.parse(stored);
       const pending = list.find(c => c.id === pendingId);
       if (!pending) return;
-      if (!hasInitialNurseScreening(pending)) {
-        Alert.alert('Données incomplètes', 'Ce patient n\'a pas encore terminé le screening infirmier à l\'accueil.');
+
+      // Check if patient is assigned to current doctor (or unassigned - open to anyone)
+      if (currentDoctorId && pending.assignedDoctor && String(pending.assignedDoctor.id) !== String(currentDoctorId)) {
+        Alert.alert('Accès Refusé', 'Ce patient n\'est pas assigné à vous.');
         return;
       }
 
-      const linkedDraftId = pending.resumeDraftId as string | undefined;
+      // Inner helper: actually opens the consultation for this pending entry
+      const startConsultation = async () => {
+        const linkedDraftId = pending.resumeDraftId as string | undefined;
+        if (linkedDraftId) {
+          await loadDraft(linkedDraftId);
+          setDraftId(linkedDraftId);
+          setActivePendingId(pendingId);
+        } else {
+          setSelectedWorker(pending.patient);
+          setExamType(pending.examType);
+          setVisitReason(pending.visitReason);
+          setReferredBy(pending.referredBy);
+          setVitals(pending.vitals);
+          setCurrentStep('physical_exam');
+          setActivePendingId(pendingId);
+        }
+        // Mark as in_consultation
+        const updated = list.map(c =>
+          c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
+        );
+        await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
+        setPendingConsultations(prev => prev.map(c =>
+          c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
+        ));
+        console.log(`📋 Loaded pending consultation for ${pending.patient.firstName} ${pending.patient.lastName}`);
+      };
 
-      if (linkedDraftId) {
-        await loadDraft(linkedDraftId);
-        setDraftId(linkedDraftId);
-        setActivePendingId(pendingId);
-      } else {
-        // Pre-populate all intake data
-        setSelectedWorker(pending.patient);
-        setExamType(pending.examType);
-        setVisitReason(pending.visitReason);
-        setReferredBy(pending.referredBy);
-        setVitals(pending.vitals);
-        setCurrentStep('physical_exam');
-        setActivePendingId(pendingId);
+      if (!hasInitialNurseScreening(pending)) {
+        // Vitals are incomplete — warn but still allow the doctor to proceed
+        Alert.alert(
+          '⚠️ Vitaux Incomplets',
+          'Ce patient n\'a pas encore de signes vitaux enregistrés à l\'accueil. Continuer quand même ?',
+          [
+            { text: 'Annuler', style: 'cancel' },
+            { text: 'Continuer', onPress: startConsultation },
+          ],
+        );
+        return;
       }
 
-      // Mark as in_consultation in queue
-      const updated = list.map(c =>
-        c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
-      );
-      await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
-      setPendingConsultations(prev => prev.map(c =>
-        c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
-      ));
-
-      console.log(`📋 Loaded pending consultation for ${pending.patient.firstName} ${pending.patient.lastName}`);
+      await startConsultation();
     } catch (e) {
       console.error('Failed to load pending consultation:', e);
     }
-  }, []);
+  }, [currentDoctorId]); // loadDraft is declared below but is a stable useCallback ref
 
   // Auto-load pending consultation if one is passed
   useEffect(() => {
@@ -1058,6 +1095,7 @@ export function OccHealthConsultationScreen({
       const payload = {
         exam_type: apiExamType,
         exam_date: examDateOnly,
+        examining_doctor: authUser?.id ? Number(authUser.id) : undefined,
         chief_complaint: draft.visitReason || '',
         medical_history_review: buildMedicalHistoryWithDraftMeta(draft),
         results_summary: draft.consultationNotes || `Décision provisoire: ${OccHealthUtils.getFitnessStatusLabel(draft.fitnessDecision)}`,
@@ -1094,8 +1132,10 @@ export function OccHealthConsultationScreen({
     status?: DraftConsultationStatus;
     step?: ConsultationStep;
     testOrderGeneratedAt?: string;
+    skipBackendSync?: boolean;
   }) => {
-    console.log('🔄 Save draft called', { selectedWorker: selectedWorker?.firstName, draftId });
+    const isAutoSave = options?.silent === true;
+    console.log('🔄 Save draft called', { selectedWorker: selectedWorker?.firstName, draftId, isAutoSave });
 
     try {
       const id = draftId || `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1142,6 +1182,12 @@ export function OccHealthConsultationScreen({
 
       const draftKey = `consultation_draft_${id}`;
       await AsyncStorage.setItem(draftKey, JSON.stringify(draft));
+
+      // Skip backend sync during auto-save (every 30s) to avoid creating duplicate exams
+      // Only sync to backend on explicit save or final submission
+      if (isAutoSave || options?.skipBackendSync) {
+        return id;
+      }
 
       const syncedBackendId = await syncDraftToBackend(draft);
       if (syncedBackendId) {
@@ -1244,68 +1290,8 @@ export function OccHealthConsultationScreen({
         setIsDraft(true);
         setLastSaved(new Date(parsed.updatedAt));
       } else if (id === 'EXAM-DRAFT-001') {
-        // Handle sample draft data
-        const sampleWorker = workers.find(w => w.id === 'W005');
-        if (sampleWorker) {
-          setSelectedWorker(sampleWorker);
-          setExamType('periodic');
-          setVisitReason('');
-          setReferredBy('');
-          setVitals({
-            temperature: 36.6,
-            bloodPressureSystolic: 125,
-            bloodPressureDiastolic: 80,
-            heartRate: 75,
-          });
-          setPhysicalExam({
-            generalAppearance: 'normal',
-            cardiovascular: 'normal',
-            respiratory: 'normal',
-            musculoskeletal: 'normal',
-            neurological: 'normal',
-            dermatological: 'normal',
-            ent: 'normal',
-            abdomen: 'normal',
-            mentalHealth: 'normal',
-            ophthalmological: 'normal',
-          });
-          setOrderedTests([]);
-          setTestExecutionMode('external');
-          setOnsiteTestResults({});
-          setAudiometryDone(false);
-          setSpirometryDone(false);
-          setVisionDone(false);
-          setDrugScreeningDone(false);
-          setBloodWorkDone(false);
-          setXrayDone(false);
-          setMentalScreening({
-            screeningTool: 'WHO5',
-            interpretation: 'good',
-            stressLevel: 'low',
-            sleepQuality: 'good',
-            workLifeBalance: 'good',
-            workload: 'manageable',
-            jobSatisfaction: 'satisfied',
-            referralNeeded: false,
-          });
-          setErgonomicNeeded(false);
-          setErgonomicNotes('');
-          setMskComplaints([]);
-          setFitnessDecision('fit');
-          setRestrictions([]);
-          setRecommendations('');
-          setFollowUpNeeded(false);
-          setFollowUpDate('');
-          setNextAppointmentDate('');
-          setNextAppointmentReason('');
-          setConsultationNotes('Consultation en cours - données partielles');
-          setCurrentStep('physical_exam'); // Continue from where it was left off
-          setBackendDraftExaminationId(null);
-          
-          setDraftId(id);
-          setIsDraft(true);
-          setLastSaved(new Date('2024-01-20T09:00:00Z'));
-        }
+        // Sample draft ID — no longer used (workers list removed)
+        console.warn('EXAM-DRAFT-001 is a legacy sample ID and is no longer supported.');
       }
     } catch (error) {
       console.error('Error loading draft:', error);
@@ -1410,50 +1396,47 @@ export function OccHealthConsultationScreen({
     if (autoDraftRecoveryAttempted.current) return;
     autoDraftRecoveryAttempted.current = true;
 
-    if (draftToLoad || pendingConsultationToLoad) return;
+    // ─── Landing page priority: Always show waiting queue first ──
+    // Only restore draft if explicitly requested via props
+    if (!draftToLoad && !pendingConsultationToLoad) {
+      // Landing page: Show waiting queue instead of auto-loading drafts
+      return;
+    }
 
-    const restoreLatestDraft = async () => {
+    // Only proceed with draft loading if draftToLoad prop is provided
+    if (!draftToLoad) return;
+
+    const restoreExplicitDraft = async () => {
       try {
+        await loadDraft(draftToLoad);
         const keys = await AsyncStorage.getAllKeys();
         const draftKeys = keys.filter(key => key.startsWith('consultation_draft_'));
-        if (draftKeys.length === 0) return;
+        if (draftKeys.length > 0) {
+          const entries = await AsyncStorage.multiGet(draftKeys);
+          const draft = entries
+            .map(([, value]) => {
+              if (!value) return null;
+              try {
+                const d = JSON.parse(value) as DraftState;
+                if (d.id === draftToLoad) return d;
+                return null;
+              } catch {
+                return null;
+              }
+            })
+            .find(d => d !== null);
 
-        const entries = await AsyncStorage.multiGet(draftKeys);
-        const activeDrafts = entries
-          .map(([, value]) => {
-            if (!value) return null;
-            try {
-              return JSON.parse(value) as DraftState;
-            } catch {
-              return null;
-            }
-          })
-          .filter((draft): draft is DraftState => {
-            if (!draft || !draft.selectedWorker) return false;
-            return draft.consultationStatus === 'in_progress'
-              || draft.consultationStatus === 'tests_ordered'
-              || draft.consultationStatus === 'awaiting_results';
-          });
-
-        if (activeDrafts.length === 0) return;
-
-        const latestDraft = activeDrafts.sort((a, b) => {
-          const aTs = Date.parse(a.updatedAt || '') || 0;
-          const bTs = Date.parse(b.updatedAt || '') || 0;
-          return bTs - aTs;
-        })[0];
-
-        await loadDraft(latestDraft.id);
-        const workerLabel = latestDraft.selectedWorker
-          ? `${latestDraft.selectedWorker.firstName} ${latestDraft.selectedWorker.lastName}`
-          : 'consultation';
-        setAutoRestoreNotice(`Brouillon restauré automatiquement pour ${workerLabel}.`);
+          if (draft?.selectedWorker) {
+            const workerLabel = `${draft.selectedWorker.firstName} ${draft.selectedWorker.lastName}`;
+            setAutoRestoreNotice(`Brouillon restauré pour ${workerLabel}.`);
+          }
+        }
       } catch (error) {
-        console.log('Auto draft recovery skipped:', error);
+        console.log('Draft loading failed:', error);
       }
     };
 
-    restoreLatestDraft();
+    restoreExplicitDraft();
   }, [draftToLoad, pendingConsultationToLoad, loadDraft]);
 
   // ─── Derived ──
@@ -3578,6 +3561,12 @@ export function OccHealthConsultationScreen({
                         <View style={[qStyles.statusChip, { backgroundColor: colors.success + '14' }]}>
                           <Text style={[qStyles.statusChipText, { color: colors.success }]}>En attente</Text>
                         </View>
+                        {!hasInitialNurseScreening(pending) && (
+                          <View style={[qStyles.statusChip, { backgroundColor: colors.warning + '20' }]}>
+                            <Ionicons name="alert-circle-outline" size={10} color={colors.warning} />
+                            <Text style={[qStyles.statusChipText, { color: colors.warning }]}>Vitaux manquants</Text>
+                          </View>
+                        )}
                       </View>
                       <Text style={qStyles.queueMeta}>{pending.patient.employeeId} · {pending.patient.company}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -3585,6 +3574,15 @@ export function OccHealthConsultationScreen({
                         <Text style={[qStyles.queueMeta, { color: sp.color }]}>{sp.label}</Text>
                         <Text style={qStyles.queueMeta}>· {OccHealthUtils.getExamTypeLabel(pending.examType)}</Text>
                       </View>
+                      {/* NEW: Show assigned doctor */}
+                      {pending.assignedDoctor && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          <Ionicons name="person-circle" size={12} color={colors.primary} />
+                          <Text style={[qStyles.queueMeta, { color: colors.primary, fontWeight: '600' }]}>
+                            Dr. {pending.assignedDoctor.name}
+                          </Text>
+                        </View>
+                      )}
                       {/* Vitals preview if available */}
                       {(pending.vitals.bloodPressureSystolic || pending.vitals.temperature || pending.vitals.heartRate) && (
                         <View style={qStyles.vitalsPreview}>

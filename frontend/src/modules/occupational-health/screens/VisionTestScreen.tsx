@@ -3,8 +3,8 @@ import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Dimensions,
   Modal, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import ApiService from '../../../services/ApiService';
+import { Ionicons } from '@expo/vector-icons';import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
 const { width } = Dimensions.get('window');
@@ -41,8 +41,7 @@ const SAMPLE_RESULTS: VisionTestResult[] = [
   },
 ];
 
-export function VisionTestScreen() {
-  const [results, setResults] = useState<VisionTestResult[]>(SAMPLE_RESULTS);
+export function VisionTestScreen() {  const authUser = useSelector((state: RootState) => state.auth.user);  const [results, setResults] = useState<VisionTestResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,6 +106,7 @@ export function VisionTestScreen() {
         color_blindness: formData.color_blindness,
         refractive_error: formData.refractive_error,
         notes: formData.notes,
+        performed_by: authUser?.id ? Number(authUser.id) : undefined,
       };
 
       const response = await api.post('/occupational-health/vision-test-results/', newResult);

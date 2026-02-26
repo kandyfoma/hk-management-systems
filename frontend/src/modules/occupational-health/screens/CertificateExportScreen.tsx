@@ -47,91 +47,139 @@ function PDFPreview({ certificate, format }: { certificate: Certificate; format:
   if (format === 'simple') {
     return (
       <View style={styles.pdfPreview}>
-        {/* Header */}
-        <View style={styles.pdfHeader}>
-          <View style={styles.companyBadge}>
-            <Text style={styles.companyName}>KCC MINING</Text>
-            <Text style={styles.companySubtitle}>Occupational Health Services</Text>
-          </View>
-          <Text style={styles.certificateTitle}>FITNESS CERTIFICATE</Text>
-        </View>
-
-        {/* Certificate Details */}
-        <View style={styles.pdfContent}>
-          {/* Worker Info */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Worker Information</Text>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Name:</Text>
-              <Text style={styles.value}>{certificate.workerName}</Text>
+        {/* Decorative Border Frame */}
+        <View style={styles.certificateFrame}>
+          {/* Header Section */}
+          <View style={styles.pdfHeader}>
+            <View style={styles.companyBadge}>
+              <Text style={styles.companyName}>KCC MINING</Text>
+              <Text style={styles.companySubtitle}>Occupational Health & Safety Department</Text>
             </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Employee ID:</Text>
-              <Text style={styles.value}>{certificate.workerId}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Company:</Text>
-              <Text style={styles.value}>{certificate.company}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Position:</Text>
-              <Text style={styles.value}>{certificate.jobTitle}</Text>
-            </View>
+            <View style={styles.headerDivider} />
+            <Text style={styles.certificateTitle}>FITNESS FOR WORK CERTIFICATE</Text>
+            <Text style={styles.certificateSubtitle}>Occupational Health Assessment</Text>
           </View>
 
-          {/* Fitness Status */}
-          <View style={[styles.fitnessBox, { borderColor: fitnessColor }]}>
-            <View style={[styles.fitnessBadge, { backgroundColor: fitnessColor + '20' }]}>
-              <Ionicons name={
-                certificate.fitnessStatus === 'fit' ? 'checkmark-circle' :
-                certificate.fitnessStatus === 'fit_with_restrictions' ? 'alert-circle' : 'close-circle'
-              } size={32} color={fitnessColor} />
-              <Text style={[styles.fitnessLabel, { color: fitnessColor }]}>{fitnessLabel}</Text>
-            </View>
-          </View>
-
-          {/* Restrictions */}
-          {certificate.restrictions && certificate.restrictions.length > 0 && (
+          {/* Certificate Body */}
+          <View style={styles.certificateBody}>
+            {/* Employee Information Section */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Work Restrictions</Text>
-              {certificate.restrictions.map((restriction, idx) => (
-                <View key={idx} style={styles.restrictionRow}>
-                  <Text style={styles.bullet}>•</Text>
-                  <Text style={styles.restrictionText}>{restriction}</Text>
+              <Text style={styles.sectionTitle}>EMPLOYEE INFORMATION</Text>
+              <View style={styles.sectionDivider} />
+              
+              <View style={styles.infoGrid}>
+                <View style={styles.infoCol}>
+                  <Text style={styles.infoLabel}>Full Name</Text>
+                  <Text style={styles.infoValue}>{certificate.workerName}</Text>
                 </View>
-              ))}
-            </View>
-          )}
+                <View style={styles.infoCol}>
+                  <Text style={styles.infoLabel}>Employee ID</Text>
+                  <Text style={styles.infoValue}>{certificate.workerId}</Text>
+                </View>
+              </View>
 
-          {/* Dates */}
-          <View style={styles.datesRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dateLabel}>Issue Date</Text>
-              <Text style={styles.dateValue}>{certificate.examDate}</Text>
+              <View style={styles.infoGrid}>
+                <View style={styles.infoCol}>
+                  <Text style={styles.infoLabel}>Organization</Text>
+                  <Text style={styles.infoValue}>{certificate.company}</Text>
+                </View>
+                <View style={styles.infoCol}>
+                  <Text style={styles.infoLabel}>Position / Job Title</Text>
+                  <Text style={styles.infoValue}>{certificate.jobTitle}</Text>
+                </View>
+              </View>
             </View>
-            <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.md }}>
-              <Text style={styles.dateLabel}>Expiry Date</Text>
-              <Text style={styles.dateValue}>{certificate.expiryDate}</Text>
+
+            {/* Medical Assessment Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>MEDICAL ASSESSMENT RESULT</Text>
+              <View style={styles.sectionDivider} />
+              
+              <View style={[styles.fitnessBox, { borderColor: {
+                fit: '#059669',
+                fit_with_restrictions: '#D97706',
+                unfit: '#DC2626',
+              }[certificate.fitnessStatus] }]}>
+                <View style={[styles.fitnessBadge, { backgroundColor: {
+                  fit: '#ECFDF5',
+                  fit_with_restrictions: '#FFFBEB',
+                  unfit: '#FEF2F2',
+                }[certificate.fitnessStatus] }]}>
+                  <Ionicons name={
+                    certificate.fitnessStatus === 'fit' ? 'checkmark-circle' :
+                    certificate.fitnessStatus === 'fit_with_restrictions' ? 'alert-circle' : 'close-circle'
+                  } size={48} color={{
+                    fit: '#059669',
+                    fit_with_restrictions: '#D97706',
+                    unfit: '#DC2626',
+                  }[certificate.fitnessStatus]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fitnessStatus}>Status:</Text>
+                    <Text style={[styles.fitnessLabel, { color: {
+                      fit: '#059669',
+                      fit_with_restrictions: '#D97706',
+                      unfit: '#DC2626',
+                    }[certificate.fitnessStatus] }]}>
+                      {
+                        certificate.fitnessStatus === 'fit' ? 'FIT FOR WORK' :
+                        certificate.fitnessStatus === 'fit_with_restrictions' ? 'FIT WITH RESTRICTIONS' : 'UNFIT FOR WORK'
+                      }
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Restrictions Section */}
+            {certificate.restrictions && certificate.restrictions.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>WORK RESTRICTIONS & RECOMMENDATIONS</Text>
+                <View style={styles.sectionDivider} />
+                {certificate.restrictions.map((restriction, idx) => (
+                  <View key={idx} style={styles.restrictionItemSimple}>
+                    <View style={styles.restrictionBullet} />
+                    <Text style={styles.restrictionItemText}>{restriction}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Validity Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>CERTIFICATE VALIDITY</Text>
+              <View style={styles.sectionDivider} />
+              
+              <View style={styles.validityGrid}>
+                <View style={styles.validityItem}>
+                  <Text style={styles.validityLabel}>Assessment Date</Text>
+                  <Text style={styles.validityValue}>{certificate.examDate}</Text>
+                </View>
+                <View style={styles.validityItem}>
+                  <Text style={styles.validityLabel}>Expiry Date</Text>
+                  <Text style={styles.validityValue}>{certificate.expiryDate}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Signature Section */}
+          <View style={styles.signatureBasicSection}>
+            <View style={styles.signatureBlock}>
+              <View style={styles.signatureLine} />
+              <Text style={styles.certifierName}>Dr. {certificate.examiner}</Text>
+              <Text style={styles.certifierTitle}>Occupational Health Physician</Text>
+            </View>
+            <View style={styles.signatureBlock}>
+              <Text style={styles.stampLabel}>Official</Text>
+              <Text style={styles.stampLabel}>Stamp/Seal</Text>
             </View>
           </View>
 
           {/* Footer */}
-          <View style={styles.footer}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.footerLabel}>Examined By</Text>
-              <Text style={styles.footerValue}>{certificate.examiner}</Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <Text style={styles.footerLabel}>Certificate #</Text>
-              <Text style={styles.footerValue}>{certificate.certificateNumber}</Text>
-            </View>
+          <View style={styles.certificateFooter}>
+            <Text style={styles.footerText}>Certificate #{certificate.certificateNumber}</Text>
+            <Text style={styles.footerText}>This certificate is issued in accordance with occupational health regulations</Text>
           </View>
-        </View>
-
-        {/* Signature Area */}
-        <View style={styles.signatureArea}>
-          <View style={styles.signatureLine} />
-          <Text style={styles.signatureLabel}>Certifying Physician</Text>
         </View>
       </View>
     );
@@ -140,130 +188,179 @@ function PDFPreview({ certificate, format }: { certificate: Certificate; format:
   // Detailed Format
   return (
     <View style={styles.pdfPreview}>
-      {/* Header */}
-      <View style={styles.pdfHeader}>
-        <View style={styles.companyBadge}>
-          <Text style={styles.companyName}>KCC MINING</Text>
-          <Text style={styles.companySubtitle}>Occupational Health Services Department</Text>
-        </View>
-        <Text style={styles.certificateTitle}>DETAILED FITNESS CERTIFICATE</Text>
-        <Text style={styles.certificateSubtitle}>ISO 45001 Compliant</Text>
-      </View>
-
-      {/* Content */}
-      <ScrollView style={styles.pdfContent} showsVerticalScrollIndicator={false}>
-        {/* Worker Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Employee Information</Text>
-          <View style={styles.detailGrid}>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Full Name</Text>
-              <Text style={styles.value}>{certificate.workerName}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Employee ID</Text>
-              <Text style={styles.value}>{certificate.workerId}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Organization</Text>
-              <Text style={styles.value}>{certificate.company}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Job Title</Text>
-              <Text style={styles.value}>{certificate.jobTitle}</Text>
-            </View>
+      <View style={styles.certificateFrame}>
+        {/* Header */}
+        <View style={styles.pdfHeader}>
+          <View style={styles.companyBadge}>
+            <Text style={styles.companyName}>KCC MINING</Text>
+            <Text style={styles.companySubtitle}>Occupational Health & Safety Department</Text>
           </View>
+          <View style={styles.headerDivider} />
+          <Text style={styles.certificateTitle}>FITNESS FOR WORK CERTIFICATE</Text>
+          <Text style={styles.certificateSubtitle}>Comprehensive Health Assessment - ISO 45001 Compliant</Text>
         </View>
 
-        {/* Examination Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Examination Details</Text>
-          <View style={styles.detailGrid}>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Examination Date</Text>
-              <Text style={styles.value}>{certificate.examDate}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Examiner</Text>
-              <Text style={styles.value}>{certificate.examiner}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Certificate #</Text>
-              <Text style={styles.value}>{certificate.certificateNumber}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.label}>Validity Period</Text>
-              <Text style={styles.value}>1 Year</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Fitness Assessment */}
-        <View style={[styles.fitnessBox, { borderColor: fitnessColor, borderWidth: 2 }]}>
-          <View style={[styles.fitnessBadgeLarge, { backgroundColor: fitnessColor + '20' }]}>
-            <Ionicons name={
-              certificate.fitnessStatus === 'fit' ? 'checkmark-circle' :
-              certificate.fitnessStatus === 'fit_with_restrictions' ? 'alert-circle' : 'close-circle'
-            } size={48} color={fitnessColor} />
-            <View>
-              <Text style={styles.fitnessLabelLarge}>Fitness Assessment</Text>
-              <Text style={[styles.fitnessValue, { color: fitnessColor }]}>{fitnessLabel}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Restrictions (if any) */}
-        {certificate.restrictions && certificate.restrictions.length > 0 && (
+        {/* Content */}
+        <View style={styles.certificateBody}>
+          {/* Employee Information */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Associated Restrictions</Text>
-            <View style={styles.restrictionsList}>
+            <Text style={styles.sectionTitle}>EMPLOYEE INFORMATION</Text>
+            <View style={styles.sectionDivider} />
+            <View style={styles.infoGrid}>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Full Name</Text>
+                <Text style={styles.infoValue}>{certificate.workerName}</Text>
+              </View>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Employee ID</Text>
+                <Text style={styles.infoValue}>{certificate.workerId}</Text>
+              </View>
+            </View>
+            <View style={styles.infoGrid}>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Organization</Text>
+                <Text style={styles.infoValue}>{certificate.company}</Text>
+              </View>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Position / Job Title</Text>
+                <Text style={styles.infoValue}>{certificate.jobTitle}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Examination Information */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>EXAMINATION INFORMATION</Text>
+            <View style={styles.sectionDivider} />
+            <View style={styles.infoGrid}>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Assessment Date</Text>
+                <Text style={styles.infoValue}>{certificate.examDate}</Text>
+              </View>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Expiry Date</Text>
+                <Text style={styles.infoValue}>{certificate.expiryDate}</Text>
+              </View>
+            </View>
+            <View style={styles.infoGrid}>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Examining Physician</Text>
+                <Text style={styles.infoValue}>Dr. {certificate.examiner}</Text>
+              </View>
+              <View style={styles.infoCol}>
+                <Text style={styles.infoLabel}>Certificate Number</Text>
+                <Text style={styles.infoValue}>{certificate.certificateNumber}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Fitness Assessment */}
+          <View style={[styles.fitnessBox, { borderColor: {
+            fit: '#059669',
+            fit_with_restrictions: '#D97706',
+            unfit: '#DC2626',
+          }[certificate.fitnessStatus] }]}>
+            <View style={[styles.fitnessBadge, { backgroundColor: {
+              fit: '#ECFDF5',
+              fit_with_restrictions: '#FFFBEB',
+              unfit: '#FEF2F2',
+            }[certificate.fitnessStatus] }]}>
+              <Ionicons name={
+                certificate.fitnessStatus === 'fit' ? 'checkmark-circle' :
+                certificate.fitnessStatus === 'fit_with_restrictions' ? 'alert-circle' : 'close-circle'
+              } size={48} color={{
+                fit: '#059669',
+                fit_with_restrictions: '#D97706',
+                unfit: '#DC2626',
+              }[certificate.fitnessStatus]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fitnessStatus}>FITNESS ASSESSMENT</Text>
+                <Text style={[styles.fitnessLabel, { color: {
+                  fit: '#059669',
+                  fit_with_restrictions: '#D97706',
+                  unfit: '#DC2626',
+                }[certificate.fitnessStatus] }]}>
+                  {
+                    certificate.fitnessStatus === 'fit' ? 'FIT FOR WORK' :
+                    certificate.fitnessStatus === 'fit_with_restrictions' ? 'FIT WITH RESTRICTIONS' : 'UNFIT FOR WORK'
+                  }
+                </Text>
+              </View>
+            </View>
+            {certificate.restrictions && certificate.restrictions.length > 0 && (
+              <Text style={styles.fitnessNote}>See restrictions below for specific recommendations</Text>
+            )}
+          </View>
+
+          {/* Restrictions Section */}
+          {certificate.restrictions && certificate.restrictions.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>WORK RESTRICTIONS & RECOMMENDATIONS</Text>
+              <View style={styles.sectionDivider} />
               {certificate.restrictions.map((restriction, idx) => (
-                <View key={idx} style={styles.restrictionCard}>
-                  <Ionicons name="alert-circle" size={16} color="#F59E0B" style={{ marginTop: 2 }} />
-                  <Text style={styles.restrictionCardText}>{restriction}</Text>
+                <View key={idx} style={styles.restrictionItemSimple}>
+                  <View style={styles.restrictionBullet} />
+                  <Text style={styles.restrictionItemText}>{restriction}</Text>
                 </View>
               ))}
             </View>
-          </View>
-        )}
+          )}
 
-        {/* Medical Notes */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Notes</Text>
-          <View style={styles.notesBox}>
-            <Text style={styles.notesText}>
-              This certificate confirms that the named above has been assessed as {fitnessLabel.toLowerCase()} for their assigned duties, including all occupational exposures in their work environment.
-            </Text>
-            {certificate.restrictions && certificate.restrictions.length > 0 && (
-              <Text style={[styles.notesText, { marginTop: spacing.md }]}>
-                This fitness status is conditional upon adherence to the restrictions listed above.
+          {/* Medical Statement */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>MEDICAL STATEMENT</Text>
+            <View style={styles.sectionDivider} />
+            <View style={styles.statementBox}>
+              <Text style={styles.statementText}>
+                This certifies that the above-named employee has been comprehensively medically examined
+                and assessed as <Text style={{ fontWeight: '700' }}>
+                  {
+                    certificate.fitnessStatus === 'fit' ? 'FIT' :
+                    certificate.fitnessStatus === 'fit_with_restrictions' ? 'FIT WITH RESTRICTIONS' : 'UNFIT'
+                  }
+                </Text> for their assigned work duties and occupational exposures.
               </Text>
-            )}
-            <Text style={[styles.notesText, { marginTop: spacing.md }]}>
-              This certificate is valid until: {certificate.expiryDate}
-            </Text>
+              {certificate.restrictions && certificate.restrictions.length > 0 && (
+                <Text style={[styles.statementText, { marginTop: spacing.md }]}>
+                  This assessment is conditional on strict adherence to the work restrictions listed above.
+                </Text>
+              )}
+              <Text style={[styles.statementText, { marginTop: spacing.md }]}>
+                This certificate is valid until <Text style={{ fontWeight: '700' }}>{certificate.expiryDate}</Text>.
+              </Text>
+            </View>
+          </View>
+
+          {/* Compliance Statement */}
+          <View style={[styles.section, styles.complianceBox]}>
+            <Ionicons name="shield-checkmark" size={20} color="#059669" style={{ marginRight: spacing.sm }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.complianceText}>
+                This certificate has been issued in compliance with ISO 45001:2018 Occupational Health and Safety Management System standards and applicable national workplace health regulations.
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* Compliance Statement */}
-        <View style={[styles.section, styles.complianceBox]}>
-          <Ionicons name="shield-checkmark" size={24} color="#22C55E" />
-          <Text style={styles.complianceText}>
-            This certificate has been issued in accordance with ISO 45001:2018 Occupational Health and Safety Management System standard and applicable national legislation.
-          </Text>
+        {/* Signature Section */}
+        <View style={styles.signatureDetailedSection}>
+          <View style={styles.signatureDetailBlock}>
+            <View style={styles.signatureLine} />
+            <Text style={styles.certifierName}>Dr. {certificate.examiner}</Text>
+            <Text style={styles.certifierTitle}>Occupational Health Physician</Text>
+            <Text style={styles.licenseInfo}>License / Registration #: ____________</Text>
+          </View>
+          <View style={styles.signatureDetailBlock}>
+            <Text style={styles.stampLargeLabel}>Official</Text>
+            <Text style={styles.stampLargeLabel}>Stamp/Seal</Text>
+            <Text style={styles.stampLargeLabel} style={{ marginTop: spacing.lg, fontSize: 9 }}>(Date: {new Date().toLocaleDateString()})</Text>
+          </View>
         </View>
-      </ScrollView>
 
-      {/* Signature Area */}
-      <View style={styles.signatureAreaDetailed}>
-        <View style={{ flex: 1 }}>
-          <View style={styles.signatureLine} />
-          <Text style={styles.signatureLabel}>Dr. {certificate.examiner}</Text>
-          <Text style={styles.signatureTitle}>Certifying Physician</Text>
-        </View>
-        <View style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.lg }}>
-          <Text style={styles.stampText}>Official Stamp</Text>
-          <Text style={styles.stampSubtext}>/ Seal of Authority</Text>
+        {/* Footer */}
+        <View style={styles.certificateFooter}>
+          <Text style={styles.footerText}>Certificate #{certificate.certificateNumber}</Text>
+          <Text style={styles.footerText}>Valid from {certificate.examDate} to {certificate.expiryDate}</Text>
         </View>
       </View>
     </View>
@@ -546,217 +643,231 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.outline,
-    padding: spacing.lg,
     ...shadows.sm,
+  },
+  certificateFrame: {
+    borderWidth: 3,
+    borderColor: '#1F2937',
+    borderRadius: 8,
+    padding: spacing.lg,
+    backgroundColor: '#FFFFFF',
   },
   pdfHeader: {
     alignItems: 'center',
     marginBottom: spacing.lg,
     paddingBottom: spacing.lg,
-    borderBottomWidth: 2,
-    borderBottomColor: '#E5E7EB',
+  },
+  headerDivider: {
+    width: '100%',
+    height: 2,
+    backgroundColor: '#1F2937',
+    marginVertical: spacing.md,
   },
   companyBadge: {
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   companyName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 1,
+    color: '#1F2937',
+    letterSpacing: 1.5,
   },
   companySubtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontWeight: '500',
   },
   certificateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: 0.5,
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1F2937',
+    letterSpacing: 0.8,
+    textAlign: 'center',
   },
   certificateSubtitle: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 4,
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 6,
+    textAlign: 'center',
+    fontWeight: '500',
   },
-  pdfContent: {
-    marginBottom: spacing.lg,
+  certificateBody: {
+    marginVertical: spacing.lg,
   },
   section: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
+    backgroundColor: '#F9FAFB',
+    padding: spacing.lg,
+    borderRadius: 6,
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: spacing.md,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
-  detailRow: {
+  sectionDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#D1D5DB',
+    marginBottom: spacing.md,
+  },
+  infoGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    gap: spacing.lg,
+    marginBottom: spacing.md,
   },
-  label: {
+  infoCol: {
+    flex: 1,
+  },
+  infoLabel: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: '#6B7280',
     fontWeight: '600',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  value: {
-    fontSize: 12,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  detailGrid: {
-    gap: spacing.md,
-  },
-  gridItem: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+  infoValue: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '600',
+    lineHeight: 20,
   },
   fitnessBox: {
-    borderWidth: 2,
-    borderRadius: borderRadius.lg,
+    borderWidth: 3,
+    borderRadius: 8,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
+    marginVertical: spacing.md,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   fitnessBadge: {
     alignItems: 'center',
-    padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-  },
-  fitnessBadgeLarge: {
     flexDirection: 'row',
-    alignItems: 'center',
     padding: spacing.lg,
-    borderRadius: borderRadius.lg,
+    borderRadius: 8,
     gap: spacing.lg,
+    width: '100%',
+  },
+  fitnessStatus: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 4,
   },
   fitnessLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: spacing.md,
+    fontSize: 18,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
-  fitnessLabelLarge: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  restrictionItemSimple: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  restrictionBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1F2937',
+    marginTop: 8,
+    flexShrink: 0,
+  },
+  restrictionItemText: {
+    fontSize: 13,
+    color: '#1F2937',
+    flex: 1,
+    lineHeight: 20,
     fontWeight: '500',
   },
-  fitnessValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  restrictionRow: {
+  validityGrid: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: spacing.sm,
-    gap: spacing.md,
+    gap: spacing.lg,
   },
-  bullet: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '700',
-  },
-  restrictionText: {
-    fontSize: 12,
-    color: colors.text,
+  validityItem: {
     flex: 1,
-  },
-  restrictionsList: {
-    gap: spacing.md,
-  },
-  restrictionCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-    backgroundColor: '#FFFBEB',
-    borderRadius: borderRadius.md,
+    backgroundColor: '#FFFFFF',
     padding: spacing.md,
-    borderLeftWidth: 3,
-    borderLeftColor: '#F59E0B',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  restrictionCardText: {
-    fontSize: 12,
-    color: '#92400E',
-    flex: 1,
-    fontWeight: '500',
-  },
-  datesRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: spacing.md,
-  },
-  dateLabel: {
+  validityLabel: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: '#6B7280',
     fontWeight: '600',
-    marginBottom: spacing.sm,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  dateValue: {
+  validityValue: {
     fontSize: 14,
-    color: colors.text,
-    fontWeight: '600',
+    color: '#1F2937',
+    fontWeight: '700',
   },
-  footer: {
+  signatureBasicSection: {
     flexDirection: 'row',
-    marginTop: spacing.lg,
+    gap: spacing.xl,
+    marginTop: spacing.xl,
     paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopWidth: 2,
+    borderTopColor: '#1F2937',
+    justifyContent: 'space-between',
   },
-  footerLabel: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  footerValue: {
-    fontSize: 12,
-    color: colors.text,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  signatureArea: {
+  signatureBlock: {
+    flex: 1,
     alignItems: 'center',
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-  },
-  signatureAreaDetailed: {
-    flexDirection: 'row',
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.outline,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
   },
   signatureLine: {
-    width: '100%',
-    height: 1,
-    backgroundColor: '#9CA3AF',
+    width: 120,
+    height: 2,
+    backgroundColor: '#1F2937',
     marginBottom: spacing.md,
   },
-  signatureLabel: {
-    fontSize: 11,
-    color: colors.text,
-    fontWeight: '600',
+  certifierName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
   },
-  signatureTitle: {
+  certifierTitle: {
     fontSize: 10,
-    color: colors.textSecondary,
+    color: '#6B7280',
     marginTop: 2,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  stampLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  certificateFooter: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 10,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 2,
+    fontWeight: '500 ',
   },
   notesBox: {
     backgroundColor: '#F0F9FF',
@@ -836,5 +947,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFF',
+  },
+  statementBox: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
+    padding: spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: '#059669',
+  },
+  statementText: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  fitnessNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  signatureDetailedSection: {
+    flexDirection: 'row',
+    gap: spacing.xl,
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 2,
+    borderTopColor: '#1F2937',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  signatureDetailBlock: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  licenseInfo: {
+    fontSize: 9,
+    color: '#6B7280',
+    marginTop: spacing.sm,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  stampLargeLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
   },
 });

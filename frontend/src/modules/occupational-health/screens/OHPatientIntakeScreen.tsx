@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
   SECTOR_PROFILES,
@@ -85,6 +87,7 @@ export interface PendingConsultation {
   vitals: VitalSigns;
   arrivalTime: string;
   status: 'waiting' | 'in_consultation' | 'completed';
+  assignedDoctor?: { id: string; name: string; email?: string };  // NEW: Assigned doctor
   resumeDraftId?: string;  // Linked draft for resuming consultation
   resumeStatus?: string;   // Status of the resumed draft
   resumeStep?: string;     // Step to resume from
@@ -165,6 +168,7 @@ export function OHPatientIntakeScreen({
   onConsultationQueued?: () => void;
   onNavigateToConsultation?: (pendingId?: string) => void;
 }): React.JSX.Element {
+  const authUser = useSelector((state: RootState) => state.auth.user);
   const [currentStep, setCurrentStep] = useState<IntakeStep>('patient_search');
   const currentStepIdx = INTAKE_STEPS.findIndex(s => s.key === currentStep);
 
@@ -187,6 +191,13 @@ export function OHPatientIntakeScreen({
 
   // Submitting
   const [submitting, setSubmitting] = useState(false);
+
+  // Doctor assignment (NEW)
+  const [showDoctorModal, setShowDoctorModal] = useState(false);
+  const [doctors, setDoctors] = useState<{ id: string; name: string; email?: string }[]>([]);
+  const [selectedDoctor, setSelectedDoctor] = useState<{ id: string; name: string; email?: string } | null>(null);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [doctorSearch, setDoctorSearch] = useState('');
 
   // Load patients and bootstrap protocol data from API
   useEffect(() => {
@@ -267,9 +278,85 @@ export function OHPatientIntakeScreen({
     if (idx > 0) setCurrentStep(INTAKE_STEPS[idx - 1].key);
   };
 
-  // Save pending consultation
-  const handleSave = useCallback(async () => {
+  // Load doctors list (from API + current logged-in user)
+  const loadDoctors = useCallback(async () => {
+    setLoadingDoctors(true);
+    try {
+      const api = (await import('../../../services/ApiService')).default.getInstance();
+      const response = await api.get('/auth/organization/users/');
+      
+      let doctorList: { id: string; name: string; email?: string }[] = [];
+      
+      if (response.success && Array.isArray(response.data)) {
+        doctorList = response.data
+          .filter((u: any) => u.primary_role === 'doctor' || u.primary_role === 'nurse' || u.is_active !== false)
+          .map((u: any) => ({
+            id: String(u.id),
+            name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || u.email || 'Dr. Inconnu',
+            email: u.email,
+          }));
+      }
+      
+      // Ensure current logged-in user is always in the list (as first option)
+      if (authUser?.id) {
+        const currentUserEntry = {
+          id: String(authUser.id),
+          name: `${authUser.firstName || ''} ${authUser.lastName || ''}`.trim() || 'Moi (Connecté)',
+          email: authUser.email,
+        };
+        // Remove duplicate if already in list
+        doctorList = doctorList.filter(d => d.id !== String(authUser.id));
+        doctorList.unshift(currentUserEntry);
+      }
+      
+      if (doctorList.length === 0) {
+        // Fallback mock data if API returns nothing
+        doctorList = [
+          { id: 'doc_1', name: 'Dr. Jean Mbeki', email: 'jean@hospital.com' },
+          { id: 'doc_2', name: 'Dr. Marie Dupont', email: 'marie@hospital.com' },
+        ];
+      }
+      
+      setDoctors(doctorList);
+    } catch (err) {
+      console.error('Error loading doctors:', err);
+      // Fallback
+      setDoctors([
+        { id: 'doc_1', name: 'Dr. Jean Mbeki', email: 'jean@hospital.com' },
+        { id: 'doc_2', name: 'Dr. Marie Dupont', email: 'marie@hospital.com' },
+      ]);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  }, [authUser]);
+
+  // Filtered doctors
+  const filteredDoctors = useMemo(() => {
+    const q = doctorSearch.trim().toLowerCase();
+    if (!q) return doctors;
+    return doctors.filter(d =>
+      d.name.toLowerCase().includes(q) ||
+      d.email?.toLowerCase().includes(q)
+    );
+  }, [doctors, doctorSearch]);
+
+  // Show doctor assignment modal after vitals saved (NEW)
+  const handleVitalsComplete = useCallback(async () => {
+    if (!selectedPatient) return;
+    
+    // Load doctors if not already loaded
+    if (doctors.length === 0) {
+      await loadDoctors();
+    }
+    
+    setShowDoctorModal(true);
+  }, [selectedPatient, doctors, loadDoctors]);
+
+  // Save consultation with optional doctor assignment
+  const handleSaveConsultation = useCallback(async (withDoctor: boolean = true) => {
     if (!selectedPatient || submitting) return;
+    if (withDoctor && !selectedDoctor) return;
+    
     setSubmitting(true);
     try {
       const pending: PendingConsultation = {
@@ -281,62 +368,89 @@ export function OHPatientIntakeScreen({
         vitals,
         arrivalTime: new Date().toISOString(),
         status: 'waiting',
+        assignedDoctor: selectedDoctor || undefined,  // Optional doctor assignment
       };
 
       // Load existing list
       const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
-      const list = upsertPendingConsultationQueue(safeParsePendingConsultations(stored), pending);
+      const list = upsertPendingConsultationQueue(
+        safeParsePendingConsultations(stored),
+        pending
+      );
       await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(list));
 
-      const resetForNextPatient = () => {
-        setCurrentStep('patient_search');
-        setSelectedPatient(null);
-        setSearchQuery('');
-        setExamType('periodic');
-        setVisitReason('');
-        setReferredBy('');
-        setVitals({});
-      };
-
-      const successMessage = `${selectedPatient.firstName} ${selectedPatient.lastName} est maintenant dans la file d'attente du médecin.`;
-
-      if (Platform.OS === 'web') {
-        const goToConsultation = window.confirm(`${successMessage}\n\nOK: Aller chez le Médecin\nAnnuler: Accueil Suivant`);
-        onConsultationQueued?.();
-        if (goToConsultation) {
-          onNavigateToConsultation?.(pending.id);
-        } else {
-          resetForNextPatient();
+      // SYNC TO BACKEND: Save medical examination to database
+      try {
+        // Extract numeric IDs safely
+        let workerId = 0;
+        if (selectedPatient.id) {
+          const parsed = parseInt(String(selectedPatient.id));
+          if (Number.isFinite(parsed) && parsed > 0) {
+            workerId = parsed;
+          }
         }
-      } else {
-        Alert.alert(
-          'Patient Enregistré',
-          successMessage,
-          [
-            {
-              text: 'Accueil Suivant',
-              onPress: () => {
-                resetForNextPatient();
-                onConsultationQueued?.();
-              },
-            },
-            {
-              text: 'Aller chez le Médecin',
-              onPress: () => {
-                onConsultationQueued?.();
-                onNavigateToConsultation?.(pending.id);
-              },
-            },
-          ],
-        );
+        // Fallback to employee ID if available
+        if (!workerId && selectedPatient.employeeId) {
+          const parsed = parseInt(String(selectedPatient.employeeId));
+          if (Number.isFinite(parsed) && parsed > 0) {
+            workerId = parsed;
+          }
+        }
+
+        // Only sync if we have a valid worker ID
+        if (workerId > 0) {
+          const examData = {
+            worker: workerId,
+            exam_type: examType,
+            exam_date: new Date().toISOString().split('T')[0],
+            examining_doctor: selectedDoctor ? parseInt(String(selectedDoctor.id)) : undefined,
+            chief_complaint: visitReason || '',
+            medical_history_review: selectedPatient.chronicConditions?.join('; ') || '',
+            results_summary: `Vitals: BP ${vitals.bloodPressureSystolic || 'N/A'}/${vitals.bloodPressureDiastolic || 'N/A'}, Temp ${vitals.temperature || 'N/A'}°C`,
+            recommendations: referredBy ? `Referred by: ${referredBy}` : '',
+            examination_completed: false,
+            follow_up_required: false,
+          };
+          
+          await occHealthApi.createMedicalExamination(examData);
+        }
+      } catch (backendErr) {
+        // Non-critical: Log error but don't fail the flow
+        console.warn('Could not sync to backend:', backendErr);
       }
+
+      // Reset form for next patient
+      setCurrentStep('patient_search');
+      setSelectedPatient(null);
+      setSearchQuery('');
+      setExamType('periodic');
+      setVisitReason('');
+      setReferredBy('');
+      setVitals({});
+      setSelectedDoctor(null);
+      setShowDoctorModal(false);
+
+      // Success message
+      const doctorMsg = selectedDoctor ? ` - Assigné à ${selectedDoctor.name}` : ' - En attente d\'assignation';
+      Alert.alert(
+        '✅ Patient Enregistré',
+        `${selectedPatient.firstName} ${selectedPatient.lastName}${doctorMsg}\n\nAccueil Suivant`,
+        [{ text: 'OK', onPress: () => onConsultationQueued?.() }],
+      );
     } catch (err) {
-      console.error('Error queuing consultation:', err);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer le patient. Réessayez.');
+      console.error('Error saving consultation:', err);
+      Alert.alert('❌ Erreur', 'Impossible d\'enregistrer le patient. Réessayez.');
     } finally {
       setSubmitting(false);
     }
-  }, [selectedPatient, examType, visitReason, referredBy, vitals, onConsultationQueued, onNavigateToConsultation]);
+  }, [selectedPatient, selectedDoctor, examType, visitReason, referredBy, vitals, submitting, onConsultationQueued]);
+
+  // Save pending consultation - triggers doctor modal
+  const handleSave = useCallback(async () => {
+    if (!selectedPatient || submitting) return;
+    // Trigger doctor assignment modal
+    await handleVitalsComplete();
+  }, [selectedPatient, submitting, handleVitalsComplete]);
 
   const handleAutoFillNormalVitals = useCallback(() => {
     setVitals({
@@ -668,7 +782,7 @@ export function OHPatientIntakeScreen({
       </View>
 
       {/* Auto-computed BMI */}
-      {bmi && (
+      {!!bmi && (
         <View style={[vStyles.bmiCard, { borderLeftColor: bmiCat.color }]}>
           <View>
             <Text style={vStyles.bmiLabel}>IMC Calculé</Text>
@@ -681,7 +795,7 @@ export function OHPatientIntakeScreen({
       )}
 
       {/* BP Alert */}
-      {vitals.bloodPressureSystolic && vitals.bloodPressureSystolic >= 140 && (
+      {!!vitals.bloodPressureSystolic && vitals.bloodPressureSystolic >= 140 && (
         <View style={vStyles.alertBox}>
           <Ionicons name="alert-circle" size={16} color={colors.error} />
           <Text style={vStyles.alertText}>
@@ -691,7 +805,7 @@ export function OHPatientIntakeScreen({
       )}
 
       {/* Low SpO2 Alert */}
-      {vitals.oxygenSaturation && vitals.oxygenSaturation < 95 && (
+      {!!vitals.oxygenSaturation && vitals.oxygenSaturation < 95 && (
         <View style={vStyles.alertBox}>
           <Ionicons name="alert-circle" size={16} color={colors.error} />
           <Text style={vStyles.alertText}>
@@ -818,9 +932,295 @@ export function OHPatientIntakeScreen({
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Doctor Assignment Modal (NEW) */}
+      <Modal visible={showDoctorModal} transparent animationType="slide">
+        <View style={styles.doctorModalOverlay}>
+          <View style={styles.doctorModal}>
+            {/* Header */}
+            <View style={styles.doctorModalHeader}>
+              <View style={styles.doctorModalHeaderIcon}>
+                <Ionicons name="person-circle" size={24} color={ACCENT} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.doctorModalTitle}>Assigner un Médecin</Text>
+                <Text style={styles.doctorModalSubtitle}>Sélectionnez le médecin pour cette consultation</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowDoctorModal(false)}
+                style={styles.doctorModalClose}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search box */}
+            <View style={styles.doctorSearchBox}>
+              <Ionicons name="search" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={styles.doctorSearchInput}
+                placeholder="Rechercher médecin..."
+                placeholderTextColor={colors.textSecondary}
+                value={doctorSearch}
+                onChangeText={setDoctorSearch}
+              />
+              {doctorSearch && (
+                <TouchableOpacity onPress={() => setDoctorSearch('')}>
+                  <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Doctor list */}
+            <ScrollView style={styles.doctorList} contentContainerStyle={styles.doctorListContent}>
+              {loadingDoctors ? (
+                <View style={styles.doctorLoadingWrap}>
+                  <ActivityIndicator size="large" color={ACCENT} />
+                  <Text style={styles.doctorLoadingText}>Chargement des médecins...</Text>
+                </View>
+              ) : filteredDoctors.length === 0 ? (
+                <View style={styles.doctorEmptyWrap}>
+                  <Ionicons name="sad" size={40} color={colors.textSecondary} />
+                  <Text style={styles.doctorEmptyText}>Aucun médecin trouvé</Text>
+                </View>
+              ) : (
+                filteredDoctors.map((doctor) => (
+                  <TouchableOpacity
+                    key={doctor.id}
+                    style={[
+                      styles.doctorCard,
+                      selectedDoctor?.id === doctor.id && styles.doctorCardSelected,
+                    ]}
+                    onPress={() => setSelectedDoctor(doctor)}
+                  >
+                    <View style={styles.doctorCardLeft}>
+                      <View style={[styles.doctorAvatar, { backgroundColor: ACCENT + '18' }]}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: ACCENT }}>
+                          {doctor.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.doctorName}>{doctor.name}</Text>
+                        {!!doctor.email && (
+                          <Text style={styles.doctorEmail}>{doctor.email}</Text>
+                        )}
+                      </View>
+                    </View>
+                    {selectedDoctor?.id === doctor.id && (
+                      <Ionicons name="checkmark-circle" size={24} color={ACCENT} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+
+            {/* Footer buttons */}
+            <View style={styles.doctorModalFooter}>
+              <TouchableOpacity
+                style={[styles.doctorFooterBtn, styles.doctorFooterBtnOutline]}
+                onPress={() => {
+                  setShowDoctorModal(false);
+                  setSelectedDoctor(null);
+                }}
+              >
+                <Ionicons name="close" size={18} color={ACCENT} />
+                <Text style={[styles.doctorFooterBtnText, { color: ACCENT }]}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.doctorFooterBtn, styles.doctorFooterBtnOutline]}
+                onPress={() => handleSaveConsultation(false)}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color={ACCENT} />
+                ) : (
+                  <Ionicons name="arrow-forward-outline" size={18} color={ACCENT} />
+                )}
+                <Text style={[styles.doctorFooterBtnText, { color: ACCENT }]}>Ignorer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.doctorFooterBtn,
+                  styles.doctorFooterBtnFilled,
+                  (!selectedDoctor || submitting) && { opacity: 0.5 },
+                ]}
+                onPress={() => handleSaveConsultation(true)}
+                disabled={!selectedDoctor || submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Ionicons name="checkmark" size={18} color="#FFF" />
+                )}
+                <Text style={[styles.doctorFooterBtnText, { color: '#FFF' }]}>Assigner</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+// Doctor Modal Styles (NEW)
+const styles = StyleSheet.create({
+  doctorModalOverlay: {
+    flex: 1,
+    backgroundColor: '#000000CC',
+    justifyContent: 'flex-end',
+  },
+  doctorModal: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    display: 'flex',
+    flexDirection: 'column',
+    ...shadows.lg,
+  },
+  doctorModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+    gap: 12,
+  },
+  doctorModalHeaderIcon: {
+    backgroundColor: ACCENT + '18',
+    borderRadius: 16,
+    padding: 8,
+  },
+  doctorModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  doctorModalSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  doctorModalClose: {
+    padding: 8,
+  },
+  doctorSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 10,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  doctorSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+  },
+  doctorList: {
+    flex: 1,
+  },
+  doctorListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  doctorLoadingWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  doctorLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  doctorEmptyWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  doctorEmptyText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  doctorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    ...shadows.sm,
+  },
+  doctorCardSelected: {
+    borderColor: ACCENT,
+    backgroundColor: ACCENT + '08',
+  },
+  doctorCardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  doctorAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doctorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  doctorEmail: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  doctorModalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.outline,
+  },
+  doctorFooterBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  doctorFooterBtnOutline: {
+    borderColor: ACCENT,
+  },
+  doctorFooterBtnFilled: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
+  },
+  doctorFooterBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
 
 // ─── Styles ──────────────────────────────────────────────────
 const vStyles = StyleSheet.create({

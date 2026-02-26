@@ -4,6 +4,8 @@ import {
   Modal, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
@@ -44,6 +46,7 @@ const SAMPLE_RESULTS: SpirometryResult[] = [
 ];
 
 export function SpirometryScreen() {
+  const authUser = useSelector((state: RootState) => state.auth.user);
   const [results, setResults] = useState<SpirometryResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
@@ -117,6 +120,7 @@ export function SpirometryScreen() {
         fev1_fvc_ratio: parseFloat(calculateRatio(fev1, fvc) as string),
         interpretation: formData.interpretation,
         notes: formData.notes,
+        performed_by: authUser?.id ? Number(authUser.id) : undefined,
       };
 
       const response = await api.post('/occupational-health/spirometry-results/', newResult);

@@ -4,6 +4,8 @@ import {
   Modal, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
@@ -41,6 +43,7 @@ const SAMPLE_RESULTS: XrayImagingResult[] = [
 ];
 
 export function XrayImagingScreen() {
+  const authUser = useSelector((state: RootState) => state.auth.user);
   const [results, setResults] = useState<XrayImagingResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
@@ -105,6 +108,7 @@ export function XrayImagingScreen() {
         imaging_findings: formData.imaging_findings,
         radiologist_notes: formData.radiologist_notes,
         result_status: 'pending',
+        performed_by: authUser?.id ? Number(authUser.id) : undefined,
       };
 
       const response = await api.post('/occupational-health/xray-imaging/', newResult);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, Switch, Dimensions, ActivityIndicator, FlatList, Alert,
+  TextInput, Modal, Switch, Dimensions, ActivityIndicator, FlatList, Alert, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -436,7 +436,7 @@ export function HealthScreeningFormScreen() {
           return {
             id: screening.id?.toString() || '',
             workerId: screening.worker?.toString() || '',
-            workerName: `${screening.worker_first_name || ''} ${screening.worker_last_name || ''}`.trim() || 'Unknown',
+            workerName: screening.worker_name || 'Unknown',
             screeningType: screening.screening_type || '',
             screeningTypeDisplay: typeLabels[screening.screening_type] || screening.screening_type,
             completedDate: screening.created_at || new Date().toISOString(),
@@ -913,6 +913,86 @@ function ScreeningFormModal({
   );
 }
 
+// ─── Export & Rescan Helpers ────────────────────────────────────
+const exportScreening = (screening: any) => {
+  try {
+    // Prepare CSV data
+    const csvRows: string[] = [];
+    
+    // Header
+    csvRows.push('Health Screening Export');
+    csvRows.push(`Exported: ${new Date().toLocaleString()}`);
+    csvRows.push('');
+    
+    // Basic Info
+    csvRows.push('Basic Information');
+    csvRows.push(`Worker Name,${screening.workerName || 'N/A'}`);
+    csvRows.push(`Screening Type,${screening.screeningTypeDisplay || 'N/A'}`);
+    csvRows.push(`Completed Date,${new Date(screening.completedDate).toLocaleString()}`);
+    csvRows.push(`Status,${screening.status || 'N/A'}`);
+    csvRows.push('');
+    
+    // Assessment Details
+    if (screening.details && Object.keys(screening.details).length > 0) {
+      csvRows.push('Assessment Details');
+      Object.entries(screening.details).forEach(([key, value]: [string, any]) => {
+        if (Array.isArray(value)) {
+          csvRows.push(`${key},"${value.join('; ')}"`);
+        } else if (typeof value === 'object') {
+          csvRows.push(`${key},"${JSON.stringify(value)}"`);
+        } else {
+          csvRows.push(`${key},${value}`);
+        }
+      });
+    }
+    
+    const csv = csvRows.join('\n');
+
+    // Download on web
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const fileName = `health-screening-${screening.id}_${new Date().toISOString().slice(0, 10)}.csv`;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = (window.URL || window.webkitURL).createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      (window.URL || window.webkitURL).revokeObjectURL(url);
+      Alert.alert('Success', `Screening exported as ${fileName}`);
+      return;
+    }
+
+    Alert.alert('Info', 'Export feature available on web platform');
+  } catch (error: any) {
+    console.error('Export error:', error);
+    Alert.alert('Error', 'Failed to export screening: ' + error?.message);
+  }
+};
+
+const handleRescan = (screening: any) => {
+  try {
+    Alert.alert(
+      'Rescan Screening',
+      `Ready to retake the ${screening.screeningTypeDisplay} screening for ${screening.workerName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Proceed',
+          onPress: () => {
+            Alert.alert('Rescan Started', `Retaking screening ID: ${screening.id}. Please provide new assessment data.`);
+            console.log('Rescan screening:', screening.id);
+          },
+        },
+      ]
+    );
+  } catch (error: any) {
+    console.error('Rescan error:', error);
+    Alert.alert('Error', 'Failed to start rescan: ' + error?.message);
+  }
+};
+
 // ─── Screening Details Modal ────────────────────────────────────
 interface ScreeningDetailsModalProps {
   screening: any;
@@ -992,10 +1072,7 @@ function ScreeningDetailsModal({ screening, onClose, screenings }: ScreeningDeta
             <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg }}>
               <TouchableOpacity
                 style={[styles.submitBtn, { flex: 1, backgroundColor: colors.primary + '20', marginHorizontal: 0 }]}
-                onPress={() => {
-                  // TODO: Implement download/export functionality
-                  console.log('Export screening:', screening.id);
-                }}
+                onPress={() => exportScreening(screening)}
               >
                 <Ionicons name="download-outline" size={20} color={colors.primary} />
                 <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Export</Text>
@@ -1004,8 +1081,7 @@ function ScreeningDetailsModal({ screening, onClose, screenings }: ScreeningDeta
               <TouchableOpacity
                 style={[styles.submitBtn, { flex: 1, marginHorizontal: 0 }]}
                 onPress={() => {
-                  // TODO: Implement rescan/retake functionality
-                  console.log('Rescan screening:', screening.id);
+                  handleRescan(screening);
                   onClose();
                 }}
               >

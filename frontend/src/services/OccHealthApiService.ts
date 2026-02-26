@@ -1079,7 +1079,7 @@ export class OccHealthApiService {
   }): Promise<{ data: any | null; error?: string }> {
     try {
       const res = await this.api.post(`${OH}/health-screening/`, {
-        worker: payload.worker_id,
+        worker_id: payload.worker_id,
         screening_type: payload.screening_type,
         responses: payload.responses,
         notes: payload.notes || '',

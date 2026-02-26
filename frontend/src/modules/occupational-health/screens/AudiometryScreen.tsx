@@ -4,6 +4,8 @@ import {
   Modal, Alert, FlatList, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
@@ -40,6 +42,7 @@ const SAMPLE_RESULTS: AudiometryResult[] = [
 ];
 
 export function AudiometryScreen() {
+  const authUser = useSelector((state: RootState) => state.auth.user);
   const [results, setResults] = useState<AudiometryResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,6 +107,7 @@ export function AudiometryScreen() {
         left_ear_500hz: parseInt(formData.left_ear_db),
         right_ear_500hz: parseInt(formData.right_ear_db),
         notes: formData.notes,
+        performed_by: authUser?.id ? Number(authUser.id) : undefined,
       };
 
       const response = await api.post('/occupational-health/audiometry-results/', newResult);
