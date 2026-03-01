@@ -3,10 +3,14 @@ import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Dimensions,
   Modal, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';import { useSelector } from 'react-redux';
-import type { RootState } from '../../../store/store';import ApiService from '../../../services/ApiService';
+import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
+import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 const { width } = Dimensions.get('window');
 const ACCENT = colors.primary;
 const themeColors = { border: '#E2E8F0' };
@@ -41,7 +45,10 @@ const SAMPLE_RESULTS: VisionTestResult[] = [
   },
 ];
 
-export function VisionTestScreen() {  const authUser = useSelector((state: RootState) => state.auth.user);  const [results, setResults] = useState<VisionTestResult[]>(SAMPLE_RESULTS);
+export function VisionTestScreen() {
+  const authUser = useSelector((state: RootState) => state.auth.user);
+  const { toastMsg, showToast } = useSimpleToast();
+  const [results, setResults] = useState<VisionTestResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,7 +98,7 @@ export function VisionTestScreen() {  const authUser = useSelector((state: RootS
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      showToast('Veuillez remplir tous les champs', 'error');
       return;
     }
 
@@ -122,12 +129,12 @@ export function VisionTestScreen() {  const authUser = useSelector((state: RootS
           refractive_error: '',
           notes: '',
         });
-        Alert.alert('Succès', 'Résultat de test de vision enregistré');
+        showToast('Résultat de test de vision enregistré', 'success');
         loadResults();
       }
     } catch (error) {
       console.error('Error creating vision test result:', error);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer le résultat');
+      showToast('Impossible d\'enregistrer le résultat', 'error');
     }
   };
 
@@ -409,6 +416,7 @@ export function VisionTestScreen() {  const authUser = useSelector((state: RootS
           </View>
         </Modal>
       )}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

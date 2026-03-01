@@ -1,9 +1,9 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Alert,
+  StyleSheet, Dimensions, Modal, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import {
@@ -11,6 +11,8 @@ import {
   type IndustrySector, type ExposureRisk, type SurveillanceProgram,
   type JobCategory, type ExamType,
 } from '../../../models/OccupationalHealth';
+import { OccHealthApiService } from '../../../services/OccHealthApiService';
+import type { RootState } from '../../../store/store';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -24,6 +26,14 @@ function getFrequencyLabel(f: string): string {
 function getFrequencyColor(f: string): string {
   const m: Record<string, string> = { monthly: '#EF4444', quarterly: '#F59E0B', biannual: '#3B82F6', annual: '#22C55E' };
   return m[f] || '#94A3B8';
+}
+function getFrequencyFromMonths(months?: number): string {
+  if (!months) return 'annual';
+  if (months === 1) return 'monthly';
+  if (months === 3) return 'quarterly';
+  if (months === 6) return 'biannual';
+  if (months >= 12) return 'annual';
+  return 'annual';
 }
 
 // ─── Sample Data ─────────────────────────────────────────────
@@ -116,7 +126,7 @@ function ProgramCard({ program, onPress }: { program: SurveillanceProgram; onPre
           </View>
           <View style={styles.programInfoItem}>
             <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.programInfoText}>{program.targetJobCategories.length} catégories</Text>
+            <Text style={styles.programInfoText}>{(program.targetJobCategories?.length || 0)} catégories</Text>
           </View>
         </View>
       </View>
@@ -130,14 +140,15 @@ function ProgramCard({ program, onPress }: { program: SurveillanceProgram; onPre
           ))}
           {program.requiredScreenings.length > 3 && <Text style={styles.moreText}>+{program.requiredScreenings.length - 3}</Text>}
         </View>
-        <Text style={styles.alertLevels}>{program.actionLevels.length} seuil(s) d'alerte</Text>
+        <Text style={styles.alertLevels}>{(program.actionLevels && Array.isArray(program.actionLevels) ? program.actionLevels.length : 0)} seuil(s) d'alerte</Text>
       </View>
     </TouchableOpacity>
   );
 }
 
 // ─── Detail Modal ────────────────────────────────────────────
-function ProgramDetailModal({ visible, program, onClose, onToggle }: { visible: boolean; program: SurveillanceProgram | null; onClose: () => void; onToggle: () => void }) {
+// ─── Program Detail Modal ────────────────────────────────────
+function ProgramDetailModal({ visible, program, onClose, onToggle, onEdit }: { visible: boolean; program: SurveillanceProgram | null; onClose: () => void; onToggle: () => void; onEdit: () => void }) {
   if (!program) return null;
   const sectorProfile = SECTOR_PROFILES[program.sector];
 
@@ -178,6 +189,8 @@ function ProgramDetailModal({ visible, program, onClose, onToggle }: { visible: 
               <DetailRow label="Risque ciblé" value={OccHealthUtils.getExposureRiskLabel(program.targetRiskGroup)} />
               <DetailRow label="Créé par" value={program.createdBy} />
               <DetailRow label="Date création" value={new Date(program.createdAt).toLocaleDateString('fr-CD')} />
+              {program.updatedBy && <DetailRow label="Modifié par" value={program.updatedBy} />}
+              {program.updatedAt && <DetailRow label="Dernière modification" value={new Date(program.updatedAt).toLocaleDateString('fr-CD')} />}
             </View>
 
             <View style={styles.detailSection}>
@@ -206,7 +219,7 @@ function ProgramDetailModal({ visible, program, onClose, onToggle }: { visible: 
 
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Seuils d'Alerte et Niveaux d'Action</Text>
-              {program.actionLevels.map((al, i) => (
+              {(program.actionLevels && Array.isArray(program.actionLevels)) ? program.actionLevels.map((al, i) => (
                 <View key={i} style={styles.actionLevelCard}>
                   <Text style={styles.actionLevelParam}>{al.parameter} ({al.unit})</Text>
                   <View style={styles.thresholdsRow}>
@@ -222,12 +235,16 @@ function ProgramDetailModal({ visible, program, onClose, onToggle }: { visible: 
                   </View>
                   <Text style={styles.actionRequired}>Action: {al.actionRequired}</Text>
                 </View>
-              ))}
+              )) : null}
             </View>
           </ScrollView>
           <View style={styles.modalActions}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
               <Text style={[styles.actionBtnText, { color: colors.text }]}>Fermer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={onEdit}>
+              <Ionicons name="pencil-outline" size={18} color="#FFF" />
+              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Modifier</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: program.isActive ? '#EF4444' : '#22C55E' }]} onPress={onToggle}>
               <Ionicons name={program.isActive ? 'pause-circle-outline' : 'play-circle-outline'} size={18} color="#FFF" />
@@ -247,69 +264,402 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 // ─── Add Program Modal ───────────────────────────────────────
 function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClose: () => void; onSave: (p: SurveillanceProgram) => void }) {
   const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [sector, setSector] = useState<IndustrySector>('mining');
   const [frequency, setFrequency] = useState<'monthly' | 'quarterly' | 'biannual' | 'annual'>('annual');
   const [targetRisk, setTargetRisk] = useState<ExposureRisk>('noise');
+  const [status, setStatus] = useState<'draft' | 'active' | 'paused' | 'archived'>('active');
+  const [regulatoryRef, setRegulatoryRef] = useState('');
+  const [complianceStandard, setComplianceStandard] = useState('');
+  const [requiredScreenings, setRequiredScreenings] = useState<string[]>(['spirometry']);
 
-  const handleSave = () => {
-    if (!name.trim()) { Alert.alert('Erreur', 'Le nom est obligatoire.'); return; }
-    const newProgram: SurveillanceProgram = {
-      id: `sp-${Date.now()}`, name: name.trim(), description: description.trim(),
-      sector, targetRiskGroup: targetRisk, targetJobCategories: [],
-      frequency, requiredTests: ['periodic'], requiredScreenings: [],
-      actionLevels: [], isActive: true, createdBy: 'Utilisateur',
-      createdAt: new Date().toISOString(),
-    };
-    onSave(newProgram);
-    setName(''); setDescription('');
+  const SCREENING_OPTIONS = [
+    'spirometry', 'audiometry', 'vision_test', 'blood_test', 
+    'musculoskeletal_screening', 'mental_health_screening', 'cardiac_screening'
+  ];
+
+  const handleToggleScreening = (screening: string) => {
+    setRequiredScreenings(prev => 
+      prev.includes(screening) 
+        ? prev.filter(s => s !== screening)
+        : [...prev, screening]
+    );
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) { Alert.alert('Erreur', 'Le nom du programme est obligatoire.'); return; }
+    if (!code.trim()) { Alert.alert('Erreur', 'Le code du programme est obligatoire.'); return; }
+    
+    try {
+      // Create program payload matching backend requirements
+      const newProgram: SurveillanceProgram = {
+        id: `sp-${Date.now()}`, 
+        name: name.trim(), 
+        description: description.trim(),
+        sector, 
+        targetRiskGroup: targetRisk, 
+        targetJobCategories: [],
+        frequency, 
+        requiredTests: ['periodic'], 
+        requiredScreenings,
+        actionLevels: {}, 
+        isActive: status === 'active', 
+        createdBy: 'Utilisateur',
+        createdAt: new Date().toISOString(),
+      };
+      onSave(newProgram);
+      
+      // Reset form
+      setName(''); 
+      setCode('');
+      setDescription('');
+      setSector('mining');
+      setFrequency('annual');
+      setTargetRisk('noise');
+      setStatus('active');
+      setRegulatoryRef('');
+      setComplianceStandard('');
+      setRequiredScreenings(['spirometry']);
+    } catch (error) {
+      Alert.alert('Erreur', 'Erreur lors de la création du programme');
+    }
   };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+        <View style={[styles.modalContent, { maxHeight: '95%' }]}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau Programme</Text>
+              <Text style={styles.modalTitle}>Nouveau Programme de Surveillance</Text>
               <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
+
+            {/* Program Identity */}
             <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Identité du Programme</Text>
               <Text style={styles.formLabel}>Nom du Programme *</Text>
-              <TextInput style={styles.formInput} value={name} onChangeText={setName} placeholder="Ex: Surveillance Respiratoire" />
+              <TextInput 
+                style={styles.formInput} 
+                value={name} 
+                onChangeText={setName} 
+                placeholder="Ex: Surveillance Respiratoire - Miniers"
+                maxLength={200}
+              />
             </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Code Programme *</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={code} 
+                onChangeText={setCode} 
+                placeholder="Ex: SURV_RESP_MIN (unique)"
+                maxLength={50}
+              />
+            </View>
+
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Description</Text>
-              <TextInput style={[styles.formInput, { minHeight: 60, textAlignVertical: 'top' }]} value={description} onChangeText={setDescription} placeholder="Description du programme..." multiline />
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={description} 
+                onChangeText={setDescription} 
+                placeholder="Description complète du programme..." 
+                multiline
+                numberOfLines={3}
+              />
             </View>
+
+            {/* Configuration */}
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Fréquence</Text>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Configuration du Dépistage</Text>
+              <Text style={styles.formLabel}>Secteur Cible</Text>
+              <View style={styles.chipGrid}>
+                {(['mining', 'construction', 'manufacturing', 'healthcare', 'agriculture'] as IndustrySector[]).map(s => (
+                  <TouchableOpacity 
+                    key={s} 
+                    style={[styles.optionChip, sector === s && styles.optionChipActive]} 
+                    onPress={() => setSector(s)}
+                  >
+                    <Text style={[styles.optionChipText, sector === s && styles.optionChipTextActive]}>
+                      {OccHealthUtils.getSectorLabel ? OccHealthUtils.getSectorLabel(s) : s}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Groupe Risque Ciblé</Text>
+              <View style={styles.chipGrid}>
+                {(['noise', 'silica_dust', 'chemical_exposure', 'ergonomic', 'psychosocial', 'biological'] as ExposureRisk[]).map(r => (
+                  <TouchableOpacity 
+                    key={r} 
+                    style={[styles.optionChip, targetRisk === r && styles.optionChipActive]} 
+                    onPress={() => setTargetRisk(r)}
+                  >
+                    <Text style={[styles.optionChipText, targetRisk === r && styles.optionChipTextActive]}>
+                      {OccHealthUtils.getExposureRiskLabel(r)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Fréquence de Dépistage</Text>
               <View style={styles.chipGrid}>
                 {(['monthly', 'quarterly', 'biannual', 'annual'] as const).map(f => (
-                  <TouchableOpacity key={f} style={[styles.optionChip, frequency === f && { backgroundColor: getFrequencyColor(f) + '20', borderColor: getFrequencyColor(f) }]} onPress={() => setFrequency(f)}>
-                    <Text style={[styles.optionChipText, frequency === f && { color: getFrequencyColor(f), fontWeight: '600' }]}>{getFrequencyLabel(f)}</Text>
+                  <TouchableOpacity 
+                    key={f} 
+                    style={[styles.optionChip, frequency === f && { backgroundColor: getFrequencyColor(f) + '28', borderColor: getFrequencyColor(f), borderWidth: 1.5 }]} 
+                    onPress={() => setFrequency(f)}
+                  >
+                    <Text style={[styles.optionChipText, frequency === f && { color: getFrequencyColor(f), fontWeight: '700' }]}>
+                      {getFrequencyLabel(f)}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
+
             <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Risque Ciblé</Text>
+              <Text style={styles.formLabel}>Examens/Dépistages Requis</Text>
               <View style={styles.chipGrid}>
-                {(['noise', 'silica_dust', 'chemical_exposure', 'ergonomic', 'psychosocial', 'biological', 'vibration', 'heat_stress'] as ExposureRisk[]).map(r => (
-                  <TouchableOpacity key={r} style={[styles.optionChip, targetRisk === r && styles.optionChipActive]} onPress={() => setTargetRisk(r)}>
-                    <Text style={[styles.optionChipText, targetRisk === r && styles.optionChipTextActive]}>{OccHealthUtils.getExposureRiskLabel(r)}</Text>
+                {SCREENING_OPTIONS.map(screening => (
+                  <TouchableOpacity 
+                    key={screening} 
+                    style={[styles.optionChip, requiredScreenings.includes(screening) && styles.optionChipActive]} 
+                    onPress={() => handleToggleScreening(screening)}
+                  >
+                    <Ionicons 
+                      name={requiredScreenings.includes(screening) ? 'checkbox' : 'checkbox-outline'} 
+                      size={14} 
+                      color={requiredScreenings.includes(screening) ? colors.primary : colors.textSecondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.optionChipText, requiredScreenings.includes(screening) && styles.optionChipTextActive]}>
+                      {screening.replace(/_/g, ' ')}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+
+            {/* Status & Compliance */}
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Statut et Conformité</Text>
+              <Text style={styles.formLabel}>Statut</Text>
+              <View style={styles.chipGrid}>
+                {(['draft', 'active', 'paused', 'archived'] as const).map(st => (
+                  <TouchableOpacity 
+                    key={st} 
+                    style={[styles.optionChip, status === st && styles.optionChipActive]} 
+                    onPress={() => setStatus(st)}
+                  >
+                    <Text style={[styles.optionChipText, status === st && styles.optionChipTextActive]}>
+                      {st === 'draft' ? 'Brouillon' : st === 'active' ? 'Actif' : st === 'paused' ? 'Suspendu' : 'Archivé'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Référence Réglementaire</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={regulatoryRef} 
+                onChangeText={setRegulatoryRef} 
+                placeholder="Ex: Code Minier RDC Art. 123"
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Standard de Conformité</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={complianceStandard} 
+                onChangeText={setComplianceStandard} 
+                placeholder="Ex: ISO 45001:2018, ILO C155"
+              />
             </View>
           </ScrollView>
+
           <View style={styles.modalActions}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
               <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave}>
               <Ionicons name="save-outline" size={18} color="#FFF" />
-              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Créer</Text>
+              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Créer Programme</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Edit Program Modal ──────────────────────────────────────
+function EditProgramModal({ visible, program, onClose, onSave }: { visible: boolean; program: SurveillanceProgram | null; onClose: () => void; onSave: (p: SurveillanceProgram) => void }) {
+  if (!program) return null;
+
+  const [name, setName] = useState(program.name);
+  const [description, setDescription] = useState(program.description);
+  const [sector, setSector] = useState<IndustrySector>(program.sector);
+  const [frequency, setFrequency] = useState<'monthly' | 'quarterly' | 'biannual' | 'annual'>(program.frequency);
+  const [targetRisk, setTargetRisk] = useState<ExposureRisk>(program.targetRiskGroup);
+  const [requiredScreenings, setRequiredScreenings] = useState<string[]>(program.requiredScreenings || ['spirometry']);
+
+  const SCREENING_OPTIONS = [
+    'spirometry', 'audiometry', 'vision_test', 'blood_test', 
+    'musculoskeletal_screening', 'mental_health_screening', 'cardiac_screening'
+  ];
+
+  const handleToggleScreening = (screening: string) => {
+    setRequiredScreenings(prev => 
+      prev.includes(screening) 
+        ? prev.filter(s => s !== screening)
+        : [...prev, screening]
+    );
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) { Alert.alert('Erreur', 'Le nom du programme est obligatoire.'); return; }
+    
+    try {
+      const updatedProgram: SurveillanceProgram = {
+        ...program,
+        name: name.trim(),
+        description: description.trim(),
+        sector,
+        targetRiskGroup: targetRisk,
+        frequency,
+        requiredScreenings,
+      };
+      onSave(updatedProgram);
+      onClose();
+    } catch (error) {
+      Alert.alert('Erreur', 'Erreur lors de la mise à jour du programme');
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { maxHeight: '95%' }]}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Modifier le Programme</Text>
+              <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+
+            {/* Program Identity */}
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Identité du Programme</Text>
+              <Text style={styles.formLabel}>Nom du Programme *</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={name} 
+                onChangeText={setName} 
+                placeholder="Ex: Surveillance Respiratoire - Miniers"
+                maxLength={200}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Description</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={description} 
+                onChangeText={setDescription} 
+                placeholder="Description complète du programme..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            {/* Configuration */}
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Configuration du Dépistage</Text>
+              <Text style={styles.formLabel}>Secteur Cible</Text>
+              <View style={styles.chipGrid}>
+                {(['mining', 'construction', 'manufacturing', 'healthcare', 'agriculture'] as IndustrySector[]).map(s => (
+                  <TouchableOpacity 
+                    key={s} 
+                    style={[styles.optionChip, sector === s && styles.optionChipActive]} 
+                    onPress={() => setSector(s)}
+                  >
+                    <Text style={[styles.optionChipText, sector === s && styles.optionChipTextActive]}>
+                      {OccHealthUtils.getSectorLabel ? OccHealthUtils.getSectorLabel(s) : s}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Groupe Risque Ciblé</Text>
+              <View style={styles.chipGrid}>
+                {(['noise', 'silica_dust', 'chemical_exposure', 'ergonomic', 'psychosocial', 'biological'] as ExposureRisk[]).map(r => (
+                  <TouchableOpacity 
+                    key={r} 
+                    style={[styles.optionChip, targetRisk === r && styles.optionChipActive]} 
+                    onPress={() => setTargetRisk(r)}
+                  >
+                    <Text style={[styles.optionChipText, targetRisk === r && styles.optionChipTextActive]}>
+                      {OccHealthUtils.getExposureRiskLabel(r)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Fréquence de Dépistage</Text>
+              <View style={styles.chipGrid}>
+                {(['monthly', 'quarterly', 'biannual', 'annual'] as Array<'monthly' | 'quarterly' | 'biannual' | 'annual'>).map(f => (
+                  <TouchableOpacity 
+                    key={f} 
+                    style={[styles.optionChip, frequency === f && styles.optionChipActive]} 
+                    onPress={() => setFrequency(f)}
+                  >
+                    <Text style={[styles.optionChipText, frequency === f && styles.optionChipTextActive]}>
+                      {getFrequencyLabel(f)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Examens & Dépistages</Text>
+              <Text style={styles.formLabel}>Examens Requis</Text>
+              {SCREENING_OPTIONS.map(screening => (
+                <TouchableOpacity
+                  key={screening}
+                  style={[styles.checkboxRow, { backgroundColor: colors.surface }]}
+                  onPress={() => handleToggleScreening(screening)}
+                >
+                  <View style={[styles.checkbox, requiredScreenings.includes(screening) && { backgroundColor: ACCENT }]}>
+                    {requiredScreenings.includes(screening) && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{screening.replace(/_/g, ' ')}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave}>
+              <Ionicons name="save-outline" size={18} color="#FFF" />
+              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Mettre à Jour</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -320,40 +670,163 @@ function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClo
 
 // ─── Main Screen ─────────────────────────────────────────────
 export function SurveillanceScreen() {
-  const [programs, setPrograms] = useState<SurveillanceProgram[]>(SAMPLE_PROGRAMS);
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+  const [programs, setPrograms] = useState<SurveillanceProgram[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedProgram, setSelectedProgram] = useState<SurveillanceProgram | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingProgram, setEditingProgram] = useState<SurveillanceProgram | null>(null);
+  const [showEdit, setShowEdit] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
-  const loadData = async () => {
+  useEffect(() => { loadPrograms(); }, []);
+  
+  const loadPrograms = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setPrograms(JSON.parse(stored));
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_PROGRAMS));
-    } catch { }
-  };
-  const saveData = async (list: SurveillanceProgram[]) => {
-    setPrograms(list);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      setLoading(true);
+      const response = await OccHealthApiService.getInstance().listSurveillancePrograms();
+      if (response.data && Array.isArray(response.data)) {
+        // Transform backend data to frontend format if needed
+        const transformed = response.data.map((prog: any) => ({
+          id: String(prog.id),
+          name: prog.name,
+          description: prog.description,
+          sector: prog.sector as IndustrySector,
+          targetRiskGroup: prog.target_risk_group as ExposureRisk,
+          targetJobCategories: prog.target_job_categories || [],
+          frequency: getFrequencyFromMonths(prog.screening_interval_months),
+          requiredTests: ['periodic'], // Default
+          requiredScreenings: prog.required_screenings || [],
+          actionLevels: prog.action_levels || {},
+          isActive: prog.is_active !== false,
+          createdBy: prog.created_by?.full_name || 'System',
+          createdAt: prog.created_at || new Date().toISOString(),
+          updatedBy: prog.updated_by?.full_name,
+          updatedAt: prog.updated_at,
+        }));
+        setPrograms(transformed);
+      } else {
+        Alert.alert('Erreur', response.error || 'Impossible de charger les programmes');
+      }
+    } catch (error) {
+      console.error('Error loading programs:', error);
+      Alert.alert('Erreur', 'Erreur lors du chargement des programmes');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAdd = (p: SurveillanceProgram) => {
-    saveData([p, ...programs]);
-    setShowAdd(false);
-    Alert.alert('Succès', 'Programme de surveillance créé.');
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadPrograms();
+    setRefreshing(false);
   };
 
-  const handleToggle = () => {
+  const handleAdd = async (p: SurveillanceProgram) => {
+    try {
+      // Convert frontend data to backend format
+      // Get interval in months from frequency
+      const intervalMonths = 
+        p.frequency === 'monthly' ? 1 :
+        p.frequency === 'quarterly' ? 3 :
+        p.frequency === 'biannual' ? 6 : 12;
+
+      // Map the surveillance program to backend requirements
+      const backendPayload = {
+        name: p.name,
+        code: `SURV_${p.name.replace(/\s+/g, '_').toUpperCase().slice(0, 40)}`,
+        description: p.description,
+        sector: p.sector,
+        target_risk_group: p.targetRiskGroup,
+        required_screenings: p.requiredScreenings || [],
+        screening_interval_months: intervalMonths,
+        action_levels: p.actionLevels || {},
+        is_active: p.isActive,
+        status: 'active',
+        regulatory_reference: '',
+        compliance_standard: '',
+        enterprise: 1, // Default enterprise ID - adjust based on user's enterprise
+        created_by: currentUser?.id, // Track who created this program
+      };
+
+      console.log('Sending payload:', backendPayload);
+      const result = await OccHealthApiService.getInstance().createSurveillanceProgram(backendPayload);
+      
+      if (result.data) {
+        setPrograms([result.data, ...programs]);
+        setShowAdd(false);
+        Alert.alert('Succès', 'Programme de surveillance créé avec succès.');
+      } else {
+        console.error('API Error:', result.error);
+        Alert.alert('Erreur', result.error || 'Impossible de créer le programme');
+      }
+    } catch (error: any) {
+      console.error('Exception in handleAdd:', error);
+      Alert.alert('Erreur', error?.message || 'Erreur lors de la création du programme');
+    }
+  };
+
+  const handleToggle = async () => {
     if (!selectedProgram) return;
-    const updated = programs.map(p =>
-      p.id === selectedProgram.id ? { ...p, isActive: !p.isActive } : p
-    );
-    saveData(updated);
-    setSelectedProgram({ ...selectedProgram, isActive: !selectedProgram.isActive });
-    Alert.alert('Succès', `Programme ${selectedProgram.isActive ? 'désactivé' : 'activé'}.`);
+    try {
+      const updated = { ...selectedProgram, isActive: !selectedProgram.isActive };
+      const result = await OccHealthApiService.getInstance().updateSurveillanceProgram(String(selectedProgram.id), updated);
+      if (result.data) {
+        const newPrograms = programs.map(p =>
+          p.id === selectedProgram.id ? result.data : p
+        );
+        setPrograms(newPrograms);
+        setSelectedProgram(result.data);
+        Alert.alert('Succès', `Programme ${selectedProgram.isActive ? 'désactivé' : 'activé'}.`);
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de mettre à jour le programme');
+    }
+  };
+
+  const handleEdit = async (editedProgram: SurveillanceProgram) => {
+    try {
+      // Convert frontend data to backend format
+      const intervalMonths = 
+        editedProgram.frequency === 'monthly' ? 1 :
+        editedProgram.frequency === 'quarterly' ? 3 :
+        editedProgram.frequency === 'biannual' ? 6 : 12;
+
+      const backendPayload = {
+        name: editedProgram.name,
+        description: editedProgram.description,
+        sector: editedProgram.sector,
+        target_risk_group: editedProgram.targetRiskGroup,
+        required_screenings: editedProgram.requiredScreenings || [],
+        screening_interval_months: intervalMonths,
+        action_levels: editedProgram.actionLevels || {},
+        is_active: editedProgram.isActive,
+        status: editedProgram.isActive ? 'active' : 'paused',
+        updated_by: currentUser?.id, // Track who updated this program
+      };
+
+      const result = await OccHealthApiService.getInstance()
+        .updateSurveillanceProgram(String(editedProgram.id), backendPayload);
+      
+      if (result.data) {
+        const newPrograms = programs.map(p =>
+          p.id === editedProgram.id ? result.data : p
+        );
+        setPrograms(newPrograms);
+        setEditingProgram(null);
+        setShowEdit(false);
+        setSelectedProgram(result.data);
+        Alert.alert('Succès', 'Programme de surveillance mis à jour avec succès.');
+      } else {
+        Alert.alert('Erreur', result.error || 'Impossible de mettre à jour le programme');
+      }
+    } catch (error: any) {
+      console.error('Exception in handleEdit:', error);
+      Alert.alert('Erreur', error?.message || 'Erreur lors de la mise à jour du programme');
+    }
   };
 
   const filtered = useMemo(() => {
@@ -373,62 +846,89 @@ export function SurveillanceScreen() {
   }), [programs]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.screenTitle}>Programmes de Surveillance</Text>
-          <Text style={styles.screenSubtitle}>Surveillance médicale par groupe de risque et secteur</Text>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[ACCENT]}
+          tintColor={ACCENT}
+        />
+      }
+    >
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={ACCENT} />
+          <Text style={styles.loadingText}>Chargement des programmes…</Text>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowAdd(true)}>
-          <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.addButtonText}>Nouveau Programme</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.statsRow}>
-        {[
-          { label: 'Total', value: stats.total, icon: 'eye', color: ACCENT },
-          { label: 'Actifs', value: stats.active, icon: 'checkmark-circle', color: '#22C55E' },
-          { label: 'Inactifs', value: stats.inactive, icon: 'pause-circle', color: '#94A3B8' },
-          { label: 'Secteurs', value: stats.sectors, icon: 'business', color: '#6366F1' },
-        ].map((s, i) => (
-          <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
-            <View style={styles.statIcon}>
-              <Ionicons name={s.icon as any} size={18} color="#FFFFFF" />
+      ) : (
+        <>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.screenTitle}>Programmes de Surveillance</Text>
+              <Text style={styles.screenSubtitle}>Surveillance médicale par groupe de risque et secteur</Text>
             </View>
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.filterBar}>
-        <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
-          <TextInput style={styles.searchInput} placeholder="Rechercher..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={colors.placeholder} />
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollRow}>
-          {[{ v: 'all', l: 'Tous' }, { v: 'active', l: 'Actifs' }, { v: 'inactive', l: 'Inactifs' }].map(opt => (
-            <TouchableOpacity key={opt.v} style={[styles.filterChip, filterActive === opt.v && styles.filterChipActive]} onPress={() => setFilterActive(opt.v as any)}>
-              <Text style={[styles.filterChipText, filterActive === opt.v && styles.filterChipTextActive]}>{opt.l}</Text>
+            <TouchableOpacity style={styles.addButton} onPress={() => setShowAdd(true)}>
+              <Ionicons name="add" size={20} color="#FFF" />
+              <Text style={styles.addButtonText}>Nouveau Programme</Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      <Text style={styles.resultsCount}>{filtered.length} programme(s)</Text>
-      <View style={styles.listContainer}>
-        {filtered.map(p => <ProgramCard key={p.id} program={p} onPress={() => { setSelectedProgram(p); setShowDetail(true); }} />)}
-        {filtered.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="eye-outline" size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>Aucun programme de surveillance</Text>
           </View>
-        )}
-      </View>
 
-      <ProgramDetailModal visible={showDetail} program={selectedProgram} onClose={() => { setShowDetail(false); setSelectedProgram(null); }} onToggle={handleToggle} />
+          <View style={styles.statsRow}>
+            {[
+              { label: 'Total', value: stats.total, icon: 'eye', color: ACCENT },
+              { label: 'Actifs', value: stats.active, icon: 'checkmark-circle', color: '#22C55E' },
+              { label: 'Inactifs', value: stats.inactive, icon: 'pause-circle', color: '#94A3B8' },
+              { label: 'Secteurs', value: stats.sectors, icon: 'business', color: '#6366F1' },
+            ].map((s, i) => (
+              <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
+                <View style={styles.statIcon}>
+                  <Ionicons name={s.icon as any} size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.filterBar}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+              <TextInput style={styles.searchInput} placeholder="Rechercher..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={colors.placeholder} />
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollRow}>
+              {[{ v: 'all', l: 'Tous' }, { v: 'active', l: 'Actifs' }, { v: 'inactive', l: 'Inactifs' }].map(opt => (
+                <TouchableOpacity key={opt.v} style={[styles.filterChip, filterActive === opt.v && styles.filterChipActive]} onPress={() => setFilterActive(opt.v as any)}>
+                  <Text style={[styles.filterChipText, filterActive === opt.v && styles.filterChipTextActive]}>{opt.l}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <Text style={styles.resultsCount}>{filtered.length} programme(s)</Text>
+          <View style={styles.listContainer}>
+            {filtered.map(p => <ProgramCard key={p.id} program={p} onPress={() => { setSelectedProgram(p); setShowDetail(true); }} />)}
+            {filtered.length === 0 && (
+              <View style={styles.emptyState}>
+                <Ionicons name="eye-outline" size={48} color={colors.textTertiary} />
+                <Text style={styles.emptyText}>Aucun programme de surveillance</Text>
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
+      <ProgramDetailModal 
+        visible={showDetail} 
+        program={selectedProgram} 
+        onClose={() => { setShowDetail(false); setSelectedProgram(null); }} 
+        onToggle={handleToggle}
+        onEdit={() => { setEditingProgram(selectedProgram); setShowEdit(true); setShowDetail(false); }}
+      />
       <AddProgramModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={handleAdd} />
+      <EditProgramModal visible={showEdit} program={editingProgram} onClose={() => { setShowEdit(false); setEditingProgram(null); }} onSave={handleEdit} />
     </ScrollView>
   );
 }
@@ -488,6 +988,9 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', padding: 40, gap: 8 },
   emptyText: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
 
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  loadingText: { fontSize: 14, color: colors.textSecondary, marginTop: 12 },
+
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, width: isDesktop ? 650 : '100%', maxHeight: '90%', padding: 24, ...shadows.xl },
@@ -524,6 +1027,9 @@ const styles = StyleSheet.create({
   formSection: { marginBottom: 16 },
   formLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 6 },
   formInput: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.outline },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: borderRadius.md, marginBottom: 8 },
+  checkbox: { width: 20, height: 20, borderRadius: borderRadius.md, borderWidth: 2, borderColor: colors.outline, alignItems: 'center', justifyContent: 'center' },
+  checkboxLabel: { fontSize: 13, color: colors.text, flex: 1 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
   optionChipActive: { backgroundColor: ACCENT + '20', borderColor: ACCENT },

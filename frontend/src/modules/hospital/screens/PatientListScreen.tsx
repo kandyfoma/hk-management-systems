@@ -11,6 +11,8 @@ import { colors, shadows } from '../../../theme/theme';
 import ApiService from '../../../services/ApiService';
 import { Patient, PatientUtils } from '../../../models/Patient';
 import { getTextColor, getIconBackgroundColor, getSecondaryTextColor } from '../../../utils/colorContrast';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -93,6 +95,7 @@ function apiToPatient(d: any): PatientWithEncounters {
 
 export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
   const api = ApiService.getInstance();
+  const { toastMsg, showToast } = useSimpleToast();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,12 +194,12 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
               const res = await api.delete(`/patients/${patient.id}/`);
               if (res.success) {
                 setPatients(prev => prev.filter(p => p.id !== patient.id));
-                Alert.alert('Succès', 'Patient supprimé.');
+                showToast('Patient supprimé.', 'success');
               } else {
-                Alert.alert('Erreur', res.error?.message ?? 'Impossible de supprimer ce patient.');
+                showToast(res.error?.message ?? 'Impossible de supprimer ce patient.', 'error');
               }
             } catch {
-              Alert.alert('Erreur', 'Suppression impossible pour le moment.');
+              showToast('Suppression impossible pour le moment.', 'error');
             } finally {
               setDeletingPatientId(null);
             }
@@ -236,7 +239,7 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
       const fileName = `patients_template_${new Date().toISOString().split('T')[0]}.xlsx`;
       if (Platform.OS === 'web') {
         XLSX.writeFile(wb, fileName);
-        Alert.alert('Succès', `Modèle téléchargé : ${fileName}`);
+        showToast(`Modèle téléchargé : ${fileName}`, 'success');
       } else {
         const { default: FileSystem } = await import('expo-file-system');
         const { default: Sharing } = await import('expo-sharing');
@@ -246,11 +249,11 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri);
         } else {
-          Alert.alert('Succès', `Modèle enregistré : ${fileName}`);
+          showToast(`Modèle enregistré : ${fileName}`, 'success');
         }
       }
     } catch (err) {
-      Alert.alert('Erreur', 'Impossible de télécharger le modèle.');
+      showToast('Impossible de télécharger le modèle.', 'error');
     }
   };
 
@@ -526,6 +529,7 @@ export function PatientListScreen({ onSelectPatient, onNewPatient }: Props) {
         onDownloadTemplate={downloadTemplate}
         onRetry={() => { setShowImportModal(false); setImportResult(null); handleBulkImport(); }}
       />
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

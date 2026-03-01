@@ -46,8 +46,7 @@ const SAMPLE_RESULTS: DrugAlcoholScreeningResult[] = [
 ];
 
 export function DrugAlcoholScreeningScreen() {
-  const authUser = useSelector((state: RootState) => state.auth.user);
-  const [results, setResults] = useState<DrugAlcoholScreeningResult[]>(SAMPLE_RESULTS);
+  const authUser = useSelector((state: RootState) => state.auth.user);  const [results, setResults] = useState<DrugAlcoholScreeningResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);

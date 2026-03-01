@@ -29,7 +29,7 @@ from .models import (
     FitnessCertificate,
     # Disease and incident models
     OccupationalDiseaseType, OccupationalDisease,
-    WorkplaceIncident,
+    WorkplaceIncident, IncidentAttachment,
     # PPE and risk models
     PPEItem, HazardIdentification,
     SiteHealthMetrics,
@@ -56,6 +56,7 @@ from .serializers import (
     # Core serializers
     EnterpriseListSerializer, EnterpriseDetailSerializer, EnterpriseCreateSerializer,
     WorkSiteSerializer, WorkerListSerializer, WorkerDetailSerializer, WorkerCreateSerializer,
+    WorkerDirectCreateSerializer,
     # Medical examination serializers
     MedicalExaminationListSerializer, MedicalExaminationDetailSerializer, MedicalExaminationCreateSerializer,
     VitalSignsSerializer, PhysicalExaminationSerializer,
@@ -65,6 +66,7 @@ from .serializers import (
     # Disease and incident serializers
     OccupationalDiseaseTypeSerializer, OccupationalDiseaseSerializer,
     WorkplaceIncidentListSerializer, WorkplaceIncidentDetailSerializer,
+    IncidentAttachmentSerializer,
     # PPE and risk serializers
     PPEItemSerializer, HazardIdentificationSerializer,
     SiteHealthMetricsSerializer,
@@ -526,7 +528,7 @@ class WorkerViewSet(viewsets.ModelViewSet):
     
     def get_serializer_class(self):
         if self.action == 'create':
-            return WorkerCreateSerializer
+            return WorkerDirectCreateSerializer
         elif self.action in ['list']:
             return WorkerListSerializer
         return WorkerDetailSerializer
@@ -1316,7 +1318,12 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
         return WorkplaceIncidentDetailSerializer
     
     def perform_create(self, serializer):
-        serializer.save(reported_by=self.request.user)
+        # Auto-assign enterprise if not provided in the request
+        enterprise = serializer.validated_data.get('enterprise')
+        if not enterprise:
+            # Assign the first active enterprise
+            enterprise = Enterprise.objects.filter(is_active=True).first()
+        serializer.save(reported_by=self.request.user, enterprise=enterprise)
     
     @action(detail=False, methods=['get'])
     def statistics(self, request):
@@ -1344,6 +1351,24 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
         return Response(stats)
 
 
+class IncidentAttachmentViewSet(viewsets.ModelViewSet):
+    """API endpoint for managing incident images and videos"""
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = IncidentAttachmentSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['incident', 'attachment_type']
+    ordering = ['-uploaded_at']
+    
+    def get_queryset(self):
+        return IncidentAttachment.objects.select_related('incident', 'uploaded_by').filter(
+            incident__enterprise__employees__user=self.request.user
+        ).distinct()
+    
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
 class HazardIdentificationViewSet(viewsets.ModelViewSet):
     """Hazard identification and risk assessment API"""
     
@@ -1353,7 +1378,7 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
         'enterprise', 'work_site', 'hazard_type', 'probability', 'severity', 'risk_level', 'status'
     ]
     search_fields = ['hazard_description', 'locations_affected']
-    ordering = ['-creation_date']
+    ordering = ['-created_at']
     serializer_class = HazardIdentificationSerializer
     
     def get_queryset(self):

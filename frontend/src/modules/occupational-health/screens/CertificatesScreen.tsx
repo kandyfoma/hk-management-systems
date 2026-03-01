@@ -20,6 +20,8 @@ import {
   type IndustrySector,
 } from '../../../models/OccupationalHealth';
 import { occHealthApi } from '../../../services/OccHealthApiService';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -173,15 +175,10 @@ export function CertificatesScreen({
   const [downloading, setDownloading] = useState<number | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState<Certificate | null>(null);
-  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const { toastMsg, showToast } = useSimpleToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'expired' | 'expiring_soon'>('all');
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
-
-  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
-    setToastMsg({ text, type });
-    setTimeout(() => setToastMsg(null), 3500);
-  };
 
   const mapApiCertificate = (item: any): Certificate => {
     const restrictionList = String(item.restrictions || '')
@@ -577,19 +574,7 @@ export function CertificatesScreen({
       </Modal>
 
       {/* ── Toast ── */}
-      {toastMsg && (
-        <View style={[
-          styles.toast,
-          { backgroundColor: toastMsg.type === 'error' ? colors.error : colors.primary },
-        ]}>
-          <Ionicons
-            name={toastMsg.type === 'error' ? 'alert-circle' : 'checkmark-circle'}
-            size={18}
-            color="#FFF"
-          />
-          <Text style={styles.toastText}>{toastMsg.text}</Text>
-        </View>
-      )}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }
@@ -753,14 +738,4 @@ const styles = StyleSheet.create({
   restrictionItem: { 
     flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4,
   },
-
-  // Toast
-  toast: {
-    position: 'absolute', bottom: 32, alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: borderRadius.lg, ...shadows.lg,
-    maxWidth: 400,
-  },
-  toastText: { fontSize: 14, color: '#FFF', fontWeight: '600', flexShrink: 1 },
 });

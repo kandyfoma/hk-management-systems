@@ -53,6 +53,7 @@ LOCAL_APPS = [
     'apps.audit',  # Audit logging system
     'apps.hospital',  # Hospital management system
     'apps.occupational_health',  # Médecine du Travail
+    'apps.reports',  # Reporting & Analytics system
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

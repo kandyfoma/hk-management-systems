@@ -10,6 +10,8 @@ import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
 import { ExamSelectDropdown, Exam } from '../components/ExamSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -43,6 +45,7 @@ const SAMPLE_RESULTS: AudiometryResult[] = [
 
 export function AudiometryScreen() {
   const authUser = useSelector((state: RootState) => state.auth.user);
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<AudiometryResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,7 +96,7 @@ export function AudiometryScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.left_ear_db || !formData.right_ear_db) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      showToast('Veuillez remplir tous les champs', 'error');
       return;
     }
 
@@ -123,12 +126,12 @@ export function AudiometryScreen() {
           frequency: '4000',
           notes: '',
         });
-        Alert.alert('Succès', 'Résultat d\'audiométrie enregistré');
+        showToast('Résultat d\'audiométrie enregistré', 'success');
         loadResults();
       }
     } catch (error) {
       console.error('Error creating audiometry result:', error);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer le résultat');
+      showToast('Impossible d\'enregistrer le résultat', 'error');
     }
   };
 
@@ -405,6 +408,7 @@ export function AudiometryScreen() {
           </View>
         </Modal>
       )}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

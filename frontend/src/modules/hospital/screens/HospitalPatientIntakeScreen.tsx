@@ -15,6 +15,8 @@ import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import ApiService from '../../../services/ApiService';
 import { Patient } from '../../../models/Patient';
 import { User } from '../../../models/User';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 export const HOSPITAL_PENDING_CONSULTATIONS_KEY = '@hospital_pending_consultations';
 export const HOSPITAL_INTAKE_DRAFT_KEY = '@hospital_intake_draft';
@@ -74,6 +76,7 @@ export function HospitalPatientIntakeScreen({
   onNavigateToConsultation?: (pendingId?: string) => void;
 }) {
   const api = ApiService.getInstance();
+  const { toastMsg, showToast } = useSimpleToast();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,12 +235,12 @@ export function HospitalPatientIntakeScreen({
     
     if (!selectedPatient) {
       console.log('[HospitalPatientIntake] Error: No patient selected');
-      Alert.alert('Patient requis', 'Sélectionnez un patient avant de continuer.');
+      showToast('Sélectionnez un patient avant de continuer.', 'error');
       return;
     }
     if (!visitReason.trim()) {
       console.log('[HospitalPatientIntake] Error: No visit reason');
-      Alert.alert('Motif requis', 'Veuillez renseigner le motif de consultation.');
+      showToast('Veuillez renseigner le motif de consultation.', 'error');
       return;
     }
 
@@ -309,7 +312,7 @@ export function HospitalPatientIntakeScreen({
       );
     } catch (err) {
       console.error('[HospitalPatientIntake] Error:', err);
-      Alert.alert('❌ Erreur', 'Impossible d\'ajouter le patient à la file d\'attente.');
+      showToast('Impossible d\'ajouter le patient à la file d\'attente.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -471,6 +474,7 @@ export function HospitalPatientIntakeScreen({
         <Ionicons name="add-circle" size={18} color="#FFF" />
         <Text style={styles.queueBtnText}>{submitting ? 'Ajout en cours...' : 'Ajouter à la salle d\'attente'}</Text>
       </TouchableOpacity>
+      <SimpleToastNotification message={toastMsg} />
     </ScrollView>
   );
 }

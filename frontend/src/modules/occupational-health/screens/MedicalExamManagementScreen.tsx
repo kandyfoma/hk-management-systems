@@ -6,7 +6,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import DateInput from '../../../components/DateInput';
-import { OccHealthApiService } from '../services/OccHealthApiService';
+import ApiService from '../../../services/ApiService';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -21,6 +23,7 @@ interface ExamSchedule {
   scheduledDate: string;
   status: 'scheduled' | 'completed' | 'cancelled' | 'no_show' | 'rescheduled';
   examiner: string;
+  examinerId?: string;
   location: string;
   sector: string;
   notes?: string;
@@ -106,27 +109,43 @@ function ExamTypeCard({
   onPress: () => void;
 }) {
   const typeColor = EXAM_TYPE_COLORS[type] || ACCENT;
+  const totalCount = scheduleCount + completedCount;
   return (
     <TouchableOpacity
-      style={[styles.typeCard, styles.cardShadow, { borderLeftColor: typeColor, borderLeftWidth: 3 }]}
+      style={[styles.typeCard, styles.cardShadow]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
     >
-      <View style={[styles.typeCardIcon, { backgroundColor: typeColor + '18' }]}>
-        <Ionicons name={icon as any} size={26} color={typeColor} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.typeCardLabel}>{label}</Text>
-        <Text style={styles.typeCardDesc} numberOfLines={1}>{description}</Text>
-      </View>
-      <View style={styles.typeCardCounters}>
-        <View style={styles.typeCounter}>
-          <Text style={[styles.typeCounterValue, { color: typeColor }]}>{scheduleCount}</Text>
-          <Text style={styles.typeCounterLabel}>Sched.</Text>
+      {/* Top border accent */}
+      <View style={[styles.typeCardTopBorder, { backgroundColor: typeColor }]} />
+      
+      {/* Content */}
+      <View style={styles.typeCardContent}>
+        {/* Header with Icon and Title */}
+        <View style={styles.typeCardHeader}>
+          <View style={[styles.typeCardIcon, { backgroundColor: typeColor + '18' }]}>
+            <Ionicons name={icon as any} size={24} color={typeColor} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.typeCardLabel}>{label}</Text>
+            <Text style={styles.typeCardDesc} numberOfLines={1}>{description}</Text>
+          </View>
         </View>
-        <View style={[styles.typeCounter, { borderLeftWidth: 1, borderLeftColor: colors.outline }]}>
-          <Text style={[styles.typeCounterValue, { color: '#22C55E' }]}>{completedCount}</Text>
-          <Text style={styles.typeCounterLabel}>Done</Text>
+
+        {/* Counters */}
+        <View style={styles.typeCardFooter}>
+          <View style={styles.typeCounterBox}>
+            <Text style={[styles.typeCounterLabel]}>Scheduled</Text>
+            <Text style={[styles.typeCounterValue, { color: typeColor }]}>{scheduleCount}</Text>
+          </View>
+          <View style={[styles.typeCounterBox, { borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.md }]}>
+            <Text style={[styles.typeCounterLabel]}>Completed</Text>
+            <Text style={[styles.typeCounterValue, { color: colors.success }]}>{completedCount}</Text>
+          </View>
+          <View style={[styles.typeCounterBox, { borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.md }]}>
+            <Text style={[styles.typeCounterLabel]}>Total</Text>
+            <Text style={[styles.typeCounterValue, { color: colors.primary }]}>{totalCount}</Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -278,15 +297,21 @@ function ExamResultCard({
 function ScheduleModal({
   visible,
   schedule,
+  workers,
+  users,
   onClose,
   onSave,
 }: {
   visible: boolean;
   schedule: ExamSchedule | null;
+  workers: any[];
+  users: any[];
   onClose: () => void;
   onSave: (data: ExamSchedule) => void;
 }) {
   const [formData, setFormData] = useState<ExamSchedule | null>(schedule);
+  const [showWorkerPicker, setShowWorkerPicker] = useState(false);
+  const [showExaminerPicker, setShowExaminerPicker] = useState(false);
 
   useEffect(() => {
     setFormData(schedule);
@@ -295,8 +320,8 @@ function ScheduleModal({
   if (!formData) return null;
 
   const handleSave = () => {
-    if (!formData.scheduledDate || !formData.examiner) {
-      Alert.alert('Validation', 'Please fill all required fields');
+    if (!formData.workerId || !formData.scheduledDate || !formData.examiner) {
+      showToast('Please fill all required fields', 'error');
       return;
     }
     onSave(formData);
@@ -315,17 +340,53 @@ function ScheduleModal({
           </View>
 
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            {/* Worker Info */}
+            {/* Worker Selection */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Worker Information</Text>
-              <View style={styles.infoBox}>
-                <Text style={styles.infoLabel}>Name</Text>
-                <Text style={styles.infoValue}>{formData.workerName}</Text>
-              </View>
-              <View style={styles.infoBox}>
-                <Text style={styles.infoLabel}>Sector</Text>
-                <Text style={styles.infoValue}>{formData.sector}</Text>
-              </View>
+              <Text style={styles.sectionLabel}>Select Worker *</Text>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setShowWorkerPicker(true)}
+              >
+                <Text style={[styles.dropdownButtonText, !formData.workerId && styles.dropdownPlaceholder]}>
+                  {formData.workerName || 'Select a worker'}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {showWorkerPicker && (
+                <Modal visible={showWorkerPicker} transparent animationType="fade">
+                  <View style={styles.pickerOverlay}>
+                    <View style={styles.pickerCard}>
+                      <View style={styles.pickerHeader}>
+                        <Text style={styles.pickerTitle}>Select Worker</Text>
+                        <TouchableOpacity onPress={() => setShowWorkerPicker(false)}>
+                          <Ionicons name="close" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                      <ScrollView style={styles.pickerList}>
+                        {workers.map((worker) => (
+                          <TouchableOpacity
+                            key={worker.id}
+                            style={styles.pickerOption}
+                            onPress={() => {
+                              setFormData({
+                                ...formData,
+                                workerId: String(worker.id),
+                                workerName: `${worker.first_name} ${worker.last_name}`,
+                              });
+                              setShowWorkerPicker(false);
+                            }}
+                          >
+                            <Text style={styles.pickerOptionText}>
+                              {worker.first_name} {worker.last_name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </View>
+                </Modal>
+              )}
             </View>
 
             {/* Exam Details */}
@@ -354,12 +415,50 @@ function ScheduleModal({
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Examiner *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.examiner}
-                  onChangeText={(text) => setFormData({ ...formData, examiner: text })}
-                  placeholder="Enter examiner name"
-                />
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setShowExaminerPicker(true)}
+                >
+                  <Text style={[styles.dropdownButtonText, !formData.examiner && styles.dropdownPlaceholder]}>
+                    {formData.examiner || 'Select examiner'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {showExaminerPicker && (
+                  <Modal visible={showExaminerPicker} transparent animationType="fade">
+                    <View style={styles.pickerOverlay}>
+                      <View style={styles.pickerCard}>
+                        <View style={styles.pickerHeader}>
+                          <Text style={styles.pickerTitle}>Select Examiner</Text>
+                          <TouchableOpacity onPress={() => setShowExaminerPicker(false)}>
+                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerList}>
+                          {users.map((user) => (
+                            <TouchableOpacity
+                              key={user.id}
+                              style={styles.pickerOption}
+                              onPress={() => {
+                                setFormData({
+                                  ...formData,
+                                  examiner: `${user.first_name} ${user.last_name}`,
+                                  examinerId: String(user.id),
+                                });
+                                setShowExaminerPicker(false);
+                              }}
+                            >
+                              <Text style={styles.pickerOptionText}>
+                                {user.first_name} {user.last_name}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </Modal>
+                )}
               </View>
 
               <View style={styles.formGroup}>
@@ -585,6 +684,7 @@ function ResultDetailModal({
 
 // ─── Main Screen ─────────────────────────────────────────────
 export function MedicalExamManagementScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [activeTab, setActiveTab] = useState<'schedule' | 'results'>('schedule');
   const [selectedSchedule, setSelectedSchedule] = useState<ExamSchedule | null>(null);
   const [selectedResult, setSelectedResult] = useState<MedicalExamResult | null>(null);
@@ -595,60 +695,187 @@ export function MedicalExamManagementScreen() {
   const [schedules, setSchedules] = useState<ExamSchedule[]>([]);
   const [results, setResults] = useState<MedicalExamResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
 
-  const apiService = useMemo(() => OccHealthApiService.getInstance(), []);
+  const apiService = useMemo(() => ApiService.getInstance(), []);
 
-  // Load exam data from API
+  // Load exam data, workers, and users
   useEffect(() => {
-    const loadExamData = async () => {
+    const loadData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [schedulesData, resultsData] = await Promise.all([
-          apiService.getExamSchedules(),
-          apiService.getExamResults(''), // Note: This might need adjustment based on API
+        const [examsRes, workersRes, usersRes] = await Promise.all([
+          apiService.get('/occupational-health/medical-exams/', {
+            ordering: '-exam_date',
+            page_size: 100,
+          }),
+          apiService.get('/occupational-health/workers/', {
+            page_size: 1000,
+          }),
+          apiService.get('/auth/users/', {
+            page_size: 1000,
+          }),
         ]);
-        setSchedules(schedulesData);
-        setResults(resultsData);
+        
+        const exams = examsRes?.data?.results || examsRes?.data || [];
+        
+        // Map API data to frontend ExamSchedule interface
+        const mappedExams = exams.map((exam: any) => ({
+          id: String(exam.id),
+          workerId: String(exam.worker),
+          workerName: exam.worker_name || '',
+          examType: exam.exam_type || 'periodic',
+          scheduledDate: exam.exam_date || '',
+          status: exam.examination_completed ? 'completed' : 'scheduled',
+          examiner: exam.examining_doctor_name || '',
+          examinerId: String(exam.examining_doctor || ''),
+          location: 'KCC Health Center',
+          sector: '',
+          notes: exam.results_summary || '',
+        }));
+        
+        const scheduledExams = mappedExams.filter((e: ExamSchedule) => e.status !== 'completed');
+        const completedExams = mappedExams.filter((e: ExamSchedule) => e.status === 'completed');
+        
+        console.log('Loaded exams:', { total: exams.length, scheduled: scheduledExams.length, completed: completedExams.length, exams: mappedExams });
+        
+        setSchedules(scheduledExams);
+        setResults(completedExams);
+        setWorkers(workersRes?.data?.results || workersRes?.data || []);
+        setUsers(usersRes?.data?.results || usersRes?.data || []);
       } catch (err: any) {
-        console.error('Failed to load exam data:', err);
-        setError(err?.message || 'Failed to load exam data');
+        console.error('Failed to load data:', err);
+        setError(err?.message || 'Failed to load data');
       } finally {
         setLoading(false);
       }
     };
 
-    loadExamData();
+    loadData();
   }, [apiService]);
 
-  const examStats = useMemo(() => ({
-    scheduled: schedules.filter(s => s.status === 'scheduled').length,
-    completed: schedules.filter(s => s.status === 'completed').length,
-    results: results.length,
-  }), [schedules, results]);
+  const examStats = useMemo(() => {
+    const allExams = [...schedules, ...results];
+    return {
+      scheduled: schedules.filter(s => s.status === 'scheduled').length,
+      completed: schedules.filter(s => s.status === 'completed').length,
+      results: results.length,
+      // Exam type breakdown
+      examTypeStats: {
+        pre_employment: {
+          scheduled: schedules.filter(s => s.examType === 'pre_employment').length,
+          completed: results.filter(r => r.examType === 'pre_employment').length,
+        },
+        periodic: {
+          scheduled: schedules.filter(s => s.examType === 'periodic').length,
+          completed: results.filter(r => r.examType === 'periodic').length,
+        },
+        return_to_work: {
+          scheduled: schedules.filter(s => s.examType === 'return_to_work').length,
+          completed: results.filter(r => r.examType === 'return_to_work').length,
+        },
+        exit: {
+          scheduled: schedules.filter(s => s.examType === 'exit').length,
+          completed: results.filter(r => r.examType === 'exit').length,
+        },
+        follow_up: {
+          scheduled: schedules.filter(s => s.examType === 'follow_up').length,
+          completed: results.filter(r => r.examType === 'follow_up').length,
+        },
+      },
+    };
+  }, [schedules, results]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    const loadExamData = async () => {
+    const loadData = async () => {
       try {
-        const [schedulesData, resultsData] = await Promise.all([
-          apiService.getExamSchedules(),
-          apiService.getExamResults(''),
+        const [examsRes, workersRes, usersRes] = await Promise.all([
+          apiService.get('/occupational-health/medical-exams/', {
+            ordering: '-exam_date',
+            page_size: 100,
+          }),
+          apiService.get('/occupational-health/workers/', {
+            page_size: 1000,
+          }),
+          apiService.get('/auth/users/', {
+            page_size: 1000,
+          }),
         ]);
-        setSchedules(schedulesData);
-        setResults(resultsData);
+        
+        const exams = examsRes?.data?.results || examsRes?.data || [];
+        
+        // Map API data to frontend ExamSchedule interface
+        const mappedExams = exams.map((exam: any) => ({
+          id: String(exam.id),
+          workerId: String(exam.worker),
+          workerName: exam.worker_name || '',
+          examType: exam.exam_type || 'periodic',
+          scheduledDate: exam.exam_date || '',
+          status: exam.examination_completed ? 'completed' : 'scheduled',
+          examiner: exam.examining_doctor_name || '',
+          examinerId: String(exam.examining_doctor || ''),
+          location: 'KCC Health Center',
+          sector: '',
+          notes: exam.results_summary || '',
+        }));
+        
+        const scheduledExams = mappedExams.filter((e: ExamSchedule) => e.status !== 'completed');
+        const completedExams = mappedExams.filter((e: ExamSchedule) => e.status === 'completed');
+        
+        setSchedules(scheduledExams);
+        setResults(completedExams);
+        setWorkers(workersRes?.data?.results || workersRes?.data || []);
+        setUsers(usersRes?.data?.results || usersRes?.data || []);
       } catch (err: any) {
         console.error('Refresh failed:', err);
       } finally {
         setRefreshing(false);
       }
     };
-    loadExamData();
+    loadData();
   }, [apiService]);
 
-  const handleSaveSchedule = (data: ExamSchedule) => {
-    Alert.alert('Success', 'Schedule saved successfully');
-    setScheduleModalVisible(false);
+  const handleSaveSchedule = async (data: ExamSchedule) => {
+    try {
+      if (!data.workerId || !data.examinerId || !data.scheduledDate) {
+        showToast('Missing required fields', 'error');
+        return;
+      }
+
+      // Create the exam payload
+      const examPayload = {
+        worker: parseInt(data.workerId),
+        exam_type: data.examType,
+        exam_date: data.scheduledDate,
+        examining_doctor: parseInt(data.examinerId),
+        chief_complaint: data.notes || '',
+        results_summary: '',
+        recommendations: '',
+        examination_completed: false,
+        follow_up_required: false,
+      };
+
+      // Post to backend
+      const response = await apiService.post('/occupational-health/medical-exams/', examPayload);
+      
+      if (response) {
+        showToast('Exam scheduled successfully', 'success');
+        setScheduleModalVisible(false);
+        // Refresh the list
+        handleRefresh();
+      }
+    } catch (err: any) {
+      console.error('Failed to save schedule:', err);
+      showToast(
+        err?.response?.data?.detail || 
+        err?.message || 
+        'Failed to schedule exam',
+        'error'
+      );
+    }
   };
 
   return (
@@ -659,28 +886,37 @@ export function MedicalExamManagementScreen() {
         <Text style={styles.headerSubtitle}>Schedule and manage occupational health examinations</Text>
       </View>
 
-      {/* Stats Grid */}
-      <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-        <View style={[styles.statCard, styles.cardShadow, { borderLeftColor: ACCENT }]}>
-          <View style={[styles.statCardIcon, { backgroundColor: ACCENT + '15' }]}>
-            <Ionicons name="calendar-outline" size={22} color={ACCENT} />
+      {/* KPI Stats Section */}
+      <View style={styles.kpiSection}>
+        <View style={[styles.statCard, styles.scheduledCard, styles.cardShadow]}>
+          <View style={[styles.statCardIcon, { backgroundColor: colors.secondary + '18' }]}>
+            <Ionicons name="calendar-outline" size={24} color={colors.secondary} />
           </View>
-          <Text style={[styles.statValue, { color: ACCENT }]}>{examStats.scheduled}</Text>
-          <Text style={styles.statLabel}>Scheduled</Text>
+          <View style={styles.statContent}>
+            <Text style={[styles.statValue, { color: colors.secondary }]}>{examStats.scheduled}</Text>
+            <Text style={styles.statLabel}>Scheduled</Text>
+            <Text style={styles.statSubtext}>Pending exams</Text>
+          </View>
         </View>
-        <View style={[styles.statCard, styles.cardShadow, { borderLeftColor: '#22C55E' }]}>
-          <View style={[styles.statCardIcon, { backgroundColor: '#22C55E15' }]}>
-            <Ionicons name="checkmark-circle-outline" size={22} color="#22C55E" />
+        <View style={[styles.statCard, styles.completedCard, styles.cardShadow]}>
+          <View style={[styles.statCardIcon, { backgroundColor: colors.success + '18' }]}>
+            <Ionicons name="checkmark-circle-outline" size={24} color={colors.success} />
           </View>
-          <Text style={[styles.statValue, { color: '#22C55E' }]}>{examStats.completed}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
+          <View style={styles.statContent}>
+            <Text style={[styles.statValue, { color: colors.success }]}>{examStats.completed}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
+            <Text style={styles.statSubtext}>This month</Text>
+          </View>
         </View>
-        <View style={[styles.statCard, styles.cardShadow, { borderLeftColor: '#8B5CF6' }]}>
-          <View style={[styles.statCardIcon, { backgroundColor: '#8B5CF615' }]}>
-            <Ionicons name="document-text-outline" size={22} color="#8B5CF6" />
+        <View style={[styles.statCard, styles.resultsCard, styles.cardShadow]}>
+          <View style={[styles.statCardIcon, { backgroundColor: colors.info + '18' }]}>
+            <Ionicons name="document-text-outline" size={24} color={colors.info} />
           </View>
-          <Text style={[styles.statValue, { color: '#8B5CF6' }]}>{examStats.results}</Text>
-          <Text style={styles.statLabel}>Results</Text>
+          <View style={styles.statContent}>
+            <Text style={[styles.statValue, { color: colors.info }]}>{examStats.results}</Text>
+            <Text style={styles.statLabel}>Results</Text>
+            <Text style={styles.statSubtext}>Processed</Text>
+          </View>
         </View>
       </View>
 
@@ -690,14 +926,15 @@ export function MedicalExamManagementScreen() {
           horizontal 
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
+          contentContainerStyle={styles.typeCardsContent}
         >
           <ExamTypeCard
             type="pre_employment"
             label="Pre-Employment"
             description="Initial fitness assessment before hire"
             icon="person-add"
-            scheduleCount={2}
-            completedCount={5}
+            scheduleCount={examStats.examTypeStats.pre_employment.scheduled}
+            completedCount={examStats.examTypeStats.pre_employment.completed}
             onPress={() => setActiveTab('schedule')}
           />
           <ExamTypeCard
@@ -705,8 +942,8 @@ export function MedicalExamManagementScreen() {
             label="Periodic"
             description="Regular health monitoring"
             icon="calendar-repeat"
-            scheduleCount={8}
-            completedCount={24}
+            scheduleCount={examStats.examTypeStats.periodic.scheduled}
+            completedCount={examStats.examTypeStats.periodic.completed}
             onPress={() => setActiveTab('schedule')}
           />
           <ExamTypeCard
@@ -714,8 +951,8 @@ export function MedicalExamManagementScreen() {
             label="Return to Work"
             description="Post-absence fitness confirmation"
             icon="arrow-redo"
-            scheduleCount={3}
-            completedCount={12}
+            scheduleCount={examStats.examTypeStats.return_to_work.scheduled}
+            completedCount={examStats.examTypeStats.return_to_work.completed}
             onPress={() => setActiveTab('schedule')}
           />
           <ExamTypeCard
@@ -723,8 +960,8 @@ export function MedicalExamManagementScreen() {
             label="Exit"
             description="Final assessment on departure"
             icon="exit-outline"
-            scheduleCount={1}
-            completedCount={8}
+            scheduleCount={examStats.examTypeStats.exit.scheduled}
+            completedCount={examStats.examTypeStats.exit.completed}
             onPress={() => setActiveTab('schedule')}
           />
         </ScrollView>
@@ -798,7 +1035,7 @@ export function MedicalExamManagementScreen() {
         />
       )}
 
-      {/* FAB */}
+      {/* FAB - Primary CTA */}
       <TouchableOpacity
         style={[styles.fab, styles.cardShadow]}
         onPress={() => {
@@ -810,20 +1047,29 @@ export function MedicalExamManagementScreen() {
             scheduledDate: new Date().toISOString().split('T')[0],
             status: 'scheduled',
             examiner: '',
+            examinerId: '',
             location: 'KCC Health Center',
             sector: '',
           };
           setSelectedSchedule(newSchedule);
           setScheduleModalVisible(true);
         }}
+        activeOpacity={0.85}
       >
-        <Ionicons name="add" size={28} color="#FFF" />
+        <View style={styles.fabContent}>
+          <Ionicons name="add" size={28} color="#FFF" />
+        </View>
       </TouchableOpacity>
+      <View style={styles.fabLabel}>
+        <Text style={styles.fabLabelText}>Schedule Exam</Text>
+      </View>
 
       {/* Modals */}
       <ScheduleModal
         visible={scheduleModalVisible}
         schedule={selectedSchedule}
+        workers={workers}
+        users={users}
         onClose={() => setScheduleModalVisible(false)}
         onSave={handleSaveSchedule}
       />
@@ -832,6 +1078,7 @@ export function MedicalExamManagementScreen() {
         result={selectedResult}
         onClose={() => setResultModalVisible(false)}
       />
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }
@@ -842,55 +1089,65 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   headerTitle: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 4 },
   headerSubtitle: { fontSize: 13, color: colors.textSecondary },
-  // Stats Grid
-  statsGrid: {
+  // KPI Stats Section
+  kpiSection: {
     flexDirection: 'row',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
     gap: spacing.md,
+    justifyContent: 'space-between',
   },
-  statsGridDesktop: { flexWrap: 'nowrap' },
   statCard: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderLeftWidth: 3,
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.outline,
   },
+  scheduledCard: { borderTopWidth: 3, borderTopColor: colors.secondary },
+  completedCard: { borderTopWidth: 3, borderTopColor: colors.success },
+  resultsCard: { borderTopWidth: 3, borderTopColor: colors.info },
   statCardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    minWidth: 48,
   },
-  statValue: { fontSize: 22, fontWeight: '700', color: colors.primary },
-  statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  statContent: { flex: 1 },
+  statValue: { fontSize: 24, fontWeight: '800', color: colors.primary, marginBottom: 2 },
+  statLabel: { fontSize: 12, fontWeight: '600', color: colors.text, marginBottom: 2 },
+  statSubtext: { fontSize: 10, color: colors.textSecondary, fontStyle: 'italic' },
   // Badges
   badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, gap: 4 },
   badgeText: { fontSize: 11, fontWeight: '600' },
   // Exam Type Cards
-  typeCardsSection: { paddingHorizontal: spacing.md, marginBottom: spacing.md },
+  typeCardsSection: { paddingHorizontal: spacing.md, marginBottom: spacing.lg },
+  typeCardsContent: { paddingRight: spacing.lg },
   typeCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
+    borderRadius: borderRadius.xl,
     marginRight: spacing.md,
-    width: 220,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    width: 280,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.outline,
   },
-  typeCardIcon: { width: 38, height: 38, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
-  typeCardLabel: { fontSize: 13, fontWeight: '600', color: colors.text },
-  typeCardDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
-  typeCardCounters: { flexDirection: 'row', gap: 0, marginLeft: 'auto' },
-  typeCounter: { paddingHorizontal: spacing.sm, alignItems: 'center' },
-  typeCounterValue: { fontSize: 15, fontWeight: '700', color: colors.primary },
-  typeCounterLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+  typeCardTopBorder: { height: 4, width: '100%' },
+  typeCardContent: { padding: spacing.md },
+  typeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.lg },
+  typeCardIcon: { width: 44, height: 44, borderRadius: borderRadius.lg, justifyContent: 'center', alignItems: 'center' },
+  typeCardLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
+  typeCardDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 4, lineHeight: 15 },
+  typeCardFooter: { flexDirection: 'row', gap: 0 },
+  typeCounterBox: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.sm },
+  typeCounterValue: { fontSize: 18, fontWeight: '800', color: colors.primary, marginTop: 6 },
+  typeCounterLabel: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   // kept for compatibility
   statBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, alignItems: 'center' },
   statNumber: { fontSize: 14, fontWeight: '700', color: colors.primary },
@@ -945,8 +1202,39 @@ const styles = StyleSheet.create({
   emptyStateText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
   loadingText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
   errorText: { fontSize: 14, color: colors.error || '#EF4444', marginTop: spacing.md, textAlign: 'center' },
-  // FAB
-  fab: { position: 'absolute', bottom: spacing.lg, right: spacing.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  // FAB - Primary CTA
+  fab: {
+    position: 'absolute',
+    bottom: spacing.lg,
+    right: spacing.lg,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: colors.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  fabContent: { justifyContent: 'center', alignItems: 'center' },
+  fabLabel: {
+    position: 'absolute',
+    bottom: spacing.lg + 80,
+    right: spacing.lg,
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    elevation: 4,
+    shadowColor: colors.secondary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  fabLabelText: { fontSize: 12, fontWeight: '600', color: '#FFF', letterSpacing: 0.3 },
   cardShadow: { ...shadows.md },
   // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
@@ -966,6 +1254,17 @@ const styles = StyleSheet.create({
   selectText: { fontSize: 14, color: colors.text },
   input: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 14, color: colors.text, minHeight: 44 },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
+  // Dropdown Selector Styles
+  dropdownButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 44 },
+  dropdownButtonText: { fontSize: 14, color: colors.text, flex: 1 },
+  dropdownPlaceholder: { color: colors.textSecondary },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  pickerCard: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, maxHeight: '70%' },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
+  pickerList: { maxHeight: 400 },
+  pickerOption: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerOptionText: { fontSize: 14, color: colors.text, fontWeight: '500' },
   cancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center' },
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text },
   saveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },

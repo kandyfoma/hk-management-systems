@@ -44,23 +44,25 @@ function workerToPatient(w: any): OccupationalHealthPatient {
     currentMedications: Array.isArray(w.current_medications) ? w.current_medications : (w.medications ? String(w.medications).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
     patientNumber: w.patient_number ?? PatientUtils.generatePatientNumber(),
     registrationDate: w.created_at ?? w.hire_date ?? new Date().toISOString(),
-    status: w.is_active !== false ? 'active' : 'inactive',
+    status: w.employment_status != null
+      ? (w.employment_status === 'active' ? 'active' : 'inactive')
+      : (w.is_active !== false ? 'active' : 'inactive'),
     createdAt: w.created_at ?? new Date().toISOString(),
     accessCount: 0,
     // OH-specific
     employeeId: w.employee_id ?? '',
-    company: w.enterprise?.name ?? w.company ?? 'Non spécifié',
-    sector: w.enterprise?.sector ?? w.sector ?? 'other',
-    site: w.work_site?.name ?? w.site ?? 'Non spécifié',
-    department: w.department ?? '',
+    company: w.enterprise_name ?? w.enterprise?.name ?? w.company ?? 'Non spécifié',
+    sector: w.enterprise_sector ?? w.enterprise?.sector ?? w.sector ?? 'other',
+    site: w.work_site_name ?? w.work_site?.name ?? w.site ?? 'Non spécifié',
+    department: w.job_category_display ?? w.department ?? '',
     jobTitle: w.job_title ?? '',
     jobCategory: w.job_category ?? 'other',
     shiftPattern: w.shift_pattern ?? 'regular',
     hireDate: w.hire_date ?? new Date().toISOString().split('T')[0],
     contractType: w.contract_type ?? 'permanent',
-    fitnessStatus: w.fitness_status ?? 'pending_evaluation',
+    fitnessStatus: w.current_fitness_status ?? w.fitness_status ?? 'pending_evaluation',
     lastMedicalExam: w.last_medical_exam ?? undefined,
-    nextMedicalExam: w.next_medical_exam ?? undefined,
+    nextMedicalExam: w.next_exam_due ?? w.next_medical_exam ?? undefined,
     exposureRisks: w.exposure_risks ?? [],
     ppeRequired: w.ppe_required ?? [],
     riskLevel: w.risk_level ?? 'low',
@@ -239,15 +241,18 @@ export class OccHealthApiService {
   // WORKERS (PATIENTS) CRUD
   // ─────────────────────────────────────────────────────────────
 
-  /** GET /api/workers/  — paginated; returns flat list */
-  async listWorkers(params: { search?: string; page?: number } = {}): Promise<{
+  /** GET /api/workers/  — returns all workers (single request with high page_size) */
+  async listWorkers(params: { search?: string; page?: number; page_size?: number } = {}): Promise<{
     data: OccupationalHealthPatient[];
     count: number;
     error?: string;
   }> {
     try {
-      const res = await this.api.get(`${OH}/workers/`, params);
+      // Use a large page_size to get all records in one request unless a specific page is requested
+      const pageSize = params.page != null ? (params.page_size ?? 20) : (params.page_size ?? 1000);
+      const res = await this.api.get(`${OH}/workers/`, { ...params, page_size: pageSize });
       if (!res.success) return { data: [], count: 0, error: res.error?.message };
+
       const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
       return {
         data: raw.map(workerToPatient),
@@ -1222,6 +1227,51 @@ export class OccHealthApiService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // SURVEILLANCE PROGRAMS
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/surveillance/programs/ */
+  async listSurveillancePrograms(params: { search?: string; is_active?: boolean } = {}): Promise<{
+    data: any[];
+    error?: string;
+  }> {
+    try {
+      const query = new URLSearchParams();
+      if (params.search) query.append('search', params.search);
+      if (params.is_active !== undefined) query.append('is_active', String(params.is_active));
+      const qs = query.toString();
+      const res = await this.api.get(`${OH}/surveillance/programs/${qs ? `?${qs}` : ''}`);
+      if (!res.success) return { data: [], error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: raw };
+    } catch (e: any) {
+      return { data: [], error: e?.message ?? 'Network error' };
+    }
+  }
+
+  /** POST /api/occupational-health/surveillance/programs/ */
+  async createSurveillanceProgram(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/surveillance/programs/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/surveillance/programs/{id}/ */
+  async updateSurveillanceProgram(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/surveillance/programs/${id}/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // REGULATORY REPORTS — CNSS
   // ─────────────────────────────────────────────────────────────
 
@@ -1317,6 +1367,165 @@ export class OccHealthApiService {
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };
+    }
+  }
+
+  // SURVEILLANCE PROGRAMS
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/surveillance/programs/ */
+  async listSurveillancePrograms(params: { search?: string; page?: number; page_size?: number } = {}): Promise<{ data: any[]; error?: string }> {
+    try {
+      const pageSize = params.page != null ? (params.page_size ?? 20) : (params.page_size ?? 1000);
+      const res = await this.api.get(`${OH}/surveillance/programs/`, { ...params, page_size: pageSize });
+      if (!res.success) return { data: [], error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: raw };
+    } catch (e: any) {
+      return { data: [], error: e?.message ?? 'Network error' };
+    }
+  }
+
+  /** POST /api/occupational-health/surveillance/programs/ */
+  async createSurveillanceProgram(program: any): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/surveillance/programs/`, program);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/surveillance/programs/{id}/ */
+  async updateSurveillanceProgram(id: number | string, program: any): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/surveillance/programs/${id}/`, program);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  // WORKPLACE INCIDENTS
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/workplace-incidents/ */
+  async getWorkplaceIncidents(params: { search?: string; page?: number; page_size?: number } = {}): Promise<{ data: any; error?: string }> {
+    try {
+      const pageSize = params.page_size ?? 50;
+      const res = await this.api.get(`${OH}/workplace-incidents/`, { ...params, page_size: pageSize });
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message ?? 'Network error' };
+    }
+  }
+
+  /** GET /api/occupational-health/workplace-incidents/{id}/ */
+  async getWorkplaceIncident(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/workplace-incidents/${id}/`);
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/workplace-incidents/ */
+  async createWorkplaceIncident(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/workplace-incidents/`, payload);
+      if (!res.success) {
+        console.error('[OccHealthApiService] Create incident error:', res.error, res.errors);
+        const errorMsg = res.error?.message || (typeof res.errors === 'object' ? JSON.stringify(res.errors) : res.errors);
+        return { data: null, error: errorMsg ?? 'Unknown error' };
+      }
+      return { data: res.data };
+    } catch (e: any) {
+      console.error('[OccHealthApiService] Create incident exception:', e);
+      return { data: null, error: e?.message || 'Network error' };
+    }
+  }
+
+  /** PATCH /api/occupational-health/workplace-incidents/{id}/ */
+  async updateWorkplaceIncident(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/workplace-incidents/${id}/`, payload);
+      if (!res.success) {
+        console.error('[OccHealthApiService] Update incident error:', res.error, res.errors);
+        const errorMsg = res.error?.message || (typeof res.errors === 'object' ? JSON.stringify(res.errors) : res.errors);
+        return { data: null, error: errorMsg ?? 'Unknown error' };
+      }
+      return { data: res.data };
+    } catch (e: any) {
+      console.error('[OccHealthApiService] Update incident exception:', e);
+      return { data: null, error: e?.message || 'Network error' };
+    }
+  }
+
+  /** DELETE /api/occupational-health/workplace-incidents/{id}/ */
+  async deleteWorkplaceIncident(id: number | string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await this.api.delete(`${OH}/workplace-incidents/${id}/`);
+      if (!res.success) return { success: false, error: res.error?.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message };
+    }
+  }
+
+  // INCIDENT ATTACHMENTS
+  // ─────────────────────────────────────────────────────────────
+
+  /** POST /api/occupational-health/incident-attachments/ - Upload image/video */
+  async uploadIncidentAttachment(
+    incidentId: number,
+    file: any,
+    attachmentType: 'image' | 'video',
+    description?: string
+  ): Promise<{ data: any | null; error?: string }> {
+    try {
+      const formData = new FormData();
+      formData.append('incident', incidentId);
+      formData.append('file', file);
+      formData.append('attachment_type', attachmentType);
+      if (description) {
+        formData.append('description', description);
+      }
+      
+      const res = await this.api.post(`${OH}/incident-attachments/`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (!res.success) return { data: null, error: res.error?.message ?? 'Upload failed' };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message || 'Network error' };
+    }
+  }
+
+  /** GET /api/occupational-health/incident-attachments/?incident={id} */
+  async getIncidentAttachments(incidentId: number): Promise<{ data: any[] | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/incident-attachments/`, { incident: incidentId });
+      if (!res.success) return { data: null, error: res.error?.message };
+      const attachments = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: attachments };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** DELETE /api/occupational-health/incident-attachments/{id}/ */
+  async deleteIncidentAttachment(id: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await this.api.delete(`${OH}/incident-attachments/${id}/`);
+      if (!res.success) return { success: false, error: res.error?.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message };
     }
   }
 }

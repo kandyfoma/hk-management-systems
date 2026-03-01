@@ -101,9 +101,8 @@ export function AudiometryListScreen() {
       const payload = {
         worker_id: selectedWorker.id,
         test_date: formData.test_date,
-        left_ear_db: parseFloat(formData.left_ear_db),
-        right_ear_db: parseFloat(formData.right_ear_db),
-        frequency: formData.frequency ? parseFloat(formData.frequency) : null,
+        left_ear_500hz: formData.left_ear_db ? parseInt(formData.left_ear_db) : null,
+        right_ear_500hz: formData.right_ear_db ? parseInt(formData.right_ear_db) : null,
         notes: formData.notes,
       };
 

@@ -20,7 +20,7 @@ from .models import (
     FitnessCertificate,
     # Disease and incident models
     OccupationalDiseaseType, OccupationalDisease,
-    WorkplaceIncident,
+    WorkplaceIncident, IncidentAttachment,
     # PPE and risk models
     PPEItem, HazardIdentification,
     SiteHealthMetrics,
@@ -340,12 +340,13 @@ class AudiometryResultSerializer(serializers.ModelSerializer):
     tested_by_name = serializers.CharField(source='tested_by.get_full_name', read_only=True)
     classification_display = serializers.CharField(source='get_hearing_loss_classification_display', read_only=True)
     worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
-    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    worker_id_display = serializers.CharField(source='examination.worker.id', read_only=True)
     employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
     test_date = serializers.DateTimeField(read_only=True)
     status = serializers.SerializerMethodField(read_only=True)
     
     # Accept worker_id for creation
+    worker_id = serializers.CharField(write_only=True, required=False)
     worker_id_input = serializers.CharField(write_only=True, required=False)
     
     def get_status(self, obj):
@@ -364,6 +365,36 @@ class AudiometryResultSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'examination': {'required': False}
         }
+    
+    def create(self, validated_data):
+        """Create AudiometryResult with automatic MedicalExamination lookup/creation"""
+        from occupational_health.models import MedicalExamination, Worker
+        from django.utils import timezone
+        
+        # Get worker_id from either field (frontend may send as worker_id or worker_id_input)
+        worker_id = validated_data.pop('worker_id', None) or validated_data.pop('worker_id_input', None)
+        
+        if not worker_id:
+            raise serializers.ValidationError({"worker_id": "worker_id is required"})
+        
+        try:
+            worker = Worker.objects.get(id=worker_id)
+        except Worker.DoesNotExist:
+            raise serializers.ValidationError({"worker_id": f"Worker with id {worker_id} not found"})
+        
+        # Get or create MedicalExamination
+        test_date = timezone.now().date()
+        examination, _ = MedicalExamination.objects.get_or_create(
+            worker=worker,
+            exam_date=test_date,
+            exam_type='periodic',
+            defaults={'examining_doctor': self.context.get('request').user if self.context.get('request') else None}
+        )
+        
+        validated_data['examination'] = examination
+        if 'tested_by' not in validated_data and self.context.get('request'):
+            validated_data['tested_by'] = self.context['request'].user
+        return super().create(validated_data)
 
 class SpirometryResultSerializer(serializers.ModelSerializer):
     """Spirometry test result serializer"""
@@ -371,12 +402,13 @@ class SpirometryResultSerializer(serializers.ModelSerializer):
     tested_by_name = serializers.CharField(source='tested_by.get_full_name', read_only=True)
     interpretation_display = serializers.CharField(source='get_spirometry_interpretation_display', read_only=True)
     worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
-    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    worker_id_display = serializers.CharField(source='examination.worker.id', read_only=True)
     employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
     test_date = serializers.DateTimeField(read_only=True)
     status = serializers.SerializerMethodField(read_only=True)
     
     # Accept worker_id for creation
+    worker_id = serializers.CharField(write_only=True, required=False)
     worker_id_input = serializers.CharField(write_only=True, required=False)
     
     def get_status(self, obj):
@@ -393,6 +425,36 @@ class SpirometryResultSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'examination': {'required': False}
         }
+    
+    def create(self, validated_data):
+        """Create SpirometryResult with automatic MedicalExamination lookup/creation"""
+        from occupational_health.models import MedicalExamination, Worker
+        from django.utils import timezone
+        
+        # Get worker_id from either field (frontend may send as worker_id or worker_id_input)
+        worker_id = validated_data.pop('worker_id', None) or validated_data.pop('worker_id_input', None)
+        
+        if not worker_id:
+            raise serializers.ValidationError({"worker_id": "worker_id is required"})
+        
+        try:
+            worker = Worker.objects.get(id=worker_id)
+        except Worker.DoesNotExist:
+            raise serializers.ValidationError({"worker_id": f"Worker with id {worker_id} not found"})
+        
+        # Get or create MedicalExamination
+        test_date = timezone.now().date()
+        examination, _ = MedicalExamination.objects.get_or_create(
+            worker=worker,
+            exam_date=test_date,
+            exam_type='periodic',
+            defaults={'examining_doctor': self.context.get('request').user if self.context.get('request') else None}
+        )
+        
+        validated_data['examination'] = examination
+        if 'tested_by' not in validated_data and self.context.get('request'):
+            validated_data['tested_by'] = self.context['request'].user
+        return super().create(validated_data)
 
 class VisionTestResultSerializer(serializers.ModelSerializer):
     """Vision test result serializer"""
@@ -400,12 +462,13 @@ class VisionTestResultSerializer(serializers.ModelSerializer):
     tested_by_name = serializers.CharField(source='tested_by.get_full_name', read_only=True)
     color_vision_display = serializers.CharField(source='get_color_vision_test_display', read_only=True)
     worker_name = serializers.CharField(source='examination.worker.full_name', read_only=True)
-    worker_id = serializers.CharField(source='examination.worker.id', read_only=True)
+    worker_id_display = serializers.CharField(source='examination.worker.id', read_only=True)
     employee_id = serializers.CharField(source='examination.worker.employee_id', read_only=True)
     test_date = serializers.DateTimeField(read_only=True)
     status = serializers.SerializerMethodField(read_only=True)
     
     # Accept worker_id for creation
+    worker_id = serializers.CharField(write_only=True, required=False)
     worker_id_input = serializers.CharField(write_only=True, required=False)
     
     def get_status(self, obj):
@@ -420,6 +483,36 @@ class VisionTestResultSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'examination': {'required': False}
         }
+    
+    def create(self, validated_data):
+        """Create VisionTestResult with automatic MedicalExamination lookup/creation"""
+        from occupational_health.models import MedicalExamination, Worker
+        from django.utils import timezone
+        
+        # Get worker_id from either field (frontend may send as worker_id or worker_id_input)
+        worker_id = validated_data.pop('worker_id', None) or validated_data.pop('worker_id_input', None)
+        
+        if not worker_id:
+            raise serializers.ValidationError({"worker_id": "worker_id is required"})
+        
+        try:
+            worker = Worker.objects.get(id=worker_id)
+        except Worker.DoesNotExist:
+            raise serializers.ValidationError({"worker_id": f"Worker with id {worker_id} not found"})
+        
+        # Get or create MedicalExamination
+        test_date = timezone.now().date()
+        examination, _ = MedicalExamination.objects.get_or_create(
+            worker=worker,
+            exam_date=test_date,
+            exam_type='periodic',
+            defaults={'examining_doctor': self.context.get('request').user if self.context.get('request') else None}
+        )
+        
+        validated_data['examination'] = examination
+        if 'tested_by' not in validated_data and self.context.get('request'):
+            validated_data['tested_by'] = self.context['request'].user
+        return super().create(validated_data)
 
 class MentalHealthScreeningSerializer(serializers.ModelSerializer):
     """Mental health screening serializer"""
@@ -552,6 +645,25 @@ class OccupationalDiseaseSerializer(serializers.ModelSerializer):
         model = OccupationalDisease
         fields = '__all__'
 
+class IncidentAttachmentSerializer(serializers.ModelSerializer):
+    """Serializer for incident images and videos"""
+    
+    uploaded_by_name = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
+    attachment_type_display = serializers.CharField(source='get_attachment_type_display', read_only=True)
+    is_image = serializers.ReadOnlyField()
+    is_video = serializers.ReadOnlyField()
+    file_size_mb = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = IncidentAttachment
+        fields = [
+            'id', 'incident', 'attachment_type', 'attachment_type_display',
+            'file', 'thumbnail', 'file_size', 'file_size_mb', 'duration_seconds',
+            'width', 'height', 'mime_type', 'description', 'uploaded_by',
+            'uploaded_by_name', 'uploaded_at', 'is_image', 'is_video'
+        ]
+        read_only_fields = ['file_size', 'mime_type', 'uploaded_at']
+
 class WorkplaceIncidentListSerializer(serializers.ModelSerializer):
     """List view serializer for workplace incidents"""
     
@@ -587,9 +699,15 @@ class WorkplaceIncidentDetailSerializer(serializers.ModelSerializer):
     injured_workers_details = WorkerListSerializer(source='injured_workers', many=True, read_only=True)
     witnesses_details = WorkerListSerializer(source='witnesses', many=True, read_only=True)
     
+    # Attachments
+    attachments = IncidentAttachmentSerializer(many=True, read_only=True)
+    
     class Meta:
         model = WorkplaceIncident
         fields = '__all__'
+        extra_kwargs = {
+            'enterprise': {'required': False},
+        }
 
 # ==================== PPE AND RISK SERIALIZERS ====================
 
@@ -788,6 +906,113 @@ class WorkerCreateSerializer(serializers.ModelSerializer):
         # Initial exam should be within 30 days
         from datetime import timedelta
         validated_data['next_exam_due'] = hire_date + timedelta(days=30)
+        
+        return super().create(validated_data)
+
+class WorkerDirectCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for direct POST /workers/ requests from frontend.
+    Accepts frontend-friendly field names (company, site, sector, department)
+    and resolves them to database IDs.
+    Auto-creates Enterprise and WorkSite if needed (like bulk import does).
+    """
+    company = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    site = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    sector = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    department = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    
+    class Meta:
+        model = Worker
+        fields = [
+            'id', 'employee_id', 'first_name', 'last_name', 'date_of_birth', 'gender',
+            'enterprise', 'work_site', 'company', 'site', 'sector', 'department',
+            'job_category', 'job_title', 'hire_date',
+            'phone', 'email', 'address', 'emergency_contact_name', 'emergency_contact_phone',
+            'exposure_risks', 'ppe_required', 'allergies', 'chronic_conditions', 'medications'
+        ]
+        read_only_fields = ['id']
+    
+    def validate_employee_id(self, value):
+        """Ensure employee ID is unique"""
+        if Worker.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError("Employee ID must be unique")
+        return value
+    
+    def to_internal_value(self, data):
+        """Process frontend-friendly names and resolve them to model fields"""
+        data = dict(data)  # Make a copy to avoid modifying the original
+        
+        # Resolve 'company' field -> 'enterprise' ID
+        if 'company' in data and 'enterprise' not in data:
+            company_name = (data.get('company') or '').strip()
+            if company_name:
+                # Try to find existing enterprise
+                enterprise = Enterprise.objects.filter(name=company_name).first()
+                if not enterprise:
+                    # Create new enterprise (like bulk import does)
+                    try:
+                        enterprise = Enterprise.objects.create(
+                            name=company_name,
+                            sector=data.get('sector', 'other'),
+                            address=data.get('address', 'N/A'),
+                            contact_person=f"{data.get('first_name', '')} {data.get('last_name', '')}".strip(),
+                            phone=(data.get('phone') or '')[:20],
+                            rccm=f'AUTO-{company_name[:10].upper()}',
+                            nif=f'AUTO-{company_name[:10].upper()}',
+                            contract_start_date=timezone.now().date(),
+                            created_by=self.context.get('request').user if self.context.get('request') else None,
+                        )
+                    except Exception as e:
+                        # If creation fails, try to get first enterprise
+                        enterprise = Enterprise.objects.first()
+                
+                if enterprise:
+                    data['enterprise'] = enterprise.id
+        
+        # Resolve 'site' field -> 'work_site' ID
+        if 'site' in data and 'work_site' not in data:
+            site_name = (data.get('site') or '').strip()
+            enterprise_id = data.get('enterprise')
+            if site_name and enterprise_id:
+                try:
+                    # Try to find existing worksite
+                    work_site = WorkSite.objects.filter(
+                        name=site_name,
+                        enterprise_id=enterprise_id
+                    ).first()
+                    if not work_site:
+                        # Create new worksite (like bulk import does)
+                        work_site = WorkSite.objects.create(
+                            name=site_name,
+                            enterprise_id=enterprise_id,
+                            address=data.get('address', 'N/A'),
+                            site_manager='',
+                            phone=(data.get('phone') or '')[:20],
+                        )
+                    
+                    if work_site:
+                        data['work_site'] = work_site.id
+                except Exception:
+                    pass  # Silently ignore worksite creation errors
+        
+        # Remove frontend-only fields
+        data.pop('company', None)
+        data.pop('site', None)
+        # Keep sector and department for reference but don't enforce them
+        data.pop('sector', None)
+        data.pop('department', None)
+        
+        # Continue with normal serializer validation
+        return super().to_internal_value(data)
+    
+    def create(self, validated_data):
+        # Set initial fitness status
+        validated_data['current_fitness_status'] = 'pending_evaluation'
+        # Calculate next exam due date
+        hire_date = validated_data.get('hire_date')
+        if hire_date:
+            from datetime import timedelta
+            validated_data['next_exam_due'] = hire_date + timedelta(days=30)
         
         return super().create(validated_data)
 

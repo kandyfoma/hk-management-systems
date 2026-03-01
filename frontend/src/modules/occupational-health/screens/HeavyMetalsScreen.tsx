@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const ACCENT = '#122056'; // Heavy Metals Primary Blue
@@ -48,6 +50,7 @@ interface HeavyMetalsResult {
 }
 
 export function HeavyMetalsScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<HeavyMetalsResult[]>([]);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
@@ -128,14 +131,14 @@ export function HeavyMetalsScreen() {
       console.log('[HeavyMetalsScreen] Validation failed: no worker selected');
       const msg = 'Veuillez sélectionner un travailleur';
       setValidationError(msg);
-      Alert.alert('Erreur Validation', msg);
+      showToast(msg, 'error');
       return;
     }
     if (!formData.level_value) {
       console.log('[HeavyMetalsScreen] Validation failed: no level value');
       const msg = 'Veuillez saisir la valeur du test';
       setValidationError(msg);
-      Alert.alert('Erreur Validation', msg);
+      showToast(msg, 'error');
       return;
     }
 
@@ -163,7 +166,7 @@ export function HeavyMetalsScreen() {
       console.log('[HeavyMetalsScreen] API Response:', response);
       
       if (response.success) {
-        Alert.alert('Succès', 'Test de métaux lourds enregistré');
+        showToast('Test de métaux lourds enregistré', 'success');
         setShowAddModal(false);
         resetForm();
         loadResults();
@@ -171,13 +174,13 @@ export function HeavyMetalsScreen() {
         const responseAsAny = response as Record<string, any>;
         const errMsg = responseAsAny.message || responseAsAny.errors || 'Erreur serveur';
         console.error('[HeavyMetalsScreen] API returned failure:', errMsg);
-        Alert.alert('Erreur API', typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+        showToast(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), 'error');
       }
     } catch (error: any) {
       console.error('[HeavyMetalsScreen] Error creating heavy metals test:', error);
       const errMsg = error?.message || 'Impossible d\'enregistrer le test';
       setValidationError(errMsg);
-      Alert.alert('Erreur Réseau', errMsg);
+      showToast(errMsg, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -570,6 +573,7 @@ export function HeavyMetalsScreen() {
           </View>
         </Modal>
       )}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

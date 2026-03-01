@@ -41,14 +41,17 @@ import {
   type DrugScreeningResult,
 } from '../../../models/OccupationalHealth';
 import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
-import { TestCatalogService } from '../../../services/TestCatalogService';
+import TestCatalogService from '../../../services/TestCatalogService';
 import {
   EXAM_CATEGORY_ICONS,
+  type MedicalExamCategory,
   type MedicalExamCatalogEntry,
   type ProtocolQueryResult,
 } from '../../../models/OccHealthProtocol';
 import DateInput from '../../../components/DateInput';
 import ApiService from '../../../services/ApiService';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -915,6 +918,7 @@ export function OccHealthConsultationScreen({
   // Get current logged-in doctor from Redux
   const currentUser = useSelector((state: RootState) => state.auth.user);
   const currentDoctorId = currentUser?.id;
+  const { toastMsg, showToast } = useSimpleToast();
 
   // ─── Waiting room state ──
   const [pendingConsultations, setPendingConsultations] = useState<PendingConsultation[]>([]);
@@ -980,7 +984,7 @@ export function OccHealthConsultationScreen({
 
       // Check if patient is assigned to current doctor (or unassigned - open to anyone)
       if (currentDoctorId && pending.assignedDoctor && String(pending.assignedDoctor.id) !== String(currentDoctorId)) {
-        Alert.alert('Accès Refusé', 'Ce patient n\'est pas assigné à vous.');
+        showToast('Ce patient n\'est pas assigné à vous.', 'error');
         return;
       }
 
@@ -1102,10 +1106,9 @@ export function OccHealthConsultationScreen({
   useEffect(() => {
     const initCatalog = async () => {
       try {
-        const catalogSvc = TestCatalogService.getInstance();
-        await catalogSvc.loadCatalog();
+        await TestCatalogService.loadCatalog();
         setCatalogReady(true);
-        console.log(`✅ Test catalog loaded (${catalogSvc.getSize()} tests)`);
+        console.log(`✅ Test catalog loaded (${TestCatalogService.getSize()} tests)`);
       } catch (err) {
         console.warn('Failed to load test catalog, will fall back to defaults:', err);
         setCatalogReady(true); // Still mark as ready to prevent UI blocking
@@ -1408,14 +1411,14 @@ export function OccHealthConsultationScreen({
       setLastSaved(new Date());
 
       if (!options?.silent) {
-        Alert.alert('Succès', 'Brouillon sauvegardé avec succès');
+        showToast('Brouillon sauvegardé avec succès', 'success');
       }
 
       return id;
     } catch (error) {
       console.error('❌ Error saving draft:', error);
       if (!options?.silent) {
-        Alert.alert('Erreur', 'Impossible de sauvegarder le brouillon');
+        showToast('Impossible de sauvegarder le brouillon', 'error');
       }
     }
   }, [
@@ -1494,7 +1497,7 @@ export function OccHealthConsultationScreen({
       }
     } catch (error) {
       console.error('Error loading draft:', error);
-      Alert.alert('Erreur', 'Impossible de charger le brouillon');
+      showToast('Impossible de charger le brouillon', 'error');
     }
   }, []);
 
@@ -1659,12 +1662,11 @@ export function OccHealthConsultationScreen({
     if (!sectorProfile) return [];
 
     // Get base tests from catalog service (replaces hardcoded list)
-    const catalogSvc = TestCatalogService.getInstance();
-    const catalogTests = catalogSvc.getAllTests();
-    const base: SectorTestOption[] = catalogTests.map(entry => ({
+    const catalogTests = TestCatalogService.getAllTests();
+    const base: SectorTestOption[] = catalogTests.map((entry) => ({
       id: entry.code.toLowerCase(),
       label: entry.label,
-      icon: normalizeIcon(EXAM_CATEGORY_ICONS[entry.category] || 'flask'),
+      icon: normalizeIcon(EXAM_CATEGORY_ICONS[entry.category as MedicalExamCategory] || 'flask'),
       recommended: sectorProfile.recommendedScreenings.includes(entry.code.toLowerCase()),
       desc: entry.description || '',
     }));
@@ -1854,7 +1856,7 @@ export function OccHealthConsultationScreen({
               }
             } catch (error) {
               console.error('Failed to remove patient from queue:', error);
-              Alert.alert('Erreur', 'Impossible de retirer le patient de la file.');
+              showToast('Impossible de retirer le patient de la file.', 'error');
             }
           },
         },
@@ -1935,7 +1937,7 @@ export function OccHealthConsultationScreen({
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=760');
       if (!printWindow) {
-        Alert.alert('Blocage navigateur', 'Autorisez les popups pour générer le PDF.');
+        showToast('Autorisez les popups pour générer le PDF.', 'error');
         return;
       }
       printWindow.document.write(html);
@@ -1944,10 +1946,7 @@ export function OccHealthConsultationScreen({
       return;
     }
 
-    Alert.alert(
-      'PDF sur mobile',
-      'La génération PDF directe est optimisée pour le mode Web. Sur mobile, utilisez la version Web pour imprimer/télécharger le document.'
-    );
+    showToast('La génération PDF directe est optimisée pour le mode Web. Sur mobile, utilisez la version Web pour imprimer/télécharger le document.', 'error');
   }, [selectedWorker, orderedTests, sectorTestOptions, sectorProfile, examType]);
 
   const handlePauseForTests = useCallback(async () => {
@@ -1956,7 +1955,7 @@ export function OccHealthConsultationScreen({
       return;
     }
     if (orderedTests.length === 0) {
-      Alert.alert('Aucun test', 'Sélectionnez les examens à prescrire avant de mettre en attente.');
+      showToast('Sélectionnez les examens à prescrire avant de mettre en attente.', 'error');
       return;
     }
 
@@ -1992,13 +1991,13 @@ export function OccHealthConsultationScreen({
       );
     } catch (error) {
       console.error('Failed to pause consultation for tests:', error);
-      Alert.alert('Erreur', 'Impossible de mettre la consultation en attente pour examens.');
+      showToast('Impossible de mettre la consultation en attente pour examens.', 'error');
     }
   }, [selectedWorker, activePendingId, orderedTests, persistDraft, loadPendingQueue]);
 
   const handleSubmitConsultation = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Aucun travailleur sélectionné');
+      showToast('Aucun travailleur sélectionné', 'error');
       return;
     }
 
@@ -2118,10 +2117,7 @@ export function OccHealthConsultationScreen({
 
       const workerId = parseWorkerIdForApi(selectedWorker.id);
       if (!workerId) {
-        Alert.alert(
-          'Travailleur non synchronisé',
-          'Ce dossier n\'est pas encore synchronisé avec la base backend. Veuillez d\'abord importer/synchroniser le travailleur, puis réessayer.'
-        );
+        showToast('Ce dossier n\'est pas encore synchronisé avec la base backend. Veuillez d\'abord importer/synchroniser le travailleur, puis réessayer.', 'error');
         return;
       }
 
@@ -2282,7 +2278,7 @@ export function OccHealthConsultationScreen({
       );
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      Alert.alert('Erreur', `Impossible de sauvegarder la consultation: ${errMsg}`);
+      showToast(`Impossible de sauvegarder la consultation: ${errMsg}`, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -3396,7 +3392,7 @@ export function OccHealthConsultationScreen({
 
                     {onsiteResult.completed && backendDraftExaminationId && (
                       <TouchableOpacity
-                        style={[styles.primaryBtn, { marginTop: 12 }]}
+                        style={[styles.secondaryActionBtn, styles.secondaryActionBtnFilled, { marginTop: 12 }]}
                         onPress={async () => {
                           try {
                             const examDate = new Date().toISOString().split('T')[0];
@@ -3414,19 +3410,19 @@ export function OccHealthConsultationScreen({
                                 follow_up_required: onsiteResult.interpretation === 'abnormal' || onsiteResult.interpretation === 'inconclusive',
                               });
                               if (!res.error) {
-                                Alert.alert('Succès', `Résultat de test créé avec succès`);
+                                showToast(`Résultat de test créé avec succès`, 'success');
                               } else {
-                                Alert.alert('Erreur', res.error);
+                                showToast(res.error, 'error');
                               }
                             }
                           } catch (e) {
-                            Alert.alert('Erreur', String(e));
+                            showToast(String(e), 'error');
                           }
                         }}
                         activeOpacity={0.8}
                       >
                         <Ionicons name="cloud-upload" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                        <Text style={styles.primaryBtnText}>Créer le résultat</Text>
+                        <Text style={[styles.secondaryActionBtnText, { color: '#FFF' }]}>Créer le résultat</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -4305,6 +4301,7 @@ export function OccHealthConsultationScreen({
 
         </>
       )}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

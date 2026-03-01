@@ -23,6 +23,8 @@ import type {
 } from '../../../models/OccHealthProtocol';
 import { EXAM_CATEGORY_LABELS, VISIT_TYPE_LABELS } from '../../../models/OccHealthProtocol';
 import { occHealthApi } from '../../../services/OccHealthApiService';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 type ProtocolTab = 'sectors' | 'departments' | 'positions' | 'protocols' | 'exams';
 type EditorType = ProtocolTab;
@@ -154,6 +156,7 @@ function OptionChips({
 }
 
 export function ProtocolManagementScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
 
@@ -286,15 +289,15 @@ export function ProtocolManagementScreen() {
       ]);
 
       if (treeRes.error) {
-        Alert.alert('Erreur', treeRes.error);
+        showToast(treeRes.error, 'error');
       }
 
       if (examsRes.error) {
-        Alert.alert('Erreur', examsRes.error);
+        showToast(examsRes.error, 'error');
       }
 
       if (protocolRes.error) {
-        Alert.alert('Erreur', protocolRes.error);
+        showToast(protocolRes.error, 'error');
       }
 
       setTree(treeRes.data || []);
@@ -391,7 +394,7 @@ export function ProtocolManagementScreen() {
     try {
       const detail = await occHealthApi.getVisitProtocol(item.id);
       if (detail.error || !detail.data) {
-        Alert.alert('Erreur', detail.error || 'Impossible de charger le protocole.');
+        showToast(detail.error || 'Impossible de charger le protocole.', 'error');
         return;
       }
       setProtocolForm({
@@ -435,7 +438,7 @@ export function ProtocolManagementScreen() {
         style: 'destructive',
         onPress: () => {
           onConfirm().catch((e) => {
-            Alert.alert('Erreur', e?.message || 'Suppression impossible');
+            showToast(e?.message || 'Suppression impossible', 'error');
           });
         },
       },
@@ -478,7 +481,7 @@ export function ProtocolManagementScreen() {
     try {
       if (editorType === 'sectors') {
         if (!sectorForm.code.trim() || !sectorForm.name.trim()) {
-          Alert.alert('Validation', 'Code et nom sont obligatoires.');
+          showToast('Code et nom sont obligatoires.', 'error');
           return;
         }
         const payload = {
@@ -495,7 +498,7 @@ export function ProtocolManagementScreen() {
 
       if (editorType === 'departments') {
         if (!departmentForm.sector || !departmentForm.code.trim() || !departmentForm.name.trim()) {
-          Alert.alert('Validation', 'Secteur, code et nom sont obligatoires.');
+          showToast('Secteur, code et nom sont obligatoires.', 'error');
           return;
         }
         const payload = {
@@ -512,7 +515,7 @@ export function ProtocolManagementScreen() {
 
       if (editorType === 'positions') {
         if (!positionForm.department || !positionForm.code.trim() || !positionForm.name.trim()) {
-          Alert.alert('Validation', 'Département, code et nom sont obligatoires.');
+          showToast('Département, code et nom sont obligatoires.', 'error');
           return;
         }
         const payload = {
@@ -531,7 +534,7 @@ export function ProtocolManagementScreen() {
 
       if (editorType === 'protocols') {
         if (!protocolForm.position || !protocolForm.visit_type) {
-          Alert.alert('Validation', 'Poste et type de visite sont obligatoires.');
+          showToast('Poste et type de visite sont obligatoires.', 'error');
           return;
         }
 
@@ -559,7 +562,7 @@ export function ProtocolManagementScreen() {
 
       if (editorType === 'exams') {
         if (!examForm.code.trim() || !examForm.label.trim() || !examForm.category) {
-          Alert.alert('Validation', 'Code, libellé et catégorie sont obligatoires.');
+          showToast('Code, libellé et catégorie sont obligatoires.', 'error');
           return;
         }
 
@@ -579,9 +582,9 @@ export function ProtocolManagementScreen() {
 
       setEditorOpen(false);
       await reloadData();
-      Alert.alert('Succès', 'Données sauvegardées avec succès.');
+      showToast('Données sauvegardées avec succès.', 'success');
     } catch (e: any) {
-      Alert.alert('Erreur', e?.message || 'Impossible de sauvegarder.');
+      showToast(e?.message || 'Impossible de sauvegarder.', 'error');
     } finally {
       setSaving(false);
     }
@@ -962,6 +965,7 @@ export function ProtocolManagementScreen() {
           </View>
         </View>
       </Modal>
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

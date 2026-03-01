@@ -703,6 +703,7 @@ export interface SurveillanceProgram {
   isActive: boolean;
   createdBy: string;
   createdAt: string;
+  updatedBy?: string;
   updatedAt?: string;
 }
 

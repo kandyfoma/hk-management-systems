@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Alert,
+  StyleSheet, Dimensions, Modal, Alert, ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -12,11 +13,17 @@ import {
   type IndustrySector, type RiskAssessment, type HazardIdentification,
   type ExposureRisk, type SectorRiskLevel,
 } from '../../../models/OccupationalHealth';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
-const { width } = Dimensions.get('window');
-const isDesktop = width >= 1024;
 const ACCENT = colors.primary;
 const STORAGE_KEY = '@occhealth_risk_assessments';
+const DEFAULT_REVIEW_OFFSET_DAYS = 180;
+
+// Normalize search text by removing accents for better French text matching
+function normalizeText(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
 
 function getControlLabel(c: string): string {
   const m: Record<string, string> = { elimination: 'Élimination', substitution: 'Substitution', engineering: 'Ingénierie', administrative: 'Administrative', ppe: 'EPI' };
@@ -70,7 +77,18 @@ const SAMPLE_ASSESSMENTS: RiskAssessment[] = [
 // ─── Risk Matrix Component ───────────────────────────────────
 function RiskMatrix({ hazards }: { hazards: HazardIdentification[] }) {
   const matrix = Array.from({ length: 5 }, () => Array(5).fill(0));
-  hazards.forEach(h => { if (h.likelihood >= 1 && h.likelihood <= 5 && h.consequence >= 1 && h.consequence <= 5) matrix[5 - h.consequence][h.likelihood - 1]++; });
+  let filteredCount = 0;
+  hazards.forEach(h => {
+    if (typeof h.likelihood !== 'number' || typeof h.consequence !== 'number') {
+      filteredCount++;
+      return;
+    }
+    if (h.likelihood >= 1 && h.likelihood <= 5 && h.consequence >= 1 && h.consequence <= 5) {
+      matrix[5 - h.consequence][h.likelihood - 1]++;
+    } else {
+      filteredCount++;
+    }
+  });
 
   const getCellColor = (row: number, col: number): string => {
     const score = (5 - row) * (col + 1);
@@ -111,6 +129,12 @@ function RiskMatrix({ hazards }: { hazards: HazardIdentification[] }) {
           </View>
         ))}
       </View>
+      {filteredCount > 0 && (
+        <View style={styles.warningBanner}>
+          <Ionicons name="information-circle" size={14} color="#F59E0B" />
+          <Text style={styles.warningText}>{filteredCount} danger(s) filtré(s) (scénarios invalides)</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -275,22 +299,35 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 // ─── Add Modal ───────────────────────────────────────────────
 function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; onClose: () => void; onSave: (a: RiskAssessment) => void }) {
+  const { showToast } = useSimpleToast();
   const [site, setSite] = useState('');
   const [area, setArea] = useState('');
   const [sector, setSector] = useState<IndustrySector>('mining');
   const [assessorName, setAssessorName] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleSave = () => {
-    if (!site.trim()) { Alert.alert('Erreur', 'Le site est obligatoire.'); return; }
+    const newErrors: Record<string, string> = {};
+    
+    if (!site.trim()) newErrors.site = 'Le site est obligatoire';
+    if (!area.trim()) newErrors.area = 'La zone est obligatoire';
+    if (!assessorName.trim()) newErrors.assessorName = 'L\'évaluateur est obligatoire';
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
+      return;
+    }
+    
     const newAssessment: RiskAssessment = {
-      id: `ra-${Date.now()}`, sector, site: site.trim(), area: area.trim() || 'Non spécifié',
-      assessmentDate: new Date().toISOString().split('T')[0], assessorName: assessorName.trim() || 'Non spécifié',
+      id: `ra-${Date.now()}`, sector, site: site.trim(), area: area.trim(),
+      assessmentDate: new Date().toISOString().split('T')[0], assessorName: assessorName.trim(),
       hazards: [], overallRiskLevel: SECTOR_PROFILES[sector].riskLevel,
-      reviewDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      reviewDate: new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'draft', createdAt: new Date().toISOString(),
     };
     onSave(newAssessment);
-    setSite(''); setArea(''); setAssessorName('');
+    setSite(''); setArea(''); setAssessorName(''); setErrors({});
   };
 
   return (
@@ -302,9 +339,21 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
               <Text style={styles.modalTitle}>Nouvelle Évaluation</Text>
               <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
             </View>
-            <View style={styles.formSection}><Text style={styles.formLabel}>Site *</Text><TextInput style={styles.formInput} value={site} onChangeText={setSite} placeholder="Nom du site" /></View>
-            <View style={styles.formSection}><Text style={styles.formLabel}>Zone</Text><TextInput style={styles.formInput} value={area} onChangeText={setArea} placeholder="Zone évaluée" /></View>
-            <View style={styles.formSection}><Text style={styles.formLabel}>Évaluateur</Text><TextInput style={styles.formInput} value={assessorName} onChangeText={setAssessorName} placeholder="Nom de l'évaluateur" /></View>
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, errors.site && { color: '#EF4444' }]}>Site *</Text>
+              <TextInput style={[styles.formInput, errors.site && { borderColor: '#EF4444', borderWidth: 2 }]} value={site} onChangeText={(text) => { setSite(text); if (errors.site) setErrors(prev => ({ ...prev, site: '' })); }} placeholder="Nom du site" />
+              {errors.site && <Text style={styles.formError}>{errors.site}</Text>}
+            </View>
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, errors.area && { color: '#EF4444' }]}>Zone *</Text>
+              <TextInput style={[styles.formInput, errors.area && { borderColor: '#EF4444', borderWidth: 2 }]} value={area} onChangeText={(text) => { setArea(text); if (errors.area) setErrors(prev => ({ ...prev, area: '' })); }} placeholder="Zone évaluée" />
+              {errors.area && <Text style={styles.formError}>{errors.area}</Text>}
+            </View>
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, errors.assessorName && { color: '#EF4444' }]}>Évaluateur *</Text>
+              <TextInput style={[styles.formInput, errors.assessorName && { borderColor: '#EF4444', borderWidth: 2 }]} value={assessorName} onChangeText={(text) => { setAssessorName(text); if (errors.assessorName) setErrors(prev => ({ ...prev, assessorName: '' })); }} placeholder="Nom de l'évaluateur" />
+              {errors.assessorName && <Text style={styles.formError}>{errors.assessorName}</Text>}
+            </View>
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Secteur</Text>
               <View style={styles.chipGrid}>
@@ -332,74 +381,120 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
 
 // ─── Main Screen ─────────────────────────────────────────────
 export function RiskAssessmentScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+  
   const [assessments, setAssessments] = useState<RiskAssessment[]>(SAMPLE_ASSESSMENTS);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssessment, setSelectedAssessment] = useState<RiskAssessment | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadData(); }, []);
+  
   const loadData = async () => {
     try {
+      setLoading(true);
       const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
       const token = await AsyncStorage.getItem('auth_token');
       
-      const response = await axios.get(
-        `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
-        {
-          headers: {
-            Authorization: `Token ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // Check if token exists before making API call
+      if (!token) {
+        console.warn('No authentication token found, using sample data');
+        setAssessments(SAMPLE_ASSESSMENTS);
+        setLoading(false);
+        return;
+      }
       
-      if (response.data) {
-        // Handle both list response and paginated response
-        const hazardsList = Array.isArray(response.data) ? response.data : response.data.results || [];
-        // Convert HazardIdentification records to RiskAssessment format
-        // Group by assessment date to create assessments
-        const assessmentsMap: Record<string, any> = {};
-        hazardsList.forEach((h: any) => {
-          const key = `${h.assessment_date}-${h.assessed_by}`;
-          if (!assessmentsMap[key]) {
-            assessmentsMap[key] = {
-              id: h.id,
-              sector: 'mining',
-              site: h.work_site?.name || '',
-              area: h.location || '',
-              assessmentDate: h.assessment_date,
-              assessorName: h.assessed_by_name || '',
-              hazards: [],
-              overallRiskLevel: h.risk_level === 'critical' ? 'very_high' : h.risk_level,
-              reviewDate: h.review_date,
-              status: h.status,
-              createdAt: h.created_at,
-            };
+      try {
+        const response = await axios.get(
+          `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
+          {
+            headers: {
+              Authorization: `Token ${token}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 8000, // 8 second timeout
           }
-          // Add hazard to assessment
-          assessmentsMap[key].hazards.push({
-            hazardType: h.hazard_type,
-            description: h.hazard_description,
-            affectedWorkers: h.workers_exposed?.length || 0,
-            likelihood: h.probability,
-            consequence: h.severity,
-            riskScore: h.risk_score,
-            existingControls: h.existing_controls.split(','),
-            additionalControls: h.ppe_recommendations || [],
-            controlHierarchy: 'engineering',
-            responsiblePerson: h.assessed_by_name || '',
-            targetDate: h.next_review_date,
-          });
-        });
+        );
         
-        const assessmentsList = Object.values(assessmentsMap);
-        setAssessments(assessmentsList);
+        if (response.data) {
+          // Handle both list response and paginated response
+          const hazardsList = Array.isArray(response.data) ? response.data : response.data.results || [];
+          
+          // Validate that hazardsList is an array
+          if (!Array.isArray(hazardsList)) {
+            throw new Error('Invalid API response format');
+          }
+          
+          // Convert HazardIdentification records to RiskAssessment format
+          // Group by assessment date and assessor to create assessments
+          const assessmentsMap: Record<string, any> = {};
+          hazardsList.forEach((h: any, index: number) => {
+            try {
+              // Validate required fields
+              const assessmentDate = h.assessment_date || '';
+              const assessorName = h.assessed_by_name || 'Inconnu';
+              const workSiteName = h.work_site?.name || 'Site sans nom';
+              
+              const key = `${assessmentDate}-${assessorName}`;
+              if (!assessmentsMap[key]) {
+                assessmentsMap[key] = {
+                  id: h.id || `ra-api-${key}-${index}`,
+                  sector: 'mining', // Default sector, should ideally come from API
+                  site: workSiteName,
+                  area: h.location || '',
+                  assessmentDate: assessmentDate,
+                  assessorName: assessorName,
+                  hazards: [],
+                  overallRiskLevel: h.risk_level === 'critical' ? 'very_high' : (h.risk_level || 'low'),
+                  reviewDate: h.review_date || '',
+                  status: h.status || 'draft',
+                  createdAt: h.created_at || new Date().toISOString(),
+                };
+              }
+              
+              // Safely access and validate hazard properties
+              const workersExposed = Array.isArray(h.workers_exposed) ? h.workers_exposed.length : (typeof h.workers_exposed === 'number' ? h.workers_exposed : 0);
+              const existingControls = typeof h.existing_controls === 'string' ? h.existing_controls.split(',').map((c: string) => c.trim()) : [];
+              
+              assessmentsMap[key].hazards.push({
+                hazardType: h.hazard_type || 'unknown',
+                description: h.hazard_description || '',
+                affectedWorkers: workersExposed,
+                likelihood: Number(h.probability) || 0,
+                consequence: Number(h.severity) || 0,
+                riskScore: Number(h.risk_score) || 0,
+                existingControls: existingControls,
+                additionalControls: Array.isArray(h.ppe_recommendations) ? h.ppe_recommendations : [],
+                controlHierarchy: 'engineering',
+                responsiblePerson: assessorName,
+                targetDate: h.next_review_date || '',
+              });
+            } catch (itemError) {
+              console.warn('Error processing hazard item:', itemError);
+              // Continue processing other items
+            }
+          });
+          
+          const assessmentsList = Object.values(assessmentsMap);
+          if (assessmentsList.length > 0) {
+            setAssessments(assessmentsList);
+          } else {
+            setAssessments(SAMPLE_ASSESSMENTS);
+          }
+        }
+      } catch (apiError: any) {
+        console.warn('API request failed, using sample data:', apiError?.message);
+        setAssessments(SAMPLE_ASSESSMENTS);
       }
     } catch (error) {
-      console.warn('Failed to fetch risk assessments from API, using sample data:', error);
-      // Fall back to sample data if API fails
+      console.error('Failed to load risk assessments:', error);
       setAssessments(SAMPLE_ASSESSMENTS);
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -408,39 +503,59 @@ export function RiskAssessmentScreen() {
       const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
       const token = await AsyncStorage.getItem('auth_token');
       
+      if (!token) {
+        console.warn('No token available, saving locally only');
+        const updatedAssessments = [assessment, ...assessments];
+        setAssessments(updatedAssessments);
+        return false;
+      }
+      
       // Create hazard identification records for each hazard in the assessment
       if (assessment.hazards && assessment.hazards.length > 0) {
-        for (const hazard of assessment.hazards) {
-          const hazardData = {
-            hazard_description: hazard.description,
-            hazard_type: hazard.hazardType,
-            location: assessment.area,
-            activities_affected: '',
-            probability: hazard.likelihood,
-            severity: hazard.consequence,
-            existing_controls: (Array.isArray(hazard.existingControls) ? hazard.existingControls : []).join(', '),
-            control_effectiveness: 'effective',
-            residual_probability: Math.max(1, hazard.likelihood - 1),
-            residual_severity: Math.max(1, hazard.consequence - 1),
-            risk_level: assessment.overallRiskLevel,
-            action_required: assessment.overallRiskLevel !== 'low',
-            priority: 'medium',
-            assessment_date: assessment.assessmentDate,
-            review_date: assessment.reviewDate,
-            next_review_date: assessment.reviewDate,
-            status: assessment.status,
-          };
-          
-          await axios.post(
-            `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
-            hazardData,
-            {
-              headers: {
-                Authorization: `Token ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
+        const failedHazards: string[] = [];
+        for (let i = 0; i < assessment.hazards.length; i++) {
+          const hazard = assessment.hazards[i];
+          try {
+            const hazardData = {
+              hazard_description: hazard.description || '',
+              hazard_type: hazard.hazardType || 'unknown',
+              location: assessment.area,
+              activities_affected: '',
+              probability: Math.max(1, Math.min(5, Number(hazard.likelihood) || 1)),
+              severity: Math.max(1, Math.min(5, Number(hazard.consequence) || 1)),
+              existing_controls: (Array.isArray(hazard.existingControls) ? hazard.existingControls : []).join(', '),
+              control_effectiveness: 'effective',
+              residual_probability: Math.max(1, (Number(hazard.likelihood) || 1) - 1),
+              residual_severity: Math.max(1, (Number(hazard.consequence) || 1) - 1),
+              risk_level: assessment.overallRiskLevel,
+              action_required: assessment.overallRiskLevel !== 'low',
+              priority: 'medium',
+              assessment_date: assessment.assessmentDate,
+              review_date: assessment.reviewDate,
+              next_review_date: assessment.reviewDate,
+              status: assessment.status,
+            };
+            
+            await axios.post(
+              `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
+              hazardData,
+              {
+                headers: {
+                  Authorization: `Token ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: 8000,
+              }
+            );
+          } catch (error) {
+            failedHazards.push(`Danger ${i + 1}`);
+            console.error(`Failed to save hazard ${i + 1}:`, error);
+          }
+        }
+        
+        if (failedHazards.length > 0) {
+          showToast(`${failedHazards.length}/${assessment.hazards.length} danger(s) non sauvegardé(s)`, 'error');
+          return false;
         }
       }
       
@@ -449,7 +564,7 @@ export function RiskAssessmentScreen() {
       return true;
     } catch (error) {
       console.error('Failed to save assessment:', error);
-      // Fall back to local storage if API fails
+      // Fall back to local storage
       const updatedAssessments = [assessment, ...assessments];
       setAssessments(updatedAssessments);
       return false;
@@ -460,82 +575,99 @@ export function RiskAssessmentScreen() {
     const success = await saveData(a); 
     setShowAdd(false); 
     if (success) {
-      Alert.alert('Succès', 'Évaluation des risques créée et sauvegardée.');
+      showToast('Évaluation des risques créée et sauvegardée.', 'success');
     } else {
-      Alert.alert('Avertissement', 'Évaluation créée localement (sync pending).');
+      showToast('Évaluation créée localement (sync pending).', 'error');
     }
   };
 
+  // Normalize search for better accent handling
+  const normalizedQuery = normalizeText(searchQuery);
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return assessments.filter(a => !q || a.site.toLowerCase().includes(q) || a.area.toLowerCase().includes(q) || SECTOR_PROFILES[a.sector].label.toLowerCase().includes(q));
-  }, [assessments, searchQuery]);
+    if (!normalizedQuery) return assessments;
+    return assessments.filter(a => 
+      normalizeText(a.site).includes(normalizedQuery) ||
+      normalizeText(a.area).includes(normalizedQuery) ||
+      normalizeText(SECTOR_PROFILES[a.sector].label).includes(normalizedQuery) ||
+      normalizeText(a.assessorName).includes(normalizedQuery)
+    );
+  }, [assessments, normalizedQuery]);
 
   const stats = useMemo(() => {
-    const allHazards = assessments.flatMap(a => a.hazards);
+    const allHazards = filtered.flatMap(a => a.hazards);
     return {
-      total: assessments.length,
+      total: filtered.length,
       totalHazards: allHazards.length,
       highRisks: allHazards.filter(h => h.riskScore >= 12).length,
       criticalRisks: allHazards.filter(h => h.riskScore >= 20).length,
       workersExposed: allHazards.reduce((s, h) => s + h.affectedWorkers, 0),
     };
-  }, [assessments]);
+  }, [filtered]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.screenTitle}>Évaluation des Risques</Text>
-          <Text style={styles.screenSubtitle}>ISO 45001 §6.1 — Matrice de risques par secteur et poste</Text>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={ACCENT} />
+          <Text style={styles.loadingText}>Chargement des évaluations...</Text>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowAdd(true)}>
-          <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.addButtonText}>Nouvelle Évaluation</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.statsRow}>
-        {[
-          { label: 'Évaluations', value: stats.total, icon: 'clipboard', color: ACCENT },
-          { label: 'Dangers', value: stats.totalHazards, icon: 'warning', color: '#F59E0B' },
-          { label: 'Risques Élevés', value: stats.highRisks, icon: 'alert-circle', color: '#EF4444' },
-          { label: 'Critiques', value: stats.criticalRisks, icon: 'skull', color: '#DC2626' },
-          { label: 'Travailleurs', value: stats.workersExposed, icon: 'people', color: '#6366F1' },
-        ].map((s, i) => (
-          <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
-            <View style={styles.statIcon}>
-              <Ionicons name={s.icon as any} size={18} color="#FFFFFF" />
+      ) : (
+        <>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.screenTitle}>Évaluation des Risques</Text>
+              <Text style={styles.screenSubtitle}>ISO 45001 §6.1 — Matrice de risques par secteur et poste</Text>
             </View>
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
+            <TouchableOpacity style={styles.addButton} onPress={() => setShowAdd(true)}>
+              <Ionicons name="add" size={20} color="#FFF" />
+              <Text style={styles.addButtonText}>Nouvelle Évaluation</Text>
+            </TouchableOpacity>
           </View>
-        ))}
-      </View>
 
-      {/* Global Risk Matrix */}
-      <RiskMatrix hazards={assessments.flatMap(a => a.hazards)} />
-
-      <View style={styles.filterBar}>
-        <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
-          <TextInput style={styles.searchInput} placeholder="Rechercher par site, zone, secteur..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={colors.placeholder} />
-        </View>
-      </View>
-
-      <Text style={styles.resultsCount}>{filtered.length} évaluation(s)</Text>
-      <View style={styles.listContainer}>
-        {filtered.map(a => <AssessmentCard key={a.id} assessment={a} onPress={() => { setSelectedAssessment(a); setShowDetail(true); }} />)}
-        {filtered.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="alert-circle-outline" size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>Aucune évaluation trouvée</Text>
+          <View style={styles.statsRow}>
+            {[
+              { label: 'Évaluations', value: stats.total, icon: 'clipboard', color: ACCENT },
+              { label: 'Dangers', value: stats.totalHazards, icon: 'warning', color: '#F59E0B' },
+              { label: 'Risques Élevés', value: stats.highRisks, icon: 'alert-circle', color: '#EF4444' },
+              { label: 'Critiques', value: stats.criticalRisks, icon: 'skull', color: '#DC2626' },
+              { label: 'Travailleurs', value: stats.workersExposed, icon: 'people', color: '#6366F1' },
+            ].map((s, i) => (
+              <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
+                <View style={styles.statIcon}>
+                  <Ionicons name={s.icon as any} size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
           </View>
-        )}
-      </View>
 
-      <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} />
-      <AddAssessmentModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={handleAdd} />
+          {/* Global Risk Matrix */}
+          <RiskMatrix hazards={filtered.flatMap(a => a.hazards)} />
+
+          <View style={styles.filterBar}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+              <TextInput style={styles.searchInput} placeholder="Rechercher par site, zone, secteur..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={colors.placeholder} />
+            </View>
+          </View>
+
+          <Text style={styles.resultsCount}>{filtered.length} évaluation(s) {searchQuery && `(filtré)`}</Text>
+          <View style={styles.listContainer}>
+            {filtered.map(a => <AssessmentCard key={a.id} assessment={a} onPress={() => { setSelectedAssessment(a); setShowDetail(true); }} />)}
+            {filtered.length === 0 && (
+              <View style={styles.emptyState}>
+                <Ionicons name="alert-circle-outline" size={48} color={colors.textTertiary} />
+                <Text style={styles.emptyText}>Aucune évaluation trouvée</Text>
+              </View>
+            )}
+          </View>
+
+          <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} />
+          <AddAssessmentModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={handleAdd} />
+        </>
+      )}
+      <SimpleToastNotification message={toastMsg} />
     </ScrollView>
   );
 }
@@ -543,15 +675,19 @@ export function RiskAssessmentScreen() {
 // ─── Styles ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  contentContainer: { padding: isDesktop ? 32 : 16, paddingBottom: 40 },
-  header: { flexDirection: isDesktop ? 'row' : 'column', justifyContent: 'space-between', alignItems: isDesktop ? 'center' : 'flex-start', gap: 12, marginBottom: 24 },
+  contentContainer: { padding: 16, paddingBottom: 40 },
+  
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 100 },
+  loadingText: { marginTop: 12, fontSize: 14, color: colors.textSecondary, fontWeight: '500' },
+  
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 24 },
   screenTitle: { fontSize: 24, fontWeight: '700', color: colors.text },
   screenSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: ACCENT, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg },
   addButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  statCard: { flex: 1, minWidth: isDesktop ? 120 : 90, borderRadius: borderRadius.xl, padding: 16, alignItems: 'center', ...shadows.md },
+  statCard: { flex: 1, minWidth: 90, borderRadius: borderRadius.xl, padding: 16, alignItems: 'center', ...shadows.md },
   statIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   statValue: { fontSize: 20, fontWeight: '700', color: colors.text },
   statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
@@ -592,19 +728,22 @@ const styles = StyleSheet.create({
   matrixAxisLabel: { fontSize: 10, color: colors.textSecondary, writingDirection: 'ltr' },
   matrixRow: { flexDirection: 'row', alignItems: 'center' },
   matrixRowLabel: { width: 20, textAlign: 'center', fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
-  matrixCell: { width: isDesktop ? 48 : 40, height: isDesktop ? 36 : 30, borderWidth: 1, borderColor: colors.outline, alignItems: 'center', justifyContent: 'center' },
+  matrixCell: { width: 40, height: 30, borderWidth: 1, borderColor: colors.outline, alignItems: 'center', justifyContent: 'center' },
   matrixCellText: { fontSize: 13, fontWeight: '700', color: colors.text },
   matrixBottomRow: { flexDirection: 'row', alignItems: 'center' },
-  matrixColLabel: { width: isDesktop ? 48 : 40, textAlign: 'center', fontSize: 11, color: colors.textSecondary, fontWeight: '600', marginTop: 2 },
+  matrixColLabel: { width: 40, textAlign: 'center', fontSize: 11, color: colors.textSecondary, fontWeight: '600', marginTop: 2 },
   matrixXLabel: { textAlign: 'center', fontSize: 10, color: colors.textSecondary, marginTop: 4, marginLeft: 20 },
   matrixLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12, justifyContent: 'center' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendText: { fontSize: 10, color: colors.textSecondary },
+  
+  warningBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F59E0B20', borderRadius: borderRadius.md, padding: 10, marginTop: 12, borderLeftWidth: 3, borderLeftColor: '#F59E0B' },
+  warningText: { flex: 1, fontSize: 11, color: colors.text, fontWeight: '500' },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, width: isDesktop ? 700 : '100%', maxHeight: '90%', padding: 24, ...shadows.xl },
+  modalContent: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, width: '100%', maxHeight: '90%', padding: 24, ...shadows.xl },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
@@ -632,6 +771,7 @@ const styles = StyleSheet.create({
   formSection: { marginBottom: 16 },
   formLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 6 },
   formInput: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.outline },
+  formError: { fontSize: 12, color: '#EF4444', marginTop: 4, marginLeft: 4 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
   optionChipText: { fontSize: 11, color: colors.textSecondary },

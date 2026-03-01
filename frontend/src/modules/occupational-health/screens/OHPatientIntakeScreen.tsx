@@ -27,6 +27,8 @@ import {
 } from '../../../models/OccupationalHealth';
 import { occHealthApi } from '../../../services/OccHealthApiService';
 import { OccHealthProtocolService } from '../../../services/OccHealthProtocolService';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 import {
   EXAM_CATEGORY_COLORS,
   EXAM_CATEGORY_LABELS,
@@ -169,6 +171,7 @@ export function OHPatientIntakeScreen({
   onNavigateToConsultation?: (pendingId?: string) => void;
 }): React.JSX.Element {
   const authUser = useSelector((state: RootState) => state.auth.user);
+  const { toastMsg, showToast } = useSimpleToast();
   const [currentStep, setCurrentStep] = useState<IntakeStep>('patient_search');
   const currentStepIdx = INTAKE_STEPS.findIndex(s => s.key === currentStep);
 
@@ -177,6 +180,10 @@ export function OHPatientIntakeScreen({
   const [selectedPatient, setSelectedPatient] = useState<OccupationalHealthPatient | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingPatients, setLoadingPatients] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'sector' | 'company' | 'created'>('name_asc');
+  const [filterSector, setFilterSector] = useState<IndustrySector | 'all'>('all');
+  const [filterRisk, setFilterRisk] = useState<'all' | 'low' | 'medium' | 'high' | 'critical'>('all');
 
   // Visit motif
   const [examType, setExamType] = useState<ExamType>('periodic');
@@ -229,17 +236,51 @@ export function OHPatientIntakeScreen({
 
   // Filtered patients
   const filteredPatients = useMemo(() => {
+    let result = [...patients];
+    
+    // Apply text search
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return patients;
-    return patients.filter(p =>
-      p.firstName.toLowerCase().includes(q) ||
-      p.lastName.toLowerCase().includes(q) ||
-      p.employeeId?.toLowerCase().includes(q) ||
-      p.company?.toLowerCase().includes(q) ||
-      p.jobTitle?.toLowerCase().includes(q) ||
-      p.patientNumber?.toLowerCase().includes(q),
-    );
-  }, [patients, searchQuery]);
+    if (q) {
+      result = result.filter(p =>
+        p.firstName.toLowerCase().includes(q) ||
+        p.lastName.toLowerCase().includes(q) ||
+        p.employeeId?.toLowerCase().includes(q) ||
+        p.company?.toLowerCase().includes(q) ||
+        p.jobTitle?.toLowerCase().includes(q) ||
+        p.patientNumber?.toLowerCase().includes(q),
+      );
+    }
+    
+    // Apply sector filter
+    if (filterSector !== 'all') {
+      result = result.filter(p => p.sector === filterSector);
+    }
+    
+    // Apply risk filter
+    if (filterRisk !== 'all') {
+      result = result.filter(p => p.riskLevel === filterRisk);
+    }
+    
+    // Apply sorting
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc':
+          return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+        case 'name_desc':
+          return `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`);
+        case 'sector':
+          return (a.sector || '').localeCompare(b.sector || '');
+        case 'company':
+          return (a.company || '').localeCompare(b.company || '');
+        case 'created':
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        default:
+          return 0;
+      }
+    });
+    
+    return result;
+  }, [patients, searchQuery, filterSector, filterRisk, sortBy]);
 
   const sectorProfile = useMemo(
     () => selectedPatient ? SECTOR_PROFILES[selectedPatient.sector] : null,
@@ -439,7 +480,7 @@ export function OHPatientIntakeScreen({
       );
     } catch (err) {
       console.error('Error saving consultation:', err);
-      Alert.alert('❌ Erreur', 'Impossible d\'enregistrer le patient. Réessayez.');
+      showToast('Impossible d\'enregistrer le patient. Réessayez.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -493,7 +534,129 @@ export function OHPatientIntakeScreen({
             <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
+        <TouchableOpacity onPress={() => setShowFilterPanel(!showFilterPanel)}>
+          <Ionicons 
+            name={showFilterPanel ? "funnel" : "funnel-outline"} 
+            size={18} 
+            color={showFilterPanel || filterSector !== 'all' || filterRisk !== 'all' ? ACCENT : colors.textSecondary}
+          />
+        </TouchableOpacity>
       </View>
+
+      {/* Filter panel */}
+      {showFilterPanel && (
+        <View style={[vStyles.filterPanel, { borderColor: colors.outline }]}>
+          {/* Sector filter */}
+          <View style={vStyles.filterSection}>
+            <Text style={vStyles.filterLabel}>Secteur</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setFilterSector('all')}
+                style={[
+                  vStyles.filterChip,
+                  filterSector === 'all' && { backgroundColor: ACCENT, borderColor: ACCENT }
+                ]}
+              >
+                <Text style={[vStyles.filterChipText, filterSector === 'all' && { color: colors.surface }]}>Tous</Text>
+              </TouchableOpacity>
+              {Object.entries(SECTOR_PROFILES).map(([key, sector]) => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setFilterSector(key as IndustrySector)}
+                  style={[
+                    vStyles.filterChip,
+                    filterSector === key && { backgroundColor: sector.color, borderColor: sector.color }
+                  ]}
+                >
+                  <Text style={[vStyles.filterChipText, filterSector === key && { color: colors.surface }]}>
+                    {sector.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Risk level filter */}
+          <View style={vStyles.filterSection}>
+            <Text style={vStyles.filterLabel}>Niveau de Risque</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {['all', 'low', 'medium', 'high', 'critical'].map((risk) => {
+                const riskLabel = {
+                  all: 'Tous',
+                  low: 'Faible',
+                  medium: 'Moyen',
+                  high: 'Élevé',
+                  critical: 'Critique'
+                }[risk];
+                const riskColor = {
+                  all: ACCENT,
+                  low: '#10B981',
+                  medium: '#F59E0B',
+                  high: '#EF4444',
+                  critical: '#DC2626'
+                }[risk];
+                return (
+                  <TouchableOpacity
+                    key={risk}
+                    onPress={() => setFilterRisk(risk as any)}
+                    style={[
+                      vStyles.filterChip,
+                      filterRisk === risk && { backgroundColor: riskColor, borderColor: riskColor }
+                    ]}
+                  >
+                    <Text style={[vStyles.filterChipText, filterRisk === risk && { color: colors.surface }]}>
+                      {riskLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Sort order */}
+          <View style={vStyles.filterSection}>
+            <Text style={vStyles.filterLabel}>Tri</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {[
+                { value: 'name_asc', label: 'Nom (A-Z)' },
+                { value: 'name_desc', label: 'Nom (Z-A)' },
+                { value: 'sector', label: 'Secteur' },
+                { value: 'company', label: 'Entreprise' },
+                { value: 'created', label: 'Plus récent' }
+              ].map((sort) => (
+                <TouchableOpacity
+                  key={sort.value}
+                  onPress={() => setSortBy(sort.value as any)}
+                  style={[
+                    vStyles.filterChip,
+                    sortBy === sort.value && { backgroundColor: ACCENT, borderColor: ACCENT }
+                  ]}
+                >
+                  <Text style={[vStyles.filterChipText, sortBy === sort.value && { color: colors.surface }]}>
+                    {sort.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Clear filters button */}
+          {(filterSector !== 'all' || filterRisk !== 'all' || sortBy !== 'name_asc' || searchQuery) && (
+            <TouchableOpacity
+              onPress={() => {
+                setFilterSector('all');
+                setFilterRisk('all');
+                setSortBy('name_asc');
+                setSearchQuery('');
+              }}
+              style={vStyles.clearButton}
+            >
+              <Ionicons name="refresh" size={16} color={colors.error} />
+              <Text style={{ color: colors.error, fontWeight: '600', fontSize: 13 }}>Réinitialiser les filtres</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Currently selected patient — compact card */}
       {selectedPatient && (
@@ -1058,6 +1221,7 @@ export function OHPatientIntakeScreen({
           </View>
         </View>
       </Modal>
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }
@@ -1306,6 +1470,30 @@ const vStyles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.outlineVariant,
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.text, paddingVertical: 0 },
+
+  // Filter panel
+  filterPanel: {
+    marginTop: 12, padding: 14,
+    backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderTopWidth: 2,
+    gap: 14,
+  },
+  filterSection: { gap: 8 },
+  filterLabel: { fontSize: 12, fontWeight: '700', color: colors.text },
+  filterChip: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1, borderColor: colors.outline,
+    backgroundColor: colors.surfaceVariant,
+  },
+  filterChipText: { fontSize: 12, fontWeight: '500', color: colors.text },
+  clearButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.error + '30',
+    backgroundColor: colors.error + '08',
+    marginTop: 4,
+  },
 
   // Patient list
   patientRow: {

@@ -16,6 +16,10 @@ class UserRole(models.TextChoices):
     LAB_TECHNICIAN = 'lab_technician', 'Technicien Laboratoire'
     CASHIER = 'cashier', 'Caissier/ière'
     INVENTORY_MANAGER = 'inventory_manager', 'Gestionnaire Inventaire'
+    # Occupational Health & Safety roles
+    OHS_MANAGER = 'ohs_manager', 'Responsable OHS'
+    OHS_OFFICER = 'ohs_officer', 'Agent OHS'
+    OCCUPATIONAL_DOCTOR = 'occupational_doctor', 'Médecin du Travail'
 
 
 class Permission(models.TextChoices):

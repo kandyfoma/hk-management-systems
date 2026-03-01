@@ -58,6 +58,7 @@ router.register(r'fitness-certificates', views.FitnessCertificateViewSet, basena
 router.register(r'occupational-diseases', views.OccupationalDiseaseViewSet, basename='occupationaldisease')
 router.register(r'occupational-diseases-results', views.OccupationalDiseaseViewSet, basename='occupational-diseases-results')
 router.register(r'workplace-incidents', views.WorkplaceIncidentViewSet, basename='workplaceincident')
+router.register(r'incident-attachments', views.IncidentAttachmentViewSet, basename='incident-attachment')
 router.register(r'hazard-identifications', views.HazardIdentificationViewSet, basename='hazard-identification')
 router.register(r'ppe-items', views.PPEItemViewSet, basename='ppe-item')
 
@@ -170,6 +171,15 @@ router.register(r'ohs/worker-feedback', WorkerFeedbackViewSet, basename='worker-
 urlpatterns = [
     # ViewSet URLs (REST API)
     path('', include(router.urls)),
+    
+    # OHS endpoints (also available at /api/v1/ohs/* via main config)
+    # This allows both /api/v1/ohs/* and /api/v1/occupational-health/ohs/* access
+    path('', include(router.urls)),
+    
+    # OHS direct endpoints (at root level)
+    # These are also available at /occupational-health/ohs/* via router
+    # This allows both /api/v1/ohs/* and /api/v1/occupational-health/ohs/* access
+
     
     # ==================== SURVEILLANCE PROGRAMS ====================
     path('surveillance/', include('apps.occupational_health.urls_surveillance')),

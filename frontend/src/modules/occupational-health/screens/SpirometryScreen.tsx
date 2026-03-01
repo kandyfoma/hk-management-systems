@@ -10,6 +10,8 @@ import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
 import { ExamSelectDropdown, Exam } from '../components/ExamSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 const ACCENT = '#1E3A8A'; // Spirometry Primary Light
@@ -47,6 +49,7 @@ const SAMPLE_RESULTS: SpirometryResult[] = [
 
 export function SpirometryScreen() {
   const authUser = useSelector((state: RootState) => state.auth.user);
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<SpirometryResult[]>(SAMPLE_RESULTS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState(false);
@@ -101,7 +104,7 @@ export function SpirometryScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.fev1 || !formData.fvc) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      showToast('Veuillez remplir tous les champs', 'error');
       return;
     }
 
@@ -136,12 +139,12 @@ export function SpirometryScreen() {
           interpretation: '',
           notes: '',
         });
-        Alert.alert('Succès', 'Résultat de spirométrie enregistré');
+        showToast('Résultat de spirométrie enregistré', 'success');
         loadResults();
       }
     } catch (error) {
       console.error('Error creating spirometry result:', error);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer le résultat');
+      showToast('Impossible d\'enregistrer le résultat', 'error');
     }
   };
 
@@ -423,6 +426,7 @@ export function SpirometryScreen() {
           </View>
         </Modal>
       )}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }

@@ -1442,6 +1442,78 @@ class WorkplaceIncident(models.Model):
             self.incident_number = f"INC{today.strftime('%Y%m%d')}{self.enterprise.pk}{str(self.pk or '').zfill(4)}"
         super().save(*args, **kwargs)
 
+# ==================== INCIDENT ATTACHMENTS MODELS ====================
+
+class IncidentAttachment(models.Model):
+    """Images and videos attached to incidents for documentation"""
+    
+    ATTACHMENT_TYPES = [
+        ('image', _('Image')),
+        ('video', _('Vidéo')),
+    ]
+    
+    incident = models.ForeignKey(WorkplaceIncident, on_delete=models.CASCADE, related_name='attachments')
+    attachment_type = models.CharField(_("Type"), max_length=20, choices=ATTACHMENT_TYPES)
+    
+    # File storage
+    file = models.FileField(
+        _("Fichier"),
+        upload_to='incidents/%Y/%m/%d/',
+        help_text='Image (JPEG, PNG) or Video (MP4, WebM)'
+    )
+    thumbnail = models.ImageField(
+        _("Aperçu"),
+        upload_to='incidents/thumbnails/%Y/%m/%d/',
+        null=True,
+        blank=True,
+        help_text='Auto-generated thumbnail for videos'
+    )
+    
+    # Metadata
+    file_size = models.BigIntegerField(_("Taille Fichier (bytes)"), default=0)
+    duration_seconds = models.PositiveIntegerField(_("Durée (secondes)"), null=True, blank=True, help_text='For videos')
+    width = models.PositiveIntegerField(_("Largeur (px)"), null=True, blank=True)
+    height = models.PositiveIntegerField(_("Hauteur (px)"), null=True, blank=True)
+    mime_type = models.CharField(_("Type MIME"), max_length=50, blank=True)
+    
+    # Description and context
+    description = models.CharField(_("Description"), max_length=500, blank=True)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='incident_attachments_uploaded')
+    
+    # Timestamps
+    uploaded_at = models.DateTimeField(_("Date Upload"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Modifié le"), auto_now=True)
+    
+    class Meta:
+        verbose_name = _("Pièce jointe Incident")
+        verbose_name_plural = _("Pièces jointes Incidents")
+        ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['incident', '-uploaded_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.incident.incident_number} - {self.get_attachment_type_display()}"
+    
+    def save(self, *args, **kwargs):
+        if self.file:
+            self.file_size = self.file.size
+            self.mime_type = self.file.content_type or 'application/octet-stream'
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_image(self):
+        return self.attachment_type == 'image'
+    
+    @property
+    def is_video(self):
+        return self.attachment_type == 'video'
+    
+    @property
+    def file_size_mb(self):
+        """File size in megabytes"""
+        return round(self.file_size / (1024 * 1024), 2)
+
 # ==================== PPE MANAGEMENT MODELS ====================
 
 class PPEItem(models.Model):

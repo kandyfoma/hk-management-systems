@@ -1,11 +1,13 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, FlatList, Modal, Dimensions,
+  ActivityIndicator, FlatList, Modal, Dimensions, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { OccHealthApiService } from '../../../services/OccHealthApiService';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +31,27 @@ interface Enterprise {
   workers: number;
   complianceScore: number;
   lastAudit: string;
+  rccm?: string;
+  nif?: string;
+  address?: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
+  isActive?: boolean;
+}
+
+interface WorkSite {
+  id: string;
+  enterpriseId: string;
+  name: string;
+  address: string;
+  siteManager: string;
+  phone: string;
+  workerCount: number;
+  isRemoteSite: boolean;
+  hasMedicalFacility: boolean;
 }
 
 interface RiskProfile {
@@ -331,7 +354,23 @@ function WorkerDetailModal({
 export function EnterpriseManagementScreen() {
   const [selectedTab, setSelectedTab] = useState<'enterprises' | 'sites'>('enterprises');
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
+  const [workSites, setWorkSites] = useState<WorkSite[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Edit Enterprise Modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEnterprise, setEditingEnterprise] = useState<Enterprise | null>(null);
+  const [enterpriseForm, setEnterpriseForm] = useState<Partial<Enterprise>>({});
+  
+  // Sites Management
+  const [selectedEnterpriseForSites, setSelectedEnterpriseForSites] = useState<Enterprise | null>(null);
+  const [showSitesModal, setShowSitesModal] = useState(false);
+  const [showAddSiteModal, setShowAddSiteModal] = useState(false);
+  const [siteForm, setSiteForm] = useState<Partial<WorkSite>>({});
+  const [editingSite, setEditingSite] = useState<WorkSite | null>(null);
+  
+  // Toast
+  const { toastMsg, showToast } = useSimpleToast();
 
   useEffect(() => {
     loadEnterprises();
@@ -346,18 +385,169 @@ export function EnterpriseManagementScreen() {
           id: String(e.id),
           name: e.name || 'N/A',
           sector: e.sector || e.industry_sector || 'N/A',
-          sites: e.worksites?.length || 0,
+          sites: e.work_sites?.length || 0,
           workers: e.worker_count || 0,
           complianceScore: e.compliance_score || Math.floor(Math.random() * 30) + 70,
           lastAudit: e.last_audit ? e.last_audit.split('T')[0] : (e.created_at ? e.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+          rccm: e.rccm,
+          nif: e.nif,
+          address: e.address,
+          contactPerson: e.contact_person,
+          phone: e.phone,
+          email: e.email,
+          contractStartDate: e.contract_start_date,
+          contractEndDate: e.contract_end_date,
+          isActive: e.is_active,
         }));
         setEnterprises(mappedEnterprises);
       }
     } catch (error) {
       console.error('Error loading enterprises:', error);
+      showToast('Erreur lors du chargement des entreprises', 'error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSitesForEnterprise = async (enterpriseId: string) => {
+    try {
+      const api = OccHealthApiService.getInstance();
+      // Fetch worksites, filtering by enterprise
+      const result = await api.get(`/occupational-health/work-sites/?enterprise=${enterpriseId}`);
+      if (result.success) {
+        const sites = (Array.isArray(result.data) ? result.data : (result.data?.results || [])).map((s: any) => ({
+          id: String(s.id),
+          enterpriseId: String(s.enterprise || s.enterprise_id),
+          name: s.name,
+          address: s.address,
+          siteManager: s.site_manager,
+          phone: s.phone,
+          workerCount: s.worker_count || 0,
+          isRemoteSite: s.is_remote_site || false,
+          hasMedicalFacility: s.has_medical_facility || false,
+        }));
+        setWorkSites(sites);
+      }
+    } catch (error) {
+      console.error('Error loading worksites:', error);
+      showToast('Erreur lors du chargement des sites', 'error');
+    }
+  };
+
+  const handleEditEnterprise = (enterprise: Enterprise) => {
+    setEditingEnterprise(enterprise);
+    setEnterpriseForm(enterprise);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEnterprise = async () => {
+    if (!editingEnterprise || !enterpriseForm.name?.trim()) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: enterpriseForm.name,
+        sector: enterpriseForm.sector,
+        rccm: enterpriseForm.rccm,
+        nif: enterpriseForm.nif,
+        address: enterpriseForm.address,
+        contact_person: enterpriseForm.contactPerson,
+        phone: enterpriseForm.phone,
+        email: enterpriseForm.email,
+        contract_start_date: enterpriseForm.contractStartDate,
+        contract_end_date: enterpriseForm.contractEndDate,
+        is_active: enterpriseForm.isActive !== false,
+      };
+
+      const api = OccHealthApiService.getInstance();
+      const result = await api.put(`/occupational-health/enterprises/${editingEnterprise.id}/`, payload);
+      
+      if (result.success) {
+        showToast('Entreprise mise à jour avec succès', 'success');
+        setShowEditModal(false);
+        loadEnterprises();
+      } else {
+        showToast('Erreur lors de la mise à jour', 'error');
+      }
+    } catch (error) {
+      console.error('Error saving enterprise:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  const handleAddSite = (enterprise: Enterprise) => {
+    setSelectedEnterpriseForSites(enterprise);
+    loadSitesForEnterprise(enterprise.id);
+    setShowSitesModal(true);
+  };
+
+  const handleCreateSite = async () => {
+    if (!selectedEnterpriseForSites || !siteForm.name?.trim() || !siteForm.siteManager?.trim()) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+
+    try {
+      const payload = {
+        enterprise: parseInt(selectedEnterpriseForSites.id),
+        name: siteForm.name,
+        address: siteForm.address || '',
+        site_manager: siteForm.siteManager,
+        phone: siteForm.phone || '',
+        worker_count: siteForm.workerCount || 0,
+        is_remote_site: siteForm.isRemoteSite || false,
+        has_medical_facility: siteForm.hasMedicalFacility || false,
+      };
+
+      const api = OccHealthApiService.getInstance();
+      const result = await api.post('/occupational-health/work-sites/', payload);
+      
+      if (result.success) {
+        showToast('Site créé avec succès', 'success');
+        setSiteForm({});
+        setShowAddSiteModal(false);
+        loadSitesForEnterprise(selectedEnterpriseForSites.id);
+      } else {
+        showToast('Erreur lors de la création du site', 'error');
+      }
+    } catch (error) {
+      console.error('Error creating site:', error);
+      showToast('Erreur lors de la création du site', 'error');
+    }
+  };
+
+  const handleDeleteSite = (siteId: string) => {
+    Alert.alert(
+      'Supprimer le site',
+      'Êtes-vous sûr de vouloir supprimer ce site?',
+      [
+        { text: 'Annuler' },
+        {
+          text: 'Supprimer',
+          onPress: async () => {
+            try {
+              const api = OccHealthApiService.getInstance();
+              const result = await api.delete(`/occupational-health/work-sites/${siteId}/`);
+              
+              if (result.success) {
+                showToast('Site supprimé avec succès', 'success');
+                if (selectedEnterpriseForSites) {
+                  loadSitesForEnterprise(selectedEnterpriseForSites.id);
+                }
+              } else {
+                showToast('Erreur lors de la suppression', 'error');
+              }
+            } catch (error) {
+              console.error('Error deleting site:', error);
+              showToast('Erreur lors de la suppression', 'error');
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   return (
@@ -394,7 +584,7 @@ export function EnterpriseManagementScreen() {
             ) : enterprises.length > 0 ? (
               <View style={{ paddingHorizontal: spacing.md, paddingBottom: 40 }}>
                 {enterprises.map(ent => (
-                  <TouchableOpacity key={ent.id} style={[styles.enterpriseCard, styles.cardShadow]}>
+                  <View key={ent.id} style={[styles.enterpriseCard, styles.cardShadow]}>
                     <View style={styles.enterpriseHeader}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.enterpriseName}>{ent.name}</Text>
@@ -405,32 +595,50 @@ export function EnterpriseManagementScreen() {
                       </View>
                     </View>
 
-                <View style={styles.enterpriseStats}>
-                  <View style={styles.statBarItem}>
-                    <Ionicons name="location" size={16} color={colors.primary} />
-                    <Text style={styles.statBarText}>{ent.sites} sites</Text>
-                  </View>
-                  <View style={styles.statBarItem}>
-                    <Ionicons name="people" size={16} color={colors.secondary} />
-                    <Text style={styles.statBarText}>{ent.workers} workers</Text>
-                  </View>
-                  <View style={styles.statBarItem}>
-                    <Ionicons name="calendar" size={16} color={colors.textSecondary} />
-                    <Text style={styles.statBarText}>Audit: {ent.lastAudit}</Text>
-                  </View>
-                </View>
+                    <View style={styles.enterpriseStats}>
+                      <View style={styles.statBarItem}>
+                        <Ionicons name="location" size={16} color={colors.primary} />
+                        <Text style={styles.statBarText}>{ent.sites} sites</Text>
+                      </View>
+                      <View style={styles.statBarItem}>
+                        <Ionicons name="people" size={16} color={colors.secondary} />
+                        <Text style={styles.statBarText}>{ent.workers} workers</Text>
+                      </View>
+                      <View style={styles.statBarItem}>
+                        <Ionicons name="calendar" size={16} color={colors.textSecondary} />
+                        <Text style={styles.statBarText}>Audit: {ent.lastAudit}</Text>
+                      </View>
+                    </View>
 
-                <View style={styles.progressBar}>
-                  <View
-                    style={{
-                      height: '100%',
-                      width: `${ent.complianceScore}%`,
-                      backgroundColor: colors.primary,
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-              </TouchableOpacity>
+                    <View style={styles.progressBar}>
+                      <View
+                        style={{
+                          height: '100%',
+                          width: `${ent.complianceScore}%`,
+                          backgroundColor: colors.primary,
+                          borderRadius: 2,
+                        }}
+                      />
+                    </View>
+
+                    {/* Action Buttons */}
+                    <View style={styles.actionButtonsRow}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.primary + '20', flex: 1 }]}
+                        onPress={() => handleEditEnterprise(ent)}
+                      >
+                        <Ionicons name="create-outline" size={16} color={colors.primary} />
+                        <Text style={[styles.actionButtonText, { color: colors.primary }]}>Modifier</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.secondary + '20', flex: 1 }]}
+                        onPress={() => handleAddSite(ent)}
+                      >
+                        <Ionicons name="add-circle-outline" size={16} color={colors.secondary} />
+                        <Text style={[styles.actionButtonText, { color: colors.secondary }]}>Sites</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 ))}
               </View>
             ) : (
@@ -444,6 +652,254 @@ export function EnterpriseManagementScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Edit Enterprise Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Modifier Entreprise</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+              <Text style={styles.fieldLabel}>Nom</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.name || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, name: text })}
+                placeholder="Nom de l'entreprise"
+              />
+
+              <Text style={styles.fieldLabel}>Secteur</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.sector || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, sector: text })}
+                placeholder="Secteur d'activité"
+              />
+
+              <Text style={styles.fieldLabel}>RCCM</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.rccm || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, rccm: text })}
+                placeholder="RCCM"
+              />
+
+              <Text style={styles.fieldLabel}>NIF</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.nif || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, nif: text })}
+                placeholder="NIF"
+              />
+
+              <Text style={styles.fieldLabel}>Adresse</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={enterpriseForm.address || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, address: text })}
+                placeholder="Adresse"
+                multiline
+              />
+
+              <Text style={styles.fieldLabel}>Personne Contact</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.contactPerson || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, contactPerson: text })}
+                placeholder="Personne de contact"
+              />
+
+              <Text style={styles.fieldLabel}>Téléphone</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.phone || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, phone: text })}
+                placeholder="Téléphone"
+              />
+
+              <Text style={styles.fieldLabel}>Email</Text>
+              <TextInput
+                style={styles.input}
+                value={enterpriseForm.email || ''}
+                onChangeText={(text) => setEnterpriseForm({ ...enterpriseForm, email: text })}
+                placeholder="Email"
+              />
+
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveEnterprise}
+              >
+                <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                <Text style={styles.saveButtonText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Manage Sites Modal */}
+      <Modal
+        visible={showSitesModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSitesModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Sites - {selectedEnterpriseForSites?.name}</Text>
+              <TouchableOpacity onPress={() => setShowSitesModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.addSiteButtonContainer}>
+              <TouchableOpacity
+                style={styles.addSiteButton}
+                onPress={() => {
+                  setSiteForm({});
+                  setEditingSite(null);
+                  setShowAddSiteModal(true);
+                }}
+              >
+                <Ionicons name="add-circle" size={20} color="#FFF" />
+                <Text style={{  color: '#FFF', fontWeight: '600', fontSize: 14 }}>Ajouter un site</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+              {workSites.length > 0 ? (
+                workSites.map(site => (
+                  <View key={site.id} style={styles.siteCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.siteName}>{site.name}</Text>
+                      <Text style={styles.siteMeta}>{site.address}</Text>
+                      <Text style={styles.siteMeta}>Responsable: {site.siteManager}</Text>
+                      <Text style={styles.siteMeta}>Tél: {site.phone}</Text>
+                      <Text style={styles.siteMeta}>Travailleurs: {site.workerCount}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteSite(site.id)}
+                      style={styles.deleteSiteButton}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <View style={{ paddingVertical: spacing.lg, alignItems: 'center' }}>
+                  <Ionicons name="location-outline" size={40} color={colors.textSecondary} />
+                  <Text style={{ marginTop: spacing.md, color: colors.textSecondary }}>Aucun site</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add/Edit Site Modal */}
+      <Modal
+        visible={showAddSiteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddSiteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ajouter Site</Text>
+              <TouchableOpacity onPress={() => setShowAddSiteModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+              <Text style={styles.fieldLabel}>Nom du Site *</Text>
+              <TextInput
+                style={styles.input}
+                value={siteForm.name || ''}
+                onChangeText={(text) => setSiteForm({ ...siteForm, name: text })}
+                placeholder="Ex: Site de Kolwezi"
+              />
+
+              <Text style={styles.fieldLabel}>Adresse</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={siteForm.address || ''}
+                onChangeText={(text) => setSiteForm({ ...siteForm, address: text })}
+                placeholder="Adresse du site"
+                multiline
+              />
+
+              <Text style={styles.fieldLabel}>Responsable Site *</Text>
+              <TextInput
+                style={styles.input}
+                value={siteForm.siteManager || ''}
+                onChangeText={(text) => setSiteForm({ ...siteForm, siteManager: text })}
+                placeholder="Nom du responsable"
+              />
+
+              <Text style={styles.fieldLabel}>Téléphone</Text>
+              <TextInput
+                style={styles.input}
+                value={siteForm.phone || ''}
+                onChangeText={(text) => setSiteForm({ ...siteForm, phone: text })}
+                placeholder="Téléphone"
+              />
+
+              <Text style={styles.fieldLabel}>Nombre de Travailleurs</Text>
+              <TextInput
+                style={styles.input}
+                value={String(siteForm.workerCount || '')}
+                onChangeText={(text) => setSiteForm({ ...siteForm, workerCount: parseInt(text) || 0 })}
+                placeholder="0"
+                keyboardType="numeric"
+              />
+
+              <View style={styles.checkboxRow}>
+                <TouchableOpacity
+                  style={styles.checkbox}
+                  onPress={() => setSiteForm({ ...siteForm, isRemoteSite: !(siteForm.isRemoteSite) })}
+                >
+                  {siteForm.isRemoteSite && <View style={styles.checkboxInner} />}
+                </TouchableOpacity>
+                <Text style={{ flex: 1, color: colors.text, fontSize: 14 }}>Site éloigné</Text>
+              </View>
+
+              <View style={styles.checkboxRow}>
+                <TouchableOpacity
+                  style={styles.checkbox}
+                  onPress={() => setSiteForm({ ...siteForm, hasMedicalFacility: !(siteForm.hasMedicalFacility) })}
+                >
+                  {siteForm.hasMedicalFacility && <View style={styles.checkboxInner} />}
+                </TouchableOpacity>
+                <Text style={{ flex: 1, color: colors.text, fontSize: 14 }}>Dispensaire sur site</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleCreateSite}
+              >
+                <Ionicons name="add-circle" size={20} color="#FFF" />
+                <Text style={styles.saveButtonText}>Créer le site</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Toast Notification */}
+      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }
@@ -551,6 +1007,36 @@ const styles = StyleSheet.create({
   tab: { flex: 1, paddingVertical: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' },
   tabActive: { borderBottomColor: colors.primary },
   tabText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+
+  // Action Buttons
+  actionButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingVertical: spacing.sm, borderRadius: borderRadius.lg },
+  actionButtonText: { fontSize: 12, fontWeight: '600' },
+
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+
+  // Form Styles
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: spacing.md, marginBottom: spacing.sm },
+  input: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 14, color: colors.text },
+  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, paddingVertical: spacing.md, borderRadius: borderRadius.lg, marginTop: spacing.lg, marginBottom: spacing.lg },
+  saveButtonText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+
+  // Site Management
+  addSiteButtonContainer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  addSiteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.secondary, paddingVertical: spacing.md, borderRadius: borderRadius.lg },
+  siteCard: { backgroundColor: colors.background, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gaps: spacing.md },
+  siteName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  siteMeta: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
+  deleteSiteButton: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+
+  // Checkbox
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.sm },
+  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: colors.primary, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  checkboxInner: { width: 12, height: 12, borderRadius: 2, backgroundColor: colors.primary },
 
   cardShadow: shadows.sm,
 });

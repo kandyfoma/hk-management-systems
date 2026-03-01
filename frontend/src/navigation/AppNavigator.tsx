@@ -24,7 +24,7 @@ import { DiseasesScreen } from '../modules/occupational-health/screens/DiseasesS
 import { SurveillanceScreen } from '../modules/occupational-health/screens/SurveillanceScreen';
 import { RiskAssessmentScreen } from '../modules/occupational-health/screens/RiskAssessmentScreen';
 import { PPEManagementScreen } from '../modules/occupational-health/screens/PPEManagementScreen';
-import { ReportsScreen } from '../modules/occupational-health/screens/ReportsScreen';
+import { AdminReportsScreen } from '../modules/occupational-health/screens/AdminReportsScreen';
 import { ComplianceScreen } from '../modules/occupational-health/screens/ComplianceScreen';
 import { AnalyticsScreen } from '../modules/occupational-health/screens/AnalyticsScreen';
 import { ProtocolManagementScreen } from '../modules/occupational-health/screens/ProtocolManagementScreen';
@@ -872,7 +872,7 @@ function DesktopApp() {
     if (activeScreen === 'oh-regulatory-reports') return <RegulatoryReportsScreen />;
     if (activeScreen === 'oh-iso45001') return <ISO45001DashboardScreen />;
     if (activeScreen === 'oh-iso27001') return <ISO27001DashboardScreen />;
-    if (activeScreen === 'oh-reports') return <ReportsScreen />;
+    if (activeScreen === 'oh-reports') return <AdminReportsScreen />;
     if (activeScreen === 'oh-compliance') return <ComplianceScreen />;
     if (activeScreen === 'oh-analytics') return <AnalyticsScreen />;
     if (activeScreen === 'oh-enterprise-management') return <EnterpriseManagementScreen />;

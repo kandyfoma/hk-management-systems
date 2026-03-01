@@ -13,6 +13,8 @@ import {
   type WorkplaceIncident, type CorrectiveAction, type AffectedWorker,
 } from '../../../models/OccupationalHealth';
 import DateInput from '../../../components/DateInput';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -213,7 +215,7 @@ function AddIncidentModal({
 
   const handleSave = () => {
     if (!description.trim()) {
-      Alert.alert('Erreur', 'La description est obligatoire.');
+      showToast('La description est obligatoire.', 'error');
       return;
     }
     const num = `INC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`;
@@ -456,6 +458,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 // ─── Main Screen ─────────────────────────────────────────────
 export function IncidentsScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [incidents, setIncidents] = useState<WorkplaceIncident[]>(SAMPLE_INCIDENTS);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<IncidentType | 'all'>('all');
@@ -498,19 +501,27 @@ export function IncidentsScreen() {
       const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
       const token = await AsyncStorage.getItem('auth_token');
       
+      // Generate incident number following backend pattern: INC{YYYYMMDD}{enterpriseId}{random}
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+      const enterpriseId = 1; // Default enterprise ID
+      const randomSuffix = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+      const incidentNumber = `INC${dateStr}${enterpriseId}${randomSuffix}`;
+      
       // Prepare incident data for API
       const incidentData = {
+        incident_number: incidentNumber,
         category: incident.category,
         severity: incident.severity,
         incident_date: incident.incidentDate,
         incident_time: incident.incidentTime,
         location_description: `${incident.area} at ${incident.site}`,
         description: incident.description,
-        immediate_cause: '', // Extract from incident if available
-        investigation_status: incident.investigationStatus,
+        immediate_cause: '', // Can be extracted from incident if available
+        immediate_actions_taken: incident.immediateActions || '',
+        status: 'reported',
         work_days_lost: incident.lostTimeDays || 0,
-        reported_by: incident.reportedBy,
-        reportable_to_authorities: incident.reportedToAuthorities,
+        enterprise: enterpriseId,
       };
       
       const response = await axios.post(
@@ -542,9 +553,9 @@ export function IncidentsScreen() {
     const success = await saveData(inc);
     setShowAddModal(false);
     if (success) {
-      Alert.alert('Succès', `Incident ${inc.incidentNumber} déclaré et sauvegardé.`);
+      showToast(`Incident ${inc.incidentNumber} déclaré et sauvegardé.`, 'success');
     } else {
-      Alert.alert('Avertissement', `Incident déclaré localement (sync pending).`);
+      showToast(`Incident déclaré localement (sync pending).`, 'error');
     }
   };
 
@@ -640,6 +651,7 @@ export function IncidentsScreen() {
 
       <AddIncidentModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleAdd} />
       <IncidentDetailModal visible={showDetail} incident={selectedIncident} onClose={() => { setShowDetail(false); setSelectedIncident(null); }} />
+      <SimpleToastNotification message={toastMsg} />
     </ScrollView>
   );
 }

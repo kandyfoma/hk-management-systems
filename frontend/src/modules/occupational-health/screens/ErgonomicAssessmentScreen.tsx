@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -32,6 +34,7 @@ const SAMPLE_ASSESSMENTS: ErgonomicAssessment[] = [
 ];
 
 export function ErgonomicAssessmentScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [assessments, setAssessments] = useState<ErgonomicAssessment[]>(SAMPLE_ASSESSMENTS);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -112,12 +115,13 @@ export function ErgonomicAssessmentScreen() {
               <Text style={styles.formLabel}>Recommandations</Text>
               <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Actions Ã  prendre..." multiline numberOfLines={4} placeholderTextColor={colors.placeholder} />
             </ScrollView>
-            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#059669' }]} onPress={() => { setShowAddModal(false); Alert.alert('SuccÃ¨s', 'Ã‰valuation crÃ©Ã©e'); }}>
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#059669' }]} onPress={() => { setShowAddModal(false); showToast('Évaluation créée', 'success'); }}>
               <Text style={styles.submitBtnText}>Enregistrer</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+      <SimpleToastNotification message={toastMsg} />
     </ScrollView>
   );
 }
