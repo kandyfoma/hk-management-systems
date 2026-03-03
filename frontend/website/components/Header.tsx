@@ -17,7 +17,7 @@ export default function Header() {
           <Link href="/" className="flex items-center gap-2">
             <Image 
               src="/logo.png" 
-              alt="KAT OHMS Logo" 
+              alt="KATMS Logo" 
               width={40} 
               height={40}
               className="rounded-lg"
@@ -25,10 +25,10 @@ export default function Header() {
             <div className="flex flex-col gap-0.5">
               <div className="flex flex-col gap-0">
                 <span className="font-bold text-lg text-primary hidden sm:inline leading-tight">
-                  KAT OHMS
+                  KATMS
                 </span>
                 <span className="text-xs text-onSurfaceVariant hidden sm:inline font-medium">
-                  Management System
+                  Unified Management System
                 </span>
               </div>
               <div className="hidden sm:flex gap-1.5 mt-1">
@@ -62,7 +62,7 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-4">
             <LanguageSwitcher />
             <a
-              href="https://app.katohms.com"
+              href="https://app.katms.org"
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primaryDark transition font-medium"
@@ -115,7 +115,7 @@ export default function Header() {
               <LanguageSwitcher />
             </div>
             <a
-              href="https://app.katohms.com"
+              href="https://app.katms.org"
               target="_blank"
               rel="noopener noreferrer"
               className="block mt-4 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primaryDark transition font-medium text-center"

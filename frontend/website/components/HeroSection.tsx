@@ -47,7 +47,7 @@ export default function HeroSection() {
             <ScrollReveal delay={3}>
               <div className="flex flex-col sm:flex-row gap-4 mb-12">
                 <a
-                  href="https://app.katohms.com"
+                  href="https://app.katms.org"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-secondaryLight hover:bg-accent text-primary font-bold text-base transition-all duration-200 hover:-translate-y-0.5 shadow-lg shadow-secondaryLight/20"

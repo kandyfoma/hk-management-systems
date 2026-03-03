@@ -9,9 +9,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'KAT OHMS - Occupational Health Management System',
-  description: 'Comprehensive workplace health and safety management platform for DR Congo enterprises.',
-  keywords: 'occupational health, workplace safety, medical examinations, ISO 45001, DR Congo, Lubumbashi, KAT OHMS',
+  title: 'KAT Management System - Pharmacy, Hospital & Occupational Health',
+  description: 'Unified management system for pharmacy, hospital operations, and occupational health. Comprehensive solutions for DR Congo enterprises.',
+  keywords: 'management system, pharmacy management, hospital management, occupational health, DR Congo, Lubumbashi, KATMS',
 }
 
 export default function RootLayout({

@@ -13,7 +13,7 @@ const nextConfig = {
     return [
       {
         source: '/app',
-        destination: 'https://app.katohms.com',
+        destination: 'https://app.katms.org',
         permanent: true,
       },
     ]

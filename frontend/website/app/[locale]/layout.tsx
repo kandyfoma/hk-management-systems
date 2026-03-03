@@ -4,11 +4,11 @@ import { getTranslations } from 'next-intl/server'
 export async function generateMetadata({ params: { locale } }: any): Promise<Metadata> {
   const t = await getTranslations({ locale, namespace: 'hero' })
   const title = locale === 'fr' 
-    ? 'KAT OHMS - Système de Gestion de la Santé Occupationnelle'
-    : 'KAT OHMS - Occupational Health Management System'
+    ? 'KATMS - Système Unifié de Gestion (Pharmacie, Hôpital et Santé Occupationnelle)'
+    : 'KATMS - Unified Management System for Pharmacy, Hospital & Occupational Health'
   const description = locale === 'fr'
-    ? 'Plateforme complète de gestion de la santé et de la sécurité au travail pour les entreprises de la RDC. Examens médicaux, évaluations des risques, conformité ISO 45001 et signalement des incidents depuis Lubumbashi.'
-    : 'Comprehensive workplace health and safety management platform for DR Congo enterprises. Medical examinations, risk assessments, ISO 45001 compliance, and incident reporting from Lubumbashi.'
+    ? 'Système complet de gestion pour les pharmacies, hôpitaux et santé occupationnelle. Solutions intégrées pour les entreprises de la RDC depuis Lubumbashi.'
+    : 'Unified management system for pharmacies, hospitals, and occupational health. Integrated solutions for DR Congo enterprises from Lubumbashi.'
 
   return {
     title,
@@ -20,7 +20,7 @@ export async function generateMetadata({ params: { locale } }: any): Promise<Met
     openGraph: {
       title,
       description,
-      url: 'https://www.katohms.com',
+      url: 'https://www.katms.org',
       siteName: 'KAT OHMS',
       type: 'website',
       images: [

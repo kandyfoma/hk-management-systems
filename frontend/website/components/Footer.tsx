@@ -14,11 +14,11 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-3 mb-4">
-              <Image src="/logo.png" alt="KAT OHMS" width={36} height={36} className="rounded-lg" />
-              <span className="font-extrabold text-xl">KAT OHMS</span>
+              <Image src="/logo.png" alt="KATMS Logo" width={36} height={36} className="rounded-lg" />
+              <span className="font-extrabold text-xl">KATMS</span>
             </div>
             <p className="text-sidebarText text-sm leading-relaxed mb-6 max-w-xs">
-              Comprehensive occupational health management for DR Congo enterprises.
+              Unified management system for pharmacy, hospital operations, and occupational health.
               Designed in Lubumbashi, built for Africa.
             </p>
             <div className="space-y-2">

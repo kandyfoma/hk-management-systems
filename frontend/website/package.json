@@ -1,7 +1,7 @@
 {
-  "name": "kat-ohms-landing",
+  "name": "katms-landing",
   "version": "1.0.0",
-  "description": "KAT Occupational Health Management System - Landing Page",
+  "description": "KATMS - Unified Management System Landing Page",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

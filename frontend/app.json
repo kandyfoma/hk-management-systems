@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "HK Management Systems",
-    "slug": "hk-management-systems",
+    "name": "KAT Management System",
+    "slug": "kat-management-system",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -14,13 +14,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hk.managementsystems",
+      "bundleIdentifier": "com.katms.app",
       "icon": {
         "source": "./assets/icon.png"
       }
     },
     "android": {
-      "package": "com.hk.managementsystems",
+      "package": "com.katms.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#122056"
