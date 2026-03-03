@@ -1,18 +1,28 @@
 'use client'
 
-import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Globe } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 export default function LanguageSwitcher() {
-  const locale = useLocale()
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
 
+  // Extract locale from pathname (first segment)
+  const locale = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean)
+    return (segments[0] === 'en' || segments[0] === 'fr') ? segments[0] : 'en'
+  }, [pathname])
+
   // Get the pathname without the locale prefix
-  const pathWithoutLocale = pathname.replace(`/${locale}`, '') || '/'
+  const pathWithoutLocale = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean)
+    if (segments[0] === 'en' || segments[0] === 'fr') {
+      return '/' + segments.slice(1).join('/')
+    }
+    return pathname
+  }, [pathname])
 
   const languages = [
     { code: 'en', name: 'English' },

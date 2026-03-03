@@ -7,9 +7,9 @@
     "launch": "Launch App"
   },
   "hero": {
-    "title": "Occupational Health Management",
+    "title": "Occupational Health Management System",
     "subtitle": "Simplified",
-    "description": "Comprehensive workplace health and safety management platform. Medical examinations, risk assessments, compliance tracking, and incident reporting — all in one system.",
+    "description": "Comprehensive workplace health and safety system for DR Congo enterprises. Medical examinations, risk assessments, compliance tracking, and incident reporting — all integrated.",
     "cta": "Start Free Trial"
   },
   "features": {
@@ -40,7 +40,7 @@
     }
   },
   "modules": {
-    "title": "Medical Specialties"
+    "title": "System Modules"
   },
   "benefits": {
     "title": "Why Choose KAT OHMS",

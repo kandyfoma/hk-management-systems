@@ -7,9 +7,9 @@
     "launch": "Lancer l'App"
   },
   "hero": {
-    "title": "Gestion de la Santé Occupationnelle",
-    "subtitle": "Simplifiée",
-    "description": "Plateforme complète de gestion de la santé et de la sécurité au travail. Examens médicaux, évaluations des risques, suivi de la conformité et signalement des incidents — tout en un seul système.",
+    "title": "Système de Gestion de la Santé Occupationnelle",
+    "subtitle": "Simplifié",
+    "description": "Système complet de gestion de la santé et de la sécurité au travail pour les entreprises de la RDC. Examens médicaux, évaluations des risques, suivi de la conformité et signalement des incidents — tout intégré.",
     "cta": "Commencer l'Essai Gratuit"
   },
   "features": {
@@ -40,7 +40,7 @@
     }
   },
   "modules": {
-    "title": "Spécialités Médicales"
+    "title": "Modules du Système"
   },
   "benefits": {
     "title": "Pourquoi Choisir KAT OHMS",

@@ -23,10 +23,15 @@ export default function Header() {
               className="rounded-lg"
             />
             <div className="flex flex-col gap-0.5">
-              <span className="font-bold text-lg text-primary hidden sm:inline">
-                KAT OHMS
-              </span>
-              <div className="hidden sm:flex gap-1.5">
+              <div className="flex flex-col gap-0">
+                <span className="font-bold text-lg text-primary hidden sm:inline leading-tight">
+                  KAT OHMS
+                </span>
+                <span className="text-xs text-onSurfaceVariant hidden sm:inline font-medium">
+                  Management System
+                </span>
+              </div>
+              <div className="hidden sm:flex gap-1.5 mt-1">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primaryFaded text-primary">
                   100% Congolese Owned
                 </span>
