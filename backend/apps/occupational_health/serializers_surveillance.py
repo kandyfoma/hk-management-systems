@@ -14,6 +14,17 @@ from .models_surveillance import (
 )
 
 
+# ==================== CUSTOM FIELDS ====================
+
+class UserCompactSerializer(serializers.Serializer):
+    """Compact user serializer with full_name"""
+    id = serializers.IntegerField()
+    full_name = serializers.SerializerMethodField()
+    
+    def get_full_name(self, obj):
+        return obj.get_full_name() if hasattr(obj, 'get_full_name') else f"{obj.first_name} {obj.last_name}"
+
+
 # ==================== SURVEILLANCE PROGRAM SERIALIZERS ====================
 
 class SurveillanceProgramSerializer(serializers.ModelSerializer):
@@ -23,6 +34,8 @@ class SurveillanceProgramSerializer(serializers.ModelSerializer):
     sector_display = serializers.CharField(source='get_sector_display', read_only=True)
     enrolled_workers_count = serializers.IntegerField(read_only=True)
     overdue_screenings_count = serializers.IntegerField(read_only=True)
+    created_by = UserCompactSerializer(read_only=True)
+    updated_by = UserCompactSerializer(read_only=True, allow_null=True)
     
     class Meta:
         model = SurveillanceProgram
@@ -36,10 +49,16 @@ class SurveillanceProgramSerializer(serializers.ModelSerializer):
             'is_active', 'status',
             'start_date', 'end_date',
             'regulatory_reference', 'compliance_standard',
+            'medical_protocols', 'follow_up_procedures',
+            'risk_assessment_method', 'target_job_categories',
+            'coverage_percentage',
             'enrolled_workers_count', 'overdue_screenings_count',
-            'created_by', 'created_at', 'updated_at',
+            'created_by', 'created_at', 'updated_by', 'updated_at',
         ]
-        read_only_fields = ['created_by', 'created_at', 'updated_at']
+        read_only_fields = ['created_by', 'created_at', 'updated_by', 'updated_at']
+        extra_kwargs = {
+            'enterprise': {'required': False},
+        }
 
 
 class SurveillanceProgramListSerializer(serializers.ModelSerializer):

@@ -4,6 +4,9 @@ import {
   StyleSheet, Dimensions, Modal, Alert, ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
+import ReactDatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import './react-datepicker.css';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +21,7 @@ import { SimpleToastNotification } from '../../../components/SimpleToastNotifica
 
 const ACCENT = colors.primary;
 const STORAGE_KEY = '@occhealth_risk_assessments';
+const DRAFT_STORAGE_KEY = '@occhealth_assessment_drafts';
 const DEFAULT_REVIEW_OFFSET_DAYS = 180;
 
 // Normalize search text by removing accents for better French text matching
@@ -198,7 +202,7 @@ function AssessmentCard({ assessment, onPress }: { assessment: RiskAssessment; o
 }
 
 // ─── Detail Modal ────────────────────────────────────────────
-function AssessmentDetailModal({ visible, assessment, onClose }: { visible: boolean; assessment: RiskAssessment | null; onClose: () => void }) {
+function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { visible: boolean; assessment: RiskAssessment | null; onClose: () => void; onDelete?: (id: string) => void }) {
   if (!assessment) return null;
   const sectorProfile = SECTOR_PROFILES[assessment.sector];
   const riskColor = OccHealthUtils.getSectorRiskColor(assessment.overallRiskLevel);
@@ -283,6 +287,12 @@ function AssessmentDetailModal({ visible, assessment, onClose }: { visible: bool
             </View>
           </ScrollView>
           <View style={styles.modalActions}>
+            {onDelete && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#EF4444' }]} onPress={() => { onClose(); onDelete(assessment.id); }}>
+                <Ionicons name="trash-outline" size={18} color="#FFF" />
+                <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Supprimer</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
               <Text style={[styles.actionBtnText, { color: colors.text }]}>Fermer</Text>
             </TouchableOpacity>
@@ -298,80 +308,876 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 // ─── Add Modal ───────────────────────────────────────────────
+interface User {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
+  primary_role?: string;
+}
+
 function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; onClose: () => void; onSave: (a: RiskAssessment) => void }) {
   const { showToast } = useSimpleToast();
+  const [step, setStep] = useState<'assessment' | 'hazards'>('assessment');
   const [site, setSite] = useState('');
   const [area, setArea] = useState('');
   const [sector, setSector] = useState<IndustrySector>('mining');
   const [assessorName, setAssessorName] = useState('');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [workers, setWorkers] = useState<User[]>([]);
+  const [workerSearchText, setWorkerSearchText] = useState('');
+  const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
+  const [filteredWorkers, setFilteredWorkers] = useState<User[]>([]);
+  const [assessorSearchText, setAssessorSearchText] = useState('');
+  const [filteredAssessors, setFilteredAssessors] = useState<User[]>([]);
+  const [showTargetDatePicker, setShowTargetDatePicker] = useState(false);
+  const [showReviewDatePicker, setShowReviewDatePicker] = useState(false);
+  const [showNextReviewDatePicker, setShowNextReviewDatePicker] = useState(false);
+  const [hazards, setHazards] = useState<HazardIdentification[]>([]);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Hazard form state
+  const [hazDescription, setHazDescription] = useState('');
+  const [hazType, setHazType] = useState('silica_dust');
+  const [likelihood, setLikelihood] = useState('3');
+  const [consequence, setConsequence] = useState('3');
+  const [affectedWorkers, setAffectedWorkers] = useState('0');
+  const [activitiesAffected, setActivitiesAffected] = useState('');
+  const [existingControls, setExistingControls] = useState('');
+  const [controlEffectiveness, setControlEffectiveness] = useState<'very_effective' | 'effective' | 'partially_effective' | 'ineffective'>('effective');
+  const [residualLikelihood, setResidualLikelihood] = useState('2');
+  const [residualConsequence, setResidualConsequence] = useState('2');
+  const [additionalControls, setAdditionalControls] = useState('');
+  const [controlHierarchy, setControlHierarchy] = useState<'elimination' | 'substitution' | 'engineering' | 'administrative' | 'ppe'>('engineering');
+  const [responsiblePerson, setResponsiblePerson] = useState('');
+  const [responsiblePersonId, setResponsiblePersonId] = useState<string | null>(null);
+  const [enterpriseId, setEnterpriseId] = useState<string | null>(null);
+  const [targetDate, setTargetDate] = useState(new Date().toISOString().split('T')[0]);
+  const [assessmentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reviewDate, setReviewDate] = useState(new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [nextReviewDate, setNextReviewDate] = useState(new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [assessmentStatus, setAssessmentStatus] = useState<'draft' | 'approved' | 'implemented' | 'reviewed'>('draft');
 
-  const handleSave = () => {
+  const riskScore = Number(likelihood) * Number(consequence);
+
+  // Fetch current user and list of users when modal opens
+  useEffect(() => {
+    if (visible) {
+      fetchUserData();
+    }
+  }, [visible]);
+
+  const fetchUserData = async () => {
+    try {
+      setLoadingUsers(true);
+      const token = await AsyncStorage.getItem('auth_token');
+      const baseURL = await AsyncStorage.getItem('api_base_url') || 'http://localhost:8000';
+
+      if (!token) return;
+
+      // Fetch current user profile
+      const profileResponse = await axios.get(
+        `${baseURL}/api/v1/auth/profile/`,
+        { headers: { Authorization: `Token ${token}` }, timeout: 5000 }
+      );
+      const user: User = profileResponse.data.user || profileResponse.data;
+      setCurrentUser(user);
+      setAssessorName(`${user.first_name} ${user.last_name}`);
+      // Store enterprise ID for hazard creation
+      if (profileResponse.data.enterprise_id) {
+        setEnterpriseId(profileResponse.data.enterprise_id);
+      }
+
+      // Fetch list of all users for responsible person selection
+      const usersResponse = await axios.get(
+        `${baseURL}/api/v1/auth/users/`,
+        { headers: { Authorization: `Token ${token}` }, timeout: 5000 }
+      );
+      const users = Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse.data.results || [];
+      const otherUsers = users.filter((u: User) => u.id !== user.id);
+      setAvailableUsers(otherUsers);
+      setWorkers(users); // Use users for responsible person selection
+      setFilteredWorkers(users);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleWorkerSearch = (text: string) => {
+    setWorkerSearchText(text);
+    if (!text.trim()) {
+      setFilteredWorkers(workers);
+      return;
+    }
+    const normalized = normalizeText(text.toLowerCase());
+    const filtered = workers.filter(worker => {
+      const nameMatch = normalizeText(`${worker.first_name} ${worker.last_name}`.toLowerCase()).includes(normalized);
+      const emailMatch = worker.email && normalizeText(worker.email.toLowerCase()).includes(normalized);
+      const idMatch = false; // User doesn't have employee_id field
+      return nameMatch || emailMatch || idMatch;
+    });
+    setFilteredWorkers(filtered);
+  };
+
+  const handleSelectWorker = (user: User) => {
+    setResponsiblePerson(`${user.first_name} ${user.last_name}`);
+    setResponsiblePersonId(user.id);
+    setShowWorkerDropdown(false);
+    setWorkerSearchText('');
+    if (errors.responsiblePerson) setErrors(prev => ({ ...prev, responsiblePerson: '' }));
+  };
+
+  const handleAssessorSearch = (text: string) => {
+    setAssessorSearchText(text);
+    if (!text.trim()) {
+      setFilteredAssessors(currentUser ? [currentUser, ...availableUsers] : availableUsers);
+      return;
+    }
+    const normalized = normalizeText(text.toLowerCase());
+    const allAssessors = currentUser ? [currentUser, ...availableUsers] : availableUsers;
+    const filtered = allAssessors.filter(user => {
+      const nameMatch = normalizeText(`${user.first_name} ${user.last_name}`.toLowerCase()).includes(normalized);
+      const emailMatch = user.email && user.email.toLowerCase().includes(text.toLowerCase());
+      return nameMatch || emailMatch;
+    });
+    setFilteredAssessors(filtered);
+  };
+
+  const handleSelectAssessor = (user: User) => {
+    setAssessorName(`${user.first_name} ${user.last_name}`);
+    setShowUserDropdown(false);
+    setAssessorSearchText('');
+    if (errors.assessorName) setErrors(prev => ({ ...prev, assessorName: '' }));
+  };
+
+  const handleDateChange = (field: 'target' | 'review' | 'nextReview', date: Date) => {
+    const dateString = date.toISOString().split('T')[0];
+    if (field === 'target') {
+      setTargetDate(dateString);
+      setShowTargetDatePicker(false);
+    } else if (field === 'review') {
+      setReviewDate(dateString);
+      setShowReviewDatePicker(false);
+    } else if (field === 'nextReview') {
+      setNextReviewDate(dateString);
+      setShowNextReviewDatePicker(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    try {
+      const draftData = {
+        id: currentDraftId || `draft_${Date.now()}`,
+        site,
+        area,
+        sector,
+        assessorName,
+        hazards,
+        targetDate,
+        reviewDate,
+        nextReviewDate,
+        assessmentStatus,
+        createdAt: currentDraftId ? new Date().toISOString() : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const existingDrafts = JSON.parse(await AsyncStorage.getItem(DRAFT_STORAGE_KEY) || '[]');
+      const draftIndex = existingDrafts.findIndex((d: any) => d.id === draftData.id);
+
+      if (draftIndex >= 0) {
+        existingDrafts[draftIndex] = draftData;
+      } else {
+        existingDrafts.push(draftData);
+      }
+
+      await AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(existingDrafts));
+      setCurrentDraftId(draftData.id);
+      showToast('Brouillon sauvegardé avec succès', 'success');
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      showToast('Erreur lors de la sauvegarde du brouillon', 'error');
+    }
+  };
+
+  const validateAssessment = () => {
     const newErrors: Record<string, string> = {};
-    
     if (!site.trim()) newErrors.site = 'Le site est obligatoire';
     if (!area.trim()) newErrors.area = 'La zone est obligatoire';
     if (!assessorName.trim()) newErrors.assessorName = 'L\'évaluateur est obligatoire';
-    
+    return newErrors;
+  };
+
+  const validateHazard = () => {
+    const newErrors: Record<string, string> = {};
+    if (!hazDescription.trim()) newErrors.hazDescription = 'La description est obligatoire';
+    if (!responsiblePerson.trim()) newErrors.responsiblePerson = 'Le responsable est obligatoire';
+    return newErrors;
+  };
+
+  const handleAddHazard = () => {
+    const newErrors = validateHazard();
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
-    
-    const newAssessment: RiskAssessment = {
-      id: `ra-${Date.now()}`, sector, site: site.trim(), area: area.trim(),
-      assessmentDate: new Date().toISOString().split('T')[0], assessorName: assessorName.trim(),
-      hazards: [], overallRiskLevel: SECTOR_PROFILES[sector].riskLevel,
-      reviewDate: new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      status: 'draft', createdAt: new Date().toISOString(),
+
+    const newHazard: HazardIdentification & Record<string, any> = {
+      hazardType: hazType as ExposureRisk,
+      description: hazDescription.trim(),
+      affectedWorkers: Number(affectedWorkers) || 0,
+      likelihood: (Number(likelihood) || 3) as any,
+      consequence: (Number(consequence) || 3) as any,
+      riskScore: riskScore,
+      existingControls: existingControls.split('\n').filter(c => c.trim()),
+      additionalControls: additionalControls.split('\n').filter(c => c.trim()),
+      controlHierarchy,
+      responsiblePerson: responsiblePerson.trim(),
+      responsiblePersonId: responsiblePersonId,
+      targetDate,
+      // Additional fields for backend
+      activitiesAffected: activitiesAffected.trim(),
+      controlEffectiveness,
+      residualLikelihood: Number(residualLikelihood) || 2,
+      residualConsequence: Number(residualConsequence) || 2,
+      assessmentDate,
+      reviewDate,
+      nextReviewDate,
+      assessmentStatus,
     };
+
+    setHazards([...hazards, newHazard]);
+    
+    // Reset hazard form
+    setHazDescription('');
+    setHazType('silica_dust');
+    setLikelihood('3');
+    setConsequence('3');
+    setAffectedWorkers('0');
+    setActivitiesAffected('');
+    setExistingControls('');
+    setControlEffectiveness('effective');
+    setResidualLikelihood('2');
+    setResidualConsequence('2');
+    setAdditionalControls('');
+    setControlHierarchy('engineering');
+    setResponsiblePerson('');
+    setResponsiblePersonId(null);
+    setTargetDate(new Date().toISOString().split('T')[0]);
+    setReviewDate(new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setNextReviewDate(new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setAssessmentStatus('draft');
+    setErrors({});
+    setShowWorkerDropdown(false);
+    setWorkerSearchText('');
+    
+    showToast('Danger ajouté', 'success');
+  };
+
+  const handleRemoveHazard = (index: number) => {
+    setHazards(hazards.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
+    const newErrors = validateAssessment();
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
+      return;
+    }
+
+    if (hazards.length === 0) {
+      showToast('Ajoutez au moins un danger', 'error');
+      return;
+    }
+
+    const newAssessment: RiskAssessment = {
+      id: `ra-${Date.now()}`,
+      sector,
+      site: site.trim(),
+      area: area.trim(),
+      assessmentDate: new Date().toISOString().split('T')[0],
+      assessorName: assessorName.trim(),
+      hazards,
+      overallRiskLevel: hazards.some(h => h.riskScore >= 16) ? 'very_high' : 
+                       hazards.some(h => h.riskScore >= 10) ? 'high' :
+                       hazards.some(h => h.riskScore >= 5) ? 'medium' : 'low',
+      reviewDate: new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+    };
+
     onSave(newAssessment);
-    setSite(''); setArea(''); setAssessorName(''); setErrors({});
+    
+    // Reset form
+    setSite('');
+    setArea('');
+    setAssessorName('');
+    setHazards([]);
+    setStep('assessment');
+    setErrors({});
+  };
+
+  const handleClose = () => {
+    setSite('');
+    setArea('');
+    setAssessorName('');
+    setHazards([]);
+    setStep('assessment');
+    setErrors({});
+    setShowUserDropdown(false);
+    setShowWorkerDropdown(false);
+    setWorkerSearchText('');
+    setShowTargetDatePicker(false);
+    setShowReviewDatePicker(false);
+    setShowNextReviewDatePicker(false);
+    onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouvelle Évaluation</Text>
-              <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
-            </View>
-            <View style={styles.formSection}>
-              <Text style={[styles.formLabel, errors.site && { color: '#EF4444' }]}>Site *</Text>
-              <TextInput style={[styles.formInput, errors.site && { borderColor: '#EF4444', borderWidth: 2 }]} value={site} onChangeText={(text) => { setSite(text); if (errors.site) setErrors(prev => ({ ...prev, site: '' })); }} placeholder="Nom du site" />
-              {errors.site && <Text style={styles.formError}>{errors.site}</Text>}
-            </View>
-            <View style={styles.formSection}>
-              <Text style={[styles.formLabel, errors.area && { color: '#EF4444' }]}>Zone *</Text>
-              <TextInput style={[styles.formInput, errors.area && { borderColor: '#EF4444', borderWidth: 2 }]} value={area} onChangeText={(text) => { setArea(text); if (errors.area) setErrors(prev => ({ ...prev, area: '' })); }} placeholder="Zone évaluée" />
-              {errors.area && <Text style={styles.formError}>{errors.area}</Text>}
-            </View>
-            <View style={styles.formSection}>
-              <Text style={[styles.formLabel, errors.assessorName && { color: '#EF4444' }]}>Évaluateur *</Text>
-              <TextInput style={[styles.formInput, errors.assessorName && { borderColor: '#EF4444', borderWidth: 2 }]} value={assessorName} onChangeText={(text) => { setAssessorName(text); if (errors.assessorName) setErrors(prev => ({ ...prev, assessorName: '' })); }} placeholder="Nom de l'évaluateur" />
-              {errors.assessorName && <Text style={styles.formError}>{errors.assessorName}</Text>}
-            </View>
-            <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Secteur</Text>
-              <View style={styles.chipGrid}>
-                {(Object.keys(SECTOR_PROFILES) as IndustrySector[]).slice(0, 8).map(s => {
-                  const sp = SECTOR_PROFILES[s]; const sel = sector === s;
-                  return (
-                    <TouchableOpacity key={s} style={[styles.optionChip, sel && { backgroundColor: sp.color + '20', borderColor: sp.color }]} onPress={() => setSector(s)}>
-                      <Ionicons name={sp.icon as any} size={12} color={sel ? sp.color : colors.textSecondary} />
-                      <Text style={[styles.optionChipText, sel && { color: sp.color, fontWeight: '600' }]}>{sp.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+        <View style={[styles.modalContent, { maxHeight: '92%' }]}>
+          {/* Step Indicator */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.outline }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                <View style={[styles.stepIndicatorCircle, { backgroundColor: step === 'assessment' ? ACCENT : '#22C55E' }]}>
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>1</Text>
+                </View>
+                <View style={{ flex: 1, height: 2, backgroundColor: step === 'hazards' ? ACCENT : colors.outline, marginHorizontal: 8 }} />
+                <View style={[styles.stepIndicatorCircle, { backgroundColor: step === 'hazards' ? ACCENT : colors.surfaceVariant }]}>
+                  <Text style={{ color: step === 'hazards' ? '#FFF' : colors.text, fontWeight: '700', fontSize: 14 }}>2</Text>
+                </View>
               </View>
             </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingHorizontal: 8 }}>
+              <Text style={{ fontSize: 11, color: step === 'assessment' ? ACCENT : colors.textSecondary, fontWeight: '500' }}>Évaluation</Text>
+              <Text style={{ fontSize: 11, color: step === 'hazards' ? ACCENT : colors.textSecondary, fontWeight: '500' }}>Dangers</Text>
+            </View>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{step === 'assessment' ? 'Nouvelle Évaluation' : 'Ajouter un Danger'}</Text>
+              <TouchableOpacity onPress={handleClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+
+            {step === 'assessment' ? (
+              <>
+                <View style={styles.formSection}>
+                  <Text style={[styles.formLabel, errors.site && { color: '#EF4444' }]}>Site *</Text>
+                  <TextInput 
+                    style={[styles.formInput, errors.site && { borderColor: '#EF4444', borderWidth: 2 }]} 
+                    value={site} 
+                    onChangeText={(text) => { setSite(text); if (errors.site) setErrors(prev => ({ ...prev, site: '' })); }} 
+                    placeholder="Nom du site (ex: Mine Kamoto)"
+                  />
+                  {errors.site && <Text style={styles.formError}>{errors.site}</Text>}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={[styles.formLabel, errors.area && { color: '#EF4444' }]}>Zone *</Text>
+                  <TextInput 
+                    style={[styles.formInput, errors.area && { borderColor: '#EF4444', borderWidth: 2 }]} 
+                    value={area} 
+                    onChangeText={(text) => { setArea(text); if (errors.area) setErrors(prev => ({ ...prev, area: '' })); }} 
+                    placeholder="Zone évaluée (ex: Galerie -200m)"
+                  />
+                  {errors.area && <Text style={styles.formError}>{errors.area}</Text>}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={[styles.formLabel, errors.assessorName && { color: '#EF4444' }]}>Évaluateur *</Text>
+                  <TouchableOpacity
+                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center', backgroundColor: showUserDropdown ? colors.surfaceVariant : colors.surfaceVariant }, errors.assessorName && { borderColor: '#EF4444', borderWidth: 2 }]}
+                    onPress={() => {
+                      setShowUserDropdown(!showUserDropdown);
+                      if (!showUserDropdown) setFilteredAssessors(currentUser ? [currentUser, ...availableUsers] : availableUsers);
+                      setAssessorSearchText('');
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <Text style={{ color: assessorName ? colors.text : colors.textSecondary, flex: 1 }} numberOfLines={1}>
+                        {loadingUsers ? 'Chargement...' : (assessorName || 'Sélectionner un évaluateur')}
+                      </Text>
+                      <Ionicons name={showUserDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+                    </View>
+                  </TouchableOpacity>
+                  
+                  {showUserDropdown && (
+                    <View style={{ backgroundColor: colors.surface, borderRadius: borderRadius.md, marginTop: 8, borderWidth: 1, borderColor: colors.outline, overflow: 'hidden' }}>
+                      {/* Search Input */}
+                      <View style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.outline, backgroundColor: colors.surfaceVariant }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.md, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.outline }}>
+                          <Ionicons name="search" size={16} color={colors.textSecondary} />
+                          <TextInput
+                            style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, color: colors.text, fontSize: 13 }}
+                            placeholder="Rechercher..."
+                            placeholderTextColor={colors.textSecondary}
+                            value={assessorSearchText}
+                            onChangeText={handleAssessorSearch}
+                          />
+                          {assessorSearchText ? (
+                            <TouchableOpacity onPress={() => { setAssessorSearchText(''); setFilteredAssessors(currentUser ? [currentUser, ...availableUsers] : availableUsers); }}>
+                              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </View>
+
+                      {/* Results */}
+                      <ScrollView style={{ maxHeight: 250 }} nestedScrollEnabled>
+                        {filteredAssessors.length > 0 ? (
+                          filteredAssessors.map(user => {
+                            const isCurrent = currentUser && user.id === currentUser.id;
+                            return (
+                              <TouchableOpacity
+                                key={user.id}
+                                style={{ paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: colors.outline, backgroundColor: isCurrent ? colors.surfaceVariant : 'transparent' }}
+                                onPress={() => handleSelectAssessor(user)}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: ACCENT + '20', justifyContent: 'center', alignItems: 'center' }}>
+                                    <Text style={{ color: ACCENT, fontWeight: '700', fontSize: 12 }}>
+                                      {user.first_name[0]}{user.last_name[0]}
+                                    </Text>
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>
+                                      {user.first_name} {user.last_name}
+                                      {isCurrent && <Text style={{ color: ACCENT, fontWeight: '600' }}> (Moi)</Text>}
+                                    </Text>
+                                    {user.email && <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{user.email}</Text>}
+                                  </View>
+                                  {isCurrent && <Ionicons name="checkmark-circle" size={20} color={ACCENT} />}
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })
+                        ) : (
+                          <View style={{ padding: 16, justifyContent: 'center', alignItems: 'center' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Aucun résultat trouvé</Text>
+                          </View>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                  
+                  {errors.assessorName && <Text style={styles.formError}>{errors.assessorName}</Text>}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Secteur</Text>
+                  <View style={styles.chipGrid}>
+                    {(Object.keys(SECTOR_PROFILES) as IndustrySector[]).slice(0, 8).map(s => {
+                      const sp = SECTOR_PROFILES[s];
+                      const sel = sector === s;
+                      return (
+                        <TouchableOpacity key={s} style={[styles.optionChip, sel && { backgroundColor: sp.color + '20', borderColor: sp.color }]} onPress={() => setSector(s)}>
+                          <Ionicons name={sp.icon as any} size={12} color={sel ? sp.color : colors.textSecondary} />
+                          <Text style={[styles.optionChipText, sel && { color: sp.color, fontWeight: '600' }]}>{sp.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={{ backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, padding: 12, marginTop: 16, marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <Ionicons name="information-circle" size={16} color={ACCENT} />
+                    <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }}>Dangers à ajouter</Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 16 }}>À l'étape suivante, vous pourrez ajouter plusieurs dangers avec leur probabilité, gravité et contrôles recommandés.</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.formSection}>
+                  <Text style={[styles.formLabel, errors.hazDescription && { color: '#EF4444' }]}>Description du Danger *</Text>
+                  <TextInput 
+                    style={[styles.formInput, errors.hazDescription && { borderColor: '#EF4444', borderWidth: 2 }, { minHeight: 70, textAlignVertical: 'top' }]} 
+                    value={hazDescription} 
+                    onChangeText={(text) => { setHazDescription(text); if (errors.hazDescription) setErrors(prev => ({ ...prev, hazDescription: '' })); }} 
+                    placeholder="Description complète du danger..."
+                    multiline
+                  />
+                  {errors.hazDescription && <Text style={styles.formError}>{errors.hazDescription}</Text>}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Type de Danger</Text>
+                  <View style={styles.chipGrid}>
+                    {['silica_dust', 'noise', 'chemical_exposure', 'biological', 'ergonomic', 'psychosocial'].map(t => (
+                      <TouchableOpacity 
+                        key={t} 
+                        style={[styles.optionChip, hazType === t && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]} 
+                        onPress={() => setHazType(t)}
+                      >
+                        <Text style={[styles.optionChipText, hazType === t && { color: ACCENT, fontWeight: '600' }]}>{t.replace(/_/g, ' ')}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formLabel}>Probabilité (1-5)</Text>
+                    <View style={styles.chipGrid}>
+                      {['1', '2', '3', '4', '5'].map(v => (
+                        <TouchableOpacity 
+                          key={v} 
+                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: likelihood === v ? ACCENT + '20' : undefined }]} 
+                          onPress={() => setLikelihood(v)}
+                        >
+                          <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: likelihood === v ? '700' : '500' }]}>{v}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formLabel}>Gravité (1-5)</Text>
+                    <View style={styles.chipGrid}>
+                      {['1', '2', '3', '4', '5'].map(v => (
+                        <TouchableOpacity 
+                          key={v} 
+                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: consequence === v ? '#EF444420' : undefined }]} 
+                          onPress={() => setConsequence(v)}
+                        >
+                          <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: consequence === v ? '700' : '500' }]}>{v}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={{ backgroundColor: riskScore >= 16 ? '#DC262640' : riskScore >= 12 ? '#EF444440' : riskScore >= 6 ? '#F59E0B40' : '#22C55E40', borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Score de Risque</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: riskScore >= 16 ? '#DC2626' : riskScore >= 12 ? '#EF4444' : riskScore >= 6 ? '#F59E0B' : '#22C55E' }}>
+                    {likelihood} × {consequence} = {riskScore} {riskScore >= 16 ? '(CRITIQUE)' : riskScore >= 12 ? '(ÉLEVÉ)' : riskScore >= 6 ? '(MOYEN)' : '(FAIBLE)'}
+                  </Text>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Travailleurs Exposés</Text>
+                  <TextInput 
+                    style={styles.formInput} 
+                    value={affectedWorkers} 
+                    onChangeText={setAffectedWorkers} 
+                    placeholder="Nombre de travailleurs"
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Activités Affectées</Text>
+                  <TextInput 
+                    style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                    value={activitiesAffected} 
+                    onChangeText={setActivitiesAffected} 
+                    placeholder="Description des activités affectées (ex: Forage, dynamitage, chargement)"
+                    multiline
+                  />
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Contrôles Existants</Text>
+                  <TextInput 
+                    style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                    value={existingControls} 
+                    onChangeText={setExistingControls} 
+                    placeholder="Un par ligne (ex: Ventilation&#10;Masques FFP3)"
+                    multiline
+                  />
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Efficacité des Contrôles Existants</Text>
+                  <View style={styles.chipGrid}>
+                    {['very_effective', 'effective', 'partially_effective', 'ineffective'].map(e => (
+                      <TouchableOpacity 
+                        key={e} 
+                        style={[styles.optionChip, controlEffectiveness === e && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]} 
+                        onPress={() => setControlEffectiveness(e as any)}
+                      >
+                        <Text style={[styles.optionChipText, controlEffectiveness === e && { color: ACCENT, fontWeight: '600' }]}>
+                          {e === 'very_effective' ? 'Très' : e === 'effective' ? 'Efficace' : e === 'partially_effective' ? 'Partielle' : 'Inefficace'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formLabel}>Prob. Résiduelle (1-5)</Text>
+                    <View style={styles.chipGrid}>
+                      {['1', '2', '3', '4', '5'].map(v => (
+                        <TouchableOpacity 
+                          key={v} 
+                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: residualLikelihood === v ? ACCENT + '20' : undefined }]} 
+                          onPress={() => setResidualLikelihood(v)}
+                        >
+                          <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: residualLikelihood === v ? '700' : '500' }]}>{v}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formLabel}>Grav. Résiduelle (1-5)</Text>
+                    <View style={styles.chipGrid}>
+                      {['1', '2', '3', '4', '5'].map(v => (
+                        <TouchableOpacity 
+                          key={v} 
+                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: residualConsequence === v ? '#EF444420' : undefined }]} 
+                          onPress={() => setResidualConsequence(v)}
+                        >
+                          <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: residualConsequence === v ? '700' : '500' }]}>{v}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Contrôles Additionnels Recommandés</Text>
+                  <TextInput 
+                    style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                    value={additionalControls} 
+                    onChangeText={setAdditionalControls} 
+                    placeholder="Un par ligne (ex: Système brumisation&#10;Rotation des postes)"
+                    multiline
+                  />
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Hiérarchie de Contrôle</Text>
+                  <View style={styles.chipGrid}>
+                    {['elimination', 'substitution', 'engineering', 'administrative', 'ppe'].map(c => (
+                      <TouchableOpacity 
+                        key={c} 
+                        style={[styles.optionChip, controlHierarchy === c && { backgroundColor: getControlColor(c) + '20', borderColor: getControlColor(c) }]} 
+                        onPress={() => setControlHierarchy(c as any)}
+                      >
+                        <Text style={[styles.optionChipText, controlHierarchy === c && { color: getControlColor(c), fontWeight: '600' }]}>{getControlLabel(c)}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={[styles.formLabel, errors.responsiblePerson && { color: '#EF4444' }]}>Personne Responsable *</Text>
+                  <TouchableOpacity
+                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center' }, errors.responsiblePerson && { borderColor: '#EF4444', borderWidth: 2 }]}
+                    onPress={() => {
+                      setShowWorkerDropdown(!showWorkerDropdown);
+                      if (!showWorkerDropdown) setFilteredWorkers(workers);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: responsiblePerson ? colors.text : colors.textSecondary, flex: 1 }}>
+                        {responsiblePerson || 'Sélectionner le responsable'}
+                      </Text>
+                      <Ionicons name={showWorkerDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+                    </View>
+                  </TouchableOpacity>
+                  {showWorkerDropdown && (
+                    <View style={{ backgroundColor: colors.surface, borderRadius: borderRadius.md, marginTop: 8, borderWidth: 1, borderColor: colors.outline }}>
+                      <TextInput
+                        style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.outline, color: colors.text }}
+                        placeholder="Rechercher par nom ou email..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={workerSearchText}
+                        onChangeText={handleWorkerSearch}
+                      />
+                      <ScrollView style={{ maxHeight: 250 }} nestedScrollEnabled>
+                        {filteredWorkers.length > 0 ? (
+                          filteredWorkers.map(worker => (
+                            <TouchableOpacity
+                              key={worker.id}
+                              style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.outline }}
+                              onPress={() => handleSelectWorker(worker)}
+                            >
+                              <Text style={{ color: colors.text, fontWeight: '500' }}>
+                                {worker.first_name} {worker.last_name}
+                              </Text>
+                              {worker.email && (
+                                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+                                  {worker.email}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={{ padding: 12, justifyContent: 'center', alignItems: 'center' }}>
+                            <Text style={{ color: colors.textSecondary }}>Aucun résultat trouvé</Text>
+                          </View>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                  {errors.responsiblePerson && <Text style={styles.formError}>{errors.responsiblePerson}</Text>}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Date Cible d'Action</Text>
+                  <TouchableOpacity
+                    style={[styles.formInput, { justifyContent: 'center', paddingRight: 12 }]}
+                    onPress={() => setShowTargetDatePicker(true)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: colors.text }}>{targetDate}</Text>
+                      <Ionicons name="calendar" size={20} color={colors.textSecondary} />
+                    </View>
+                  </TouchableOpacity>
+                  {showTargetDatePicker && (
+                    <View style={{ marginTop: 8, zIndex: 1000 }}>
+                      <ReactDatePicker
+                        selected={new Date(targetDate)}
+                        onChange={(date: Date | null) => {
+                          if (date) handleDateChange('target', date);
+                        }}
+                        dateFormat="yyyy-MM-dd"
+                        inline
+                      />
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formLabel}>Date Révision</Text>
+                    <TouchableOpacity
+                      style={[styles.formInput, { justifyContent: 'center', paddingRight: 12 }]}
+                      onPress={() => setShowReviewDatePicker(true)}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ color: colors.text, fontSize: 13 }}>{reviewDate}</Text>
+                        <Ionicons name="calendar" size={18} color={colors.textSecondary} />
+                      </View>
+                    </TouchableOpacity>
+                    {showReviewDatePicker && (
+                      <View style={{ marginTop: 8, zIndex: 1000 }}>
+                        <ReactDatePicker
+                          selected={new Date(reviewDate)}
+                          onChange={(date: Date | null) => {
+                            if (date) handleDateChange('review', date);
+                          }}
+                          dateFormat="yyyy-MM-dd"
+                          inline
+                        />
+                      </View>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.formLabel}>Prochaine Révision</Text>
+                    <TouchableOpacity
+                      style={[styles.formInput, { justifyContent: 'center', paddingRight: 12 }]}
+                      onPress={() => setShowNextReviewDatePicker(true)}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ color: colors.text, fontSize: 13 }}>{nextReviewDate}</Text>
+                        <Ionicons name="calendar" size={18} color={colors.textSecondary} />
+                      </View>
+                    </TouchableOpacity>
+                    {showNextReviewDatePicker && (
+                      <View style={{ marginTop: 8, zIndex: 1000 }}>
+                        <ReactDatePicker
+                          selected={new Date(nextReviewDate)}
+                          onChange={(date: Date | null) => {
+                            if (date) handleDateChange('nextReview', date);
+                          }}
+                          dateFormat="yyyy-MM-dd"
+                          inline
+                        />
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Statut d'Évaluation</Text>
+                  <View style={styles.chipGrid}>
+                    {['draft', 'approved', 'implemented', 'reviewed'].map(s => (
+                      <TouchableOpacity 
+                        key={s} 
+                        style={[styles.optionChip, assessmentStatus === s && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]} 
+                        onPress={() => setAssessmentStatus(s as any)}
+                      >
+                        <Text style={[styles.optionChipText, assessmentStatus === s && { color: ACCENT, fontWeight: '600' }]}>
+                          {s === 'draft' ? 'Brouillon' : s === 'approved' ? 'Approuvé' : s === 'implemented' ? 'Implémenté' : 'Révisé'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {hazards.length > 0 && (
+                  <View style={{ backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text, marginBottom: 8 }}>Dangers ajoutés: {hazards.length}</Text>
+                    {hazards.map((h, i) => (
+                      <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.outline }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: colors.text }}>{h.description.substring(0, 40)}...</Text>
+                          <Text style={{ fontSize: 10, color: colors.textSecondary }}>Score: {h.riskScore}</Text>
+                        </View>
+                        <TouchableOpacity onPress={() => handleRemoveHazard(i)}>
+                          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
           </ScrollView>
+
           <View style={styles.modalActions}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}><Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave}><Ionicons name="save-outline" size={18} color="#FFF" /><Text style={[styles.actionBtnText, { color: '#FFF' }]}>Créer</Text></TouchableOpacity>
+            {step === 'assessment' ? (
+              <>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant, opacity: 0.7 }]} onPress={saveDraft}>
+                  <Ionicons name="document-outline" size={16} color={colors.text} />
+                  <Text style={[styles.actionBtnText, { color: colors.text, fontSize: 12 }]}>Brouillon</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={handleClose}>
+                  <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, { backgroundColor: (!site.trim() || !area.trim() || !assessorName.trim()) ? colors.outline : ACCENT, opacity: (!site.trim() || !area.trim() || !assessorName.trim()) ? 0.5 : 1 }]} 
+                  onPress={() => { const newErrors = validateAssessment(); if (Object.keys(newErrors).length === 0) setStep('hazards'); else setErrors(newErrors); }}
+                  disabled={!site.trim() || !area.trim() || !assessorName.trim()}
+                >
+                  <Ionicons name="arrow-forward" size={18} color={(!site.trim() || !area.trim() || !assessorName.trim()) ? colors.textSecondary : "#FFF"} />
+                  <Text style={[styles.actionBtnText, { color: (!site.trim() || !area.trim() || !assessorName.trim()) ? colors.textSecondary : '#FFF' }]}>Suivant</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant, opacity: 0.7 }]} onPress={saveDraft}>
+                  <Ionicons name="document-outline" size={16} color={colors.text} />
+                  <Text style={[styles.actionBtnText, { color: colors.text, fontSize: 12 }]}>Brouillon</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={() => setStep('assessment')}>
+                  <Ionicons name="arrow-back" size={18} color={colors.text} />
+                  <Text style={[styles.actionBtnText, { color: colors.text }]}>Retour</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={handleAddHazard}>
+                  <Ionicons name="add-circle-outline" size={18} color="#FFF" />
+                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>+ Danger</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave} disabled={hazards.length === 0}>
+                  <Ionicons name="save-outline" size={18} color="#FFF" />
+                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Créer ({hazards.length})</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -385,7 +1191,7 @@ export function RiskAssessmentScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   
-  const [assessments, setAssessments] = useState<RiskAssessment[]>(SAMPLE_ASSESSMENTS);
+  const [assessments, setAssessments] = useState<RiskAssessment[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssessment, setSelectedAssessment] = useState<RiskAssessment | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -402,8 +1208,8 @@ export function RiskAssessmentScreen() {
       
       // Check if token exists before making API call
       if (!token) {
-        console.warn('No authentication token found, using sample data');
-        setAssessments(SAMPLE_ASSESSMENTS);
+        console.warn('No authentication token found');
+        setAssessments([]);
         setLoading(false);
         return;
       }
@@ -459,6 +1265,7 @@ export function RiskAssessmentScreen() {
               // Safely access and validate hazard properties
               const workersExposed = Array.isArray(h.workers_exposed) ? h.workers_exposed.length : (typeof h.workers_exposed === 'number' ? h.workers_exposed : 0);
               const existingControls = typeof h.existing_controls === 'string' ? h.existing_controls.split(',').map((c: string) => c.trim()) : [];
+              const responsiblePersonName = h.responsible_person_name || h.assessed_by_name || 'Inconnu';
               
               assessmentsMap[key].hazards.push({
                 hazardType: h.hazard_type || 'unknown',
@@ -470,7 +1277,7 @@ export function RiskAssessmentScreen() {
                 existingControls: existingControls,
                 additionalControls: Array.isArray(h.ppe_recommendations) ? h.ppe_recommendations : [],
                 controlHierarchy: 'engineering',
-                responsiblePerson: assessorName,
+                responsiblePerson: responsiblePersonName,
                 targetDate: h.next_review_date || '',
               });
             } catch (itemError) {
@@ -480,19 +1287,15 @@ export function RiskAssessmentScreen() {
           });
           
           const assessmentsList = Object.values(assessmentsMap);
-          if (assessmentsList.length > 0) {
-            setAssessments(assessmentsList);
-          } else {
-            setAssessments(SAMPLE_ASSESSMENTS);
-          }
+          setAssessments(assessmentsList);
         }
       } catch (apiError: any) {
-        console.warn('API request failed, using sample data:', apiError?.message);
-        setAssessments(SAMPLE_ASSESSMENTS);
+        console.warn('API request failed:', apiError?.message);
+        setAssessments([]);
       }
     } catch (error) {
       console.error('Failed to load risk assessments:', error);
-      setAssessments(SAMPLE_ASSESSMENTS);
+      setAssessments([]);
     } finally {
       setLoading(false);
     }
@@ -514,27 +1317,29 @@ export function RiskAssessmentScreen() {
       if (assessment.hazards && assessment.hazards.length > 0) {
         const failedHazards: string[] = [];
         for (let i = 0; i < assessment.hazards.length; i++) {
-          const hazard = assessment.hazards[i];
+          const hazard: any = assessment.hazards[i];
           try {
-            const hazardData = {
+            const hazardData: any = {
               hazard_description: hazard.description || '',
               hazard_type: hazard.hazardType || 'unknown',
               location: assessment.area,
-              activities_affected: '',
+              activities_affected: hazard.activitiesAffected || '',
               probability: Math.max(1, Math.min(5, Number(hazard.likelihood) || 1)),
               severity: Math.max(1, Math.min(5, Number(hazard.consequence) || 1)),
-              existing_controls: (Array.isArray(hazard.existingControls) ? hazard.existingControls : []).join(', '),
-              control_effectiveness: 'effective',
-              residual_probability: Math.max(1, (Number(hazard.likelihood) || 1) - 1),
-              residual_severity: Math.max(1, (Number(hazard.consequence) || 1) - 1),
-              risk_level: assessment.overallRiskLevel,
-              action_required: assessment.overallRiskLevel !== 'low',
-              priority: 'medium',
+              existing_controls: (Array.isArray(hazard.existingControls) ? hazard.existingControls : []).join('\n'),
+              control_effectiveness: hazard.controlEffectiveness || 'effective',
+              residual_probability: Math.max(1, Math.min(5, hazard.residualLikelihood || (Number(hazard.likelihood) || 1) - 1)),
+              residual_severity: Math.max(1, Math.min(5, hazard.residualConsequence || (Number(hazard.consequence) || 1) - 1)),
               assessment_date: assessment.assessmentDate,
-              review_date: assessment.reviewDate,
-              next_review_date: assessment.reviewDate,
-              status: assessment.status,
+              review_date: hazard.reviewDate || assessment.reviewDate,
+              next_review_date: hazard.nextReviewDate || assessment.reviewDate,
+              status: hazard.assessmentStatus || assessment.status,
             };
+            
+            // Add optional responsible person field if provided (enterprise is auto-assigned by backend)
+            if (hazard.responsiblePersonId) {
+              hazardData.responsible_person = hazard.responsiblePersonId;
+            }
             
             await axios.post(
               `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
@@ -579,6 +1384,79 @@ export function RiskAssessmentScreen() {
     } else {
       showToast('Évaluation créée localement (sync pending).', 'error');
     }
+  };
+
+  const handleDelete = async (assessmentId: string) => {
+    Alert.alert(
+      'Supprimer l\'évaluation',
+      'Êtes-vous sûr de vouloir supprimer cette évaluation et tous ses dangers?',
+      [
+        { text: 'Annuler', onPress: () => {} },
+        {
+          text: 'Supprimer',
+          onPress: async () => {
+            try {
+              const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+              const token = await AsyncStorage.getItem('auth_token');
+              
+              if (!token) {
+                showToast('Authentification requise', 'error');
+                return;
+              }
+
+              // Delete all hazards for this assessment
+              const assessment = assessments.find(a => a.id === assessmentId);
+              if (assessment && assessment.hazards.length > 0) {
+                // Get the assessment data to find associated hazard IDs
+                const response = await axios.get(
+                  `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
+                  {
+                    headers: {
+                      Authorization: `Token ${token}`,
+                      'Content-Type': 'application/json',
+                    },
+                    timeout: 8000,
+                  }
+                );
+
+                const allHazards = Array.isArray(response.data) ? response.data : response.data.results || [];
+                
+                // Filter hazards for this assessment and delete them
+                for (const hazard of allHazards) {
+                  if (hazard.assessment_date === assessment.assessmentDate && 
+                      hazard.assessed_by_name === assessment.assessorName) {
+                    try {
+                      await axios.delete(
+                        `${baseURL}/api/v1/occupational-health/hazard-identifications/${hazard.id}/`,
+                        {
+                          headers: {
+                            Authorization: `Token ${token}`,
+                            'Content-Type': 'application/json',
+                          },
+                          timeout: 8000,
+                        }
+                      );
+                    } catch (deleteError) {
+                      console.warn(`Failed to delete hazard ${hazard.id}:`, deleteError);
+                    }
+                  }
+                }
+              }
+
+              // Remove from local state
+              setAssessments(assessments.filter(a => a.id !== assessmentId));
+              setShowDetail(false);
+              setSelectedAssessment(null);
+              showToast('Évaluation supprimée', 'success');
+            } catch (error: any) {
+              console.error('Failed to delete assessment:', error);
+              showToast('Erreur lors de la suppression', 'error');
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Normalize search for better accent handling
@@ -663,7 +1541,7 @@ export function RiskAssessmentScreen() {
             )}
           </View>
 
-          <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} />
+          <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} onDelete={handleDelete} />
           <AddAssessmentModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={handleAdd} />
         </>
       )}
@@ -743,10 +1621,11 @@ const styles = StyleSheet.create({
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, width: '100%', maxHeight: '90%', padding: 24, ...shadows.xl },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalContent: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, width: '100%', maxHeight: '90%', ...shadows.xl },
+  stepIndicatorCircle: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingHorizontal: 20, paddingTop: 12 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 20, paddingHorizontal: 20, paddingBottom: 20 },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: borderRadius.lg },
   actionBtnText: { fontWeight: '600', fontSize: 14 },
 

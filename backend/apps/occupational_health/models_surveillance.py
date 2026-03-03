@@ -111,10 +111,36 @@ class SurveillanceProgram(models.Model):
         help_text=_("Ex: ISO 45001:2018, ILO C155")
     )
     
+    # Medical & Risk Management
+    medical_protocols = models.TextField(
+        _("Protocoles Médicaux"), blank=True,
+        help_text=_("Description des protocoles médicaux à suivre")
+    )
+    follow_up_procedures = models.TextField(
+        _("Procédures Suivi"), blank=True,
+        help_text=_("Actions de suivi requises pour les résultats anormaux")
+    )
+    risk_assessment_method = models.TextField(
+        _("Méthodologie Évaluation Risques"), blank=True,
+        help_text=_("Approche utilisée pour évaluer les risques")
+    )
+    target_job_categories = models.JSONField(
+        _("Catégories Emploi Ciblées"), default=list, blank=True,
+        help_text=_("Liste des catégories d'emploi: ['underground_work', 'surface_operations']")
+    )
+    coverage_percentage = models.PositiveIntegerField(
+        _("Couverture Cible (%)"), default=100,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    
     # Audit
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True,
         related_name='surveillance_programs_created'
+    )
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='surveillance_programs_updated'
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

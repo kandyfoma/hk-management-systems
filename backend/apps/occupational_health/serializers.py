@@ -738,6 +738,7 @@ class HazardIdentificationSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     assessed_by_name = serializers.CharField(source='assessed_by.get_full_name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    responsible_person_name = serializers.CharField(source='responsible_person.get_full_name', read_only=True, required=False)
     
     risk_score = serializers.ReadOnlyField()
     residual_risk_score = serializers.ReadOnlyField()
@@ -748,6 +749,10 @@ class HazardIdentificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = HazardIdentification
         fields = '__all__'
+        read_only_fields = ['risk_score', 'residual_risk_score', 'risk_level', 'action_required', 'priority', 'assessed_by', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'enterprise': {'required': False},
+        }
 
 class SiteHealthMetricsSerializer(serializers.ModelSerializer):
     """Site health metrics serializer with calculated KPIs"""

@@ -692,6 +692,7 @@ export type OccupationalDiseaseType =
 export interface SurveillanceProgram {
   id: string;
   name: string;
+  code?: string;
   description: string;
   sector: IndustrySector;
   targetRiskGroup: ExposureRisk;
@@ -701,10 +702,17 @@ export interface SurveillanceProgram {
   requiredScreenings: string[];
   actionLevels: ActionLevel[];
   isActive: boolean;
+  status?: 'draft' | 'active' | 'paused' | 'archived';
   createdBy: string;
   createdAt: string;
   updatedBy?: string;
   updatedAt?: string;
+  regulatoryRef?: string;
+  complianceStandard?: string;
+  medicalProtocols?: string;
+  followUpProcedures?: string;
+  riskAssessmentMethod?: string;
+  coveragePercentage?: number | string;
 }
 
 export interface ActionLevel {

@@ -1387,7 +1387,19 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
         ).prefetch_related('workers_exposed')
     
     def perform_create(self, serializer):
-        serializer.save(assessed_by=self.request.user)
+        # Auto-assign enterprise if not provided
+        enterprise = serializer.validated_data.get('enterprise')
+        if not enterprise:
+            from apps.administration.models import Enterprise
+            # Try to get user's enterprise
+            user = self.request.user
+            if hasattr(user, 'enterprise') and user.enterprise:
+                enterprise = user.enterprise
+            else:
+                # Fallback to first active enterprise
+                enterprise = Enterprise.objects.filter(is_active=True).first()
+        # Set assessor to current user and enterprise
+        serializer.save(assessed_by=self.request.user, enterprise=enterprise)
     
     @action(detail=False, methods=['get'])
     def statistics(self, request):

@@ -19,6 +19,26 @@ const isDesktop = width >= 1024;
 const ACCENT = colors.primary;
 const STORAGE_KEY = '@occhealth_surveillance';
 
+// Mapping function to convert ExposureRisk to backend RISK_GROUP_CHOICES
+// Mapping function to convert ExposureRisk to backend RISK_GROUP_CHOICES
+function mapExposureRiskToBackendRiskGroup(exposureRisk: ExposureRisk): string {
+  const map: Record<string, string> = {
+    silica_dust: 'respiratory_exposed', coal_dust: 'respiratory_exposed', asbestos: 'respiratory_exposed',
+    noise: 'noise_exposed', vibration: 'noise_exposed',
+    chemical_exposure: 'chemical_exposed', diesel_exhaust: 'chemical_exposed', pesticides: 'chemical_exposed', solvents: 'chemical_exposed',
+    heavy_metals: 'heavy_metals',
+    radiation: 'high_risk', non_ionizing_radiation: 'high_risk', working_at_heights: 'high_risk', confined_spaces: 'high_risk',
+    biological: 'respiratory_exposed', needle_stick: 'high_risk', animal_hazards: 'respiratory_exposed',
+    ergonomic: 'all_workers', manual_handling: 'all_workers', vdt_screen: 'all_workers', sedentary: 'all_workers', repetitive_motion: 'all_workers',
+    psychosocial: 'night_workers', shift_work: 'night_workers',
+    violence_aggression: 'high_risk', isolated_work: 'high_risk',
+    machine_hazards: 'high_risk', electrical: 'high_risk', fire_explosion: 'high_risk', road_accident: 'high_risk',
+    slip_trip_fall: 'all_workers', indoor_air_quality: 'respiratory_exposed', voice_strain: 'all_workers',
+    heat_stress: 'all_workers', cold_stress: 'all_workers',
+  };
+  return map[exposureRisk] || 'all_workers';
+}
+
 function getFrequencyLabel(f: string): string {
   const m: Record<string, string> = { monthly: 'Mensuel', quarterly: 'Trimestriel', biannual: 'Semestriel', annual: 'Annuel' };
   return m[f] || f;
@@ -133,14 +153,26 @@ function ProgramCard({ program, onPress }: { program: SurveillanceProgram; onPre
 
       <View style={styles.programCardFooter}>
         <View style={styles.screeningTags}>
-          {program.requiredScreenings.slice(0, 3).map((s, i) => (
+          {(program.requiredScreenings || []).slice(0, 3).map((s, i) => (
             <View key={i} style={styles.screeningTag}>
-              <Text style={styles.screeningTagText}>{s.replace(/_/g, ' ')}</Text>
+              <Text style={styles.screeningTagText}>{String(s).replace(/_/g, ' ')}</Text>
             </View>
           ))}
-          {program.requiredScreenings.length > 3 && <Text style={styles.moreText}>+{program.requiredScreenings.length - 3}</Text>}
+          {(program.requiredScreenings?.length || 0) > 3 && <Text style={styles.moreText}>+{(program.requiredScreenings?.length || 0) - 3}</Text>}
         </View>
         <Text style={styles.alertLevels}>{(program.actionLevels && Array.isArray(program.actionLevels) ? program.actionLevels.length : 0)} seuil(s) d'alerte</Text>
+      </View>
+
+      <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, marginTop: 8, gap: 4 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: colors.textSecondary }}>Créé par: <Text style={{ fontWeight: '600', color: colors.text }}>{program.createdBy || 'N/A'}</Text></Text>
+            {program.createdAt && <Text style={{ fontSize: 10, color: colors.textTertiary }}>{new Date(program.createdAt).toLocaleDateString('fr-CD')} à {new Date(program.createdAt).toLocaleTimeString('fr-CD', { hour: '2-digit', minute: '2-digit' })}</Text>}
+          </View>
+        </View>
+        {program.updatedBy && (
+          <Text style={{ fontSize: 10, color: colors.textTertiary }}>Modifié: {new Date(program.updatedAt || '').toLocaleDateString('fr-CD')} à {new Date(program.updatedAt || '').toLocaleTimeString('fr-CD', { hour: '2-digit', minute: '2-digit' })}</Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -273,6 +305,16 @@ function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClo
   const [regulatoryRef, setRegulatoryRef] = useState('');
   const [complianceStandard, setComplianceStandard] = useState('');
   const [requiredScreenings, setRequiredScreenings] = useState<string[]>(['spirometry']);
+  const [targetJobCategories, setTargetJobCategories] = useState<string[]>([]);
+  const [followUpProcedures, setFollowUpProcedures] = useState('');
+  const [medicalProtocols, setMedicalProtocols] = useState('');
+  const [riskAssessmentMethod, setRiskAssessmentMethod] = useState('');
+  const [coveragePercentage, setCoveragePercentage] = useState('100');
+
+  const JOB_CATEGORIES = [
+    'underground_work', 'surface_operations', 'processing_refining',
+    'office_clerical', 'management', 'maintenance_mechanical', 'construction_trades'
+  ];
 
   const SCREENING_OPTIONS = [
     'spirometry', 'audiometry', 'vision_test', 'blood_test', 
@@ -284,6 +326,14 @@ function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClo
       prev.includes(screening) 
         ? prev.filter(s => s !== screening)
         : [...prev, screening]
+    );
+  };
+
+  const handleToggleJobCategory = (category: string) => {
+    setTargetJobCategories(prev => 
+      prev.includes(category) 
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
     );
   };
 
@@ -299,7 +349,7 @@ function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClo
         description: description.trim(),
         sector, 
         targetRiskGroup: targetRisk, 
-        targetJobCategories: [],
+        targetJobCategories: targetJobCategories,
         frequency, 
         requiredTests: ['periodic'], 
         requiredScreenings,
@@ -320,6 +370,12 @@ function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClo
       setStatus('active');
       setRegulatoryRef('');
       setComplianceStandard('');
+      setRequiredScreenings(['spirometry']);
+      setTargetJobCategories([]);
+      setFollowUpProcedures('');
+      setMedicalProtocols('');
+      setRiskAssessmentMethod('');
+      setCoveragePercentage('100');
       setRequiredScreenings(['spirometry']);
     } catch (error) {
       Alert.alert('Erreur', 'Erreur lors de la création du programme');
@@ -448,6 +504,79 @@ function AddProgramModal({ visible, onClose, onSave }: { visible: boolean; onClo
               </View>
             </View>
 
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Critères d'Éligibilité & Couverture</Text>
+              <Text style={styles.formLabel}>Catégories de Travaillez Ciblées</Text>
+              <View style={styles.chipGrid}>
+                {JOB_CATEGORIES.map(category => (
+                  <TouchableOpacity 
+                    key={category} 
+                    style={[styles.optionChip, targetJobCategories.includes(category) && styles.optionChipActive]} 
+                    onPress={() => handleToggleJobCategory(category)}
+                  >
+                    <Ionicons 
+                      name={targetJobCategories.includes(category) ? 'checkbox' : 'checkbox-outline'} 
+                      size={14} 
+                      color={targetJobCategories.includes(category) ? colors.primary : colors.textSecondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.optionChipText, targetJobCategories.includes(category) && styles.optionChipTextActive]}>
+                      {category.replace(/_/g, ' ')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Couverture Cible (%)</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={coveragePercentage} 
+                onChangeText={setCoveragePercentage} 
+                placeholder="100"
+                keyboardType="numeric"
+                maxLength={3}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Procédures & Protocoles Médicaux</Text>
+              <Text style={styles.formLabel}>Protocoles Médicaux</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={medicalProtocols} 
+                onChangeText={setMedicalProtocols} 
+                placeholder="Description des protocoles médicaux à suivre..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Procédures de Suivi</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={followUpProcedures} 
+                onChangeText={setFollowUpProcedures} 
+                placeholder="Actions de suivi requises pour les résultats anormaux..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Méthodologie d'Évaluation des Risques</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={riskAssessmentMethod} 
+                onChangeText={setRiskAssessmentMethod} 
+                placeholder="Approche utilisée pour évaluer les risques..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
             {/* Status & Compliance */}
             <View style={styles.formSection}>
               <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Statut et Conformité</Text>
@@ -508,11 +637,25 @@ function EditProgramModal({ visible, program, onClose, onSave }: { visible: bool
   if (!program) return null;
 
   const [name, setName] = useState(program.name);
+  const [code, setCode] = useState(program.code || '');
   const [description, setDescription] = useState(program.description);
   const [sector, setSector] = useState<IndustrySector>(program.sector);
   const [frequency, setFrequency] = useState<'monthly' | 'quarterly' | 'biannual' | 'annual'>(program.frequency);
   const [targetRisk, setTargetRisk] = useState<ExposureRisk>(program.targetRiskGroup);
+  const [status, setStatus] = useState<'draft' | 'active' | 'paused' | 'archived'>(program.status || 'active');
+  const [regulatoryRef, setRegulatoryRef] = useState(program.regulatoryRef || '');
+  const [complianceStandard, setComplianceStandard] = useState(program.complianceStandard || '');
   const [requiredScreenings, setRequiredScreenings] = useState<string[]>(program.requiredScreenings || ['spirometry']);
+  const [targetJobCategories, setTargetJobCategories] = useState<string[]>(program.targetJobCategories || []);
+  const [followUpProcedures, setFollowUpProcedures] = useState(program.followUpProcedures || '');
+  const [medicalProtocols, setMedicalProtocols] = useState(program.medicalProtocols || '');
+  const [riskAssessmentMethod, setRiskAssessmentMethod] = useState(program.riskAssessmentMethod || '');
+  const [coveragePercentage, setCoveragePercentage] = useState(program.coveragePercentage || '100');
+
+  const JOB_CATEGORIES = [
+    'underground_work', 'surface_operations', 'processing_refining',
+    'office_clerical', 'management', 'maintenance_mechanical', 'construction_trades'
+  ];
 
   const SCREENING_OPTIONS = [
     'spirometry', 'audiometry', 'vision_test', 'blood_test', 
@@ -527,18 +670,36 @@ function EditProgramModal({ visible, program, onClose, onSave }: { visible: bool
     );
   };
 
+  const handleToggleJobCategory = (category: string) => {
+    setTargetJobCategories(prev => 
+      prev.includes(category) 
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Erreur', 'Le nom du programme est obligatoire.'); return; }
+    if (!code.trim()) { Alert.alert('Erreur', 'Le code du programme est obligatoire.'); return; }
     
     try {
       const updatedProgram: SurveillanceProgram = {
         ...program,
         name: name.trim(),
+        code: code.trim(),
         description: description.trim(),
         sector,
         targetRiskGroup: targetRisk,
+        targetJobCategories,
         frequency,
         requiredScreenings,
+        status,
+        regulatoryRef: regulatoryRef.trim(),
+        complianceStandard: complianceStandard.trim(),
+        followUpProcedures: followUpProcedures.trim(),
+        medicalProtocols: medicalProtocols.trim(),
+        riskAssessmentMethod: riskAssessmentMethod.trim(),
+        coveragePercentage: parseInt(coveragePercentage) || 100,
       };
       onSave(updatedProgram);
       onClose();
@@ -567,6 +728,17 @@ function EditProgramModal({ visible, program, onClose, onSave }: { visible: bool
                 onChangeText={setName} 
                 placeholder="Ex: Surveillance Respiratoire - Miniers"
                 maxLength={200}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Code Programme *</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={code} 
+                onChangeText={setCode} 
+                placeholder="Ex: SURV_RESP_MIN (unique)"
+                maxLength={50}
               />
             </View>
 
@@ -621,13 +793,13 @@ function EditProgramModal({ visible, program, onClose, onSave }: { visible: bool
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Fréquence de Dépistage</Text>
               <View style={styles.chipGrid}>
-                {(['monthly', 'quarterly', 'biannual', 'annual'] as Array<'monthly' | 'quarterly' | 'biannual' | 'annual'>).map(f => (
+                {(['monthly', 'quarterly', 'biannual', 'annual'] as const).map(f => (
                   <TouchableOpacity 
                     key={f} 
-                    style={[styles.optionChip, frequency === f && styles.optionChipActive]} 
+                    style={[styles.optionChip, frequency === f && { backgroundColor: getFrequencyColor(f) + '28', borderColor: getFrequencyColor(f), borderWidth: 1.5 }]} 
                     onPress={() => setFrequency(f)}
                   >
-                    <Text style={[styles.optionChipText, frequency === f && styles.optionChipTextActive]}>
+                    <Text style={[styles.optionChipText, frequency === f && { color: getFrequencyColor(f), fontWeight: '700' }]}>
                       {getFrequencyLabel(f)}
                     </Text>
                   </TouchableOpacity>
@@ -636,21 +808,156 @@ function EditProgramModal({ visible, program, onClose, onSave }: { visible: bool
             </View>
 
             <View style={styles.formSection}>
-              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Examens & Dépistages</Text>
-              <Text style={styles.formLabel}>Examens Requis</Text>
-              {SCREENING_OPTIONS.map(screening => (
-                <TouchableOpacity
-                  key={screening}
-                  style={[styles.checkboxRow, { backgroundColor: colors.surface }]}
-                  onPress={() => handleToggleScreening(screening)}
-                >
-                  <View style={[styles.checkbox, requiredScreenings.includes(screening) && { backgroundColor: ACCENT }]}>
-                    {requiredScreenings.includes(screening) && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{screening.replace(/_/g, ' ')}</Text>
-                </TouchableOpacity>
-              ))}
+              <Text style={styles.formLabel}>Examens/Dépistages Requis</Text>
+              <View style={styles.chipGrid}>
+                {SCREENING_OPTIONS.map(screening => (
+                  <TouchableOpacity 
+                    key={screening} 
+                    style={[styles.optionChip, requiredScreenings.includes(screening) && styles.optionChipActive]} 
+                    onPress={() => handleToggleScreening(screening)}
+                  >
+                    <Ionicons 
+                      name={requiredScreenings.includes(screening) ? 'checkbox' : 'checkbox-outline'} 
+                      size={14} 
+                      color={requiredScreenings.includes(screening) ? colors.primary : colors.textSecondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.optionChipText, requiredScreenings.includes(screening) && styles.optionChipTextActive]}>
+                      {screening.replace(/_/g, ' ')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
+
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Critères d'Éligibilité & Couverture</Text>
+              <Text style={styles.formLabel}>Catégories de Travaillez Ciblées</Text>
+              <View style={styles.chipGrid}>
+                {JOB_CATEGORIES.map(category => (
+                  <TouchableOpacity 
+                    key={category} 
+                    style={[styles.optionChip, targetJobCategories.includes(category) && styles.optionChipActive]} 
+                    onPress={() => handleToggleJobCategory(category)}
+                  >
+                    <Ionicons 
+                      name={targetJobCategories.includes(category) ? 'checkbox' : 'checkbox-outline'} 
+                      size={14} 
+                      color={targetJobCategories.includes(category) ? colors.primary : colors.textSecondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.optionChipText, targetJobCategories.includes(category) && styles.optionChipTextActive]}>
+                      {category.replace(/_/g, ' ')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Couverture Cible (%)</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={coveragePercentage} 
+                onChangeText={setCoveragePercentage} 
+                placeholder="100"
+                keyboardType="numeric"
+                maxLength={3}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Procédures & Protocoles Médicaux</Text>
+              <Text style={styles.formLabel}>Protocoles Médicaux</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={medicalProtocols} 
+                onChangeText={setMedicalProtocols} 
+                placeholder="Description des protocoles médicaux à suivre..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Procédures de Suivi</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={followUpProcedures} 
+                onChangeText={setFollowUpProcedures} 
+                placeholder="Actions de suivi requises pour les résultats anormaux..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Méthodologie d'Évaluation des Risques</Text>
+              <TextInput 
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]} 
+                value={riskAssessmentMethod} 
+                onChangeText={setRiskAssessmentMethod} 
+                placeholder="Approche utilisée pour évaluer les risques..." 
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            {/* Status & Compliance */}
+            <View style={styles.formSection}>
+              <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700' }]}>Statut et Conformité</Text>
+              <Text style={styles.formLabel}>Statut</Text>
+              <View style={styles.chipGrid}>
+                {(['draft', 'active', 'paused', 'archived'] as const).map(st => (
+                  <TouchableOpacity 
+                    key={st} 
+                    style={[styles.optionChip, status === st && styles.optionChipActive]} 
+                    onPress={() => setStatus(st)}
+                  >
+                    <Text style={[styles.optionChipText, status === st && styles.optionChipTextActive]}>
+                      {st === 'draft' ? 'Brouillon' : st === 'active' ? 'Actif' : st === 'paused' ? 'Suspendu' : 'Archivé'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Référence Réglementaire</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={regulatoryRef} 
+                onChangeText={setRegulatoryRef} 
+                placeholder="Ex: Code Minier RDC Art. 123"
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Standard de Conformité</Text>
+              <TextInput 
+                style={styles.formInput} 
+                value={complianceStandard} 
+                onChangeText={setComplianceStandard} 
+                placeholder="Ex: ISO 45001:2018, ILO C155"
+              />
+            </View>
+
+            {/* Audit Trail (Read-only) */}
+            {program.createdBy && (
+              <View style={[styles.formSection, { backgroundColor: colors.surface, borderRadius: 8, padding: 12 }]}>
+                <Text style={[styles.formLabel, { color: colors.primary, fontWeight: '700', marginBottom: 8 }]}>Historique</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={[styles.formLabel, { fontSize: 12 }]}>Créé par:</Text>
+                  <Text style={[styles.formLabel, { fontSize: 12, fontWeight: '600' }]}>{program.createdBy}</Text>
+                </View>
+                {program.createdAt && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={[styles.formLabel, { fontSize: 12 }]}>Date:</Text>
+                    <Text style={[styles.formLabel, { fontSize: 12, fontWeight: '600' }]}>{new Date(program.createdAt).toLocaleDateString('fr-CD')}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           <View style={styles.modalActions}>
@@ -693,6 +1000,7 @@ export function SurveillanceScreen() {
         const transformed = response.data.map((prog: any) => ({
           id: String(prog.id),
           name: prog.name,
+          code: prog.code,
           description: prog.description,
           sector: prog.sector as IndustrySector,
           targetRiskGroup: prog.target_risk_group as ExposureRisk,
@@ -702,6 +1010,13 @@ export function SurveillanceScreen() {
           requiredScreenings: prog.required_screenings || [],
           actionLevels: prog.action_levels || {},
           isActive: prog.is_active !== false,
+          status: prog.status || 'active',
+          regulatoryRef: prog.regulatory_reference,
+          complianceStandard: prog.compliance_standard,
+          medicalProtocols: prog.medical_protocols,
+          followUpProcedures: prog.follow_up_procedures,
+          riskAssessmentMethod: prog.risk_assessment_method,
+          coveragePercentage: prog.coverage_percentage || 100,
           createdBy: prog.created_by?.full_name || 'System',
           createdAt: prog.created_at || new Date().toISOString(),
           updatedBy: prog.updated_by?.full_name,
@@ -737,22 +1052,23 @@ export function SurveillanceScreen() {
       // Map the surveillance program to backend requirements
       const backendPayload = {
         name: p.name,
-        code: `SURV_${p.name.replace(/\s+/g, '_').toUpperCase().slice(0, 40)}`,
+        code: p.code || `SURV_${p.name.replace(/\s+/g, '_').toUpperCase().slice(0, 40)}`,
         description: p.description,
         sector: p.sector,
-        target_risk_group: p.targetRiskGroup,
+        target_risk_group: mapExposureRiskToBackendRiskGroup(p.targetRiskGroup),
         required_screenings: p.requiredScreenings || [],
         screening_interval_months: intervalMonths,
         action_levels: p.actionLevels || {},
-        is_active: p.isActive,
-        status: 'active',
-        regulatory_reference: '',
-        compliance_standard: '',
-        enterprise: 1, // Default enterprise ID - adjust based on user's enterprise
-        created_by: currentUser?.id, // Track who created this program
+        is_active: p.status !== 'paused' && p.status !== 'archived',
+        status: p.status || 'active',
+        regulatory_reference: p.regulatoryRef || '',
+        compliance_standard: p.complianceStandard || '',
+        medical_protocols: p.medicalProtocols || '',
+        follow_up_procedures: p.followUpProcedures || '',
+        risk_assessment_method: p.riskAssessmentMethod || '',
+        target_job_categories: p.targetJobCategories || [],
+        coverage_percentage: typeof p.coveragePercentage === 'string' ? parseInt(p.coveragePercentage) : (p.coveragePercentage || 100),
       };
-
-      console.log('Sending payload:', backendPayload);
       const result = await OccHealthApiService.getInstance().createSurveillanceProgram(backendPayload);
       
       if (result.data) {
@@ -760,11 +1076,21 @@ export function SurveillanceScreen() {
         setShowAdd(false);
         Alert.alert('Succès', 'Programme de surveillance créé avec succès.');
       } else {
-        console.error('API Error:', result.error);
-        Alert.alert('Erreur', result.error || 'Impossible de créer le programme');
+        // Format error message to show field-specific errors
+        let errorMsg = result.error || 'Impossible de créer le programme';
+        if (typeof result.error === 'object') {
+          const fieldErrors = Object.entries(result.error)
+            .map(([field, msgs]: [string, any]) => {
+              const fieldLabel = field.replace(/_/g, ' ');
+              const messages = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+              return `${fieldLabel}: ${messages}`;
+            })
+            .join('\n');
+          errorMsg = fieldErrors || errorMsg;
+        }
+        Alert.alert('Erreur', errorMsg);
       }
     } catch (error: any) {
-      console.error('Exception in handleAdd:', error);
       Alert.alert('Erreur', error?.message || 'Erreur lors de la création du programme');
     }
   };
@@ -797,15 +1123,22 @@ export function SurveillanceScreen() {
 
       const backendPayload = {
         name: editedProgram.name,
+        code: editedProgram.code || `SURV_${editedProgram.name.replace(/\s+/g, '_').toUpperCase().slice(0, 40)}`,
         description: editedProgram.description,
         sector: editedProgram.sector,
-        target_risk_group: editedProgram.targetRiskGroup,
+        target_risk_group: mapExposureRiskToBackendRiskGroup(editedProgram.targetRiskGroup),
         required_screenings: editedProgram.requiredScreenings || [],
         screening_interval_months: intervalMonths,
         action_levels: editedProgram.actionLevels || {},
-        is_active: editedProgram.isActive,
-        status: editedProgram.isActive ? 'active' : 'paused',
-        updated_by: currentUser?.id, // Track who updated this program
+        is_active: editedProgram.status !== 'paused' && editedProgram.status !== 'archived',
+        status: editedProgram.status || 'active',
+        regulatory_reference: editedProgram.regulatoryRef || '',
+        compliance_standard: editedProgram.complianceStandard || '',
+        medical_protocols: editedProgram.medicalProtocols || '',
+        follow_up_procedures: editedProgram.followUpProcedures || '',
+        risk_assessment_method: editedProgram.riskAssessmentMethod || '',
+        target_job_categories: editedProgram.targetJobCategories || [],
+        coverage_percentage: typeof editedProgram.coveragePercentage === 'string' ? parseInt(editedProgram.coveragePercentage) : (editedProgram.coveragePercentage || 100),
       };
 
       const result = await OccHealthApiService.getInstance()
@@ -818,13 +1151,22 @@ export function SurveillanceScreen() {
         setPrograms(newPrograms);
         setEditingProgram(null);
         setShowEdit(false);
-        setSelectedProgram(result.data);
-        Alert.alert('Succès', 'Programme de surveillance mis à jour avec succès.');
+        Alert.alert('Succès', 'Programme de surveillance mise à jour avec succès.');
       } else {
-        Alert.alert('Erreur', result.error || 'Impossible de mettre à jour le programme');
+        let errorMsg = result.error || 'Impossible de mettre à jour le programme';
+        if (typeof result.error === 'object') {
+          const fieldErrors = Object.entries(result.error)
+            .map(([field, msgs]: [string, any]) => {
+              const fieldLabel = field.replace(/_/g, ' ');
+              const messages = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+              return `${fieldLabel}: ${messages}`;
+            })
+            .join('\n');
+          errorMsg = fieldErrors || errorMsg;
+        }
+        Alert.alert('Erreur', errorMsg);
       }
     } catch (error: any) {
-      console.error('Exception in handleEdit:', error);
       Alert.alert('Erreur', error?.message || 'Erreur lors de la mise à jour du programme');
     }
   };

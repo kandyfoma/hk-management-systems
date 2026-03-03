@@ -1676,6 +1676,9 @@ class HazardIdentification(models.Model):
         ('reviewed', _('Révisé'))
     ], default='draft')
     
+    # Responsibility and implementation
+    responsible_person = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='hazard_responsibilities', verbose_name=_("Personne Responsable"))
+    
     # Audit fields
     assessed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hazards_assessed')
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hazards_approved', blank=True)
@@ -1699,6 +1702,39 @@ class HazardIdentification(models.Model):
     def residual_risk_score(self):
         """Calculate residual risk score after controls"""
         return self.residual_probability * self.residual_severity
+    
+    def save(self, *args, **kwargs):
+        """Auto-calculate risk_level based on probability × severity"""
+        # Calculate initial risk score
+        score = self.probability * self.severity
+        
+        # Determine risk level based on matrix (ISO 45001)
+        # Risk Score ranges:
+        # 1-4: Low (green)
+        # 5-9: Medium (yellow)
+        # 10-15: High (orange)
+        # 16-25: Critical (red)
+        if score >= 16:
+            self.risk_level = 'critical'
+            if not self.priority or self.priority == 'low':
+                self.priority = 'urgent'
+        elif score >= 10:
+            self.risk_level = 'high'
+            if self.priority == 'low':
+                self.priority = 'high'
+        elif score >= 5:
+            self.risk_level = 'medium'
+            if self.priority == 'low':
+                self.priority = 'medium'
+        else:
+            self.risk_level = 'low'
+            if not self.priority:
+                self.priority = 'low'
+        
+        # Set action_required based on risk level
+        self.action_required = self.risk_level in ['high', 'critical']
+        
+        super().save(*args, **kwargs)
 
 # ==================== SITE HEALTH METRICS ====================
 

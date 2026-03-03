@@ -1,0 +1,107 @@
+/* React DatePicker Styling - Custom Theme Integration */
+
+.react-datepicker {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  background-color: #fff;
+  padding: 8px;
+}
+
+.react-datepicker__header {
+  background-color: #3b82f6;
+  border-radius: 6px;
+  border-bottom: 1px solid #3b82f6;
+}
+
+.react-datepicker__day-name,
+.react-datepicker__day {
+  width: 2rem;
+  height: 2rem;
+  line-height: 2rem;
+  margin: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--in-selecting-range,
+.react-datepicker__day--in-range {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.react-datepicker__day--keyboard-selected,
+.react-datepicker__day--highlighted {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.react-datepicker__day:hover {
+  background-color: #e0e7ff;
+  color: #3b82f6;
+  border-radius: 4px;
+}
+
+.react-datepicker__day--disabled {
+  color: #d1d5db;
+  cursor: not-allowed;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__current-month-button {
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.react-datepicker__navigation {
+  top: 8px;
+}
+
+.react-datepicker__navigation-button {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: white;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-datepicker__navigation-button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.react-datepicker__navigation-button--previous {
+  left: 8px;
+}
+
+.react-datepicker__navigation-button--next {
+  right: 8px;
+}
+
+.react-datepicker__day-names {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.react-datepicker__day-name {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.react-datepicker__week {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}

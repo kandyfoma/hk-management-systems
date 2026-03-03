@@ -146,11 +146,11 @@ export function AdminReportsScreen() {
       const [examsRes, incidentsRes, diseasesRes, alertsRes, ppeRes, workersRes] = 
         await Promise.allSettled([
           apiService.get('/occupational-health/examinations/', { params: { ...baseParams, limit: 1000 } }),
-          apiService.get('/occupational-health/incidents/', { params: { ...baseParams, limit: 1000 } }),
+          apiService.get('/occupational-health/workplace-incidents/', { params: { ...baseParams, limit: 1000 } }),
           apiService.get('/occupational-health/occupational-diseases/', { params: { ...baseParams, limit: 1000 } }),
           apiService.get('/occupational-health/overexposure-alerts/', { params: { ...baseParams } }),
           apiService.get('/occupational-health/ppe-compliance/', { params: { ...baseParams } }),
-          apiService.get('/occupational-health/personnel-registry/', { params: { ...baseParams, limit: 1000 } }),
+          apiService.get('/occupational-health/workers/', { params: { ...baseParams, limit: 1000 } }),
         ]);
 
       const exams = (examsRes as any).value?.data?.results || [];
@@ -386,7 +386,7 @@ export function AdminReportsScreen() {
         <>
           {/* Report Selector */}
           <FlatList
-            data={Array.from(reportConfigs.entries())}
+            data={Object.entries(reportConfigs)}
             horizontal
             showsHorizontalScrollIndicator={false}
             scrollEnabled={true}

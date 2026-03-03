@@ -89,7 +89,17 @@ class SurveillanceProgramViewSet(viewsets.ModelViewSet):
         return SurveillanceProgramSerializer
     
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Auto-assign enterprise if not provided in the request
+        enterprise = serializer.validated_data.get('enterprise')
+        if not enterprise:
+            # Assign the first active enterprise
+            from .models import Enterprise
+            enterprise = Enterprise.objects.filter(is_active=True).first()
+        serializer.save(created_by=self.request.user, enterprise=enterprise)
+    
+    def perform_update(self, serializer):
+        # Track who updated the program
+        serializer.save(updated_by=self.request.user)
     
     @action(detail=False, methods=['get'])
     def by_sector(self, request):
