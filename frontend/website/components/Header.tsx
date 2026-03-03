@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
+import LanguageSwitcher from './LanguageSwitcher'
 
 export default function Header() {
   const [isMobileOpen, setIsOpen] = useState(false)
@@ -21,9 +22,19 @@ export default function Header() {
               height={40}
               className="rounded-lg"
             />
-            <span className="font-bold text-lg text-primary hidden sm:inline">
-              KAT OHMS
-            </span>
+            <div className="flex flex-col gap-0.5">
+              <span className="font-bold text-lg text-primary hidden sm:inline">
+                KAT OHMS
+              </span>
+              <div className="hidden sm:flex gap-1.5">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primaryFaded text-primary">
+                  100% Congolese Owned
+                </span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-white">
+                  100% Woman Owned
+                </span>
+              </div>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
@@ -44,6 +55,7 @@ export default function Header() {
 
           {/* CTA Button */}
           <div className="hidden md:flex items-center gap-4">
+            <LanguageSwitcher />
             <a
               href="https://app.katohms.com"
               target="_blank"
@@ -94,6 +106,9 @@ export default function Header() {
             >
               Benefits
             </Link>
+            <div className="py-3 border-t border-outline my-3">
+              <LanguageSwitcher />
+            </div>
             <a
               href="https://app.katohms.com"
               target="_blank"

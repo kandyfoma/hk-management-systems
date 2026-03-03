@@ -31,16 +31,16 @@ export default function HeroSection() {
             <ScrollReveal delay={1}>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-6 leading-[1.1] tracking-tight">
                 Occupational Health<br />
-                <span className="gradient-text">Management</span><br />
-                Made Simple
+                Management<br />
+                <span className="gradient-text">System</span>
               </h1>
             </ScrollReveal>
 
             <ScrollReveal delay={2}>
               <p className="text-lg sm:text-xl text-white/75 mb-10 leading-relaxed max-w-xl">
-                Comprehensive workplace health &amp; safety platform built for
+                Comprehensive workplace health &amp; safety system built for
                 DR Congo enterprises. Manage medical examinations, risk assessments,
-                incident reporting, and regulatory compliance — all in one place.
+                incident reporting, and regulatory compliance — all in one platform.
               </p>
             </ScrollReveal>
 

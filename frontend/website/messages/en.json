@@ -1,0 +1,64 @@
+{
+  "nav": {
+    "features": "Features",
+    "modules": "Modules",
+    "compliance": "Compliance",
+    "benefits": "Benefits",
+    "launch": "Launch App"
+  },
+  "hero": {
+    "title": "Occupational Health Management",
+    "subtitle": "Simplified",
+    "description": "Comprehensive workplace health and safety management platform. Medical examinations, risk assessments, compliance tracking, and incident reporting — all in one system.",
+    "cta": "Start Free Trial"
+  },
+  "features": {
+    "title": "Platform Features",
+    "medical": {
+      "name": "Medical Examinations",
+      "desc": "Conduct thorough occupational health assessments"
+    },
+    "risk": {
+      "name": "Risk Assessment",
+      "desc": "Identify and manage workplace risks systematically"
+    },
+    "compliance": {
+      "name": "Compliance Tracking",
+      "desc": "ISO 45001, ILO standards, and local regulations"
+    },
+    "incident": {
+      "name": "Incident Management",
+      "desc": "Report and track workplace incidents"
+    },
+    "analytics": {
+      "name": "Analytics Dashboard",
+      "desc": "Real-time insights into health metrics"
+    },
+    "documentation": {
+      "name": "Documentation Management",
+      "desc": "Centralized storage for all health records"
+    }
+  },
+  "modules": {
+    "title": "Medical Specialties"
+  },
+  "benefits": {
+    "title": "Why Choose KAT OHMS",
+    "efficiency": "Increased Efficiency",
+    "compliance": "Full Compliance",
+    "safety": "Enhanced Safety",
+    "data": "Better Insights"
+  },
+  "compliance": {
+    "title": "Standards & Compliance",
+    "iso": "ISO 45001:2018 Certified",
+    "ilo": "ILO Conventions Compliant"
+  },
+  "footer": {
+    "contact": "Contact",
+    "phone": "+243 82 88 12 498",
+    "email": "foma.kandy@gmail.com",
+    "location": "Lubumbashi, DR Congo",
+    "rights": "All rights reserved"
+  }
+}

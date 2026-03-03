@@ -1,0 +1,64 @@
+{
+  "nav": {
+    "features": "Fonctionnalités",
+    "modules": "Spécialités",
+    "compliance": "Conformité",
+    "benefits": "Avantages",
+    "launch": "Lancer l'App"
+  },
+  "hero": {
+    "title": "Gestion de la Santé Occupationnelle",
+    "subtitle": "Simplifiée",
+    "description": "Plateforme complète de gestion de la santé et de la sécurité au travail. Examens médicaux, évaluations des risques, suivi de la conformité et signalement des incidents — tout en un seul système.",
+    "cta": "Commencer l'Essai Gratuit"
+  },
+  "features": {
+    "title": "Fonctionnalités de la Plateforme",
+    "medical": {
+      "name": "Examens Médicaux",
+      "desc": "Effectuer des évaluations complètes de santé occupationnelle"
+    },
+    "risk": {
+      "name": "Évaluation des Risques",
+      "desc": "Identifier et gérer systématiquement les risques professionnels"
+    },
+    "compliance": {
+      "name": "Suivi de la Conformité",
+      "desc": "Normes ISO 45001, conventions OIT et réglementations locales"
+    },
+    "incident": {
+      "name": "Gestion des Incidents",
+      "desc": "Signaler et suivre les incidents professionnels"
+    },
+    "analytics": {
+      "name": "Tableau de Bord Analytique",
+      "desc": "Aperçus en temps réel des indicateurs de santé"
+    },
+    "documentation": {
+      "name": "Gestion de la Documentation",
+      "desc": "Stockage centralisé pour tous les dossiers de santé"
+    }
+  },
+  "modules": {
+    "title": "Spécialités Médicales"
+  },
+  "benefits": {
+    "title": "Pourquoi Choisir KAT OHMS",
+    "efficiency": "Efficacité Accrue",
+    "compliance": "Conformité Complète",
+    "safety": "Sécurité Renforcée",
+    "data": "Meilleures Données"
+  },
+  "compliance": {
+    "title": "Normes et Conformité",
+    "iso": "Certifié ISO 45001:2018",
+    "ilo": "Conforme aux Conventions OIT"
+  },
+  "footer": {
+    "contact": "Contact",
+    "phone": "+243 82 88 12 498",
+    "email": "foma.kandy@gmail.com",
+    "location": "Lubumbashi, République Démocratique du Congo",
+    "rights": "Tous droits réservés"
+  }
+}
