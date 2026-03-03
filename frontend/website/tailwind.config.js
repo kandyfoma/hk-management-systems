@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"Roboto"', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+        sans: ['var(--font-inter)', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"Roboto"', '"Helvetica Neue"', 'Arial', 'sans-serif'],
       },
       colors: {
         primary: '#122056',
@@ -40,6 +40,14 @@ module.exports = {
         surface: '#FFFFFF',
         surfaceVariant: '#F1F5F9',
         background: '#FAFAFD',
+        outline: '#E2E8F0',
+        outlineVariant: '#F1F5F9',
+        onSurface: '#0F172A',
+        onSurfaceVariant: '#64748B',
+        onBackground: '#0F172A',
+        text: '#0F172A',
+        textSecondary: '#64748B',
+        textTertiary: '#94A3B8',
       },
     },
   },

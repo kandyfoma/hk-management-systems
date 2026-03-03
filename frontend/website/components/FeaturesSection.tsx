@@ -2,67 +2,76 @@
 
 import React from 'react'
 import { Heart, AlertCircle, Shield, BarChart3, Users, CheckCircle } from 'lucide-react'
+import ScrollReveal from './ScrollReveal'
 
 export default function FeaturesSection() {
   const features = [
     {
       icon: Heart,
       title: 'Medical Examinations',
-      description: 'Comprehensive occupational health exams with structured clinical workflows, vital signs tracking, and fitness determination.'
+      points: ['Structured clinical workflows', 'Vital signs & fitness tracking', 'Fitness-for-duty certificates', 'Occupational disease registry'],
     },
     {
       icon: AlertCircle,
       title: 'Incident Management',
-      description: 'Real-time incident reporting, investigation workflows, and root cause analysis with automated compliance tracking.'
+      points: ['Real-time incident reporting', 'Investigation workflows', 'Root cause analysis', 'Automated compliance tracking'],
     },
     {
       icon: BarChart3,
       title: 'Risk Assessment',
-      description: 'Advanced risk matrix calculations with probability and severity scoring, real-time risk level determination.'
+      points: ['Advanced risk matrix calculations', 'Probability & severity scoring', 'Real-time risk level view', 'Corrective action tracking'],
     },
     {
       icon: Shield,
       title: 'Compliance Management',
-      description: 'Multi-standard compliance tracking for ISO 45001, ISO 27001, ILO standards, and local regulations.'
+      points: ['ISO 45001 & ISO 27001 ready', 'ILO standards alignment', 'Audit trail & reporting', 'Regulatory document store'],
     },
     {
       icon: Users,
       title: 'Worker Management',
-      description: 'Enterprise-wide worker profiles, role-based access control, and comprehensive audit trails.'
+      points: ['Enterprise worker profiles', 'Role-based access control', 'Health surveillance programs', 'Training records'],
     },
     {
       icon: CheckCircle,
       title: 'Health Surveillance',
-      description: 'Continuous health monitoring programs with threshold-based alerts and automated reporting.'
+      points: ['Continuous health monitoring', 'Threshold-based alerts', 'Periodic exam scheduling', 'Trend analytics'],
     },
   ]
 
   return (
-    <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-background">
+    <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl font-bold text-primary mb-4">
-            Comprehensive Features
+        <ScrollReveal className="text-center mb-16">
+          <span className="pill bg-successLight text-secondary mb-4">Platform Features</span>
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-primary mb-4 mt-3 tracking-tight">
+            Everything You Need
           </h2>
-          <p className="text-xl text-onSurfaceVariant max-w-2xl mx-auto">
-            Everything you need to manage occupational health and safety effectively
+          <p className="text-lg text-onSurfaceVariant max-w-2xl mx-auto">
+            A complete toolset for occupational health professionals — designed for DR Congo workplace realities.
           </p>
-        </div>
+        </ScrollReveal>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature, index) => {
             const Icon = feature.icon
+            const delay = ((index % 3) + 1) as 1 | 2 | 3
             return (
-              <div
-                key={index}
-                className="bg-surface rounded-xl p-8 hover:shadow-lg transition border border-outline"
-              >
-                <div className="w-12 h-12 bg-gradient-to-br from-secondaryLight to-secondaryDark rounded-lg flex items-center justify-center mb-4">
-                  <Icon size={24} className="text-white" />
+              <ScrollReveal key={index} delay={delay}>
+                <div className="card-lift bg-background rounded-2xl p-7 border border-outline h-full">
+                  <div className="w-11 h-11 bg-successLight rounded-xl flex items-center justify-center mb-5">
+                    <Icon size={22} className="text-secondary" />
+                  </div>
+                  <h3 className="text-lg font-bold text-primary mb-4">{feature.title}</h3>
+                  <ul className="space-y-2">
+                    {feature.points.map((point, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-onSurfaceVariant">
+                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <h3 className="text-xl font-bold text-primary mb-3">{feature.title}</h3>
-                <p className="text-onSurfaceVariant leading-relaxed">{feature.description}</p>
-              </div>
+              </ScrollReveal>
             )
           })}
         </div>
@@ -70,3 +79,4 @@ export default function FeaturesSection() {
     </section>
   )
 }
+
