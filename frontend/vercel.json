@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": "expo",
+  "env": {
+    "REACT_APP_ENV": "@app_env",
+    "REACT_APP_API_URL": "@api_url"
+  }
+}

@@ -3,5 +3,14 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "regions": ["cdg1"]
+  "regions": ["cdg1"],
+  "env": {
+    "NEXT_PUBLIC_APP_ENV": "@app_env"
+  },
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
 }

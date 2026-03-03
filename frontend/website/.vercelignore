@@ -1,0 +1,17 @@
+.git
+.gitignore
+node_modules
+npm-debug.log
+.next
+.DS_Store
+*.pem
+.env.local
+.env.*.local
+.env.example
+README.md
+DEPLOYMENT.md
+SETUP.md
+QUICKSTART.md
+CREATION_SUMMARY.md
+FILE_MANIFEST.md
+INDEX.md
