@@ -4,13 +4,11 @@ import {
   StyleSheet, Dimensions, Modal, Alert, ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
-import ReactDatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import './react-datepicker.css';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
+import DateInput from '../../../components/DateInput';
 import {
   SECTOR_PROFILES, OccHealthUtils,
   type IndustrySector, type RiskAssessment, type HazardIdentification,
@@ -334,9 +332,6 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
   const [filteredWorkers, setFilteredWorkers] = useState<User[]>([]);
   const [assessorSearchText, setAssessorSearchText] = useState('');
   const [filteredAssessors, setFilteredAssessors] = useState<User[]>([]);
-  const [showTargetDatePicker, setShowTargetDatePicker] = useState(false);
-  const [showReviewDatePicker, setShowReviewDatePicker] = useState(false);
-  const [showNextReviewDatePicker, setShowNextReviewDatePicker] = useState(false);
   const [hazards, setHazards] = useState<HazardIdentification[]>([]);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -455,20 +450,6 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
     setShowUserDropdown(false);
     setAssessorSearchText('');
     if (errors.assessorName) setErrors(prev => ({ ...prev, assessorName: '' }));
-  };
-
-  const handleDateChange = (field: 'target' | 'review' | 'nextReview', date: Date) => {
-    const dateString = date.toISOString().split('T')[0];
-    if (field === 'target') {
-      setTargetDate(dateString);
-      setShowTargetDatePicker(false);
-    } else if (field === 'review') {
-      setReviewDate(dateString);
-      setShowReviewDatePicker(false);
-    } else if (field === 'nextReview') {
-      setNextReviewDate(dateString);
-      setShowNextReviewDatePicker(false);
-    }
   };
 
   const saveDraft = async () => {
@@ -635,9 +616,6 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
     setShowUserDropdown(false);
     setShowWorkerDropdown(false);
     setWorkerSearchText('');
-    setShowTargetDatePicker(false);
-    setShowReviewDatePicker(false);
-    setShowNextReviewDatePicker(false);
     onClose();
   };
 
@@ -1028,77 +1006,32 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
 
                 <View style={styles.formSection}>
                   <Text style={styles.formLabel}>Date Cible d'Action</Text>
-                  <TouchableOpacity
-                    style={[styles.formInput, { justifyContent: 'center', paddingRight: 12 }]}
-                    onPress={() => setShowTargetDatePicker(true)}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={{ color: colors.text }}>{targetDate}</Text>
-                      <Ionicons name="calendar" size={20} color={colors.textSecondary} />
-                    </View>
-                  </TouchableOpacity>
-                  {showTargetDatePicker && (
-                    <View style={{ marginTop: 8, zIndex: 1000 }}>
-                      <ReactDatePicker
-                        selected={new Date(targetDate)}
-                        onChange={(date: Date | null) => {
-                          if (date) handleDateChange('target', date);
-                        }}
-                        dateFormat="yyyy-MM-dd"
-                        inline
-                      />
-                    </View>
-                  )}
+                  <DateInput
+                    value={targetDate}
+                    onChangeText={(date) => setTargetDate(date)}
+                    placeholder="Select target date"
+                    format="iso"
+                  />
                 </View>
 
                 <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.formLabel}>Date Révision</Text>
-                    <TouchableOpacity
-                      style={[styles.formInput, { justifyContent: 'center', paddingRight: 12 }]}
-                      onPress={() => setShowReviewDatePicker(true)}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ color: colors.text, fontSize: 13 }}>{reviewDate}</Text>
-                        <Ionicons name="calendar" size={18} color={colors.textSecondary} />
-                      </View>
-                    </TouchableOpacity>
-                    {showReviewDatePicker && (
-                      <View style={{ marginTop: 8, zIndex: 1000 }}>
-                        <ReactDatePicker
-                          selected={new Date(reviewDate)}
-                          onChange={(date: Date | null) => {
-                            if (date) handleDateChange('review', date);
-                          }}
-                          dateFormat="yyyy-MM-dd"
-                          inline
-                        />
-                      </View>
-                    )}
+                    <DateInput
+                      value={reviewDate}
+                      onChangeText={(date) => setReviewDate(date)}
+                      placeholder="Select review date"
+                      format="iso"
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.formLabel}>Prochaine Révision</Text>
-                    <TouchableOpacity
-                      style={[styles.formInput, { justifyContent: 'center', paddingRight: 12 }]}
-                      onPress={() => setShowNextReviewDatePicker(true)}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ color: colors.text, fontSize: 13 }}>{nextReviewDate}</Text>
-                        <Ionicons name="calendar" size={18} color={colors.textSecondary} />
-                      </View>
-                    </TouchableOpacity>
-                    {showNextReviewDatePicker && (
-                      <View style={{ marginTop: 8, zIndex: 1000 }}>
-                        <ReactDatePicker
-                          selected={new Date(nextReviewDate)}
-                          onChange={(date: Date | null) => {
-                            if (date) handleDateChange('nextReview', date);
-                          }}
-                          dateFormat="yyyy-MM-dd"
-                          inline
-                        />
-                      </View>
-                    )}
+                    <DateInput
+                      value={nextReviewDate}
+                      onChangeText={(date) => setNextReviewDate(date)}
+                      placeholder="Select next review"
+                      format="iso"
+                    />
                   </View>
                 </View>
 
