@@ -13,7 +13,7 @@ export default function HeroSection() {
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
               Occupational Health Management Made Simple
             </h1>
-            <p className="text-xl text-gray-100 mb-8 leading-relaxed">
+            <p className="text-xl text-white/80 mb-8 leading-relaxed">
               Comprehensive workplace health and safety platform. Manage medical examinations, risk assessments, incident reporting, and regulatory compliance all in one place.
             </p>
 
@@ -22,7 +22,7 @@ export default function HeroSection() {
                 href="https://app.katohms.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-accent hover:bg-accentLight text-primary font-bold transition transform hover:scale-105"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-secondaryLight hover:bg-accent text-primary font-bold transition transform hover:scale-105"
               >
                 Get Started <ArrowRight size={20} />
               </a>
@@ -54,20 +54,20 @@ export default function HeroSection() {
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white/10 rounded-lg p-4 text-center">
-                  <div className="text-3xl font-bold text-accent mb-2">500+</div>
-                  <div className="text-sm text-gray-200">Enterprises</div>
+                  <div className="text-3xl font-bold text-secondaryLight mb-2">500+</div>
+                  <div className="text-sm text-white/70">Enterprises</div>
                 </div>
                 <div className="bg-white/10 rounded-lg p-4 text-center">
-                  <div className="text-3xl font-bold text-accent mb-2">50K+</div>
-                  <div className="text-sm text-gray-200">Workers Managed</div>
+                  <div className="text-3xl font-bold text-secondaryLight mb-2">50K+</div>
+                  <div className="text-sm text-white/70">Workers Managed</div>
                 </div>
                 <div className="bg-white/10 rounded-lg p-4 text-center">
-                  <div className="text-3xl font-bold text-accent mb-2">99.9%</div>
-                  <div className="text-sm text-gray-200">Uptime</div>
+                  <div className="text-3xl font-bold text-secondaryLight mb-2">99.9%</div>
+                  <div className="text-sm text-white/70">Uptime</div>
                 </div>
                 <div className="bg-white/10 rounded-lg p-4 text-center">
-                  <div className="text-3xl font-bold text-accent mb-2">24/7</div>
-                  <div className="text-sm text-gray-200">Support</div>
+                  <div className="text-3xl font-bold text-secondaryLight mb-2">24/7</div>
+                  <div className="text-sm text-white/70">Support</div>
                 </div>
               </div>
             </div>

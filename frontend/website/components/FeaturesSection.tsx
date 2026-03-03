@@ -38,13 +38,13 @@ export default function FeaturesSection() {
   ]
 
   return (
-    <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+    <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-background">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl font-bold text-primary mb-4">
             Comprehensive Features
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-onSurfaceVariant max-w-2xl mx-auto">
             Everything you need to manage occupational health and safety effectively
           </p>
         </div>
@@ -55,13 +55,13 @@ export default function FeaturesSection() {
             return (
               <div
                 key={index}
-                className="bg-gray-50 rounded-xl p-8 hover:shadow-lg transition border border-gray-200"
+                className="bg-surface rounded-xl p-8 hover:shadow-lg transition border border-outline"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-accent to-accentDark rounded-lg flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-secondaryLight to-secondaryDark rounded-lg flex items-center justify-center mb-4">
                   <Icon size={24} className="text-white" />
                 </div>
                 <h3 className="text-xl font-bold text-primary mb-3">{feature.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{feature.description}</p>
+                <p className="text-onSurfaceVariant leading-relaxed">{feature.description}</p>
               </div>
             )
           })}

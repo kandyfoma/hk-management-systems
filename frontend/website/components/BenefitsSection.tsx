@@ -28,13 +28,13 @@ export default function BenefitsSection() {
   ]
 
   return (
-    <section id="benefits" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+    <section id="benefits" className="py-20 px-4 sm:px-6 lg:px-8 bg-background">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl font-bold text-primary mb-4">
             Key Benefits
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-onSurfaceVariant max-w-2xl mx-auto">
             Transform your occupational health management with measurable results
           </p>
         </div>
@@ -45,13 +45,13 @@ export default function BenefitsSection() {
             return (
               <div key={index} className="flex gap-6">
                 <div className="flex-shrink-0">
-                  <div className="w-14 h-14 bg-gradient-to-br from-accent to-accentDark rounded-xl flex items-center justify-center">
+                  <div className="w-14 h-14 bg-gradient-to-br from-secondaryLight to-secondaryDark rounded-xl flex items-center justify-center">
                     <Icon size={28} className="text-white" />
                   </div>
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-primary mb-3">{benefit.title}</h3>
-                  <p className="text-gray-600 leading-relaxed">{benefit.description}</p>
+                  <p className="text-onSurfaceVariant leading-relaxed">{benefit.description}</p>
                 </div>
               </div>
             )
@@ -62,16 +62,16 @@ export default function BenefitsSection() {
           <h3 className="text-2xl font-bold mb-6">Why Choose KAT OHMS?</h3>
           <div className="grid md:grid-cols-3 gap-8">
             <div>
-              <div className="text-3xl font-bold text-accent mb-2">99.9%</div>
-              <p className="text-gray-100">System Uptime Guarantee</p>
+              <div className="text-3xl font-bold text-secondaryLight mb-2">99.9%</div>
+              <p className="text-white/80">System Uptime Guarantee</p>
             </div>
             <div>
-              <div className="text-3xl font-bold text-accent mb-2">24/7</div>
-              <p className="text-gray-100">Priority Technical Support</p>
+              <div className="text-3xl font-bold text-secondaryLight mb-2">24/7</div>
+              <p className="text-white/80">Priority Technical Support</p>
             </div>
             <div>
-              <div className="text-3xl font-bold text-accent mb-2">GDPR</div>
-              <p className="text-gray-100">Data Protection Compliant</p>
+              <div className="text-3xl font-bold text-secondaryLight mb-2">GDPR</div>
+              <p className="text-white/80">Data Protection Compliant</p>
             </div>
           </div>
         </div>
