@@ -34,7 +34,7 @@ from .models import (
     PPEItem, PPECatalog, PPEAuditLog, HazardIdentification,
     SiteHealthMetrics,
     # Extended occupational health models
-    WorkerRiskProfile, OverexposureAlert, ExitExamination,
+    WorkerRiskProfile, OverexposureAlert, ExposureReading, ExitExamination,
     RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
     # Medical examination extended models
     XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
@@ -72,7 +72,7 @@ from .serializers import (
     HazardIdentificationSerializer,
     SiteHealthMetricsSerializer,
     # Extended occupational health serializers
-    OverexposureAlertSerializer, ExitExaminationSerializer,
+    OverexposureAlertSerializer, ExposureReadingSerializer, ExitExaminationSerializer,
     RegulatoryCNSSReportSerializer, DRCRegulatoryReportSerializer, PPEComplianceRecordSerializer,
     # Medical examination extended serializers
     XrayImagingResultSerializer, HeavyMetalsTestSerializer, DrugAlcoholScreeningSerializer,
@@ -2479,6 +2479,137 @@ class OverexposureAlertViewSet(viewsets.ModelViewSet):
             acknowledged_by=request.user
         )
         return Response({'message': f'{updated} alerts acknowledged'})
+
+
+class ExposureReadingViewSet(viewsets.ModelViewSet):
+    """
+    Occupational exposure measurement management with ISO 45001 §9.1 compliance
+    
+    GET /api/exposure-readings/ - List all readings
+    POST /api/exposure-readings/ - Record new exposure measurement
+    GET /api/exposure-readings/{id}/ - View reading details
+    PATCH /api/exposure-readings/{id}/ - Update reading
+    POST /api/exposure-readings/{id}/review/ - Mark as reviewed
+    GET /api/exposure-readings/by-worker/{worker_id}/ - Get readings for worker
+    GET /api/exposure-readings/stats/ - Get exposure statistics
+    """
+    
+    serializer_class = ExposureReadingSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    # 'status' is handled manually in get_queryset to support comma-separated multi-value
+    filterset_fields = ['exposure_type', 'worker__enterprise', 'source_type']
+    search_fields = ['worker__first_name', 'worker__last_name', 'exposure_type', 'equipment_name']
+    ordering = ['-measurement_date']
+    
+    def get_queryset(self):
+        """Get readings with related data, supporting comma-separated status filter"""
+        qs = ExposureReading.objects.select_related(
+            'worker__enterprise', 'measured_by', 'reviewed_by', 'related_alert'
+        ).prefetch_related('worker')
+
+        # Handle comma-separated ?status= values (e.g. "exceeded,critical,warning")
+        status_param = self.request.query_params.get('status', '')
+        if status_param:
+            statuses = [s.strip() for s in status_param.split(',') if s.strip()]
+            if statuses:
+                qs = qs.filter(status__in=statuses)
+
+        return qs
+
+    def perform_create(self, serializer):
+        """Auto-set measured_by and enterprise from the authenticated user"""
+        enterprise_id = getattr(self.request.user, 'enterprise_id', None)
+        serializer.save(
+            measured_by=self.request.user,
+            enterprise_id=enterprise_id,
+        )
+    
+    @action(detail=True, methods=['post'])
+    def review(self, request, pk=None):
+        """Mark exposure reading as reviewed"""
+        reading = self.get_object()
+        reading.reviewed_by = request.user
+        reading.save(update_fields=['reviewed_by', 'updated_at'])
+        
+        serializer = self.get_serializer(reading)
+        return Response({
+            'message': 'Reading reviewed',
+            'reading': serializer.data,
+            'reviewed_by_name': request.user.get_full_name(),
+        })
+    
+    @action(detail=False, methods=['get'])
+    def by_worker(self, request):
+        """Get all readings for a specific worker"""
+        worker_id = request.query_params.get('worker_id')
+        if not worker_id:
+            return Response({'error': 'worker_id parameter required'}, status=400)
+        
+        readings = self.get_queryset().filter(worker_id=worker_id)
+        serializer = self.get_serializer(readings, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Get exposure statistics for compliance dashboard"""
+        enterprise_id = request.query_params.get('enterprise_id')
+        exposure_type = request.query_params.get('exposure_type')
+        
+        queryset = self.get_queryset()
+        
+        if enterprise_id:
+            queryset = queryset.filter(enterprise_id=enterprise_id)
+        if exposure_type:
+            queryset = queryset.filter(exposure_type=exposure_type)
+        
+        stats = {
+            'total_readings': queryset.count(),
+            'safe': queryset.filter(status='safe').count(),
+            'warning': queryset.filter(status='warning').count(),
+            'critical': queryset.filter(status='critical').count(),
+            'exceeded': queryset.filter(status='exceeded').count(),
+            'alerts_triggered': queryset.filter(alert_triggered=True).count(),
+            'readings_by_type': dict(
+                queryset.values('exposure_type').annotate(count=Count('id')).values_list('exposure_type', 'count')
+            ),
+            'recent_readings': self.get_serializer(
+                queryset[:10], many=True
+            ).data,
+        }
+        return Response(stats)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_create(self, request):
+        """Bulk import multiple exposure readings (for equipment API integration)"""
+        readings_data = request.data.get('readings', [])
+        
+        created_readings = []
+        errors = []
+        
+        for reading_data in readings_data:
+            try:
+                serializer = self.get_serializer(data=reading_data)
+                if serializer.is_valid():
+                    serializer.save(measured_by=request.user)
+                    created_readings.append(serializer.data)
+                else:
+                    errors.append({
+                        'reading': reading_data,
+                        'errors': serializer.errors
+                    })
+            except Exception as e:
+                errors.append({
+                    'reading': reading_data,
+                    'error': str(e)
+                })
+        
+        return Response({
+            'created': len(created_readings),
+            'failed': len(errors),
+            'readings': created_readings,
+            'errors': errors if errors else None,
+        })
 
 
 class ExitExaminationViewSet(viewsets.ModelViewSet):

@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from decimal import Decimal
+from datetime import date
 import uuid
 
 User = get_user_model()
@@ -2171,6 +2172,221 @@ class OverexposureAlert(models.Model):
         self.status = 'resolved'
         self.resolved_date = timezone.now()
         self.save()
+
+
+class ExposureReading(models.Model):
+    """Real-time occupational exposure measurements with ISO 45001 §9.1 compliance tracking"""
+    
+    EXPOSURE_TYPES = [
+        ('silica_dust', 'Crystalline Silica (Respirable)'),
+        ('cobalt', 'Cobalt & Compounds'),
+        ('total_dust', 'Total Inhalable Dust'),
+        ('noise', 'Noise Level'),
+        ('vibration', 'Hand-Arm Vibration'),
+        ('heat', 'Wet Bulb Globe Temperature (WBGT)'),
+        ('lead', 'Lead & Compounds'),
+        ('asbestos', 'Asbestos Fibers'),
+        ('chemical', 'Chemical Vapor'),
+        ('biological', 'Biological Agents'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('safe', 'Safe'),
+        ('warning', 'Warning'),
+        ('critical', 'Critical'),
+        ('exceeded', 'Exceeded Limit'),
+    ]
+    
+    SOURCE_CHOICES = [
+        ('direct_measurement', 'Direct Measurement'),
+        ('area_monitoring', 'Area Monitoring'),
+        ('personal_sampler', 'Personal Air Sampler'),
+        ('real_time_monitor', 'Real-Time Monitor'),
+        ('manual_entry', 'Manual Entry'),
+        ('equipment_api', 'Equipment API Integration'),
+    ]
+    
+    # Core fields
+    worker = models.ForeignKey(
+        Worker, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='exposure_readings',
+        help_text="Leave blank for area/environmental readings not tied to a specific worker"
+    )
+    enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='exposure_readings')
+    exposure_type = models.CharField(max_length=50, choices=EXPOSURE_TYPES)
+    exposure_value = models.DecimalField(
+        _("Valeur Exposition"), max_digits=10, decimal_places=3,
+        validators=[MinValueValidator(Decimal('0'))]
+    )
+    unit_measurement = models.CharField(
+        _("Unité"), max_length=20,
+        help_text=_("ex: mg/m³, µg/m³, dB(A), m/s²")
+    )
+    
+    # Exposure limits (OSHA/ACGIH/Local standard)
+    osha_twa_limit = models.DecimalField(
+        _("Limite OSHA TWA"), max_digits=10, decimal_places=3,
+        null=True, blank=True,
+        help_text=_("Time Weighted Average limit")
+    )
+    acgih_tlv_limit = models.DecimalField(
+        _("Limite ACGIH TLV"), max_digits=10, decimal_places=3,
+        null=True, blank=True,
+        help_text=_("American Conference of Industrial Hygienists Threshold Limit Value")
+    )
+    local_limit = models.DecimalField(
+        _("Limite Locale"), max_digits=10, decimal_places=3,
+        null=True, blank=True,
+        help_text=_("Country/enterprise specific limit")
+    )
+    
+    # Status calculation
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='safe')
+    
+    # Sampling details
+    measurement_date = models.DateField(_("Date Mesure"), default=date.today)
+    sampling_duration_hours = models.DecimalField(
+        _("Durée Échantillonnage (h)"), max_digits=5, decimal_places=2,
+        null=True, blank=True
+    )
+    sampling_location = models.CharField(
+        _("Lieu Échantillonnage"), max_length=200,
+        help_text=_("ex: Main Shaft, Grinding Mill, Office A, etc")
+    )
+    
+    # Equipment & Method
+    source_type = models.CharField(max_length=30, choices=SOURCE_CHOICES)
+    equipment_id = models.CharField(
+        _("ID Équipement"), max_length=100, blank=True,
+        help_text=_("Equipment serial number or sensor ID")
+    )
+    equipment_name = models.CharField(
+        _("Nom Équipement"), max_length=200, blank=True,
+        help_text=_("ex: Gravimetric Sampler #02, Sound Level Meter SLM-001")
+    )
+    calibration_date = models.DateField(
+        _("Date Étalonnage"), null=True, blank=True
+    )
+    calibration_due_date = models.DateField(
+        _("Étalonnage Dû"), null=True, blank=True
+    )
+    
+    # Measurement quality
+    is_valid_measurement = models.BooleanField(
+        _("Mesure Valide"), default=True,
+        help_text=_("Uncheck if equipment malfunction or invalid conditions")
+    )
+    measurement_notes = models.TextField(
+        _("Notes Mesure"), blank=True,
+        help_text=_("Conditions, interference, anomalies observed")
+    )
+    
+    # Responsible parties
+    measured_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='exposure_readings_measured'
+    )
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='exposure_readings_reviewed'
+    )
+    
+    # Alert tracking
+    alert_triggered = models.BooleanField(_("Alerte Déclenchée"), default=False)
+    related_alert = models.OneToOneField(
+        OverexposureAlert, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='source_reading'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = _('Exposure Reading')
+        verbose_name_plural = _('Exposure Readings')
+        ordering = ['-measurement_date']
+        indexes = [
+            models.Index(fields=['worker', '-measurement_date']),
+            models.Index(fields=['enterprise', 'exposure_type', '-measurement_date']),
+            models.Index(fields=['status', '-measurement_date']),
+        ]
+    
+    def __str__(self):
+        worker_label = self.worker.full_name if self.worker_id else 'Area Reading'
+        return f"{worker_label} - {self.get_exposure_type_display()} ({self.exposure_value} {self.unit_measurement}) @ {self.measurement_date}"
+    
+    def save(self, *args, **kwargs):
+        """Calculate status on save and trigger alerts if needed"""
+        # Determine status based on limit comparison
+        limit_to_check = self.local_limit or self.acgih_tlv_limit or self.osha_twa_limit
+        
+        if limit_to_check:
+            if self.exposure_value >= limit_to_check * Decimal('1.5'):
+                self.status = 'exceeded'
+            elif self.exposure_value >= limit_to_check * Decimal('1.25'):
+                self.status = 'critical'
+            elif self.exposure_value >= limit_to_check:
+                self.status = 'warning'
+            else:
+                self.status = 'safe'
+        
+        super().save(*args, **kwargs)
+        
+        # Trigger alert if status is critical/exceeded and not already alerted
+        if self.status in ['critical', 'exceeded'] and not self.alert_triggered:
+            self._create_overexposure_alert()
+    
+    def _create_overexposure_alert(self):
+        """Auto-create OverexposureAlert when reading exceeds limits"""
+        # Cannot create alert without a linked worker
+        if not self.worker_id:
+            return
+
+        limit_to_check = self.local_limit or self.acgih_tlv_limit or self.osha_twa_limit
+
+        alert = OverexposureAlert.objects.create(
+            worker=self.worker,
+            exposure_type=self.get_exposure_type_display(),
+            exposure_level=self.exposure_value,
+            exposure_threshold=limit_to_check or Decimal('0'),
+            unit_measurement=self.unit_measurement,
+            severity='critical' if self.status == 'exceeded' else 'warning',
+            status='active',
+            recommended_action=self._get_recommended_action(),
+        )
+
+        # Use QuerySet.update to avoid a recursive save() call
+        ExposureReading.objects.filter(pk=self.pk).update(
+            related_alert=alert,
+            alert_triggered=True,
+        )
+        # Keep in-memory state consistent
+        self.related_alert = alert
+        self.alert_triggered = True
+    
+    def _get_recommended_action(self):
+        """Generate recommended action based on exposure type and severity"""
+        actions = {
+            'silica_dust': 'Increase ventilation, provide respiratory protection, perform medical surveillance',
+            'cobalt': 'Review engineering controls, ensure respiratory protection, conduct health assessment',
+            'total_dust': 'Enhance dust collection, increase air exchange rate, verify PPE usage',
+            'noise': 'Implement hearing protection program, reduce noise source, relocate worker if possible',
+            'vibration': 'Limit exposure time, provide vibration-dampening equipment, medical evaluation',
+            'heat': 'Increase breaks, provide hydration stations, monitor for heat stress symptoms',
+            'lead': 'Review work practices, provide respiratory protection, conduct blood lead testing',
+            'asbestos': 'STOP work immediately - asbestos exposure exceeds all safe limits',
+            'chemical': 'Review ventilation, upgrade respiratory protection, evacuate if necessary',
+            'biological': 'Ensure biohazard protocols, provide appropriate PPE, medical monitoring',
+        }
+        return actions.get(self.exposure_type, 'Assess situation and implement appropriate controls')
+    
+    def percent_of_limit(self):
+        """Calculate percentage of limit (for visualization in frontend)"""
+        limit = self.local_limit or self.acgih_tlv_limit or self.osha_twa_limit
+        if limit:
+            return float((self.exposure_value / limit) * 100)
+        return 0
 
 
 class ExitExamination(models.Model):

@@ -32,16 +32,16 @@ function getControlLabel(c: string): string {
   return m[c] || c;
 }
 function getControlColor(c: string): string {
-  const m: Record<string, string> = { elimination: '#22C55E', substitution: '#3B82F6', engineering: '#6366F1', administrative: '#F59E0B', ppe: '#EF4444' };
-  return m[c] || '#94A3B8';
+  const m: Record<string, string> = { elimination: '#22C55E', substitution: colors.secondary, engineering: colors.accent, administrative: colors.warning, ppe: colors.error };
+  return m[c] || colors.textTertiary;
 }
 function getStatusLabel(s: string): string {
   const m: Record<string, string> = { draft: 'Brouillon', active: 'Actif', under_review: 'En révision', archived: 'Archivé' };
   return m[s] || s;
 }
 function getStatusColor(s: string): string {
-  const m: Record<string, string> = { draft: '#94A3B8', active: '#22C55E', under_review: '#F59E0B', archived: '#64748B', approved: '#3B82F6', implemented: '#10B981', reviewed: '#6366F1' };
-  return m[s] || '#94A3B8';
+  const m: Record<string, string> = { draft: colors.textTertiary, active: '#22C55E', under_review: colors.warning, archived: colors.textSecondary, approved: colors.secondary, implemented: colors.primaryLight, reviewed: colors.accent };
+  return m[s] || colors.textTertiary;
 }
 function safeDate(val: string | undefined | null): string {
   if (!val) return '—';
@@ -139,9 +139,9 @@ function RiskMatrix({ hazards }: { hazards: HazardIdentification[] }) {
 
   const getCellColor = (row: number, col: number): string => {
     const score = (5 - row) * (col + 1);
-    if (score >= 20) return '#DC262640';
-    if (score >= 12) return '#EF444440';
-    if (score >= 6) return '#F59E0B40';
+    if (score >= 20) return colors.errorDark + '40';
+    if (score >= 12) return colors.error + '40';
+    if (score >= 6) return colors.warning + '40';
     return '#22C55E40';
   };
 
@@ -169,7 +169,7 @@ function RiskMatrix({ hazards }: { hazards: HazardIdentification[] }) {
         </View>
       </View>
       <View style={styles.matrixLegend}>
-        {[{ label: 'Faible (1-5)', color: '#22C55E' }, { label: 'Modéré (6-11)', color: '#F59E0B' }, { label: 'Élevé (12-19)', color: '#EF4444' }, { label: 'Critique (20-25)', color: '#DC2626' }].map((l, i) => (
+        {[{ label: 'Faible (1-5)', color: '#22C55E' }, { label: 'Modéré (6-11)', color: colors.warning }, { label: 'Élevé (12-19)', color: colors.error }, { label: 'Critique (20-25)', color: colors.errorDark }].map((l, i) => (
           <View key={i} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: l.color }]} />
             <Text style={styles.legendText}>{l.label}</Text>
@@ -178,7 +178,7 @@ function RiskMatrix({ hazards }: { hazards: HazardIdentification[] }) {
       </View>
       {filteredCount > 0 && (
         <View style={styles.warningBanner}>
-          <Ionicons name="information-circle" size={14} color="#F59E0B" />
+          <Ionicons name="information-circle" size={14} color={colors.warning} />
           <Text style={styles.warningText}>{filteredCount} danger(s) filtré(s) (scénarios invalides)</Text>
         </View>
       )}
@@ -231,7 +231,7 @@ function AssessmentCard({ assessment, onPress }: { assessment: RiskAssessment; o
         </View>
         <View style={styles.assessmentInfoRow}>
           <View style={styles.assessmentInfoItem}>
-            <Ionicons name="warning-outline" size={14} color="#EF4444" />
+            <Ionicons name="warning-outline" size={14} color={colors.error} />
             <Text style={styles.assessmentInfoText}>{assessment.hazards.length} dangers identifiés ({highRisks} élevés)</Text>
           </View>
           <View style={styles.assessmentInfoItem}>
@@ -306,8 +306,8 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
                         <Text style={styles.controlTitle}>Travailleurs exposés:</Text>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                           {(h as any).exposedWorkerNames.map((name: string, j: number) => (
-                            <View key={j} style={{ backgroundColor: '#EF444415', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
-                              <Text style={{ color: '#EF4444', fontSize: 11, fontWeight: '500' }}>{name}</Text>
+                            <View key={j} style={{ backgroundColor: colors.error + '15', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+                              <Text style={{ color: colors.error, fontSize: 11, fontWeight: '500' }}>{name}</Text>
                             </View>
                           ))}
                         </View>
@@ -384,7 +384,7 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
           </ScrollView>
           <View style={styles.modalActions}>
             {onDelete && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#EF4444' }]} onPress={() => { onClose(); onDelete(assessment.id); }}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.error }]} onPress={() => { onClose(); onDelete(assessment.id); }}>
                 <Ionicons name="trash-outline" size={18} color="#FFF" />
                 <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Supprimer</Text>
               </TouchableOpacity>
@@ -541,7 +541,7 @@ function EditHazardModal({ visible, hazard, onClose, onSave }: { visible: boolea
                   {['1', '2', '3', '4', '5'].map(v => (
                     <TouchableOpacity
                       key={v}
-                      style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: consequence === v ? '#EF444420' : undefined }]}
+                      style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: consequence === v ? colors.error + '20' : undefined }]}
                       onPress={() => setConsequence(v)}
                       disabled={saving}
                     >
@@ -554,9 +554,9 @@ function EditHazardModal({ visible, hazard, onClose, onSave }: { visible: boolea
               </View>
             </View>
 
-            <View style={{ backgroundColor: riskScore >= 16 ? '#DC262640' : riskScore >= 12 ? '#EF444440' : riskScore >= 6 ? '#F59E0B40' : '#22C55E40', borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
+            <View style={{ backgroundColor: riskScore >= 16 ? colors.errorDark + '40' : riskScore >= 12 ? colors.error + '40' : riskScore >= 6 ? colors.warning + '40' : '#22C55E40', borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Score de Risque</Text>
-              <Text style={{ fontSize: 18, fontWeight: '700', color: riskScore >= 16 ? '#DC2626' : riskScore >= 12 ? '#EF4444' : riskScore >= 6 ? '#F59E0B' : '#22C55E' }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: riskScore >= 16 ? colors.errorDark : riskScore >= 12 ? colors.error : riskScore >= 6 ? colors.warning : '#22C55E' }}>
                 {likelihood} × {consequence} = {riskScore} {riskScore >= 16 ? '(CRITIQUE)' : riskScore >= 12 ? '(ÉLEVÉ)' : riskScore >= 6 ? '(MOYEN)' : '(FAIBLE)'}
               </Text>
             </View>
@@ -1027,9 +1027,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
             {step === 'assessment' ? (
               <>
                 <View style={styles.formSection}>
-                  <Text style={[styles.formLabel, errors.site && { color: '#EF4444' }]}>Site *</Text>
+                  <Text style={[styles.formLabel, errors.site && { color: colors.error }]}>Site *</Text>
                   <TextInput 
-                    style={[styles.formInput, errors.site && { borderColor: '#EF4444', borderWidth: 2 }]} 
+                    style={[styles.formInput, errors.site && { borderColor: colors.error, borderWidth: 2 }]} 
                     value={site} 
                     onChangeText={(text) => { setSite(text); if (errors.site) setErrors(prev => ({ ...prev, site: '' })); }} 
                     placeholder="Nom du site (ex: Mine Kamoto)"
@@ -1038,9 +1038,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                 </View>
 
                 <View style={styles.formSection}>
-                  <Text style={[styles.formLabel, errors.area && { color: '#EF4444' }]}>Zone *</Text>
+                  <Text style={[styles.formLabel, errors.area && { color: colors.error }]}>Zone *</Text>
                   <TextInput 
-                    style={[styles.formInput, errors.area && { borderColor: '#EF4444', borderWidth: 2 }]} 
+                    style={[styles.formInput, errors.area && { borderColor: colors.error, borderWidth: 2 }]} 
                     value={area} 
                     onChangeText={(text) => { setArea(text); if (errors.area) setErrors(prev => ({ ...prev, area: '' })); }} 
                     placeholder="Zone évaluée (ex: Galerie -200m)"
@@ -1049,9 +1049,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                 </View>
 
                 <View style={styles.formSection}>
-                  <Text style={[styles.formLabel, errors.assessorName && { color: '#EF4444' }]}>Évaluateur *</Text>
+                  <Text style={[styles.formLabel, errors.assessorName && { color: colors.error }]}>Évaluateur *</Text>
                   <TouchableOpacity
-                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center', backgroundColor: showUserDropdown ? colors.surfaceVariant : colors.surfaceVariant }, errors.assessorName && { borderColor: '#EF4444', borderWidth: 2 }]}
+                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center', backgroundColor: showUserDropdown ? colors.surfaceVariant : colors.surfaceVariant }, errors.assessorName && { borderColor: colors.error, borderWidth: 2 }]}
                     onPress={() => {
                       setShowUserDropdown(!showUserDropdown);
                       if (!showUserDropdown) setFilteredAssessors(currentUser ? [currentUser, ...availableUsers] : availableUsers);
@@ -1156,9 +1156,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
             ) : (
               <>
                 <View style={styles.formSection}>
-                  <Text style={[styles.formLabel, errors.hazDescription && { color: '#EF4444' }]}>Description du Danger *</Text>
+                  <Text style={[styles.formLabel, errors.hazDescription && { color: colors.error }]}>Description du Danger *</Text>
                   <TextInput 
-                    style={[styles.formInput, errors.hazDescription && { borderColor: '#EF4444', borderWidth: 2 }, { minHeight: 70, textAlignVertical: 'top' }]} 
+                    style={[styles.formInput, errors.hazDescription && { borderColor: colors.error, borderWidth: 2 }, { minHeight: 70, textAlignVertical: 'top' }]} 
                     value={hazDescription} 
                     onChangeText={(text) => { setHazDescription(text); if (errors.hazDescription) setErrors(prev => ({ ...prev, hazDescription: '' })); }} 
                     placeholder="Description complète du danger..."
@@ -1210,7 +1210,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                       {['1', '2', '3', '4', '5'].map(v => (
                         <TouchableOpacity 
                           key={v} 
-                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: consequence === v ? '#EF444420' : undefined }]} 
+                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: consequence === v ? colors.error + '20' : undefined }]} 
                           onPress={() => setConsequence(v)}
                         >
                           <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: consequence === v ? '700' : '500' }]}>{v}</Text>
@@ -1220,9 +1220,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                   </View>
                 </View>
 
-                <View style={{ backgroundColor: riskScore >= 16 ? '#DC262640' : riskScore >= 12 ? '#EF444440' : riskScore >= 6 ? '#F59E0B40' : '#22C55E40', borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
+                <View style={{ backgroundColor: riskScore >= 16 ? colors.errorDark + '40' : riskScore >= 12 ? colors.error + '40' : riskScore >= 6 ? colors.warning + '40' : '#22C55E40', borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
                   <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Score de Risque</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '700', color: riskScore >= 16 ? '#DC2626' : riskScore >= 12 ? '#EF4444' : riskScore >= 6 ? '#F59E0B' : '#22C55E' }}>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: riskScore >= 16 ? colors.errorDark : riskScore >= 12 ? colors.error : riskScore >= 6 ? colors.warning : '#22C55E' }}>
                     {likelihood} × {consequence} = {riskScore} {riskScore >= 16 ? '(CRITIQUE)' : riskScore >= 12 ? '(ÉLEVÉ)' : riskScore >= 6 ? '(MOYEN)' : '(FAIBLE)'}
                   </Text>
                 </View>
@@ -1298,7 +1298,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                       {['1', '2', '3', '4', '5'].map(v => (
                         <TouchableOpacity 
                           key={v} 
-                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: residualConsequence === v ? '#EF444420' : undefined }]} 
+                          style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: residualConsequence === v ? colors.error + '20' : undefined }]} 
                           onPress={() => setResidualConsequence(v)}
                         >
                           <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: residualConsequence === v ? '700' : '500' }]}>{v}</Text>
@@ -1335,9 +1335,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                 </View>
 
                 <View style={styles.formSection}>
-                  <Text style={[styles.formLabel, errors.responsiblePerson && { color: '#EF4444' }]}>Personne Responsable *</Text>
+                  <Text style={[styles.formLabel, errors.responsiblePerson && { color: colors.error }]}>Personne Responsable *</Text>
                   <TouchableOpacity
-                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center' }, errors.responsiblePerson && { borderColor: '#EF4444', borderWidth: 2 }]}
+                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center' }, errors.responsiblePerson && { borderColor: colors.error, borderWidth: 2 }]}
                     onPress={() => {
                       setShowWorkerDropdown(!showWorkerDropdown);
                       if (!showWorkerDropdown) setFilteredWorkers(workers);
@@ -1551,7 +1551,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                           <Text style={{ fontSize: 10, color: colors.textSecondary }}>Score: {h.riskScore} • {(h as any).exposedWorkerIds?.length || h.affectedWorkers || 0} exposé(s)</Text>
                         </View>
                         <TouchableOpacity onPress={() => handleRemoveHazard(i)}>
-                          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                          <Ionicons name="trash-outline" size={16} color={colors.error} />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -1994,10 +1994,10 @@ export function RiskAssessmentScreen() {
           <View style={styles.statsRow}>
             {[
               { label: 'Évaluations', value: stats.total, icon: 'clipboard', color: ACCENT },
-              { label: 'Dangers', value: stats.totalHazards, icon: 'warning', color: '#F59E0B' },
-              { label: 'Risques Élevés', value: stats.highRisks, icon: 'alert-circle', color: '#EF4444' },
-              { label: 'Critiques', value: stats.criticalRisks, icon: 'skull', color: '#DC2626' },
-              { label: 'Travailleurs', value: stats.workersExposed, icon: 'people', color: '#6366F1' },
+              { label: 'Dangers', value: stats.totalHazards, icon: 'warning', color: colors.warning },
+              { label: 'Risques Élevés', value: stats.highRisks, icon: 'alert-circle', color: colors.error },
+              { label: 'Critiques', value: stats.criticalRisks, icon: 'skull', color: colors.errorDark },
+              { label: 'Travailleurs', value: stats.workersExposed, icon: 'people', color: colors.secondary },
             ].map((s, i) => (
               <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
                 <View style={styles.statIcon}>
@@ -2056,9 +2056,9 @@ const styles = StyleSheet.create({
 
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   statCard: { flex: 1, minWidth: 90, borderRadius: borderRadius.xl, padding: 16, alignItems: 'center', ...shadows.md },
-  statIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  statValue: { fontSize: 20, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
+  statIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 6, backgroundColor: 'rgba(255, 255, 255, 0.18)' },
+  statValue: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
+  statLabel: { fontSize: 10, color: 'rgba(255, 255, 255, 0.75)', marginTop: 2, textAlign: 'center' },
 
   filterBar: { gap: 10, marginBottom: 16 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.lg, paddingHorizontal: 14, paddingVertical: 10, gap: 8, borderWidth: 1, borderColor: colors.outline, ...shadows.xs },
@@ -2106,7 +2106,7 @@ const styles = StyleSheet.create({
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendText: { fontSize: 10, color: colors.textSecondary },
   
-  warningBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F59E0B20', borderRadius: borderRadius.md, padding: 10, marginTop: 12, borderLeftWidth: 3, borderLeftColor: '#F59E0B' },
+  warningBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.warningLight, borderRadius: borderRadius.md, padding: 10, marginTop: 12, borderLeftWidth: 3, borderLeftColor: colors.warning },
   warningText: { flex: 1, fontSize: 11, color: colors.text, fontWeight: '500' },
 
   // Modal
@@ -2140,7 +2140,7 @@ const styles = StyleSheet.create({
   formSection: { marginBottom: 16 },
   formLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 6 },
   formInput: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.outline },
-  formError: { fontSize: 12, color: '#EF4444', marginTop: 4, marginLeft: 4 },
+  formError: { fontSize: 12, color: colors.error, marginTop: 4, marginLeft: 4 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
   optionChipText: { fontSize: 11, color: colors.textSecondary },

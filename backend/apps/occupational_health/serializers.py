@@ -25,7 +25,7 @@ from .models import (
     PPEItem, PPECatalog, PPEAuditLog, HazardIdentification,
     SiteHealthMetrics,
     # Extended occupational health models
-    WorkerRiskProfile, OverexposureAlert, ExitExamination,
+    WorkerRiskProfile, OverexposureAlert, ExposureReading, ExitExamination,
     RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
     # Medical examination extended models
     XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
@@ -1173,6 +1173,43 @@ class OverexposureAlertSerializer(serializers.ModelSerializer):
     class Meta:
         model = OverexposureAlert
         fields = '__all__'
+
+
+class ExposureReadingSerializer(serializers.ModelSerializer):
+    """Serializer for occupational exposure readings with ISO 45001 §9.1 compliance tracking"""
+    
+    worker_name = serializers.CharField(source='worker.full_name', read_only=True)
+    worker_employee_id = serializers.CharField(source='worker.employee_id', read_only=True)
+    enterprise_name = serializers.CharField(source='worker.enterprise.name', read_only=True)
+    exposure_type_display = serializers.CharField(source='get_exposure_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    source_type_display = serializers.CharField(source='get_source_type_display', read_only=True)
+    measured_by_name = serializers.CharField(source='measured_by.get_full_name', read_only=True, allow_null=True)
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True, allow_null=True)
+    percent_of_limit = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = ExposureReading
+        fields = [
+            'id', 'worker', 'worker_name', 'worker_employee_id',
+            'enterprise', 'enterprise_name',
+            'exposure_type', 'exposure_type_display',
+            'exposure_value', 'unit_measurement',
+            'osha_twa_limit', 'acgih_tlv_limit', 'local_limit',
+            'status', 'status_display', 'percent_of_limit',
+            'measurement_date', 'sampling_duration_hours', 'sampling_location',
+            'source_type', 'source_type_display',
+            'equipment_id', 'equipment_name', 'calibration_date', 'calibration_due_date',
+            'is_valid_measurement', 'measurement_notes',
+            'measured_by', 'measured_by_name',
+            'reviewed_by', 'reviewed_by_name',
+            'alert_triggered', 'related_alert',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'enterprise', 'status', 'alert_triggered', 'related_alert',
+            'created_at', 'updated_at'
+        ]
 
 
 class ExitExaminationSerializer(serializers.ModelSerializer):

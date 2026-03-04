@@ -11,6 +11,7 @@ from . import views
 from .views import (
     WorkerRiskProfileViewSet,
     OverexposureAlertViewSet,
+    ExposureReadingViewSet,
     ExitExaminationViewSet,
     RegulatoryCNSSReportViewSet,
     DRCRegulatoryReportViewSet,
@@ -69,8 +70,9 @@ router.register(r'ppe-catalog', PPECatalogViewSet, basename='ppe-catalog')
 # Risk profiling
 router.register(r'worker-risk-profiles', WorkerRiskProfileViewSet, basename='worker-risk-profile')
 
-# Occupational exposure alerts
+# Occupational exposure alerts and monitoring
 router.register(r'overexposure-alerts', OverexposureAlertViewSet, basename='overexposure-alert')
+router.register(r'exposure-readings', ExposureReadingViewSet, basename='exposure-reading')
 
 # Exit examinations
 router.register(r'exit-exams', ExitExaminationViewSet, basename='exit-examination')
