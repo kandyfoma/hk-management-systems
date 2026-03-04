@@ -69,6 +69,7 @@ export function WorkerRiskProfileScreen() {
   const [selectedProfile, setSelectedProfile] = useState<WorkerRiskProfile | null>(null);
   const [showDetail, setShowDetail]       = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showInfo, setShowInfo]           = useState(false);
 
   useEffect(() => { loadProfiles(); }, []);
 
@@ -138,6 +139,84 @@ export function WorkerRiskProfileScreen() {
           <Text style={styles.screenSubtitle}>Score de risque par travailleur – Surveillance ciblée</Text>
         </View>
       </View>
+
+      {/* How It Works Info Panel */}
+      <TouchableOpacity 
+        style={styles.infoPanel}
+        onPress={() => setShowInfo(!showInfo)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.infoPanelHeader}>
+          <Ionicons name="information-circle-outline" size={20} color={ACCENT} />
+          <Text style={styles.infoPanelTitle}>Comment ça marche?</Text>
+          <Ionicons 
+            name={showInfo ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color={colors.textSecondary} 
+            style={{ marginLeft: 'auto' }}
+          />
+        </View>
+
+        {showInfo && (
+          <View style={styles.infoPanelContent}>
+            <View style={styles.infoSection}>
+              <Text style={styles.infoSectionTitle}>📊 Les 3 scores de risque</Text>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoItemLabel}>🏥 Score Santé (0-100)</Text>
+                <Text style={styles.infoItemDesc}>Basé sur l'âge, status d'aptitude, conditions chroniques et allergies du travailleur</Text>
+              </View>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoItemLabel}>⚠️ Score Exposition (0-100)</Text>
+                <Text style={styles.infoItemDesc}>Basé sur les substances dangereuses exposées, années d'emploi et compiance aux EPI</Text>
+              </View>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoItemLabel}>✓ Score Conformité (0-100)</Text>
+                <Text style={styles.infoItemDesc}>Basé sur les incidents, maladies professionnelles actuelles et examens médicaux en retard</Text>
+              </View>
+            </View>
+
+            <View style={styles.infoSection}>
+              <Text style={styles.infoSectionTitle}>🎨 Niveaux de risque</Text>
+              <View style={styles.infoRiskLevel}>
+                <View style={[styles.riskColorBox, { backgroundColor: '#22C55E' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.riskLevelName}>Faible (0-24)</Text>
+                  <Text style={styles.riskLevelDesc}>Risque minimal — suivi annuel standard</Text>
+                </View>
+              </View>
+              <View style={styles.infoRiskLevel}>
+                <View style={[styles.riskColorBox, { backgroundColor: '#F59E0B' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.riskLevelName}>Modéré (25-49)</Text>
+                  <Text style={styles.riskLevelDesc}>Nécessite attention particulière et suivi régulier</Text>
+                </View>
+              </View>
+              <View style={styles.infoRiskLevel}>
+                <View style={[styles.riskColorBox, { backgroundColor: '#EF4444' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.riskLevelName}>Élevé (50-74)</Text>
+                  <Text style={styles.riskLevelDesc}>Intervention requise et suivi intensifié</Text>
+                </View>
+              </View>
+              <View style={styles.infoRiskLevel}>
+                <View style={[styles.riskColorBox, { backgroundColor: '#DC2626' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.riskLevelName}>Critique (75-100)</Text>
+                  <Text style={styles.riskLevelDesc}>Action immédiate et suivi strict obligatoire</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.infoSection}>
+              <Text style={styles.infoSectionTitle}>⏰ Indicateurs clés</Text>
+              <Text style={styles.infoIndicator}>🔴 <Text style={{ fontWeight: '600' }}>Exams en retard:</Text> Examens médicaux passés leur date limite</Text>
+              <Text style={styles.infoIndicator}>⚡ <Text style={{ fontWeight: '600' }}>Incidents:</Text> Accidents ou incidents de travail dans les 12 derniers mois</Text>
+              <Text style={styles.infoIndicator}>📋 <Text style={{ fontWeight: '600' }}>Presqu'accidents:</Text> Situations dangereuses qui auraient pu causer des blessures</Text>
+              <Text style={styles.infoIndicator}>🔄 <Text style={{ fontWeight: '600' }}>Recalculé auto:</Text> Les scores se mettent à jour automatiquement quand vous enregistrez un nouvel incident ou examen</Text>
+            </View>
+          </View>
+        )}
+      </TouchableOpacity>
 
       {/* Filters */}
       <View style={styles.filterBar}>

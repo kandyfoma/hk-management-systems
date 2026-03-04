@@ -111,6 +111,7 @@ class Command(BaseCommand):
     def calculate_profile(self, profile):
         """Calculate and save risk profile"""
         worker = profile.worker
+        from datetime import date as date_type, timedelta
         
         # Calculate health risk score (0-100)
         health_score = self._calculate_health_risk(worker)
@@ -121,10 +122,40 @@ class Command(BaseCommand):
         # Calculate compliance risk score (0-100)
         compliance_score = self._calculate_compliance_risk(worker)
         
+        # Calculate incident and disease counts
+        twelve_months_ago = date_type.today() - timedelta(days=365)
+        
+        incidents_12m = WorkplaceIncident.objects.filter(
+            injured_workers=worker,
+            incident_date__gte=twelve_months_ago
+        ).count()
+        
+        near_misses_12m = WorkplaceIncident.objects.filter(
+            injured_workers=worker,
+            category='near_miss',
+            incident_date__gte=twelve_months_ago
+        ).count()
+        
+        diseases = OccupationalDisease.objects.filter(
+            worker=worker,
+            case_status__in=['active', 'chronic']
+        ).count()
+        
+        # Check for overdue exams
+        exams_overdue = False
+        days_overdue = 0
+        if worker.next_exam_due and worker.next_exam_due < date_type.today():
+            exams_overdue = True
+            days_overdue = (date_type.today() - worker.next_exam_due).days
+        
         # Update profile
         profile.health_risk_score = health_score
         profile.exposure_risk_score = exposure_score
         profile.compliance_risk_score = compliance_score
+        profile.incidents_last_12months = incidents_12m
+        profile.near_misses_last_12months = near_misses_12m
+        profile.exams_overdue = exams_overdue
+        profile.days_overdue = days_overdue
         
         # Calculate overall risk
         profile.calculate_overall_risk()
