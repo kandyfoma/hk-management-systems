@@ -1,4 +1,4 @@
-# HK Management Systems - Django Backend
+# KAT Management Systems - Django Backend
 
 A comprehensive Django REST API backend for healthcare management systems, supporting hospitals, pharmacies, clinics, and related healthcare organizations.
 
@@ -254,7 +254,7 @@ Optional:
 
 ## License
 
-This project is proprietary software for HK Management Systems.
+This project is proprietary software for KAT Management Systems.
 
 ## Support
 

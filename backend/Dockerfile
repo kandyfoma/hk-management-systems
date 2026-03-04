@@ -1,5 +1,5 @@
 # =============================================================================
-# Dockerfile — HK Management Systems Backend
+# Dockerfile — KAT Management Systems Backend
 # =============================================================================
 FROM python:3.11-slim
 

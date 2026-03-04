@@ -1,6 +1,6 @@
 {
-  "name": "HK Management Systems",
-  "short_name": "HK Systems",
+  "name": "KAT Management Systems",
+  "short_name": "KAT Systems",
   "description": "Système de gestion hospitalière et pharmaceutique pour la RD Congo",
   "start_url": "/",
   "display": "standalone",

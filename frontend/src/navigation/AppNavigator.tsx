@@ -933,7 +933,7 @@ function DesktopApp() {
       activeId={activeScreen}
       onSelect={handleScreenChange}
       accentColor={getAccentColor()}
-      title="HK Management"
+      title="KAT Management"
       subtitle="Système de Gestion de Santé"
       organizationName={organization?.name}
       headerIcon="medkit"
@@ -1016,7 +1016,7 @@ function MobileApp() {
       <Tab.Screen 
         name="Dashboard" 
         component={DashboardScreen} 
-        options={{ title: 'Tableau de Bord', headerTitle: 'HK Management Systems' }} 
+        options={{ title: 'Tableau de Bord', headerTitle: 'KAT Management Systems' }} 
       />
       
       {hasPharmacyAccess && (

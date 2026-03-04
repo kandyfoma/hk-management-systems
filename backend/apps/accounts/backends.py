@@ -1,5 +1,5 @@
 """
-Custom authentication backends for HK Management System
+Custom authentication backends for KAT Management System
 """
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth import get_user_model

@@ -248,16 +248,16 @@ LOGGING = {
 JAZZMIN_SETTINGS = {
     # ============= Site Identity =============
     "show_ui_builder": False,
-    "site_title": "HK Management Admin",
-    "site_header": "HK Healthcare System",
-    "site_brand": "HK Santé",
+    "site_title": "KAT Management Admin",
+    "site_header": "KAT Healthcare System",
+    "site_brand": "KAT Santé",
     "site_logo": "branding/admin-logo.png",
     "site_logo_classes": "img-circle",
     "site_icon": "branding/admin-icon.png",
     "login_logo": "branding/admin-logo.png",
     "login_logo_dark": "branding/admin-logo.png",
-    "welcome_sign": "Welcome to HK Healthcare Management System",
-    "copyright": "© 2025 HK Management Systems - RD Congo",
+    "welcome_sign": "Welcome to KAT Healthcare Management System",
+    "copyright": "© 2025 KAT Management Systems - RD Congo",
     
     # ============= Search & User Avatar =============
     "search_model": "accounts.User",

@@ -429,7 +429,7 @@ export function SidebarLayout({
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const label = getActiveLabel(activeId);
-      document.title = `${label} — HK Management Systems`;
+      document.title = `${label} — KAT Management Systems`;
     }
   }, [activeId, getActiveLabel]);
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Django HK Management Systems Backend Setup Script
+Django KAT Management Systems Backend Setup Script
 
-This script helps set up the Django backend for the HK Management Systems.
+This script helps set up the Django backend for the KAT Management Systems.
 It creates a virtual environment, installs dependencies, and runs initial setup.
 """
 
@@ -25,7 +25,7 @@ def run_command(command, description):
 
 
 def main():
-    print("🏥 HK Management Systems - Django Backend Setup")
+    print("🏥 KAT Management Systems - Django Backend Setup")
     print("=" * 50)
     
     # Check if virtual environment exists

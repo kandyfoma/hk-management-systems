@@ -260,7 +260,7 @@ const buildReceiptHtml = (sale: SaleDetail): string => {
   <div class="sheet">
     <div class="header">
       <div class="brand">
-        <h1>HK Management Systems</h1>
+        <h1>KAT Management Systems</h1>
         <p>${escapeHtml(sale.organization_name || 'Pharmacie')}</p>
       </div>
       <div class="badge">PAIEMENT VALIDÉ</div>
@@ -326,7 +326,7 @@ const buildReceiptHtml = (sale: SaleDetail): string => {
 
       <div class="footer">
         Merci pour votre confiance.<br />
-        Document généré automatiquement par HK Management Systems.
+        Document généré automatiquement par KAT Management Systems.
       </div>
     </div>
   </div>

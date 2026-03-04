@@ -172,7 +172,7 @@ function AppContent() {
     if (Platform.OS === 'web') {
       const setDocumentTitle = () => {
         if (typeof document !== 'undefined') {
-          const title = 'HK Management Systems - Système Hospitalier';
+          const title = 'KAT Management Systems - Système Hospitalier';
           
           // Method 1: Direct assignment
           document.title = title;
@@ -223,7 +223,7 @@ function AppContent() {
 
       // Set web page title
       if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        document.title = 'HK Management Systems';
+        document.title = 'KAT Management Systems';
       }
 
       // First, check for existing session data locally
@@ -395,7 +395,7 @@ function AppContent() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>HK Management Systems</Text>
+        <Text style={styles.loadingText}>KAT Management Systems</Text>
         <Text style={styles.loadingSubtext}>Initialisation du système...</Text>
       </View>
     );

@@ -2,7 +2,7 @@
  * Modern Reports Dashboard Component
  * 
  * Comprehensive reporting UI with charts, metrics, and data export
- * Compatible with your HK Management System backend
+ * Compatible with your KAT Management System backend
  */
 
 import React, { useState, useEffect } from 'react';

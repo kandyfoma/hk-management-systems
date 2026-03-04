@@ -17,10 +17,10 @@ User = get_user_model()
 
 # Create or get organization
 org, created = Organization.objects.get_or_create(
-    name='HK Management System',
+    name='KAT Management System',
     defaults={
         'type': OrganizationType.HOSPITAL,
-        'registration_number': 'HK-001',
+        'registration_number': 'KAT-001',
         'address': 'Kinshasa, DRC',
         'email': 'admin@hkmanagement.com',
         'phone': '+243123456789',

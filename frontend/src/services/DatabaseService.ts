@@ -223,11 +223,11 @@ export class DatabaseService {
   async createTestLicenses(): Promise<void> {
     try {
       // Create test organization if it doesn't exist
-      let testOrg = this.tables.organizations.find(org => org.name === 'HK Healthcare Group');
+      let testOrg = this.tables.organizations.find(org => org.name === 'KAT Healthcare Group');
       
       if (!testOrg) {
         testOrg = await this.createOrganization({
-          name: 'HK Healthcare Group',
+          name: 'KAT Healthcare Group',
           businessType: 'HEALTHCARE_GROUP',
           address: '123 Avenue de la Santé',
           city: 'Kinshasa',
@@ -338,7 +338,7 @@ export class DatabaseService {
       }
 
       // Find org
-      const testOrg = this.tables.organizations.find(org => org.name === 'HK Healthcare Group');
+      const testOrg = this.tables.organizations.find(org => org.name === 'KAT Healthcare Group');
       if (!testOrg) {
         console.error('❌ Cannot create admin user — test organization not found');
         return;
@@ -2164,14 +2164,14 @@ export class DatabaseService {
     try {
       // Create test organization
       const testOrg = await this.createOrganization({
-        name: 'HK Healthcare Group',
+        name: 'KAT Healthcare Group',
         businessType: 'HEALTHCARE_GROUP',
         address: '123 Avenue de la Santé',
         city: 'Kinshasa',
         country: 'RD Congo',
         phone: '+243 999 123 456',
-        email: 'contact@hkhealthcare.cd',
-        contactPerson: 'Admin HK',
+        email: 'contact@kathealthcare.cd',
+        contactPerson: 'Admin KAT',
       });
 
       // Trial license

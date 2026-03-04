@@ -826,7 +826,7 @@ export function StaffManagementScreen() {
         <View>
           <View style={styles.brandRow}>
             <Image source={require('../../assets/icon.png')} style={styles.brandLogo} resizeMode="contain" />
-            <Text style={styles.brandName}>HK Management Systems</Text>
+            <Text style={styles.brandName}>KAT Management Systems</Text>
           </View>
           <Text style={styles.headerTitle}>👥 Gestion du Personnel</Text>
           <Text style={styles.headerSubtitle}>

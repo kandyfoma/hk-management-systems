@@ -621,7 +621,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps = {}) {
       {/* ── Footer ─────────────────────────────────────── */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          © 2025 HK Management Systems — Conçu pour la RD Congo
+          © 2025 KAT Management Systems — Conçu pour la RD Congo
         </Text>
         <View style={styles.footerBadge}>
           <View style={styles.footerDot} />

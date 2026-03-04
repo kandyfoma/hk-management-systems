@@ -191,7 +191,7 @@ export const LicenseTestScreen: React.FC = () => {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Ionicons name="flask" size={32} color={colors.primary} />
-        <Text style={styles.title}>HK Management System</Text>
+        <Text style={styles.title}>KAT Management System</Text>
         <Text style={styles.subtitle}>Modular Licensing Test Suite</Text>
       </View>
 

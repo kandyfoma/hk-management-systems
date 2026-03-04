@@ -1,5 +1,5 @@
 """
-Comprehensive Reporting System for HK Management Systems
+Comprehensive Reporting System for KAT Management Systems
 
 Provides modern, data-rich reports across:
 - Pharmacy Sales & Financial Performance

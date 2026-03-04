@@ -316,7 +316,7 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
                 <View style={newLS.logoCircle}>
                   <Ionicons name="medical" size={isDesktop ? 40 : 36} color="#FFF" />
                 </View>
-                <Text style={newLS.brandName}>HK Santé</Text>
+                <Text style={newLS.brandName}>KAT Santé</Text>
                 <Text style={newLS.brandSubtitle}>Système de Gestion de Santé</Text>
               </View>
 
@@ -463,7 +463,7 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
             {/* Footer */}
             <View style={newLS.footer}>
               <Text style={newLS.footerText}>
-                © 2025 HK Management Systems · République Démocratique du Congo
+                © 2025 KAT Management Systems · République Démocratique du Congo
               </Text>
             </View>
           </Animated.View>
@@ -1071,7 +1071,7 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
               <View style={newLogS.logoBox}>
                 <Ionicons name="medical" size={40} color="#FFF" />
               </View>
-              <Text style={newLogS.title}>HK Santé</Text>
+              <Text style={newLogS.title}>KAT Santé</Text>
               <Text style={newLogS.subtitle}>Connectez-vous à votre espace</Text>
             </View>
 
@@ -1199,7 +1199,7 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
             </TouchableOpacity>
 
             {/* Footer */}
-            <Text style={newLogS.footerText}>© 2025 HK Management Systems</Text>
+            <Text style={newLogS.footerText}>© 2025 KAT Management Systems</Text>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

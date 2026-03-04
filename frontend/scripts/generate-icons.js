@@ -1,5 +1,5 @@
 /**
- * HK Management Systems — Icon Generator
+ * KAT Management Systems — Icon Generator
  * Generates all required icon sizes for iOS, Android, and Web/PWA
  * from a single 1024x1024 master icon.
  */
@@ -78,7 +78,7 @@ const expoIcons = [
 // ═══════════════════════════════════════════════════════════════
 
 async function generateIcons() {
-  console.log('🎨 HK Management Systems — Icon Generator');
+  console.log('🎨 KAT Management Systems — Icon Generator');
   console.log('==========================================\n');
 
   // Verify source exists

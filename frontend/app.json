@@ -30,8 +30,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "HK Management Systems",
-      "shortName": "HK Systems",
+      "name": "KAT Management Systems",
+      "shortName": "KAT Systems",
       "description": "Système de gestion hospitalière et pharmaceutique pour la RD Congo",
       "themeColor": "#122056",
       "backgroundColor": "#FAFAFD",

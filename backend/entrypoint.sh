@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-# Docker Entrypoint — HK Management Systems Backend
+# Docker Entrypoint — KAT Management Systems Backend
 #
 # Runs automatically on every container start (UAT / Production).
 # Order is intentional: wait → migrate → seed → collectstatic → serve.
@@ -9,7 +9,7 @@
 set -e  # Exit immediately on any error
 
 echo "──────────────────────────────────────────"
-echo "  HK Management Systems — Backend startup"
+echo "  KAT Management Systems — Backend startup"
 echo "  ENV: ${DJANGO_ENV:-production}"
 echo "──────────────────────────────────────────"
 
