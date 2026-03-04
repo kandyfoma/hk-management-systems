@@ -77,6 +77,14 @@ error.log
 *.temp
 
 # Environment files (real secrets — only examples are committed)
+# IMPORTANT: Never commit actual secrets/credentials
 .env
+.env.local
+.env.*.local
 .env.uat
 .env.prod
+.env.*.secret
+*.env
+!.env.example
+!.env.prod.example
+!.env.uat.example
