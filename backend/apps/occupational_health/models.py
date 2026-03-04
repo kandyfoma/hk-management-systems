@@ -1589,6 +1589,222 @@ class PPEItem(models.Model):
         from django.utils import timezone
         return timezone.now().date() >= self.next_inspection_date
 
+
+# ==================== PPE CATALOG & AUDIT MODELS ====================
+
+class PPECatalog(models.Model):
+    """
+    Central PPE inventory catalogue (ISO 45001 §8.1.2).
+    Tracks all PPE types available in the enterprise with full
+    industry-standard fields: stock levels, certification, lifecycle.
+    """
+
+    PPE_CATEGORIES = [
+        ('head',        _('Protection Tête')),
+        ('eye',         _('Protection Yeux')),
+        ('ear',         _('Protection Auditive')),
+        ('respiratory', _('Protection Respiratoire')),
+        ('hand',        _('Protection Mains')),
+        ('foot',        _('Protection Pieds')),
+        ('body',        _('Protection Corps')),
+        ('fall',        _('Protection Anti-chute')),
+        ('high_vis',    _('Haute Visibilité')),
+        ('chemical',    _('Protection Chimique')),
+        ('electrical',  _('Protection Électrique')),
+        ('thermal',     _('Protection Thermique')),
+        ('ergonomic',   _('Ergonomique')),
+        ('other',       _('Autre')),
+    ]
+
+    RISK_PROTECTION_LEVELS = [
+        ('basic',        _('Protection Basique')),
+        ('intermediate', _('Protection Intermédiaire')),
+        ('advanced',     _('Protection Avancée')),
+        ('specialist',   _('Spécialiste')),
+    ]
+
+    # ── Identity ──────────────────────────────────────────────
+    enterprise    = models.ForeignKey(Enterprise, on_delete=models.CASCADE,
+                                      related_name='ppe_catalog')
+    work_site     = models.ForeignKey(WorkSite, on_delete=models.SET_NULL,
+                                      null=True, blank=True,
+                                      related_name='ppe_catalog')
+    ppe_type      = models.CharField(_("Type PPE"), max_length=50,
+                                     choices=PPE_TYPES)
+    category      = models.CharField(_("Catégorie"), max_length=20,
+                                     choices=PPE_CATEGORIES)
+    name          = models.CharField(_("Nom"), max_length=200)
+    description   = models.TextField(_("Description"), blank=True)
+    brand         = models.CharField(_("Marque"), max_length=100, blank=True)
+    model_number  = models.CharField(_("Modèle / Référence"), max_length=100,
+                                     blank=True)
+    part_number   = models.CharField(_("Numéro de Pièce"), max_length=100,
+                                     blank=True)
+    colour_size   = models.CharField(_("Couleur / Taille"), max_length=100,
+                                     blank=True,
+                                     help_text="Ex: Rouge, Taille L/XL")
+
+    # ── Certification (ILO C155 / EN standards) ───────────────
+    certification_standard = models.CharField(_("Norme Certification"),
+                                              max_length=200, blank=True,
+                                              help_text="Ex: EN 397:2012, ANSI Z87.1")
+    certification_number   = models.CharField(_("Numéro Certificat"),
+                                              max_length=100, blank=True)
+    certification_body     = models.CharField(_("Organisme Certificateur"),
+                                              max_length=200, blank=True)
+    certification_expiry   = models.DateField(_("Expiration Certification"),
+                                              null=True, blank=True)
+    risk_protection_level  = models.CharField(_("Niveau Protection"),
+                                              max_length=20,
+                                              choices=RISK_PROTECTION_LEVELS,
+                                              blank=True)
+
+    # ── Compatible hazard types (links PPE to risks) ──────────
+    compatible_hazard_types = models.JSONField(
+        _("Types Dangers Compatibles"), default=list, blank=True,
+        help_text="List of hazard_type values this PPE protects against"
+    )
+
+    # ── Stock & Inventory ─────────────────────────────────────
+    stock_quantity     = models.PositiveIntegerField(_("Quantité en Stock"),
+                                                    default=0)
+    assigned_quantity  = models.PositiveIntegerField(_("Quantité Attribuée"),
+                                                    default=0)
+    minimum_stock_level = models.PositiveIntegerField(_("Stock Minimum"),
+                                                      default=10)
+    reorder_point      = models.PositiveIntegerField(_("Point Réapprovisionnement"),
+                                                    default=20)
+    storage_location   = models.CharField(_("Lieu de Stockage"), max_length=200,
+                                          blank=True)
+    batch_number       = models.CharField(_("Numéro de Lot"), max_length=100,
+                                          blank=True)
+    manufacture_date   = models.DateField(_("Date de Fabrication"),
+                                          null=True, blank=True)
+    expiry_date        = models.DateField(_("Date d'Expiration / Péremption"),
+                                          null=True, blank=True)
+    max_lifespan_months = models.PositiveIntegerField(
+        _("Durée de Vie Max (mois)"), null=True, blank=True,
+        help_text="Maximum service life in months from issue date"
+    )
+    maintenance_interval_months = models.PositiveIntegerField(
+        _("Intervalle Maintenance (mois)"), null=True, blank=True
+    )
+
+    # ── Costing ───────────────────────────────────────────────
+    unit_price  = models.DecimalField(_("Prix Unitaire"), max_digits=10,
+                                       decimal_places=2, default=0)
+    currency    = models.CharField(_("Devise"), max_length=5, default='USD')
+    supplier    = models.CharField(_("Fournisseur"), max_length=200, blank=True)
+    supplier_contact = models.CharField(_("Contact Fournisseur"), max_length=200,
+                                         blank=True)
+    supplier_reference = models.CharField(_("Référence Fournisseur"),
+                                           max_length=100, blank=True)
+
+    # ── Status & Control ──────────────────────────────────────
+    is_active = models.BooleanField(_("Actif"), default=True)
+    notes     = models.TextField(_("Remarques"), blank=True)
+
+    # ── Full audit trail ─────────────────────────────────────
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name='ppe_catalog_created')
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name='ppe_catalog_updated')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Catalogue EPI")
+        verbose_name_plural = _("Catalogue EPI")
+        ordering = ['category', 'name']
+
+    def __str__(self):
+        return f"{self.name} ({self.brand} {self.model_number})"
+
+    @property
+    def available_quantity(self):
+        return max(0, self.stock_quantity - self.assigned_quantity)
+
+    @property
+    def is_low_stock(self):
+        return self.available_quantity < self.minimum_stock_level
+
+    @property
+    def needs_reorder(self):
+        return self.available_quantity <= self.reorder_point
+
+    @property
+    def is_expired(self):
+        if not self.expiry_date:
+            return False
+        from django.utils import timezone
+        return timezone.now().date() > self.expiry_date
+
+    @property
+    def is_certification_expired(self):
+        if not self.certification_expiry:
+            return False
+        from django.utils import timezone
+        return timezone.now().date() > self.certification_expiry
+
+    @property
+    def total_value(self):
+        return float(self.unit_price) * self.stock_quantity
+
+
+class PPEAuditLog(models.Model):
+    """
+    Immutable audit trail for all PPE Catalog operations.
+    Records who did what, when, and what changed.
+    Satisfies ISO 45001 §9.1 monitoring & measurement and legal traceability.
+    """
+
+    ACTION_CHOICES = [
+        ('created',      _('Créé')),
+        ('updated',      _('Modifié')),
+        ('deleted',      _('Supprimé')),
+        ('stock_added',  _('Stock Ajouté')),
+        ('stock_removed', _('Stock Retiré')),
+        ('assigned',     _('Attribué')),
+        ('returned',     _('Retourné')),
+        ('inspected',    _('Inspecté')),
+        ('deactivated',  _('Désactivé')),
+        ('reactivated',  _('Réactivé')),
+    ]
+
+    ppe_catalog    = models.ForeignKey(PPECatalog, on_delete=models.SET_NULL,
+                                       null=True, blank=True,
+                                       related_name='audit_logs')
+    ppe_item_name  = models.CharField(_("Nom EPI"), max_length=200,
+                                      help_text="Snapshot at time of action")
+    action         = models.CharField(_("Action"), max_length=30,
+                                      choices=ACTION_CHOICES)
+    actor          = models.ForeignKey(User, on_delete=models.SET_NULL,
+                                       null=True, related_name='ppe_audit_actions')
+    actor_name     = models.CharField(_("Acteur"), max_length=200, blank=True,
+                                      help_text="Snapshot of actor name")
+    timestamp      = models.DateTimeField(_("Horodatage"), auto_now_add=True)
+    changes        = models.JSONField(_("Modifications"), default=dict,
+                                      blank=True,
+                                      help_text="{field: {old, new}} for updates")
+    notes          = models.TextField(_("Notes"), blank=True)
+    ip_address     = models.GenericIPAddressField(_("Adresse IP"), null=True,
+                                                  blank=True)
+    # For worker assignment actions
+    worker         = models.ForeignKey(Worker, on_delete=models.SET_NULL,
+                                       null=True, blank=True,
+                                       related_name='ppe_audit_logs')
+    worker_name    = models.CharField(_("Travailleur"), max_length=200,
+                                      blank=True)
+
+    class Meta:
+        verbose_name = _("Journal Audit EPI")
+        verbose_name_plural = _("Journal Audit EPI")
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.get_action_display()} — {self.ppe_item_name} by {self.actor_name} at {self.timestamp:%Y-%m-%d %H:%M}"
+
+
 # ==================== RISK ASSESSMENT MODELS ====================
 
 class HazardIdentification(models.Model):

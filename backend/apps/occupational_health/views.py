@@ -31,7 +31,7 @@ from .models import (
     OccupationalDiseaseType, OccupationalDisease,
     WorkplaceIncident, IncidentAttachment,
     # PPE and risk models
-    PPEItem, HazardIdentification,
+    PPEItem, PPECatalog, PPEAuditLog, HazardIdentification,
     SiteHealthMetrics,
     # Extended occupational health models
     WorkerRiskProfile, OverexposureAlert, ExitExamination,
@@ -68,7 +68,8 @@ from .serializers import (
     WorkplaceIncidentListSerializer, WorkplaceIncidentDetailSerializer,
     IncidentAttachmentSerializer,
     # PPE and risk serializers
-    PPEItemSerializer, HazardIdentificationSerializer,
+    PPEItemSerializer, PPECatalogSerializer, PPEAuditLogSerializer,
+    HazardIdentificationSerializer,
     SiteHealthMetricsSerializer,
     # Extended occupational health serializers
     OverexposureAlertSerializer, ExitExaminationSerializer,
@@ -1547,6 +1548,201 @@ class PPEItemViewSet(viewsets.ModelViewSet):
         }
         
         return Response(stats)
+
+
+# ─── Helpers ────────────────────────────────────────────────
+def _get_client_ip(request):
+    """Extract real IP from request headers."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def _ppe_snapshot(instance):
+    """Capture current field values for diff storage."""
+    fields = [
+        'name', 'brand', 'model_number', 'category', 'ppe_type',
+        'stock_quantity', 'assigned_quantity', 'minimum_stock_level',
+        'reorder_point', 'unit_price', 'currency', 'supplier',
+        'certification_standard', 'certification_number',
+        'certification_expiry', 'expiry_date', 'storage_location',
+        'is_active', 'notes',
+    ]
+    return {f: str(getattr(instance, f, '')) for f in fields}
+
+
+def _ppe_diff(old_snap, new_snap):
+    """Return dict of changed fields: {field: {old, new}}."""
+    return {
+        f: {'old': old_snap.get(f), 'new': new_snap.get(f)}
+        for f in new_snap
+        if old_snap.get(f) != new_snap.get(f)
+    }
+
+
+class PPECatalogViewSet(viewsets.ModelViewSet):
+    """
+    PPE Catalogue – full CRUD with immutable audit trail.
+
+    Every CREATE / UPDATE / DELETE is logged to PPEAuditLog so you have
+    a complete paper trail of who changed what and when.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class   = PPECatalogSerializer
+    filter_backends    = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields   = ['category', 'ppe_type', 'is_active', 'work_site']
+    search_fields      = ['name', 'brand', 'model_number', 'supplier',
+                          'certification_standard', 'batch_number']
+    ordering_fields    = ['name', 'category', 'stock_quantity', 'created_at']
+    ordering           = ['category', 'name']
+
+    def get_queryset(self):
+        qs = PPECatalog.objects.select_related(
+            'enterprise', 'work_site', 'created_by', 'updated_by'
+        ).prefetch_related('audit_logs')
+        # Enterprise filter: every logged-in user is scoped to their enterprise
+        try:
+            enterprise = Enterprise.objects.filter(
+                workers__user=self.request.user
+            ).first() or Enterprise.objects.first()
+            if enterprise:
+                qs = qs.filter(enterprise=enterprise)
+        except Exception:
+            pass
+        return qs
+
+    def perform_create(self, serializer):
+        """Save + write CREATE audit log."""
+        # Resolve enterprise automatically
+        try:
+            enterprise = Enterprise.objects.filter(
+                workers__user=self.request.user
+            ).first() or Enterprise.objects.first()
+        except Exception:
+            enterprise = None
+
+        instance = serializer.save(
+            enterprise=enterprise,
+            created_by=self.request.user,
+            updated_by=self.request.user,
+        )
+        PPEAuditLog.objects.create(
+            ppe_catalog=instance,
+            ppe_item_name=str(instance.name),
+            action='created',
+            actor=self.request.user,
+            actor_name=self.request.user.get_full_name(),
+            notes=f"EPI créé: {instance.name} | Stock initial: {instance.stock_quantity}",
+            ip_address=_get_client_ip(self.request),
+        )
+
+    def perform_update(self, serializer):
+        """Save + write UPDATE audit log with field-level diff."""
+        old_snap = _ppe_snapshot(serializer.instance)
+        instance = serializer.save(updated_by=self.request.user)
+        new_snap = _ppe_snapshot(instance)
+        diff = _ppe_diff(old_snap, new_snap)
+        if diff:
+            PPEAuditLog.objects.create(
+                ppe_catalog=instance,
+                ppe_item_name=str(instance.name),
+                action='updated',
+                actor=self.request.user,
+                actor_name=self.request.user.get_full_name(),
+                changes=diff,
+                notes=f"Champs modifiés: {', '.join(diff.keys())}",
+                ip_address=_get_client_ip(self.request),
+            )
+
+    def perform_destroy(self, instance):
+        """Write DELETE audit log BEFORE removing the record."""
+        PPEAuditLog.objects.create(
+            ppe_catalog=instance,
+            ppe_item_name=str(instance.name),
+            action='deleted',
+            actor=self.request.user,
+            actor_name=self.request.user.get_full_name(),
+            notes=f"EPI supprimé: {instance.name} | Stock au moment: {instance.stock_quantity}",
+            ip_address=_get_client_ip(self.request),
+        )
+        instance.delete()
+
+    # ── Extra actions ──────────────────────────────────────────
+    @action(detail=True, methods=['post'])
+    def adjust_stock(self, request, pk=None):
+        """
+        Adjust stock quantity up or down.
+        Body: { "delta": 10, "notes": "..." }   (delta can be negative)
+        """
+        instance = self.get_object()
+        delta = int(request.data.get('delta', 0))
+        notes = request.data.get('notes', '')
+        if delta == 0:
+            return Response({'detail': 'delta must be non-zero'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        old_qty = instance.stock_quantity
+        instance.stock_quantity = max(0, old_qty + delta)
+        instance.updated_by = request.user
+        instance.save(update_fields=['stock_quantity', 'updated_by', 'updated_at'])
+        action_label = 'stock_added' if delta > 0 else 'stock_removed'
+        PPEAuditLog.objects.create(
+            ppe_catalog=instance,
+            ppe_item_name=str(instance.name),
+            action=action_label,
+            actor=request.user,
+            actor_name=request.user.get_full_name(),
+            changes={'stock_quantity': {'old': str(old_qty), 'new': str(instance.stock_quantity)}},
+            notes=notes or f"Ajustement stock: {old_qty} → {instance.stock_quantity}",
+            ip_address=_get_client_ip(request),
+        )
+        return Response(PPECatalogSerializer(instance).data)
+
+    @action(detail=True, methods=['get'])
+    def audit_trail(self, request, pk=None):
+        """Return paginated audit log for a specific PPE item."""
+        instance = self.get_object()
+        logs = PPEAuditLog.objects.filter(ppe_catalog=instance).order_by('-timestamp')
+        return Response(PPEAuditLogSerializer(logs, many=True).data)
+
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """Inventory overview statistics."""
+        qs = self.get_queryset().filter(is_active=True)
+        from django.utils import timezone as tz
+        now = tz.now().date()
+        ninety_days = now + timedelta(days=90)
+        total_items   = qs.count()
+        total_stock   = qs.aggregate(s=Sum('stock_quantity'))['s'] or 0
+        total_assigned = qs.aggregate(s=Sum('assigned_quantity'))['s'] or 0
+        low_stock     = sum(1 for i in qs if i.is_low_stock)
+        expiring_soon = qs.filter(expiry_date__lte=ninety_days,
+                                  expiry_date__gte=now).count()
+        expired       = qs.filter(expiry_date__lt=now).count()
+        total_value   = sum(i.total_value for i in qs)
+        return Response({
+            'total_catalog_items': total_items,
+            'total_stock':    total_stock,
+            'total_assigned': total_assigned,
+            'available':      total_stock - total_assigned,
+            'low_stock_count': low_stock,
+            'expiring_soon':  expiring_soon,
+            'expired_count':  expired,
+            'total_inventory_value': round(total_value, 2),
+            'by_category': dict(
+                qs.values_list('category').annotate(c=Count('id'))
+            ),
+        })
+
+    @action(detail=False, methods=['get'])
+    def audit_log(self, request):
+        """All PPE audit events visible to the authenticated user."""
+        logs = PPEAuditLog.objects.select_related(
+            'ppe_catalog', 'actor', 'worker'
+        ).order_by('-timestamp')[:200]
+        return Response(PPEAuditLogSerializer(logs, many=True).data)
+
 
 # ==================== DASHBOARD AND ANALYTICS VIEWS ====================
 

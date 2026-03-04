@@ -15,6 +15,7 @@ from .views import (
     RegulatoryCNSSReportViewSet,
     DRCRegulatoryReportViewSet,
     PPEComplianceRecordViewSet,
+    PPECatalogViewSet,
     XrayImagingResultViewSet,
     HeavyMetalsTestViewSet,
     DrugAlcoholScreeningViewSet,
@@ -61,6 +62,8 @@ router.register(r'workplace-incidents', views.WorkplaceIncidentViewSet, basename
 router.register(r'incident-attachments', views.IncidentAttachmentViewSet, basename='incident-attachment')
 router.register(r'hazard-identifications', views.HazardIdentificationViewSet, basename='hazard-identification')
 router.register(r'ppe-items', views.PPEItemViewSet, basename='ppe-item')
+# PPE Catalogue (inventory management with audit trail)
+router.register(r'ppe-catalog', PPECatalogViewSet, basename='ppe-catalog')
 
 # ==================== EXTENDED FEATURES ENDPOINTS ====================
 # Risk profiling

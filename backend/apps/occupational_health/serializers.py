@@ -22,7 +22,7 @@ from .models import (
     OccupationalDiseaseType, OccupationalDisease,
     WorkplaceIncident, IncidentAttachment,
     # PPE and risk models
-    PPEItem, HazardIdentification,
+    PPEItem, PPECatalog, PPEAuditLog, HazardIdentification,
     SiteHealthMetrics,
     # Extended occupational health models
     WorkerRiskProfile, OverexposureAlert, ExitExamination,
@@ -764,6 +764,71 @@ class PPEItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PPEItem
         fields = '__all__'
+
+
+class PPEAuditLogSerializer(serializers.ModelSerializer):
+    """Read-only audit log entries for PPE operations."""
+
+    action_display    = serializers.CharField(source='get_action_display', read_only=True)
+    actor_full_name   = serializers.SerializerMethodField()
+
+    def get_actor_full_name(self, obj):
+        return obj.actor.get_full_name() if obj.actor else obj.actor_name or 'Système'
+
+    class Meta:
+        model = PPEAuditLog
+        fields = [
+            'id', 'ppe_catalog', 'ppe_item_name', 'action', 'action_display',
+            'actor', 'actor_full_name', 'actor_name', 'timestamp', 'changes',
+            'notes', 'ip_address', 'worker', 'worker_name',
+        ]
+        read_only_fields = fields
+
+
+class PPECatalogSerializer(serializers.ModelSerializer):
+    """Full serializer for PPE Catalog CRUD + read-only computed fields."""
+
+    # Read-only computed
+    available_quantity         = serializers.ReadOnlyField()
+    is_low_stock               = serializers.ReadOnlyField()
+    needs_reorder              = serializers.ReadOnlyField()
+    is_expired                 = serializers.ReadOnlyField()
+    is_certification_expired   = serializers.ReadOnlyField()
+    total_value                = serializers.ReadOnlyField()
+
+    # Audit who fields
+    created_by_name = serializers.SerializerMethodField(read_only=True)
+    updated_by_name = serializers.SerializerMethodField(read_only=True)
+
+    # Recent audit trail (last 10 entries)
+    recent_audit_logs = PPEAuditLogSerializer(
+        source='audit_logs', many=True, read_only=True
+    )
+
+    # Human-readable display fields
+    category_display          = serializers.CharField(source='get_category_display',     read_only=True)
+    ppe_type_display          = serializers.CharField(source='get_ppe_type_display',     read_only=True)
+    risk_protection_level_display = serializers.CharField(
+        source='get_risk_protection_level_display', read_only=True
+    )
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.get_full_name() if obj.created_by else None
+
+    def get_updated_by_name(self, obj):
+        return obj.updated_by.get_full_name() if obj.updated_by else None
+
+    class Meta:
+        model = PPECatalog
+        fields = '__all__'
+        read_only_fields = [
+            'created_at', 'updated_at', 'created_by', 'updated_by',
+            'assigned_quantity',
+        ]
+        extra_kwargs = {
+            'enterprise': {'required': False},
+        }
+
 
 class HazardIdentificationSerializer(serializers.ModelSerializer):
     """Hazard identification and risk assessment serializer"""
