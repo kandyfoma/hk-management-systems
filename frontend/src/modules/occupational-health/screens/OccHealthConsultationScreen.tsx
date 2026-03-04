@@ -977,7 +977,7 @@ export function OccHealthConsultationScreen({
       const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
       if (stored) {
         const list: PendingConsultation[] = JSON.parse(stored);
-        let filtered = list.filter(c => c.status === 'waiting');
+        let filtered = list.filter(c => c.status === 'waiting' || c.status === 'in_consultation');
 
         // Show patients assigned to this doctor OR unassigned patients (no doctor selected yet)
         if (currentDoctorId) {
@@ -1010,6 +1010,32 @@ export function OccHealthConsultationScreen({
     }, [loadPendingQueue])
   );
 
+  // Restore active consultation draft when returning to screen
+  useFocusEffect(
+    useCallback(() => {
+      const restoreActiveConsultation = async () => {
+        // If we have an active pending ID with a linked draft, restore it
+        if (activePendingId) {
+          const stored = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+          if (stored) {
+            const list: PendingConsultation[] = JSON.parse(stored);
+            const pending = list.find(c => c.id === activePendingId);
+            if (pending && pending.resumeDraftId && pending.status === 'in_consultation') {
+              console.log('🔄 Restoring active consultation draft:', pending.resumeDraftId);
+              await loadDraft(pending.resumeDraftId);
+              setDraftId(pending.resumeDraftId);
+            }
+          }
+        }
+      };
+      
+      // Don't restore immediately - only if there's an active consultation
+      if (activePendingId) {
+        restoreActiveConsultation();
+      }
+    }, [activePendingId, loadDraft])
+  );
+
   // ─── Step state ──
   const [currentStep, setCurrentStep] = useState<ConsultationStep>('anamnesis');
   const currentStepIdx = STEPS.findIndex(s => s.key === currentStep);
@@ -1035,11 +1061,15 @@ export function OccHealthConsultationScreen({
       // Inner helper: actually opens the consultation for this pending entry
       const startConsultation = async () => {
         const linkedDraftId = pending.resumeDraftId as string | undefined;
+        let draftIdToUse = linkedDraftId;
+
         if (linkedDraftId) {
+          // Resume existing draft
           await loadDraft(linkedDraftId);
           setDraftId(linkedDraftId);
           setActivePendingId(pendingId);
         } else {
+          // Start new consultation - load pending data and create draft immediately
           setSelectedWorker(pending.patient);
           setExamType(pending.examType);
           setVisitReason(pending.visitReason);
@@ -1047,16 +1077,32 @@ export function OccHealthConsultationScreen({
           setVitals(pending.vitals);
           setCurrentStep('anamnesis');
           setActivePendingId(pendingId);
+
+          // Create initial draft immediately to save progress
+          // We'll trigger the draft creation after state is updated via useEffect
+          // For now, we just mark that we need to create a draft
+          draftIdToUse = `draft_${pendingId}_${Date.now()}`;
+          setDraftId(draftIdToUse);
+          setIsDraft(true);
         }
+
         // Mark as in_consultation
         const updated = list.map(c =>
-          c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
+          c.id === pendingId ? {
+            ...c,
+            status: 'in_consultation' as const,
+            resumeDraftId: draftIdToUse, // Link draft to pending consultation
+          } : c,
         );
         await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updated));
         setPendingConsultations(prev => prev.map(c =>
-          c.id === pendingId ? { ...c, status: 'in_consultation' as const } : c,
+          c.id === pendingId ? {
+            ...c,
+            status: 'in_consultation' as const,
+            resumeDraftId: draftIdToUse, // Link draft to pending consultation
+          } : c,
         ));
-        console.log(`📋 Loaded pending consultation for ${pending.patient.firstName} ${pending.patient.lastName}`);
+        console.log(`📋 Loaded pending consultation for ${pending.patient.firstName} ${pending.patient.lastName} with draft ${draftIdToUse}`);
       };
 
       if (!hasInitialNurseScreening(pending)) {
@@ -1682,6 +1728,18 @@ export function OccHealthConsultationScreen({
       console.error('Error deleting draft:', error);
     }
   }, [draftId]);
+
+  // Save draft immediately when worker is selected (to ensure draft-pending linkage)
+  useEffect(() => {
+    if (!selectedWorker || !activePendingId) return;
+    
+    // Save immediately when starting a new consultation
+    const saveInitialDraft = async () => {
+      await persistDraft({ silent: true, status: 'in_progress' });
+    };
+    
+    saveInitialDraft();
+  }, [selectedWorker, activePendingId, persistDraft]);
 
   // Auto-save draft every 30 seconds if there are changes
   useEffect(() => {
