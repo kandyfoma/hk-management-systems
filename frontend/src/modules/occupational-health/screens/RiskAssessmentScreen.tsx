@@ -245,7 +245,7 @@ function AssessmentCard({ assessment, onPress }: { assessment: RiskAssessment; o
 }
 
 // ─── Detail Modal ────────────────────────────────────────────
-function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { visible: boolean; assessment: RiskAssessment | null; onClose: () => void; onDelete?: (id: string) => void }) {
+function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdate }: { visible: boolean; assessment: RiskAssessment | null; onClose: () => void; onDelete?: (id: string) => void; onUpdate?: (hazard: HazardIdentification, updatedData: Partial<HazardIdentification>) => void }) {
   if (!assessment) return null;
   const sectorProfile = SECTOR_PROFILES[assessment.sector];
   const riskColor = OccHealthUtils.getSectorRiskColor(assessment.overallRiskLevel);
@@ -332,11 +332,21 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { vis
                         </View>
                       ))}
                     </View>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                       <View style={[styles.controlHierarchyBadge, { backgroundColor: controlColor + '14' }]}>
                         <Text style={[styles.controlHierarchyText, { color: controlColor }]}>{getControlLabel(h.controlHierarchy)}</Text>
                       </View>
-                      <Text style={styles.hazardMeta}>→ {h.responsiblePerson} • {safeDate(h.targetDate)}</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                        <Text style={styles.hazardMeta}>→ {h.responsiblePerson} • {safeDate(h.targetDate)}</Text>
+                        {onUpdate && (
+                          <TouchableOpacity 
+                            onPress={() => onUpdate(h, { /* simple edit - open quick edit dialog */ })}
+                            style={{ padding: 4 }}
+                          >
+                            <Ionicons name="pencil-outline" size={16} color={ACCENT} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                   </View>
                 );
@@ -1571,41 +1581,31 @@ export function RiskAssessmentScreen() {
                 return;
               }
 
-              // Delete all hazards for this assessment
+              // Get the assessment to find its hazards
               const assessment = assessments.find(a => a.id === assessmentId);
-              if (assessment && assessment.hazards.length > 0) {
-                // Get the assessment data to find associated hazard IDs
-                const response = await axios.get(
-                  `${baseURL}/api/v1/occupational-health/hazard-identifications/`,
-                  {
-                    headers: {
-                      Authorization: `Token ${token}`,
-                      'Content-Type': 'application/json',
-                    },
-                    timeout: 8000,
-                  }
-                );
+              if (!assessment) {
+                showToast('Évaluation non trouvée', 'error');
+                return;
+              }
 
-                const allHazards = Array.isArray(response.data) ? response.data : response.data.results || [];
-                
-                // Filter hazards for this assessment and delete them
-                for (const hazard of allHazards) {
-                  if (hazard.assessment_date === assessment.assessmentDate && 
-                      hazard.assessed_by_name === assessment.assessorName) {
-                    try {
-                      await axios.delete(
-                        `${baseURL}/api/v1/occupational-health/hazard-identifications/${hazard.id}/`,
-                        {
-                          headers: {
-                            Authorization: `Token ${token}`,
-                            'Content-Type': 'application/json',
-                          },
-                          timeout: 8000,
-                        }
-                      );
-                    } catch (deleteError) {
-                      console.warn(`Failed to delete hazard ${hazard.id}:`, deleteError);
-                    }
+              // Delete each hazard by its ID directly
+              const failedDeletes: string[] = [];
+              for (const hazard of assessment.hazards) {
+                if (hazard.id) {
+                  try {
+                    await axios.delete(
+                      `${baseURL}/api/v1/occupational-health/hazard-identifications/${hazard.id}/`,
+                      {
+                        headers: {
+                          Authorization: `Token ${token}`,
+                          'Content-Type': 'application/json',
+                        },
+                        timeout: 8000,
+                      }
+                    );
+                  } catch (deleteError: any) {
+                    console.warn(`Failed to delete hazard ${hazard.id}:`, deleteError);
+                    failedDeletes.push(hazard.description.substring(0, 30) + '...');
                   }
                 }
               }
@@ -1614,7 +1614,12 @@ export function RiskAssessmentScreen() {
               setAssessments(assessments.filter(a => a.id !== assessmentId));
               setShowDetail(false);
               setSelectedAssessment(null);
-              showToast('Évaluation supprimée', 'success');
+
+              if (failedDeletes.length > 0) {
+                showToast(`Évaluation supprimée (${failedDeletes.length} danger(s) non supprimé(s))`, 'error');
+              } else {
+                showToast('Évaluation supprimée', 'success');
+              }
             } catch (error: any) {
               console.error('Failed to delete assessment:', error);
               showToast('Erreur lors de la suppression', 'error');
@@ -1624,6 +1629,81 @@ export function RiskAssessmentScreen() {
         },
       ]
     );
+  };
+
+  const handleUpdate = async (hazard: HazardIdentification, updatedData: Partial<HazardIdentification>) => {
+    try {
+      if (!hazard.id) {
+        showToast('ID du danger non trouvé', 'error');
+        return;
+      }
+
+      const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      if (!token) {
+        showToast('Authentification requise', 'error');
+        return;
+      }
+
+      // Prepare update payload - only include provided fields
+      const updatePayload: any = {};
+      
+      if (updatedData.description !== undefined) updatePayload.hazard_description = updatedData.description;
+      if (updatedData.hazardType !== undefined) updatePayload.hazard_type = updatedData.hazardType;
+      if (updatedData.activitiesAffected !== undefined) updatePayload.activities_affected = updatedData.activitiesAffected;
+      if (updatedData.exposedWorkerIds !== undefined) updatePayload.workers_exposed = updatedData.exposedWorkerIds;
+      if (updatedData.likelihood !== undefined) updatePayload.probability = updatedData.likelihood;
+      if (updatedData.consequence !== undefined) updatePayload.severity = updatedData.consequence;
+      if (updatedData.residualLikelihood !== undefined) updatePayload.residual_probability = updatedData.residualLikelihood;
+      if (updatedData.residualConsequence !== undefined) updatePayload.residual_severity = updatedData.residualConsequence;
+      if (updatedData.existingControls !== undefined) updatePayload.existing_controls = updatedData.existingControls;
+      if (updatedData.controlEffectiveness !== undefined) updatePayload.control_effectiveness = updatedData.controlEffectiveness;
+      if (updatedData.additionalControls !== undefined) updatePayload.additional_control_measures = updatedData.additionalControls;
+      if (updatedData.responsiblePersonId !== undefined) updatePayload.responsible_person = updatedData.responsiblePersonId;
+      if (updatedData.assessmentDate !== undefined) updatePayload.assessment_date = updatedData.assessmentDate;
+      if (updatedData.reviewDate !== undefined) updatePayload.review_date = updatedData.reviewDate;
+      if (updatedData.nextReviewDate !== undefined) updatePayload.next_review_date = updatedData.nextReviewDate;
+      if (updatedData.assessmentStatus !== undefined) updatePayload.status = updatedData.assessmentStatus;
+
+      await axios.patch(
+        `${baseURL}/api/v1/occupational-health/hazard-identifications/${hazard.id}/`,
+        updatePayload,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 8000,
+        }
+      );
+
+      // Find and update the assessment in local state
+      const assessmentIndex = assessments.findIndex(a => 
+        a.hazards.some(h => h.id === hazard.id)
+      );
+
+      if (assessmentIndex !== -1) {
+        const updatedAssessments = [...assessments];
+        const hazardIndex = updatedAssessments[assessmentIndex].hazards.findIndex(h => h.id === hazard.id);
+        
+        if (hazardIndex !== -1) {
+          updatedAssessments[assessmentIndex].hazards[hazardIndex] = {
+            ...updatedAssessments[assessmentIndex].hazards[hazardIndex],
+            ...updatedData
+          };
+          
+          setAssessments(updatedAssessments);
+          setSelectedAssessment(updatedAssessments[assessmentIndex]);
+        }
+      }
+
+      showToast('Danger mis à jour avec succès', 'success');
+    } catch (error: any) {
+      console.error('Failed to update hazard:', error);
+      const message = error.response?.data?.detail || 'Erreur lors de la mise à jour du danger';
+      showToast(message, 'error');
+    }
   };
 
   // Normalize search for better accent handling
@@ -1708,7 +1788,7 @@ export function RiskAssessmentScreen() {
             )}
           </View>
 
-          <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} onDelete={handleDelete} />
+          <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} onDelete={handleDelete} onUpdate={handleUpdate} />
           <AddAssessmentModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={handleAdd} />
         </>
       )}
