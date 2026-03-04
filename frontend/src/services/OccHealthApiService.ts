@@ -652,6 +652,76 @@ export class OccHealthApiService {
     }
   }
 
+  /** POST /api/audiometry-results/ */
+  async createAudiometryResult(payload: {
+    examination: number;
+    hearing_loss_classification?: string;
+    noise_induced_probable?: boolean;
+    recommendations?: string;
+    test_conditions?: string;
+    right_ear_500hz?: number | null;
+    right_ear_1000hz?: number | null;
+    right_ear_2000hz?: number | null;
+    right_ear_4000hz?: number | null;
+    right_ear_8000hz?: number | null;
+    left_ear_500hz?: number | null;
+    left_ear_1000hz?: number | null;
+    left_ear_2000hz?: number | null;
+    left_ear_4000hz?: number | null;
+    left_ear_8000hz?: number | null;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/audiometry-results/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/spirometry-results/ */
+  async createSpirometryResult(payload: {
+    examination: number;
+    spirometry_interpretation?: string;
+    fev1_pre?: number | null;
+    fvc_pre?: number | null;
+    fev1_fvc_ratio_pre?: number | null;
+    pef_pre?: number | null;
+    occupational_lung_disease_suspected?: boolean;
+    recommendations?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/spirometry-results/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/vision-test-results/ */
+  async createVisionTestResult(payload: {
+    examination: number;
+    right_eye_uncorrected?: string;
+    right_eye_corrected?: string;
+    left_eye_uncorrected?: string;
+    left_eye_corrected?: string;
+    both_eyes?: string;
+    color_vision_test?: string;
+    near_vision_test?: string;
+    requires_correction?: boolean;
+    computer_vision_syndrome?: boolean;
+    recommendations?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/vision-test-results/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   // PROTOCOL HIERARCHY
   // ─────────────────────────────────────────────────────────────
@@ -1223,6 +1293,118 @@ export class OccHealthApiService {
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // OVEREXPOSURE ALERTS
+  // ─────────────────────────────────────────────────────────────
+
+  /** GET /api/occupational-health/overexposure-alerts/ */
+  async listOverexposureAlerts(params: {
+    severity?: string;
+    status?: string;
+    exposure_type?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  } = {}): Promise<{ data: any[]; count: number; error?: string }> {
+    try {
+      const query: Record<string, any> = {};
+      if (params.severity) query.severity = params.severity;
+      if (params.status) query.status = params.status;
+      if (params.exposure_type) query.exposure_type = params.exposure_type;
+      if (params.search) query.search = params.search;
+      if (params.page) query.page = params.page;
+      if (params.page_size) query.page_size = params.page_size;
+      const res = await this.api.get(`${OH}/overexposure-alerts/`, query);
+      if (!res.success) return { data: [], count: 0, error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: raw, count: res.data?.count ?? raw.length };
+    } catch (e: any) {
+      return { data: [], count: 0, error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/overexposure-alerts/critical_alerts/ */
+  async listCriticalAlerts(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/overexposure-alerts/critical_alerts/`);
+      if (!res.success) return { data: [], error: res.error?.message };
+      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return { data: raw };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/overexposure-alerts/ */
+  async createOverexposureAlert(payload: {
+    worker: number;
+    exposure_type: string;
+    exposure_level: number;
+    exposure_threshold: number;
+    unit_measurement: string;
+    severity: 'warning' | 'critical' | 'emergency';
+    recommended_action?: string;
+    medical_followup_required?: boolean;
+    medical_followup_date?: string | null;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/overexposure-alerts/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/overexposure-alerts/{id}/acknowledge/ */
+  async acknowledgeOverexposureAlert(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/overexposure-alerts/${id}/acknowledge/`, {});
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/overexposure-alerts/{id}/resolve/ */
+  async resolveOverexposureAlert(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/overexposure-alerts/${id}/resolve/`, {});
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/overexposure-alerts/{id}/ — update action_taken, medical_followup_date, etc. */
+  async patchOverexposureAlert(id: number | string, payload: {
+    action_taken?: string;
+    medical_followup_required?: boolean;
+    medical_followup_date?: string | null;
+    recommended_action?: string;
+  }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/overexposure-alerts/${id}/`, payload);
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/overexposure-alerts/bulk_acknowledge/ */
+  async bulkAcknowledgeAlerts(alertIds: number[]): Promise<{ error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/overexposure-alerts/bulk_acknowledge/`, { alert_ids: alertIds });
+      if (!res.success) return { error: res.error?.message };
+      return {};
+    } catch (e: any) {
+      return { error: e?.message };
     }
   }
 

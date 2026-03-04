@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 
@@ -39,6 +40,13 @@ interface ExposureReading {
   measurement_notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+interface WorkerOption {
+  id: number;
+  firstName: string;
+  lastName: string;
+  employeeId: string;
 }
 
 interface ExposureType {
@@ -362,7 +370,42 @@ export function ExposureMonitoringScreen() {
     sampling_location: '',
     equipment_name: '',
     source_type: 'manual_entry',
+    worker: null as number | null,
   });
+
+  // Worker picker state
+  const [allWorkers, setAllWorkers]             = useState<WorkerOption[]>([]);
+  const [loadingWorkers, setLoadingWorkers]     = useState(false);
+  const [workerSearchText, setWorkerSearchText] = useState('');
+  const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
+  const [selectedWorkerLabel, setSelectedWorkerLabel] = useState('');
+
+  const filteredWorkers = useMemo(() => {
+    const q = workerSearchText.toLowerCase();
+    if (!q) return allWorkers;
+    return allWorkers.filter(w =>
+      `${w.firstName} ${w.lastName}`.toLowerCase().includes(q) ||
+      w.employeeId.toLowerCase().includes(q)
+    );
+  }, [allWorkers, workerSearchText]);
+
+  // Pre-load workers when manual entry modal opens
+  useEffect(() => {
+    if (!manualEntryVisible) return;
+    if (allWorkers.length > 0) return;
+    setLoadingWorkers(true);
+    occHealthApi.listWorkers({ page_size: 200 }).then(res => {
+      setLoadingWorkers(false);
+      if (!res.error) {
+        setAllWorkers(res.data.map((w: any) => ({
+          id: w.id,
+          firstName: w.firstName ?? w.first_name ?? '',
+          lastName:  w.lastName  ?? w.last_name  ?? '',
+          employeeId: w.employeeId ?? w.employee_id ?? '',
+        })));
+      }
+    });
+  }, [manualEntryVisible]);
 
   // Form validation
   const isFormValid = () => {
@@ -467,6 +510,10 @@ export function ExposureMonitoringScreen() {
       if (userEnterprise) {
         readingData.enterprise = userEnterprise;
       }
+      // Link worker so backend can auto-create OverexposureAlert on critical/exceeded status
+      if (newReading.worker) {
+        readingData.worker = newReading.worker;
+      }
 
       await axios.post(
         `${baseURL}/api/v1/occupational-health/exposure-readings/`,
@@ -485,7 +532,11 @@ export function ExposureMonitoringScreen() {
         sampling_location: '',
         equipment_name: '',
         source_type: 'manual_entry',
+        worker: null,
       });
+      setWorkerSearchText('');
+      setSelectedWorkerLabel('');
+      setShowWorkerDropdown(false);
       await loadReadings();
     } catch (err: any) {
       const errorData = err.response?.data;
@@ -799,12 +850,86 @@ export function ExposureMonitoringScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Enregistrer une Mesure d'Exposition</Text>
-              <TouchableOpacity onPress={() => setManualEntryVisible(false)}>
+              <TouchableOpacity onPress={() => {
+                setManualEntryVisible(false);
+                setWorkerSearchText('');
+                setSelectedWorkerLabel('');
+                setShowWorkerDropdown(false);
+              }}>
                 <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalBody}>
+
+              {/* Worker Picker — required for auto-alert generation */}
+              <Text style={styles.formLabel}>Travailleur (Optionnel)</Text>
+              {selectedWorkerLabel ? (
+                <View style={styles.workerSelectedCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.workerSelectedName}>{selectedWorkerLabel}</Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                      Alerte auto-générée si niveau critique/dépassé
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => {
+                    setNewReading(r => ({ ...r, worker: null }));
+                    setSelectedWorkerLabel('');
+                    setWorkerSearchText('');
+                    setShowWorkerDropdown(false);
+                  }}>
+                    <Ionicons name="close-circle" size={20} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <View style={[styles.workerSearchBox, showWorkerDropdown && { borderColor: colors.primary, borderWidth: 2 }]}>
+                    <Ionicons name="search" size={16} color={colors.textSecondary} />
+                    <TextInput
+                      style={styles.workerSearchInput}
+                      placeholder="Rechercher un travailleur..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={workerSearchText}
+                      onChangeText={text => { setWorkerSearchText(text); setShowWorkerDropdown(true); }}
+                      onFocus={() => setShowWorkerDropdown(true)}
+                    />
+                    {loadingWorkers && <ActivityIndicator size="small" color={colors.primary} />}
+                    {workerSearchText ? (
+                      <TouchableOpacity onPress={() => setWorkerSearchText('')}>
+                        <Ionicons name="close-outline" size={16} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  {showWorkerDropdown && filteredWorkers.length > 0 && (
+                    <View style={styles.workerDropdown}>
+                      {filteredWorkers.slice(0, 8).map(w => (
+                        <TouchableOpacity
+                          key={w.id}
+                          style={styles.workerDropdownItem}
+                          onPress={() => {
+                            setNewReading(r => ({ ...r, worker: w.id }));
+                            setSelectedWorkerLabel(`${w.firstName} ${w.lastName}`.trim() + (w.employeeId ? ` (${w.employeeId})` : ''));
+                            setShowWorkerDropdown(false);
+                            setWorkerSearchText('');
+                          }}
+                        >
+                          <View style={styles.workerItemAvatar}>
+                            <Text style={styles.workerItemAvatarText}>
+                              {((w.firstName || w.lastName || '?').charAt(0)).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.workerItemName}>{`${w.firstName} ${w.lastName}`.trim()}</Text>
+                            <Text style={styles.workerItemId}>{w.employeeId || `#${w.id}`}</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+
               <Text style={styles.formLabel}>Type d'Exposition *</Text>
               <View style={styles.pickerContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -1443,4 +1568,20 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
   },
+
+  // ─── Worker Picker (manual entry modal) ──────────────────
+  workerSearchBox: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, borderWidth: 1,
+    borderColor: colors.outline, gap: spacing.sm, height: 44, marginBottom: spacing.sm,
+  },
+  workerSearchInput:   { flex: 1, fontSize: 13, color: colors.text, paddingVertical: spacing.sm },
+  workerDropdown:      { backgroundColor: colors.surface, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.primary, overflow: 'hidden', marginBottom: spacing.sm },
+  workerDropdownItem:  { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  workerItemAvatar:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '15' },
+  workerItemAvatarText:{ fontSize: 13, fontWeight: '700', color: colors.primary },
+  workerItemName:      { fontSize: 13, fontWeight: '600', color: colors.text },
+  workerItemId:        { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  workerSelectedCard:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.primary + '08', borderRadius: borderRadius.md, borderWidth: 2, borderColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  workerSelectedName:  { fontSize: 13, fontWeight: '700', color: colors.text },
 });

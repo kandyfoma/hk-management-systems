@@ -677,7 +677,44 @@ class MedicalExamination(models.Model):
     # Examination details
     chief_complaint = models.TextField(_("Motif Principal"), blank=True)
     medical_history_review = models.TextField(_("Révision Antécédents"), blank=True)
-    
+
+    # ── Anamnèse — Habitudes de vie & Historique occupationnel ──────────────
+    SMOKING_CHOICES = [
+        ('never', _('Non-fumeur')),
+        ('ex_smoker', _('Ex-fumeur')),
+        ('current', _('Fumeur actuel')),
+    ]
+    SCHEDULE_CHOICES = [
+        ('day', _('Jour')),
+        ('night', _('Nuit')),
+        ('rotating', _('Rotatif')),
+        ('irregular', _('Irrégulier')),
+    ]
+    smoking_status = models.CharField(
+        _("Statut tabagique"), max_length=20, choices=SMOKING_CHOICES, blank=True,
+    )
+    pack_years = models.DecimalField(
+        _("Paquets-années"), max_digits=5, decimal_places=1, null=True, blank=True,
+        help_text="(nb cigarettes/jour ÷ 20) × années",
+    )
+    alcohol_audit_c_score = models.PositiveIntegerField(
+        _("Score AUDIT-C"), null=True, blank=True,
+        help_text="Score AUDIT-C 0-12",
+    )
+    family_history = models.TextField(
+        _("Antécédents familiaux"), blank=True,
+    )
+    prior_occupational_history = models.JSONField(
+        _("Historique professionnel antérieur"), default=list,
+        help_text='[{"employer":"…","job_title":"…","from_year":2010,"to_year":2018,"exposures":["poussières","bruit"]}]',
+    )
+    working_schedule = models.CharField(
+        _("Horaire de travail"), max_length=20, choices=SCHEDULE_CHOICES, blank=True,
+    )
+    functional_complaints_at_work = models.TextField(
+        _("Plaintes fonctionnelles au travail"), blank=True,
+    )
+
     # Examination results summary
     examination_completed = models.BooleanField(_("Examen Terminé"), default=False)
     results_summary = models.TextField(_("Résumé Résultats"), blank=True)
@@ -1130,21 +1167,50 @@ class FitnessCertificate(models.Model):
     
     FITNESS_DECISIONS = [
         ('fit', _('Apte')),
-        ('fit_with_restrictions', _('Apte avec Restrictions')), 
+        ('fit_with_restrictions', _('Apte avec Restrictions')),
+        ('fit_enhanced_surveillance', _('Apte sous Surveillance Renforcée')),
         ('temporarily_unfit', _('Inapte Temporaire')),
-        ('permanently_unfit', _('Inapte Définitif'))
+        ('permanently_unfit', _('Inapte Définitif')),
     ]
-    
+
     examination = models.OneToOneField(MedicalExamination, on_delete=models.CASCADE, related_name='fitness_certificate')
     certificate_number = models.CharField(_("Numéro Certificat"), max_length=50, unique=True)
-    
+
     # Fitness decision
     fitness_decision = models.CharField(_("Décision Aptitude"), max_length=30, choices=FITNESS_DECISIONS)
     decision_rationale = models.TextField(_("Justification Décision"))
-    
-    # Restrictions (if fit with restrictions)
-    restrictions = models.TextField(_("Restrictions"), blank=True, help_text=_("Ex: pas de travail en hauteur, poste adapté"))
+
+    # ── Restrictions structurées (cases à cocher) ────────────────────────────
+    restrictions = models.TextField(_("Restrictions (libre)"), blank=True, help_text=_("Ex: pas de travail en hauteur, poste adapté"))
     work_limitations = models.TextField(_("Limitations Travail"), blank=True)
+
+    restrict_no_driving = models.BooleanField(_("Interdit de conduire"), default=False)
+    restrict_no_height_work = models.BooleanField(_("Interdit travail en hauteur"), default=False)
+    restrict_max_lifting_kg = models.PositiveIntegerField(
+        _("Port de charge max (kg)"), null=True, blank=True,
+    )
+    restrict_no_night_shift = models.BooleanField(_("Interdit travail de nuit"), default=False)
+    restrict_adapted_workstation = models.BooleanField(_("Poste aménagé requis"), default=False)
+    restrict_reduced_hours = models.BooleanField(_("Horaire aménagé requis"), default=False)
+    restrict_no_confined_space = models.BooleanField(_("Interdit espaces confinés"), default=False)
+    restrict_no_chemical_exposure = models.BooleanField(_("Interdit exposition chimique"), default=False)
+    restrict_custom = models.TextField(
+        _("Restriction personnalisée"), blank=True, help_text="Restriction non couverte par les cases ci-dessus",
+    )
+
+    # ── Conformité légale ─────────────────────────────────────────────────────
+    legal_article_reference = models.CharField(
+        _("Référence légale"), max_length=200, blank=True,
+        default="Code du Travail RDC, Art. 156 — Décret No. 68/432",
+    )
+    right_of_appeal_offered = models.BooleanField(_("Droit de recours notifié"), default=True)
+    right_of_appeal_deadline_days = models.PositiveIntegerField(
+        _("Délai de recours (jours)"), default=15,
+    )
+    functional_impairment_percent = models.PositiveIntegerField(
+        _("Taux d'incapacité fonctionnelle (%)"), null=True, blank=True,
+        help_text="0-100 — pour déclaration CNSS/IPM",
+    )
     
     # Validity period
     issue_date = models.DateField(_("Date Émission"))
@@ -2130,6 +2196,92 @@ class WorkerRiskProfile(models.Model):
             self.risk_level = 'critical'
         self.save()
         return self.overall_risk_score
+
+
+class RiskProfileAuditLog(models.Model):
+    """
+    Immutable audit trail for worker risk profile changes.
+    Tracks all score updates, recalculations, and calculation triggers.
+    Satisfies ISO 45001 §9.1 monitoring & measurement and legal traceability.
+    """
+    
+    ACTION_CHOICES = [
+        ('calculated',      _('Calculé')),
+        ('recalculated',    _('Recalculé')),
+        ('updated',         _('Modifié')),
+        ('trigger_medical', _('Déclenché - Examen')),
+        ('trigger_fitness', _('Déclenché - Aptitude')),
+        ('trigger_incident',_('Déclenché - Incident')),
+        ('trigger_disease', _('Déclenché - Maladie')),
+    ]
+    
+    TRIGGER_CHOICES = [
+        ('medical_examination', _('Examen médical')),
+        ('fitness_certificate',  _('Certificat d\'aptitude')),
+        ('workplace_incident',    _('Incident sur le lieu de travail')),
+        ('occupational_disease',  _('Maladie professionnelle')),
+        ('manual_calculation',    _('Calcul manuel (API)')),
+        ('scheduled_task',        _('Tâche planifiée')),
+        ('other',                 _('Autre')),
+    ]
+    
+    worker_risk_profile = models.ForeignKey(WorkerRiskProfile, on_delete=models.CASCADE,
+                                           related_name='audit_logs')
+    worker = models.ForeignKey(Worker, on_delete=models.CASCADE,
+                              related_name='risk_profile_audits')
+    action = models.CharField(_("Action"), max_length=30, choices=ACTION_CHOICES)
+    trigger_type = models.CharField(_("Type de déclencheur"), max_length=30,
+                                   choices=TRIGGER_CHOICES, blank=True)
+    trigger_id = models.IntegerField(_("ID du déclencheur"), null=True, blank=True,
+                                    help_text="ID of the related object (exam, incident, etc)")
+    
+    # Score snapshots (before and after)
+    health_risk_before = models.PositiveIntegerField(default=0)
+    health_risk_after = models.PositiveIntegerField(default=0)
+    exposure_risk_before = models.PositiveIntegerField(default=0)
+    exposure_risk_after = models.PositiveIntegerField(default=0)
+    compliance_risk_before = models.PositiveIntegerField(default=0)
+    compliance_risk_after = models.PositiveIntegerField(default=0)
+    overall_risk_before = models.PositiveIntegerField(default=0)
+    overall_risk_after = models.PositiveIntegerField(default=0)
+    risk_level_before = models.CharField(max_length=20, blank=True)
+    risk_level_after = models.CharField(max_length=20, blank=True)
+    
+    # Who made the change
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL,
+                             null=True, blank=True,
+                             related_name='risk_profile_audit_actions')
+    actor_name = models.CharField(_("Acteur"), max_length=200, blank=True,
+                                 help_text="Snapshot of actor name")
+    
+    # Metadata
+    timestamp = models.DateTimeField(_("Horodatage"), auto_now_add=True)
+    reason_for_change = models.TextField(_("Raison du changement"), blank=True)
+    notes = models.TextField(_("Notes"), blank=True)
+    ip_address = models.GenericIPAddressField(_("Adresse IP"), null=True, blank=True)
+    
+    # Whether this recalculation was automatic or manual
+    is_automatic = models.BooleanField(default=True)
+    
+    class Meta:
+        verbose_name = 'Risk Profile Audit Log'
+        verbose_name_plural = 'Risk Profile Audit Logs'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['worker', '-timestamp']),
+            models.Index(fields=['trigger_type', '-timestamp']),
+        ]
+    
+    def __str__(self):
+        change_summary = f"{self.risk_level_before} → {self.risk_level_after}" if self.risk_level_after else "Initial"
+        return f"{self.worker.full_name} | {self.action} | {change_summary} | {self.timestamp.strftime('%d/%m/%Y')}"
+    
+    def has_changes(self):
+        """Check if any scores changed"""
+        return (self.health_risk_before != self.health_risk_after or
+                self.exposure_risk_before != self.exposure_risk_after or
+                self.compliance_risk_before != self.compliance_risk_after or
+                self.overall_risk_before != self.overall_risk_after)
 
 
 class OverexposureAlert(models.Model):

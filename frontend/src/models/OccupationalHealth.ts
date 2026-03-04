@@ -342,8 +342,24 @@ export type ShiftPattern =
   | 'day_shift' | 'night_shift' | 'rotating' | 'on_call' | 'regular' | 'flexible' | 'split_shift';
 
 export type FitnessStatus =
-  | 'fit' | 'fit_with_restrictions' | 'temporarily_unfit'
-  | 'permanently_unfit' | 'pending_evaluation' | 'expired';
+  | 'fit'
+  | 'fit_with_restrictions'
+  | 'fit_enhanced_surveillance'
+  | 'temporarily_unfit'
+  | 'permanently_unfit'
+  | 'pending_evaluation'
+  | 'expired';
+
+export type SmokingStatus = 'never' | 'ex_smoker' | 'current';
+export type WorkingSchedule = 'day' | 'night' | 'rotating' | 'irregular';
+
+export interface PriorOccupationalEntry {
+  employer: string;
+  jobTitle: string;
+  fromYear: number;
+  toYear?: number;             // undefined = current
+  exposures: string[];
+}
 
 // ─── Medical Examination (ILO C161 / WHO) ────────────────────
 export interface MedicalExamination {
@@ -366,6 +382,15 @@ export interface MedicalExamination {
   ergonomicAssessment?: ErgonomicAssessment;
   mentalHealthScreening?: MentalHealthScreening;
   cardiovascularScreening?: CardiovascularScreening;
+  // ── Anamnèse — Habitudes de vie & Historique occupationnel ──
+  smokingStatus?: SmokingStatus;
+  packYears?: number;
+  alcoholAuditCScore?: number;
+  familyHistory?: string;
+  priorOccupationalHistory?: PriorOccupationalEntry[];
+  workingSchedule?: WorkingSchedule;
+  functionalComplaintsAtWork?: string;
+
   fitnessDecision: FitnessStatus;
   restrictions: string[];
   recommendations: string[];
@@ -773,6 +798,24 @@ export interface FitnessCertificate {
   restrictions: string[];
   allowedActivities: string[];
   restrictedActivities: string[];
+
+  // ── Restrictions structurées ──
+  restrictNoDriving?: boolean;
+  restrictNoHeightWork?: boolean;
+  restrictMaxLiftingKg?: number | null;
+  restrictNoNightShift?: boolean;
+  restrictAdaptedWorkstation?: boolean;
+  restrictReducedHours?: boolean;
+  restrictNoConfinedSpace?: boolean;
+  restrictNoChemicalExposure?: boolean;
+  restrictCustom?: string;
+
+  // ── Conformité légale ──
+  legalArticleReference?: string;
+  rightOfAppealOffered?: boolean;
+  rightOfAppealDeadlineDays?: number;
+  functionalImpairmentPercent?: number | null;
+
   issuedBy: string;
   issuedByName: string;
   isValid: boolean;
@@ -891,11 +934,11 @@ export class OccHealthUtils {
 
   // ── Fitness status ──
   static getFitnessStatusLabel(status: FitnessStatus): string {
-    return ({ fit: 'Apte', fit_with_restrictions: 'Apte avec restrictions', temporarily_unfit: 'Inapte temporaire', permanently_unfit: 'Inapte définitif', pending_evaluation: 'En attente', expired: 'Certificat expiré' } as Record<FitnessStatus, string>)[status] || status;
+    return ({ fit: 'Apte', fit_with_restrictions: 'Apte avec restrictions', fit_enhanced_surveillance: 'Apte sous surveillance renforcée', temporarily_unfit: 'Inapte temporaire', permanently_unfit: 'Inapte définitif', pending_evaluation: 'En attente', expired: 'Certificat expiré' } as Record<FitnessStatus, string>)[status] || status;
   }
 
   static getFitnessStatusColor(status: FitnessStatus): string {
-    return ({ fit: '#5B65DC', fit_with_restrictions: '#D97706', temporarily_unfit: '#EF4444', permanently_unfit: '#DC2626', pending_evaluation: '#122056', expired: '#64748B' } as Record<FitnessStatus, string>)[status] || '#64748B';
+    return ({ fit: '#5B65DC', fit_with_restrictions: '#D97706', fit_enhanced_surveillance: '#B45309', temporarily_unfit: '#EF4444', permanently_unfit: '#DC2626', pending_evaluation: '#122056', expired: '#64748B' } as Record<FitnessStatus, string>)[status] || '#64748B';
   }
 
   // ── Incident ──

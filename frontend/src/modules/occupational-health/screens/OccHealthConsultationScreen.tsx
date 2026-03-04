@@ -28,6 +28,9 @@ import {
   type IndustrySector,
   type ExamType,
   type FitnessStatus,
+  type SmokingStatus,
+  type WorkingSchedule,
+  type PriorOccupationalEntry,
   type VitalSigns,
   type PhysicalExamination,
   type MedicalExamination,
@@ -131,6 +134,12 @@ const LEGACY_TEST_LABELS: Record<string, string> = {
   musculoskeletal_screening: 'Dépistage Musculo-squelettique',
   hepatitis_screening: 'Dépistage Hépatite B',
   tb_screening: 'Dépistage Tuberculose',
+  // Health screening sub-types (HealthScreening model – direct worker FK)
+  health_screening: 'Dépistage Santé',
+  health_screening_cardio: 'Bilan Cardiovasculaire (Dépistage)',
+  health_screening_mental: 'Santé Mentale – Dépistage',
+  health_screening_ergonomic: 'Évaluation Ergonomique',
+  health_screening_msk: 'Dépistage Musculo-squelettique',
 };
 
 /**
@@ -138,12 +147,20 @@ const LEGACY_TEST_LABELS: Record<string, string> = {
  * Determines when a past result is still clinically acceptable to reuse.
  */
 const TEST_VALIDITY_MONTHS: Record<string, number> = {
-  audiometry:     12,   // annual audiometric surveillance
-  spirometry:     12,   // annual lung function
-  vision_test:    12,   // annual visual acuity
-  chest_xray:     24,   // biennial for most sectors (12 for high dust/asbestos)
-  blood_lead:      6,   // every 6 months for lead-exposed workers
-  drug_screening: 12,   // annual toxicological screening
+  audiometry:              12,   // annual audiometric surveillance
+  spirometry:              12,   // annual lung function
+  vision_test:             12,   // annual visual acuity
+  chest_xray:              24,   // biennial for most sectors (12 for high dust/asbestos)
+  blood_lead:               6,   // every 6 months for lead-exposed workers
+  drug_screening:          12,   // annual toxicological screening
+  // Health screening sub-types (HealthScreening model – direct worker FK)
+  health_screening:        12,   // general health questionnaire
+  health_screening_cardio: 12,   // cardiovascular risk assessment
+  health_screening_mental: 12,   // mental health screening
+  health_screening_ergonomic: 12, // ergonomic assessment
+  health_screening_msk:    12,   // musculoskeletal screening
+  cardiac_screening:       12,   // alias used by PROTOCOL_EXAM_CODE_TO_TEST_ID
+  mental_health_screening: 12,   // alias used by PROTOCOL_EXAM_CODE_TO_TEST_ID
 };
 
 // Maps test card IDs (catalog codes lowercased or legacy) → existingTestResults key
@@ -154,6 +171,19 @@ const TEST_ID_TO_EXISTING_KEY: Record<string, string> = {
   radio_thorax: 'chest_xray', chest_xray: 'chest_xray',
   plombemie: 'blood_lead', cobaltemie: 'blood_lead', blood_lead: 'blood_lead',
   test_alcool_drogue: 'drug_screening', drug_screening: 'drug_screening',
+  // Health screening – generic & type-specific (HealthScreening model: direct worker FK)
+  health_screening: 'health_screening',
+  questionnaire_sante: 'health_screening',
+  depistage_sante: 'health_screening',
+  // Protocol code aliases → health screening sub-type keys
+  cardiac_screening: 'health_screening_cardio',
+  ecg_repos: 'health_screening_cardio',
+  test_effort: 'health_screening_cardio',
+  mental_health_screening: 'health_screening_mental',
+  evaluation_stress: 'health_screening_mental',
+  evaluation_psychotechnique: 'health_screening_mental',
+  ergonomic_assessment: 'health_screening_ergonomic',
+  musculoskeletal_screening: 'health_screening_msk',
 };
 
 const summarizeExistingResult = (testId: string, rawData: any): string => {
@@ -192,6 +222,16 @@ const summarizeExistingResult = (testId: string, rawData: any): string => {
       const alc = rawData.alcohol_result ?? '';
       const drug = rawData.drug_result ?? '';
       return [alc && `Alcool: ${alc}`, drug && `Drogues: ${drug}`].filter(Boolean).join(' · ') || 'Résultat toxicologique';
+    }
+    case 'health_screening':
+    case 'health_screening_cardio':
+    case 'health_screening_mental':
+    case 'health_screening_ergonomic':
+    case 'health_screening_msk': {
+      const typeLabel = rawData.screening_type_display ?? rawData.screening_type ?? '';
+      const notes = rawData.notes ? String(rawData.notes).substring(0, 80) : '';
+      const status = rawData.status ?? '';
+      return [typeLabel, notes || (status && `Statut: ${status}`)].filter(Boolean).join(' — ') || 'Dépistage santé disponible';
     }
     default:
       return 'Résultat disponible';
@@ -256,7 +296,7 @@ const addMonthsToDate = (baseDate: Date, months: number): string => {
 };
 
 const getCertificateTitleByDecision = (decision: FitnessStatus): string => {
-  if (decision === 'fit' || decision === 'fit_with_restrictions') {
+  if (decision === 'fit' || decision === 'fit_with_restrictions' || decision === 'fit_enhanced_surveillance') {
     return 'Certificat d\'Aptitude au Travail';
   }
   return 'Avis Médical d\'Inaptitude au Poste';
@@ -269,6 +309,9 @@ const getLegalWordingByDecision = (decision: FitnessStatus): string => {
   if (decision === 'fit_with_restrictions') {
     return 'Conclusion médicale: travailleur apte avec restrictions. L\'employeur doit mettre en œuvre les limitations et aménagements de poste mentionnés ci-dessous.';
   }
+  if (decision === 'fit_enhanced_surveillance') {
+    return 'Conclusion médicale: travailleur apte sous surveillance médicale renforcée (ILO C161, Art. 5). Un suivi médical rapproché est obligatoire; l\'employeur doit s\'assurer d\'un accès facilité aux consultations médicales et déclarer toute modification du poste au médecin du travail.';
+  }
   if (decision === 'temporarily_unfit') {
     return 'Conclusion médicale: inaptitude temporaire. Une réévaluation est obligatoire à la date de contrôle fixée; le retour au poste est conditionné à l\'avis médical ultérieur.';
   }
@@ -279,6 +322,7 @@ const getSuggestedNextAppointmentDate = (decision: FitnessStatus, examType: Exam
   const now = new Date();
   if (decision === 'temporarily_unfit') return addMonthsToDate(now, 1);
   if (decision === 'fit_with_restrictions') return addMonthsToDate(now, 6);
+  if (decision === 'fit_enhanced_surveillance') return addMonthsToDate(now, 3);
   if (decision === 'permanently_unfit') return addMonthsToDate(now, 12);
   if (examType === 'pre_employment') return addMonthsToDate(now, 12);
   return addMonthsToDate(now, 12);
@@ -1086,6 +1130,15 @@ export function OccHealthConsultationScreen({
   // ─── Anamnesis notes ──
   const [anamnesisNotes, setAnamnesisNotes] = useState('');
 
+  // ─── Anamnèse — Historique occupationnel & habitudes de vie ──
+  const [smokingStatus, setSmokingStatus] = useState<SmokingStatus | ''>('');
+  const [packYears, setPackYears] = useState('');
+  const [alcoholAuditCScore, setAlcoholAuditCScore] = useState('');
+  const [familyHistory, setFamilyHistory] = useState('');
+  const [priorOccupationalHistory, setPriorOccupationalHistory] = useState<PriorOccupationalEntry[]>([]);
+  const [workingSchedule, setWorkingSchedule] = useState<WorkingSchedule | ''>('');
+  const [functionalComplaintsAtWork, setFunctionalComplaintsAtWork] = useState('');
+
   // ─── Mental health / Ergonomic ──
   const [mentalScreening, setMentalScreening] = useState<Partial<MentalHealthScreening>>({
     screeningTool: 'WHO5', interpretation: 'good', stressLevel: 'low',
@@ -1130,6 +1183,8 @@ export function OccHealthConsultationScreen({
     const apiSvc = ApiService.getInstance();
     const params = { examination__worker: wId, ordering: '-test_date', page_size: 1 };
     const xrayParams = { examination__worker: wId, ordering: '-imaging_date', page_size: 1 };
+    // HealthScreening uses a direct worker FK (not via examination)
+    const hsParams = { worker: wId, ordering: '-created_at', page_size: 20 };
 
     setExistingTestsLoading(true);
     Promise.allSettled([
@@ -1139,7 +1194,8 @@ export function OccHealthConsultationScreen({
       apiSvc.get('/occupational-health/xray-imaging-results/', xrayParams),
       apiSvc.get('/occupational-health/heavy-metals-tests/', params),
       apiSvc.get('/occupational-health/drug-alcohol-screening/', params),
-    ]).then(([audioRes, spiroRes, visionRes, xrayRes, hmRes, daRes]) => {
+      apiSvc.get('/occupational-health/health-screening/', hsParams),  // direct worker FK
+    ]).then(([audioRes, spiroRes, visionRes, xrayRes, hmRes, daRes, hsRes]) => {
       if (cancelled) return;
       const extractFirst = (res: PromiseSettledResult<any>): any | null => {
         if (res.status === 'rejected') return null;
@@ -1151,7 +1207,7 @@ export function OccHealthConsultationScreen({
       const now = new Date();
       const makeResult = (testId: string, raw: any | null): ExistingTestResult | null => {
         if (!raw) return null;
-        const dateStr = raw.test_date || raw.imaging_date || raw.assessment_date || '';
+        const dateStr = raw.test_date || raw.imaging_date || raw.assessment_date || raw.created_at || '';
         const date = dateStr ? new Date(dateStr) : null;
         const validityMonths = TEST_VALIDITY_MONTHS[testId] ?? 12;
         let ageMonths = 0;
@@ -1176,13 +1232,29 @@ export function OccHealthConsultationScreen({
           rawData: raw,
         };
       };
+
+      // ── Process HealthScreening records (one response, split by sub-type) ──
+      const hsData = hsRes.status === 'fulfilled'
+        ? (hsRes.value?.data?.results ?? hsRes.value?.data ?? [])
+        : [];
+      const hsItems: any[] = Array.isArray(hsData) ? hsData : [];
+      const findHsByType = (type: string): any | null =>
+        hsItems.find((s: any) => s.screening_type === type) ?? null;
+
       setExistingTestResults({
-        audiometry: makeResult('audiometry', extractFirst(audioRes)),
-        spirometry: makeResult('spirometry', extractFirst(spiroRes)),
-        vision_test: makeResult('vision_test', extractFirst(visionRes)),
-        chest_xray: makeResult('chest_xray', extractFirst(xrayRes)),
-        blood_lead: makeResult('blood_lead', extractFirst(hmRes)),
-        drug_screening: makeResult('drug_screening', extractFirst(daRes)),
+        audiometry:              makeResult('audiometry',              extractFirst(audioRes)),
+        spirometry:              makeResult('spirometry',              extractFirst(spiroRes)),
+        vision_test:             makeResult('vision_test',             extractFirst(visionRes)),
+        chest_xray:              makeResult('chest_xray',              extractFirst(xrayRes)),
+        blood_lead:              makeResult('blood_lead',              extractFirst(hmRes)),
+        drug_screening:          makeResult('drug_screening',          extractFirst(daRes)),
+        // Health screenings – most recent overall (generic 'health_screening' catalogue card)
+        health_screening:           makeResult('health_screening',           hsItems[0] ?? null),
+        // Per-type (protocol codes: ECG_REPOS → cardio, EVALUATION_STRESS → mental, etc.)
+        health_screening_cardio:    makeResult('health_screening_cardio',    findHsByType('cardio')),
+        health_screening_mental:    makeResult('health_screening_mental',    findHsByType('mental')),
+        health_screening_ergonomic: makeResult('health_screening_ergonomic', findHsByType('ergonomic')),
+        health_screening_msk:       makeResult('health_screening_msk',       findHsByType('msk')),
       });
     }).finally(() => {
       if (!cancelled) setExistingTestsLoading(false);
@@ -1200,6 +1272,23 @@ export function OccHealthConsultationScreen({
   const [nextAppointmentDate, setNextAppointmentDate] = useState('');
   const [nextAppointmentReason, setNextAppointmentReason] = useState('');
   const [consultationNotes, setConsultationNotes] = useState('');
+
+  // ─── Certificat — Restrictions structurées ──
+  const [restrictNoDriving, setRestrictNoDriving] = useState(false);
+  const [restrictNoHeightWork, setRestrictNoHeightWork] = useState(false);
+  const [restrictMaxLiftingKg, setRestrictMaxLiftingKg] = useState('');
+  const [restrictNoNightShift, setRestrictNoNightShift] = useState(false);
+  const [restrictAdaptedWorkstation, setRestrictAdaptedWorkstation] = useState(false);
+  const [restrictReducedHours, setRestrictReducedHours] = useState(false);
+  const [restrictNoConfinedSpace, setRestrictNoConfinedSpace] = useState(false);
+  const [restrictNoChemicalExposure, setRestrictNoChemicalExposure] = useState(false);
+  const [restrictCustom, setRestrictCustom] = useState('');
+
+  // ─── Certificat — Conformité légale ──
+  const [legalArticleReference, setLegalArticleReference] = useState('Code du Travail RDC, Art. 156 — Décret No. 68/432');
+  const [rightOfAppealOffered, setRightOfAppealOffered] = useState(true);
+  const [rightOfAppealDeadlineDays, setRightOfAppealDeadlineDays] = useState('15');
+  const [functionalImpairmentPercent, setFunctionalImpairmentPercent] = useState('');
 
   const authUser = useSelector((state: RootState) => state.auth.user);
   const authOrganization = useSelector((state: RootState) => state.auth.organization);
@@ -1251,6 +1340,29 @@ export function OccHealthConsultationScreen({
     testOrderGeneratedAt?: string;
     testStatuses?: Record<string, PerTestStatus>;
     anamnesisNotes?: string;
+    // Anamnesis — occupational history & lifestyle
+    smokingStatus?: SmokingStatus | '';
+    packYears?: string;
+    alcoholAuditCScore?: string;
+    familyHistory?: string;
+    priorOccupationalHistory?: PriorOccupationalEntry[];
+    workingSchedule?: WorkingSchedule | '';
+    functionalComplaintsAtWork?: string;
+    // Certificat — structured restrictions
+    restrictNoDriving?: boolean;
+    restrictNoHeightWork?: boolean;
+    restrictMaxLiftingKg?: string;
+    restrictNoNightShift?: boolean;
+    restrictAdaptedWorkstation?: boolean;
+    restrictReducedHours?: boolean;
+    restrictNoConfinedSpace?: boolean;
+    restrictNoChemicalExposure?: boolean;
+    restrictCustom?: string;
+    // Certificat — legal compliance
+    legalArticleReference?: string;
+    rightOfAppealOffered?: boolean;
+    rightOfAppealDeadlineDays?: string;
+    functionalImpairmentPercent?: string;
     createdAt: string;
     updatedAt: string;
   };
@@ -1374,6 +1486,29 @@ export function OccHealthConsultationScreen({
         testOrderGeneratedAt: options?.testOrderGeneratedAt,
         testStatuses,
         anamnesisNotes,
+        // Occupational history & lifestyle
+        smokingStatus,
+        packYears,
+        alcoholAuditCScore,
+        familyHistory,
+        priorOccupationalHistory,
+        workingSchedule,
+        functionalComplaintsAtWork,
+        // Structured restrictions
+        restrictNoDriving,
+        restrictNoHeightWork,
+        restrictMaxLiftingKg,
+        restrictNoNightShift,
+        restrictAdaptedWorkstation,
+        restrictReducedHours,
+        restrictNoConfinedSpace,
+        restrictNoChemicalExposure,
+        restrictCustom,
+        // Legal compliance
+        legalArticleReference,
+        rightOfAppealOffered,
+        rightOfAppealDeadlineDays,
+        functionalImpairmentPercent,
         createdAt: draftId ? (await getDraftCreatedAt(id)) || now : now,
         updatedAt: now,
       };
@@ -1427,6 +1562,11 @@ export function OccHealthConsultationScreen({
     bloodWorkDone, xrayDone, mentalScreening, ergonomicNeeded, ergonomicNotes,
     mskComplaints, sectorAnswers, fitnessDecision, restrictions, recommendations, followUpNeeded,
     followUpDate, nextAppointmentDate, nextAppointmentReason, consultationNotes, currentStep, backendDraftExaminationId, syncDraftToBackend,
+    anamnesisNotes, smokingStatus, packYears, alcoholAuditCScore, familyHistory, priorOccupationalHistory,
+    workingSchedule, functionalComplaintsAtWork,
+    restrictNoDriving, restrictNoHeightWork, restrictMaxLiftingKg, restrictNoNightShift,
+    restrictAdaptedWorkstation, restrictReducedHours, restrictNoConfinedSpace, restrictNoChemicalExposure, restrictCustom,
+    legalArticleReference, rightOfAppealOffered, rightOfAppealDeadlineDays, functionalImpairmentPercent,
   ]);
 
   // Save current state as draft
@@ -1487,6 +1627,29 @@ export function OccHealthConsultationScreen({
         setBackendDraftExaminationId(parsed.backendExaminationId ?? null);
         setTestStatuses(parsed.testStatuses || {});
         setAnamnesisNotes(parsed.anamnesisNotes || '');
+        // Occupational history & lifestyle
+        setSmokingStatus(parsed.smokingStatus || '');
+        setPackYears(parsed.packYears || '');
+        setAlcoholAuditCScore(parsed.alcoholAuditCScore || '');
+        setFamilyHistory(parsed.familyHistory || '');
+        setPriorOccupationalHistory(parsed.priorOccupationalHistory || []);
+        setWorkingSchedule(parsed.workingSchedule || '');
+        setFunctionalComplaintsAtWork(parsed.functionalComplaintsAtWork || '');
+        // Structured restrictions
+        setRestrictNoDriving(parsed.restrictNoDriving ?? false);
+        setRestrictNoHeightWork(parsed.restrictNoHeightWork ?? false);
+        setRestrictMaxLiftingKg(parsed.restrictMaxLiftingKg || '');
+        setRestrictNoNightShift(parsed.restrictNoNightShift ?? false);
+        setRestrictAdaptedWorkstation(parsed.restrictAdaptedWorkstation ?? false);
+        setRestrictReducedHours(parsed.restrictReducedHours ?? false);
+        setRestrictNoConfinedSpace(parsed.restrictNoConfinedSpace ?? false);
+        setRestrictNoChemicalExposure(parsed.restrictNoChemicalExposure ?? false);
+        setRestrictCustom(parsed.restrictCustom || '');
+        // Legal compliance
+        setLegalArticleReference(parsed.legalArticleReference || 'Code du Travail RDC, Art. 156 — Décret No. 68/432');
+        setRightOfAppealOffered(parsed.rightOfAppealOffered ?? true);
+        setRightOfAppealDeadlineDays(parsed.rightOfAppealDeadlineDays || '15');
+        setFunctionalImpairmentPercent(parsed.functionalImpairmentPercent || '');
         
         setDraftId(id);
         setIsDraft(true);
@@ -2129,13 +2292,21 @@ export function OccHealthConsultationScreen({
         exam_date: examDateOnly,
         examining_doctor: authUser?.id ? (Number.isFinite(Number(authUser.id)) ? Number(authUser.id) : undefined) : undefined,
         chief_complaint: visitReason || '',
-        medical_history_review: `${referredBy ? `Référé par: ${referredBy}\n` : ''}Organisation: ${organizationName}\nMédecin évaluateur: ${doctorName}${doctorLicense}`,
+        medical_history_review: `${referredBy ? `Référé par: ${referredBy}\n` : ''}Organisation: ${organizationName}\nMédecin évaluateur: ${doctorName}${doctorLicense}${anamnesisNotes?.trim() ? `\n\nNotes d'anamnèse:\n${anamnesisNotes.trim()}` : ''}`,
         results_summary: `${consultationNotes || `Décision: ${OccHealthUtils.getFitnessStatusLabel(fitnessDecision)}`}\n\n${legalDecisionWording}${onsiteResultsBlock}`,
         recommendations: recommendations || '',
         examination_completed: true,
         follow_up_required: followUpNeeded || Boolean(scheduledNextAppointment),
         follow_up_date: followUpDateOnly,
         next_periodic_exam: scheduledNextAppointment || nextPeriodicDateOnly,
+        // Occupational history & lifestyle (Priority 1)
+        ...(smokingStatus ? { smoking_status: smokingStatus } : {}),
+        ...(packYears ? { pack_years: parseFloat(packYears) } : {}),
+        ...(alcoholAuditCScore ? { alcohol_audit_c_score: parseInt(alcoholAuditCScore, 10) } : {}),
+        ...(familyHistory ? { family_history: familyHistory } : {}),
+        ...(priorOccupationalHistory.length > 0 ? { prior_occupational_history: priorOccupationalHistory.map(e => ({ employer: e.employer, job_title: e.jobTitle, from_year: e.fromYear, to_year: e.toYear ?? null, exposures: e.exposures })) } : {}),
+        ...(workingSchedule ? { working_schedule: workingSchedule } : {}),
+        ...(functionalComplaintsAtWork ? { functional_complaints_at_work: functionalComplaintsAtWork } : {}),
       };
 
       let examinationId: number;
@@ -2184,12 +2355,46 @@ export function OccHealthConsultationScreen({
         // Non-fatal: vital signs failed but exam was created
       }
 
+      // Submit physical examination findings
+      const physExamIsNormal = Object.values(physicalExam).every(v => v === 'normal' || !v);
+      const physExamAbnormalSummary = Object.entries(physicalExam)
+        .filter(([, v]) => v !== 'normal' && Boolean(v))
+        .map(([key, val]) => `${key}: ${val}`)
+        .join('; ');
+      await occHealthApi.createPhysicalExam({
+        examination: examinationId,
+        general_appearance: physicalExam.generalAppearance,
+        cardiovascular: physicalExam.cardiovascular,
+        respiratory: physicalExam.respiratory,
+        abdominal: physicalExam.abdomen,
+        musculoskeletal: physicalExam.musculoskeletal,
+        neurological: physicalExam.neurological,
+        skin: physicalExam.dermatological,
+        ent: physicalExam.ent,
+        physical_exam_normal: physExamIsNormal,
+        abnormal_findings_summary: physExamAbnormalSummary || '',
+      }); // Non-fatal if fails — exam record already saved
+
+      // Build combined restrictions text for backward-compat free-text field
+      const structuredRestrictionsText = [
+        restrictNoDriving ? 'Interdit de conduire' : '',
+        restrictNoHeightWork ? 'Interdit travail en hauteur' : '',
+        restrictMaxLiftingKg ? `Port de charge max ${restrictMaxLiftingKg} kg` : '',
+        restrictNoNightShift ? 'Interdit travail de nuit' : '',
+        restrictAdaptedWorkstation ? 'Poste aménagé requis' : '',
+        restrictReducedHours ? 'Horaire aménagé requis' : '',
+        restrictNoConfinedSpace ? 'Interdit espaces confinés' : '',
+        restrictNoChemicalExposure ? 'Interdit exposition chimique' : '',
+        restrictCustom || '',
+        ...restrictions,
+      ].filter(Boolean).join('; ');
+
       const certRes = await occHealthApi.createFitnessCertificate({
         examination: examinationId,
         fitness_decision: fitnessDecision,
         decision_rationale: `${legalTitle}. ${legalDecisionWording}`,
-        restrictions: restrictions.join('; '),
-        work_limitations: restrictions.join('; '),
+        restrictions: structuredRestrictionsText,
+        work_limitations: structuredRestrictionsText,
         issue_date: examDateOnly,
         valid_until: nextPeriodicDateOnly,
         requires_follow_up: followUpNeeded || Boolean(scheduledNextAppointment),
@@ -2198,6 +2403,21 @@ export function OccHealthConsultationScreen({
           ? (`Rendez-vous planifié le ${scheduledNextAppointment || nextPeriodicDateOnly}. ${nextAppointmentReason || recommendations || 'Suivi médical requis.'}`)
           : '',
         is_active: true,
+        // Structured restriction checkboxes (Priority 2)
+        restrict_no_driving: restrictNoDriving,
+        restrict_no_height_work: restrictNoHeightWork,
+        restrict_max_lifting_kg: restrictMaxLiftingKg ? parseInt(restrictMaxLiftingKg, 10) : null,
+        restrict_no_night_shift: restrictNoNightShift,
+        restrict_adapted_workstation: restrictAdaptedWorkstation,
+        restrict_reduced_hours: restrictReducedHours,
+        restrict_no_confined_space: restrictNoConfinedSpace,
+        restrict_no_chemical_exposure: restrictNoChemicalExposure,
+        restrict_custom: restrictCustom || '',
+        // Legal compliance (Priority 2)
+        legal_article_reference: legalArticleReference || 'Code du Travail RDC, Art. 156 — Décret No. 68/432',
+        right_of_appeal_offered: rightOfAppealOffered,
+        right_of_appeal_deadline_days: rightOfAppealDeadlineDays ? parseInt(rightOfAppealDeadlineDays, 10) : 15,
+        functional_impairment_percent: functionalImpairmentPercent ? parseInt(functionalImpairmentPercent, 10) : null,
       });
 
       if (certRes.error || !certRes.data?.id) {
@@ -2211,10 +2431,10 @@ export function OccHealthConsultationScreen({
 
         const examDate = examDateOnly;
         const value = result.value || '0';
-        const interpretation = result.interpretation || 'normal';
+        const interp = result.interpretation || 'normal';
+        const needsFollowUp = interp === 'abnormal' || interp === 'inconclusive';
 
-        // Map test ID to appropriate test result creation
-        if (testId === 'blood_lead') {
+        if (testId === 'blood_lead' || testId === 'plombemie') {
           await occHealthApi.createHeavyMetalsTest({
             examination: examinationId,
             heavy_metal: 'lead',
@@ -2225,9 +2445,107 @@ export function OccHealthConsultationScreen({
             reference_upper: 25,
             clinical_significance: result.notes || '',
             occupational_exposure: true,
-            follow_up_required: interpretation === 'abnormal' || interpretation === 'inconclusive',
+            follow_up_required: needsFollowUp,
+          });
+        } else if (testId === 'cobaltemie') {
+          await occHealthApi.createHeavyMetalsTest({
+            examination: examinationId,
+            heavy_metal: 'cobalt',
+            specimen_type: 'blood',
+            test_date: examDate,
+            level_value: parseFloat(value) || 0,
+            unit: 'µg/dL',
+            reference_upper: 10,
+            clinical_significance: result.notes || '',
+            occupational_exposure: true,
+            follow_up_required: needsFollowUp,
+          });
+        } else if (testId === 'chest_xray' || testId === 'radio_thorax') {
+          await occHealthApi.createXrayImagingResult({
+            examination: examinationId,
+            imaging_type: 'chest_pa',
+            imaging_date: examDate,
+            ilo_classification: interp === 'normal' ? '0/0' : interp === 'abnormal' ? '1/0' : '',
+            pneumoconiosis_detected: interp === 'abnormal',
+          });
+        } else if (testId === 'drug_screening' || testId === 'test_alcool_drogue') {
+          await occHealthApi.createDrugAlcoholScreening({
+            examination: examinationId,
+            test_type: 'site_random',
+            alcohol_tested: true,
+            drug_tested: true,
+            test_date: examDate,
+            testing_facility: 'Sur site',
+            alcohol_result: interp === 'normal' ? 'negative' : 'positive',
+            drug_result: interp === 'normal' ? 'negative' : 'positive',
+            fit_for_duty: interp === 'normal',
+          });
+        } else if (testId === 'audiometry' || testId === 'audiogramme') {
+          await occHealthApi.createAudiometryResult({
+            examination: examinationId,
+            hearing_loss_classification: interp === 'normal' ? 'normal' : interp === 'abnormal' ? 'mild' : '',
+            noise_induced_probable: interp === 'abnormal',
+            recommendations: result.notes || '',
+          });
+        } else if (testId === 'spirometry' || testId === 'spirometrie') {
+          await occHealthApi.createSpirometryResult({
+            examination: examinationId,
+            spirometry_interpretation: interp === 'normal' ? 'normal' : interp === 'abnormal' ? 'obstructive' : '',
+            fev1_pre: parseFloat(value) || null,
+            occupational_lung_disease_suspected: interp === 'abnormal',
+            recommendations: result.notes || '',
+          });
+        } else if (testId === 'vision_test' || testId === 'test_vision_complete' || testId === 'test_vision_nocturne') {
+          await occHealthApi.createVisionTestResult({
+            examination: examinationId,
+            requires_correction: interp !== 'normal',
+            recommendations: result.notes || '',
           });
         }
+        // Other test IDs are stored in results_summary text (not mapped to dedicated endpoints)
+      }
+
+      // Submit mental health screening if the doctor filled it in
+      if (mentalScreening.screeningTool && workerId) {
+        await occHealthApi.createHealthScreening({
+          worker_id: workerId,
+          screening_type: 'mental',
+          responses: {
+            screening_tool: mentalScreening.screeningTool ?? 'WHO5',
+            interpretation: mentalScreening.interpretation ?? '',
+            stress_level: mentalScreening.stressLevel ?? '',
+            sleep_quality: mentalScreening.sleepQuality ?? '',
+            work_life_balance: mentalScreening.workLifeBalance ?? '',
+            workload: mentalScreening.workload ?? '',
+            job_satisfaction: mentalScreening.jobSatisfaction ?? '',
+            referral_needed: mentalScreening.referralNeeded ?? false,
+          },
+          notes: [
+            mentalScreening.screeningTool && `Outil: ${mentalScreening.screeningTool}`,
+            mentalScreening.interpretation && `Résultat: ${mentalScreening.interpretation}`,
+            mentalScreening.referralNeeded ? 'Référence spécialiste requise' : '',
+          ].filter(Boolean).join(' | '),
+        });
+      }
+
+      // Submit ergonomic assessment if indicated
+      if (ergonomicNeeded && workerId) {
+        await occHealthApi.createHealthScreening({
+          worker_id: workerId,
+          screening_type: 'ergonomic',
+          responses: { ergonomic_needed: true, notes: ergonomicNotes },
+          notes: ergonomicNotes || 'Évaluation ergonomique réalisée lors de la consultation',
+        });
+      }
+
+      // Submit MSK screening if there are complaints
+      if (mskComplaints.length > 0 && workerId) {
+        await occHealthApi.createHealthScreening({
+          worker_id: workerId,
+          screening_type: 'msk',
+          responses: { complaints: mskComplaints },
+          notes: `${mskComplaints.length} plainte(s) musculo-squelettique(s) enregistrée(s)`,
+        });
       }
 
       const patchRes = await occHealthApi.patchWorker(String(workerId), {
@@ -2329,6 +2647,33 @@ export function OccHealthConsultationScreen({
     setIsDraft(false);
     setLastSaved(null);
     setBackendDraftExaminationId(null);
+    // ── Priority 1: Anamnesis / Occupational history & lifestyle ──
+    setAnamnesisNotes('');
+    setSmokingStatus('');
+    setPackYears('');
+    setAlcoholAuditCScore('');
+    setFamilyHistory('');
+    setPriorOccupationalHistory([]);
+    setWorkingSchedule('');
+    setFunctionalComplaintsAtWork('');
+    // ── Priority 2: Structured restrictions & legal compliance ──
+    setRestrictNoDriving(false);
+    setRestrictNoHeightWork(false);
+    setRestrictMaxLiftingKg('');
+    setRestrictNoNightShift(false);
+    setRestrictAdaptedWorkstation(false);
+    setRestrictReducedHours(false);
+    setRestrictNoConfinedSpace(false);
+    setRestrictNoChemicalExposure(false);
+    setRestrictCustom('');
+    setLegalArticleReference('Code du Travail RDC, Art. 156 — Décret No. 68/432');
+    setRightOfAppealOffered(true);
+    setRightOfAppealDeadlineDays('15');
+    setFunctionalImpairmentPercent('');
+    // ── Test state ──
+    setTestStatuses({});
+    setExistingTestResults({});
+    setProtocolResult(null);
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -2724,6 +3069,194 @@ export function OccHealthConsultationScreen({
             placeholderTextColor={colors.placeholder}
             multiline
             numberOfLines={4}
+          />
+        </View>
+
+        {/* ── Tabagisme & Alcool ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="flame" size={20} color={colors.warning} />
+            <Text style={styles.sectionCardTitle}>Tabagisme & Alcool</Text>
+          </View>
+          <Text style={styles.fieldLabel}>Statut tabagique</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            {([['never', 'Non-fumeur'], ['ex_smoker', 'Ex-fumeur'], ['current', 'Fumeur actuel']] as [SmokingStatus, string][]).map(([val, label]) => {
+              const isActive = smokingStatus === val;
+              return (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.recBadge, { flex: 1, paddingVertical: 8, justifyContent: 'center', borderWidth: 1.5, borderColor: isActive ? colors.warning : colors.outline, backgroundColor: isActive ? colors.warningLight : colors.surface }]}
+                  onPress={() => setSmokingStatus(isActive ? '' : val)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.recBadgeText, { color: isActive ? colors.warningDark : colors.textSecondary, fontWeight: isActive ? '700' : '400' }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {(smokingStatus === 'ex_smoker' || smokingStatus === 'current') && (
+            <View style={styles.formGroup}>
+              <Text style={styles.fieldLabel}>Paquets-années <Text style={styles.helperText}>(nb cigarettes/jour ÷ 20 × années)</Text></Text>
+              <TextInput
+                style={styles.input}
+                value={packYears}
+                onChangeText={setPackYears}
+                keyboardType="decimal-pad"
+                placeholder="Ex: 12.5"
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+          )}
+          <View style={styles.formGroup}>
+            <Text style={styles.fieldLabel}>Score AUDIT-C <Text style={styles.helperText}>(0-12, optionnel)</Text></Text>
+            <TextInput
+              style={styles.input}
+              value={alcoholAuditCScore}
+              onChangeText={setAlcoholAuditCScore}
+              keyboardType="number-pad"
+              placeholder="Score 0-12"
+              placeholderTextColor={colors.placeholder}
+            />
+          </View>
+        </View>
+
+        {/* ── Horaire de travail ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="time" size={20} color={colors.infoDark} />
+            <Text style={styles.sectionCardTitle}>Horaire de Travail Actuel</Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {([['day', 'Jour'], ['night', 'Nuit'], ['rotating', 'Rotatif'], ['irregular', 'Irrégulier']] as [WorkingSchedule, string][]).map(([val, label]) => {
+              const isActive = workingSchedule === val;
+              return (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.recBadge, { paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: isActive ? colors.primary : colors.outline, backgroundColor: isActive ? colors.primaryLight : colors.surface }]}
+                  onPress={() => setWorkingSchedule(isActive ? '' : val)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.recBadgeText, { color: isActive ? colors.primary : colors.textSecondary, fontWeight: isActive ? '700' : '400' }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ── Plaintes fonctionnelles au travail ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="alert-circle" size={20} color={colors.error} />
+            <Text style={styles.sectionCardTitle}>Plaintes Fonctionnelles au Travail</Text>
+          </View>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={functionalComplaintsAtWork}
+            onChangeText={setFunctionalComplaintsAtWork}
+            placeholder="Douleurs, fatigue, difficultés respiratoires, troubles auditifs en lien avec le poste…"
+            placeholderTextColor={colors.placeholder}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+
+        {/* ── Historique professionnel antérieur ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="briefcase" size={20} color={colors.secondary} />
+            <Text style={styles.sectionCardTitle}>Historique Professionnel Antérieur</Text>
+          </View>
+          <Text style={[styles.helperText, { marginBottom: 10 }]}>Employers précédents et expositions cumulées (important pour la spirométrie et l'audiométrie)</Text>
+
+          {priorOccupationalHistory.map((entry, idx) => (
+            <View key={idx} style={[styles.sectionCard, { marginBottom: 10, backgroundColor: colors.background, borderColor: colors.outline }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>Employeur {idx + 1}</Text>
+                <TouchableOpacity onPress={() => setPriorOccupationalHistory(prev => prev.filter((_, i) => i !== idx))}>
+                  <Ionicons name="close-circle" size={20} color={colors.error} />
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.fieldLabel}>Entreprise</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={entry.employer}
+                    onChangeText={v => setPriorOccupationalHistory(prev => prev.map((e, i) => i === idx ? { ...e, employer: v } : e))}
+                    placeholder="Nom entreprise"
+                    placeholderTextColor={colors.placeholder}
+                  />
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.fieldLabel}>Poste occupé</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={entry.jobTitle}
+                    onChangeText={v => setPriorOccupationalHistory(prev => prev.map((e, i) => i === idx ? { ...e, jobTitle: v } : e))}
+                    placeholder="Intitulé du poste"
+                    placeholderTextColor={colors.placeholder}
+                  />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Depuis (année)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={entry.fromYear ? String(entry.fromYear) : ''}
+                    onChangeText={v => setPriorOccupationalHistory(prev => prev.map((e, i) => i === idx ? { ...e, fromYear: Number(v) || 0 } : e))}
+                    keyboardType="number-pad"
+                    placeholder="2010"
+                    placeholderTextColor={colors.placeholder}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Jusqu'à (année)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={entry.toYear ? String(entry.toYear) : ''}
+                    onChangeText={v => setPriorOccupationalHistory(prev => prev.map((e, i) => i === idx ? { ...e, toYear: v ? Number(v) : undefined } : e))}
+                    keyboardType="number-pad"
+                    placeholder="Vide = actuel"
+                    placeholderTextColor={colors.placeholder}
+                  />
+                </View>
+              </View>
+              <Text style={styles.fieldLabel}>Expositions professionnelles</Text>
+              <TextInput
+                style={styles.input}
+                value={entry.exposures.join(', ')}
+                onChangeText={v => setPriorOccupationalHistory(prev => prev.map((e, i) => i === idx ? { ...e, exposures: v.split(',').map(s => s.trim()).filter(Boolean) } : e))}
+                placeholder="Ex: poussières, bruit, vibrations, plomb (séparés par virgules)"
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+          ))}
+
+          <TouchableOpacity
+            style={[styles.secondaryActionBtn, { marginTop: 4 }]}
+            onPress={() => setPriorOccupationalHistory(prev => [...prev, { employer: '', jobTitle: '', fromYear: 0, exposures: [] }])}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add-circle-outline" size={18} color={ACCENT} />
+            <Text style={styles.secondaryActionBtnText}>Ajouter un employeur précédent</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Antécédents familiaux ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="people" size={20} color={colors.infoDark} />
+            <Text style={styles.sectionCardTitle}>Antécédents Familiaux</Text>
+          </View>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={familyHistory}
+            onChangeText={setFamilyHistory}
+            placeholder="Maladies cardiaques, cancer, diabète, maladies pulmonaires, troubles neurologiques dans la famille…"
+            placeholderTextColor={colors.placeholder}
+            multiline
+            numberOfLines={3}
           />
         </View>
       </View>
@@ -3636,10 +4169,13 @@ export function OccHealthConsultationScreen({
   const renderFitnessDecision = () => {
     const decisions: { status: FitnessStatus; label: string; desc: string; color: string; icon: keyof typeof Ionicons.glyphMap }[] = [
       { status: 'fit', label: 'Apte', desc: 'Le travailleur peut exercer son poste sans restriction.', color: colors.success, icon: 'checkmark-circle' },
-      { status: 'fit_with_restrictions', label: 'Apte avec Restrictions', desc: 'Le travailleur peut travailler avec des aménagements.', color: colors.warning, icon: 'alert-circle' },
+      { status: 'fit_with_restrictions', label: 'Apte avec Restrictions', desc: 'Le travailleur peut travailler avec des aménagements de poste.', color: colors.warning, icon: 'alert-circle' },
+      { status: 'fit_enhanced_surveillance', label: 'Apte — Surveillance Renforcée', desc: 'Apte mais nécessite un suivi médical rapproché (ILO C161, Art. 5).', color: '#B45309', icon: 'eye' },
       { status: 'temporarily_unfit', label: 'Inapte Temporaire', desc: 'Arrêt temporaire — réévaluation à une date ultérieure.', color: colors.error, icon: 'close-circle' },
       { status: 'permanently_unfit', label: 'Inapte Définitif', desc: 'Incompatibilité permanente avec le poste.', color: colors.errorDark, icon: 'ban' },
     ];
+
+    const showRestrictions = fitnessDecision === 'fit_with_restrictions' || fitnessDecision === 'temporarily_unfit' || fitnessDecision === 'fit_enhanced_surveillance';
 
     return (
       <View>
@@ -3670,16 +4206,73 @@ export function OccHealthConsultationScreen({
           );
         })}
 
-        {/* Restrictions (if applicable) */}
-        {(fitnessDecision === 'fit_with_restrictions' || fitnessDecision === 'temporarily_unfit') && (
+        {/* ── Restrictions structurées ── */}
+        {showRestrictions && (
           <View style={[styles.sectionCard, { marginTop: 16 }]}>
-            <Text style={styles.sectionCardTitle}>Restrictions</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <View style={styles.sectionCardHeader}>
+              <Ionicons name="construct" size={18} color={colors.warning} />
+              <Text style={styles.sectionCardTitle}>Restrictions & Aménagements</Text>
+            </View>
+            <Text style={[styles.helperText, { marginBottom: 10 }]}>Cochez toutes les restrictions applicables. Ces éléments seront inscrits dans le certificat d'aptitude.</Text>
+
+            {/* Restriction checkboxes grid */}
+            {([
+              [restrictNoDriving, setRestrictNoDriving, 'car', 'Interdit de conduire'],
+              [restrictNoHeightWork, setRestrictNoHeightWork, 'trending-up', 'Interdit travail en hauteur'],
+              [restrictNoNightShift, setRestrictNoNightShift, 'moon', 'Interdit travail de nuit'],
+              [restrictAdaptedWorkstation, setRestrictAdaptedWorkstation, 'desktop', 'Poste aménagé requis'],
+              [restrictReducedHours, setRestrictReducedHours, 'time', 'Horaire aménagé requis'],
+              [restrictNoConfinedSpace, setRestrictNoConfinedSpace, 'contract', 'Interdit espaces confinés'],
+              [restrictNoChemicalExposure, setRestrictNoChemicalExposure, 'flask', 'Interdit exposition chimique'],
+            ] as [boolean, (v: boolean) => void, keyof typeof Ionicons.glyphMap, string][]).map(([val, setter, icon, label]) => (
+              <TouchableOpacity
+                key={label}
+                style={[styles.checkboxRow, { marginBottom: 8 }]}
+                onPress={() => setter(!val)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkbox, val && styles.checkboxActive]}>
+                  {val && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                </View>
+                <Ionicons name={icon} size={16} color={val ? colors.warning : colors.textSecondary} style={{ marginHorizontal: 8 }} />
+                <Text style={[styles.checkboxLabel, val && { color: colors.warningDark, fontWeight: '600' }]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {/* Port de charge max */}
+            <View style={[styles.formGroup, { marginTop: 4 }]}>
+              <Text style={styles.fieldLabel}>Port de charge maximum (kg) <Text style={styles.helperText}>(laisser vide si non applicable)</Text></Text>
+              <TextInput
+                style={styles.input}
+                value={restrictMaxLiftingKg}
+                onChangeText={setRestrictMaxLiftingKg}
+                keyboardType="number-pad"
+                placeholder="Ex: 10"
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+
+            {/* Restriction personnalisée */}
+            <View style={styles.formGroup}>
+              <Text style={styles.fieldLabel}>Restriction personnalisée / complémentaire</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={restrictCustom}
+                onChangeText={setRestrictCustom}
+                placeholder="Toute restriction ne figurant pas ci-dessus…"
+                placeholderTextColor={colors.placeholder}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            {/* Legacy free-text restrictions list (retained for additional items) */}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
               <TextInput
                 style={[styles.input, { flex: 1 }]}
                 value={restrictionInput}
                 onChangeText={setRestrictionInput}
-                placeholder="Ex: pas de travail en hauteur, pas de port > 10kg..."
+                placeholder="Autre restriction à ajouter à la liste…"
                 placeholderTextColor={colors.placeholder}
                 onSubmitEditing={handleAddRestriction}
               />
@@ -3702,6 +4295,64 @@ export function OccHealthConsultationScreen({
             )}
           </View>
         )}
+
+        {/* ── Conformité légale ── */}
+        <View style={[styles.sectionCard, { marginTop: 16, borderColor: colors.infoDark + '40', borderWidth: 1 }]}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="shield" size={18} color={colors.infoDark} />
+            <Text style={styles.sectionCardTitle}>Conformité Légale</Text>
+          </View>
+
+          {/* Legal article reference */}
+          <View style={styles.formGroup}>
+            <Text style={styles.fieldLabel}>Base légale du certificat</Text>
+            <TextInput
+              style={styles.input}
+              value={legalArticleReference}
+              onChangeText={setLegalArticleReference}
+              placeholder="Ex: Code du Travail RDC, Art. 156 — Décret No. 68/432"
+              placeholderTextColor={colors.placeholder}
+            />
+          </View>
+
+          {/* Right of appeal */}
+          <TouchableOpacity
+            style={[styles.checkboxRow, { marginBottom: 8 }]}
+            onPress={() => setRightOfAppealOffered(!rightOfAppealOffered)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, rightOfAppealOffered && styles.checkboxActive]}>
+              {rightOfAppealOffered && <Ionicons name="checkmark" size={14} color="#FFF" />}
+            </View>
+            <Text style={[styles.checkboxLabel, { marginLeft: 10 }]}>Droit de recours notifié au travailleur</Text>
+          </TouchableOpacity>
+          {rightOfAppealOffered && (
+            <View style={[styles.formGroup, { marginLeft: 32 }]}>
+              <Text style={styles.fieldLabel}>Délai de recours (jours)</Text>
+              <TextInput
+                style={styles.input}
+                value={rightOfAppealDeadlineDays}
+                onChangeText={setRightOfAppealDeadlineDays}
+                keyboardType="number-pad"
+                placeholder="15"
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+          )}
+
+          {/* Functional impairment % (for CNSS/IPM) */}
+          <View style={styles.formGroup}>
+            <Text style={styles.fieldLabel}>Taux d'incapacité fonctionnelle — CNSS/IPM (%) <Text style={styles.helperText}>(optionnel, 0-100)</Text></Text>
+            <TextInput
+              style={styles.input}
+              value={functionalImpairmentPercent}
+              onChangeText={setFunctionalImpairmentPercent}
+              keyboardType="number-pad"
+              placeholder="Laisser vide si non applicable"
+              placeholderTextColor={colors.placeholder}
+            />
+          </View>
+        </View>
 
         {/* Follow-up */}
         <View style={[styles.sectionCard, { marginTop: 16 }]}>

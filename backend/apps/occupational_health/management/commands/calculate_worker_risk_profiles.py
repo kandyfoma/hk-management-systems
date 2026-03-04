@@ -5,8 +5,7 @@ Usage: python manage.py calculate_worker_risk_profiles [--recalculate-all]
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from occupational_health.models import Worker, WorkplaceIncident, OccupationalDisease, PPEItem, PPEComplianceRecord
-from occupational_health.models_extended import WorkerRiskProfile
+from apps.occupational_health.models import Worker, WorkplaceIncident, OccupationalDisease, PPEItem, PPEComplianceRecord, WorkerRiskProfile
 from datetime import date, timedelta
 
 
@@ -77,7 +76,7 @@ class Command(BaseCommand):
 
     def process_enterprise(self, enterprise_id):
         """Process risk profiles for all workers in enterprise"""
-        from occupational_health.models import Enterprise
+        from apps.occupational_health.models import Enterprise
         try:
             enterprise = Enterprise.objects.get(id=enterprise_id)
             workers = Worker.objects.filter(enterprise=enterprise)
@@ -143,39 +142,26 @@ class Command(BaseCommand):
         # Age factor
         if worker.age < 25:
             score += 10
-            profile.age_risk_factor = 10
         elif worker.age < 35:
             score += 15
-            profile.age_risk_factor = 15
         elif worker.age < 45:
             score += 20
-            profile.age_risk_factor = 20
         elif worker.age < 55:
             score += 30
-            profile.age_risk_factor = 30
         else:
             score += 40
-            profile.age_risk_factor = 40
         
         # Fitness status
         if worker.current_fitness_status == 'permanently_unfit':
             score += 35
-            profile.fitness_status_factor = 35
         elif worker.current_fitness_status == 'temporarily_unfit':
             score += 25
-            profile.fitness_status_factor = 25
         elif worker.current_fitness_status == 'fit_with_restrictions':
             score += 15
-            profile.fitness_status_factor = 15
-        else:
-            profile.fitness_status_factor = 0
         
         # Medical conditions
         if worker.chronic_conditions:
             score += 15
-            profile.medical_history_factor = 15
-        else:
-            profile.medical_history_factor = 0
         
         # Allergies
         if worker.allergies and worker.allergies.upper() != 'NONE':

@@ -974,6 +974,11 @@ class MedicalExaminationCreateSerializer(serializers.ModelSerializer):
             'id', 'exam_number',
             'worker', 'exam_type', 'exam_date', 'examining_doctor',
             'chief_complaint', 'medical_history_review',
+            # Occupational history & lifestyle (Priority 1)
+            'smoking_status', 'pack_years', 'alcohol_audit_c_score',
+            'family_history', 'prior_occupational_history',
+            'working_schedule', 'functional_complaints_at_work',
+            # Results
             'results_summary', 'recommendations',
             'examination_completed',
             'follow_up_required', 'follow_up_date', 'next_periodic_exam',

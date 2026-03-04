@@ -30,7 +30,7 @@ from .models import (
     PPEItem, HazardIdentification,
     SiteHealthMetrics,
     # Extended occupational health models
-    WorkerRiskProfile, OverexposureAlert, ExitExamination,
+    WorkerRiskProfile, RiskProfileAuditLog, OverexposureAlert, ExitExamination,
     RegulatoryCNSSReport, DRCRegulatoryReport, PPEComplianceRecord,
     # Medical examination extended models
     XrayImagingResult, HeavyMetalsTest, DrugAlcoholScreening,
@@ -798,6 +798,69 @@ class WorkerRiskProfileAdmin(admin.ModelAdmin):
             profile.save()
         self.message_user(request, f"Recalculated {queryset.count()} risk profiles")
     recalculate_risk_scores.short_description = _("Recalculate risk scores")
+
+
+@admin.register(RiskProfileAuditLog)
+class RiskProfileAuditLogAdmin(admin.ModelAdmin):
+    """Admin interface for risk profile audit trail"""
+    list_display = [
+        'timestamp', 'worker_name', 'action', 'trigger_type',
+        'risk_level_before_after', 'is_automatic'
+    ]
+    list_filter = [
+        'action', 'trigger_type', 'is_automatic', 'timestamp',
+        'worker__enterprise'
+    ]
+    search_fields = [
+        'worker__first_name', 'worker__last_name',
+        'worker__employee_id', 'reason_for_change'
+    ]
+    readonly_fields = [
+        'timestamp', 'worker_risk_profile', 'worker',
+        'health_risk_before', 'health_risk_after',
+        'exposure_risk_before', 'exposure_risk_after',
+        'compliance_risk_before', 'compliance_risk_after',
+        'overall_risk_before', 'overall_risk_after',
+    ]
+    
+    fieldsets = (
+        (_('Event Information'), {
+            'fields': ('timestamp', 'action', 'trigger_type', 'trigger_id', 'is_automatic')
+        }),
+        (_('Worker'), {
+            'fields': ('worker', 'actor', 'actor_name')
+        }),
+        (_('Score Changes'), {
+            'fields': (
+                ('health_risk_before', 'health_risk_after'),
+                ('exposure_risk_before', 'exposure_risk_after'),
+                ('compliance_risk_before', 'compliance_risk_after'),
+                ('overall_risk_before', 'overall_risk_after'),
+                ('risk_level_before', 'risk_level_after'),
+            ),
+            'description': _('Before and after score snapshots')
+        }),
+        (_('Details'), {
+            'fields': ('reason_for_change', 'notes', 'ip_address'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def worker_name(self, obj):
+        return f"{obj.worker.first_name} {obj.worker.last_name}"
+    worker_name.short_description = _('Worker')
+    
+    def risk_level_before_after(self, obj):
+        return f"{obj.risk_level_before} → {obj.risk_level_after}"
+    risk_level_before_after.short_description = _('Risk Level Change')
+    
+    def has_add_permission(self, request):
+        # Audit logs are auto-generated, don't allow manual creation
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deletion of audit logs (preserve audit trail)
+        return False
 
 
 @admin.register(OverexposureAlert)
