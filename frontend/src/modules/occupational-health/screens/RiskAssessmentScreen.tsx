@@ -245,7 +245,7 @@ function AssessmentCard({ assessment, onPress }: { assessment: RiskAssessment; o
 }
 
 // ─── Detail Modal ────────────────────────────────────────────
-function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdate }: { visible: boolean; assessment: RiskAssessment | null; onClose: () => void; onDelete?: (id: string) => void; onUpdate?: (hazard: HazardIdentification, updatedData: Partial<HazardIdentification>) => void }) {
+function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdate }: { visible: boolean; assessment: RiskAssessment | null; onClose: () => void; onDelete?: (id: string) => void; onUpdate?: (hazard: HazardIdentification) => void }) {
   if (!assessment) return null;
   const sectorProfile = SECTOR_PROFILES[assessment.sector];
   const riskColor = OccHealthUtils.getSectorRiskColor(assessment.overallRiskLevel);
@@ -340,7 +340,7 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
                         <Text style={styles.hazardMeta}>→ {h.responsiblePerson} • {safeDate(h.targetDate)}</Text>
                         {onUpdate && (
                           <TouchableOpacity 
-                            onPress={() => onUpdate(h, { /* simple edit - open quick edit dialog */ })}
+                            onPress={() => onUpdate(h)}
                             style={{ padding: 4 }}
                           >
                             <Ionicons name="pencil-outline" size={16} color={ACCENT} />
@@ -401,6 +401,241 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return <View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View>;
+}
+
+// ─── Edit Hazard Modal ───────────────────────────────────────
+function EditHazardModal({ visible, hazard, onClose, onSave }: { visible: boolean; hazard: (HazardIdentification & { assessmentId?: string }) | null; onClose: () => void; onSave: (hazard: HazardIdentification) => Promise<void> }) {
+  const { showToast } = useSimpleToast();
+  const [description, setDescription] = useState('');
+  const [hazardType, setHazardType] = useState('physical');
+  const [likelihood, setLikelihood] = useState('3');
+  const [consequence, setConsequence] = useState('3');
+  const [existingControls, setExistingControls] = useState('');
+  const [additionalControls, setAdditionalControls] = useState('');
+  const [responsiblePerson, setResponsiblePerson] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (visible && hazard) {
+      setDescription(hazard.description || '');
+      setHazardType(hazard.hazardType || 'physical');
+      setLikelihood(String(hazard.likelihood ?? 3));
+      setConsequence(String(hazard.consequence ?? 3));
+      setExistingControls(hazard.existingControls?.join('\n') || '');
+      setAdditionalControls(hazard.additionalControls?.join('\n') || '');
+      setResponsiblePerson(hazard.responsiblePerson || '');
+      setTargetDate(hazard.targetDate || '');
+    }
+  }, [visible, hazard]);
+
+  const riskScore = Number(likelihood) * Number(consequence);
+
+  const handleSave = async () => {
+    if (!description.trim()) {
+      showToast('La description est obligatoire', 'error');
+      return;
+    }
+
+    if (!responsiblePerson.trim()) {
+      showToast('Le responsable est obligatoire', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updatedHazard: HazardIdentification = {
+        ...hazard!,
+        description: description.trim(),
+        hazardType: hazardType as ExposureRisk,
+        likelihood: (Number(likelihood) || 3) as any,
+        consequence: (Number(consequence) || 3) as any,
+        riskScore: riskScore,
+        existingControls: existingControls.split('\n').filter(c => c.trim()),
+        additionalControls: additionalControls.split('\n').filter(c => c.trim()),
+        responsiblePerson: responsiblePerson.trim(),
+        targetDate,
+      };
+
+      await onSave(updatedHazard);
+      onClose();
+    } catch (error) {
+      console.error('Error saving hazard:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!hazard) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Modifier le Danger</Text>
+              <TouchableOpacity onPress={onClose} disabled={saving}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Description *</Text>
+              <TextInput
+                style={[styles.formInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Description complète du danger..."
+                multiline
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Type de Danger</Text>
+              <View style={styles.chipGrid}>
+                {[
+                  { value: 'physical', label: 'Physique' },
+                  { value: 'chemical', label: 'Chimique' },
+                  { value: 'biological', label: 'Biologique' },
+                  { value: 'psychosocial', label: 'Psychosocial' },
+                  { value: 'ergonomic', label: 'Ergonomique' },
+                  { value: 'safety', label: 'Sécurité' },
+                ].map(t => (
+                  <TouchableOpacity
+                    key={t.value}
+                    style={[styles.optionChip, hazardType === t.value && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]}
+                    onPress={() => setHazardType(t.value)}
+                    disabled={saving}
+                  >
+                    <Text style={[styles.optionChipText, hazardType === t.value && { color: ACCENT, fontWeight: '600' }]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formLabel}>Probabilité (1-5)</Text>
+                <View style={styles.chipGrid}>
+                  {['1', '2', '3', '4', '5'].map(v => (
+                    <TouchableOpacity
+                      key={v}
+                      style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: likelihood === v ? ACCENT + '20' : undefined }]}
+                      onPress={() => setLikelihood(v)}
+                      disabled={saving}
+                    >
+                      <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: likelihood === v ? '700' : '500' }]}>
+                        {v}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formLabel}>Gravité (1-5)</Text>
+                <View style={styles.chipGrid}>
+                  {['1', '2', '3', '4', '5'].map(v => (
+                    <TouchableOpacity
+                      key={v}
+                      style={[styles.optionChip, { flex: 1, justifyContent: 'center', backgroundColor: consequence === v ? '#EF444420' : undefined }]}
+                      onPress={() => setConsequence(v)}
+                      disabled={saving}
+                    >
+                      <Text style={[styles.optionChipText, { textAlign: 'center', fontWeight: consequence === v ? '700' : '500' }]}>
+                        {v}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={{ backgroundColor: riskScore >= 16 ? '#DC262640' : riskScore >= 12 ? '#EF444440' : riskScore >= 6 ? '#F59E0B40' : '#22C55E40', borderRadius: borderRadius.lg, padding: 12, marginBottom: 16 }}>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Score de Risque</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: riskScore >= 16 ? '#DC2626' : riskScore >= 12 ? '#EF4444' : riskScore >= 6 ? '#F59E0B' : '#22C55E' }}>
+                {likelihood} × {consequence} = {riskScore} {riskScore >= 16 ? '(CRITIQUE)' : riskScore >= 12 ? '(ÉLEVÉ)' : riskScore >= 6 ? '(MOYEN)' : '(FAIBLE)'}
+              </Text>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Contrôles Existants</Text>
+              <TextInput
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]}
+                value={existingControls}
+                onChangeText={setExistingControls}
+                placeholder="Un contrôle par ligne..."
+                multiline
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Contrôles Additionnels</Text>
+              <TextInput
+                style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]}
+                value={additionalControls}
+                onChangeText={setAdditionalControls}
+                placeholder="Un contrôle par ligne..."
+                multiline
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Responsable</Text>
+              <TextInput
+                style={styles.formInput}
+                value={responsiblePerson}
+                onChangeText={setResponsiblePerson}
+                placeholder="Nom du responsable"
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Date Cible</Text>
+              <TouchableOpacity
+                style={[styles.formInput, { justifyContent: 'center' }]}
+                disabled={saving}
+              >
+                <Text style={{ color: targetDate ? colors.text : colors.textSecondary }}>
+                  {targetDate ? new Date(targetDate).toLocaleDateString('fr-CD') : 'Sélectionner une date'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant, opacity: saving ? 0.6 : 1 }]}
+              onPress={onClose}
+              disabled={saving}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: ACCENT, opacity: saving ? 0.6 : 1 }]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="save-outline" size={16} color="#FFF" />
+                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Enregistrer</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 // ─── Add Modal ───────────────────────────────────────────────
@@ -1384,6 +1619,8 @@ export function RiskAssessmentScreen() {
   const [showDetail, setShowDetail] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingHazard, setEditingHazard] = useState<(HazardIdentification & { assessmentId?: string }) | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => { loadData(); }, []);
   
@@ -1631,9 +1868,19 @@ export function RiskAssessmentScreen() {
     );
   };
 
-  const handleUpdate = async (hazard: HazardIdentification, updatedData: Partial<HazardIdentification>) => {
+  const handleUpdate = (hazard: HazardIdentification) => {
+    // Open edit modal with the hazard data
+    const hazardWithAssessmentId = {
+      ...hazard,
+      assessmentId: selectedAssessment?.id,
+    };
+    setEditingHazard(hazardWithAssessmentId);
+    setShowEditModal(true);
+  };
+
+  const handleSaveHazardUpdate = async (updatedHazard: HazardIdentification) => {
     try {
-      if (!hazard.id) {
+      if (!updatedHazard.id) {
         showToast('ID du danger non trouvé', 'error');
         return;
       }
@@ -1649,25 +1896,23 @@ export function RiskAssessmentScreen() {
       // Prepare update payload - only include provided fields
       const updatePayload: any = {};
       
-      if (updatedData.description !== undefined) updatePayload.hazard_description = updatedData.description;
-      if (updatedData.hazardType !== undefined) updatePayload.hazard_type = updatedData.hazardType;
-      if (updatedData.activitiesAffected !== undefined) updatePayload.activities_affected = updatedData.activitiesAffected;
-      if (updatedData.exposedWorkerIds !== undefined) updatePayload.workers_exposed = updatedData.exposedWorkerIds;
-      if (updatedData.likelihood !== undefined) updatePayload.probability = updatedData.likelihood;
-      if (updatedData.consequence !== undefined) updatePayload.severity = updatedData.consequence;
-      if (updatedData.residualLikelihood !== undefined) updatePayload.residual_probability = updatedData.residualLikelihood;
-      if (updatedData.residualConsequence !== undefined) updatePayload.residual_severity = updatedData.residualConsequence;
-      if (updatedData.existingControls !== undefined) updatePayload.existing_controls = updatedData.existingControls;
-      if (updatedData.controlEffectiveness !== undefined) updatePayload.control_effectiveness = updatedData.controlEffectiveness;
-      if (updatedData.additionalControls !== undefined) updatePayload.additional_control_measures = updatedData.additionalControls;
-      if (updatedData.responsiblePersonId !== undefined) updatePayload.responsible_person = updatedData.responsiblePersonId;
-      if (updatedData.assessmentDate !== undefined) updatePayload.assessment_date = updatedData.assessmentDate;
-      if (updatedData.reviewDate !== undefined) updatePayload.review_date = updatedData.reviewDate;
-      if (updatedData.nextReviewDate !== undefined) updatePayload.next_review_date = updatedData.nextReviewDate;
-      if (updatedData.assessmentStatus !== undefined) updatePayload.status = updatedData.assessmentStatus;
+      if (updatedHazard.description !== editingHazard?.description) updatePayload.hazard_description = updatedHazard.description;
+      if (updatedHazard.hazardType !== editingHazard?.hazardType) updatePayload.hazard_type = updatedHazard.hazardType;
+      if (updatedHazard.activitiesAffected !== editingHazard?.activitiesAffected) updatePayload.activities_affected = updatedHazard.activitiesAffected;
+      if (updatedHazard.exposedWorkerIds !== editingHazard?.exposedWorkerIds) updatePayload.workers_exposed = updatedHazard.exposedWorkerIds;
+      if (updatedHazard.likelihood !== editingHazard?.likelihood) updatePayload.probability = updatedHazard.likelihood;
+      if (updatedHazard.consequence !== editingHazard?.consequence) updatePayload.severity = updatedHazard.consequence;
+      if (updatedHazard.residualLikelihood !== editingHazard?.residualLikelihood) updatePayload.residual_probability = updatedHazard.residualLikelihood;
+      if (updatedHazard.residualConsequence !== editingHazard?.residualConsequence) updatePayload.residual_severity = updatedHazard.residualConsequence;
+      if (updatedHazard.existingControls !== editingHazard?.existingControls) updatePayload.existing_controls = updatedHazard.existingControls;
+      if (updatedHazard.controlEffectiveness !== editingHazard?.controlEffectiveness) updatePayload.control_effectiveness = updatedHazard.controlEffectiveness;
+      if (updatedHazard.additionalControls !== editingHazard?.additionalControls) updatePayload.additional_control_measures = updatedHazard.additionalControls;
+      if (updatedHazard.responsiblePersonId !== editingHazard?.responsiblePersonId) updatePayload.responsible_person = updatedHazard.responsiblePersonId;
+      if (updatedHazard.targetDate !== editingHazard?.targetDate) updatePayload.target_date = updatedHazard.targetDate;
+      if (updatedHazard.assessmentStatus !== editingHazard?.assessmentStatus) updatePayload.status = updatedHazard.assessmentStatus;
 
       await axios.patch(
-        `${baseURL}/api/v1/occupational-health/hazard-identifications/${hazard.id}/`,
+        `${baseURL}/api/v1/occupational-health/hazard-identifications/${updatedHazard.id}/`,
         updatePayload,
         {
           headers: {
@@ -1679,25 +1924,22 @@ export function RiskAssessmentScreen() {
       );
 
       // Find and update the assessment in local state
-      const assessmentIndex = assessments.findIndex(a => 
-        a.hazards.some(h => h.id === hazard.id)
-      );
+      const assessmentIndex = assessments.findIndex(a => a.id === editingHazard?.assessmentId);
 
       if (assessmentIndex !== -1) {
         const updatedAssessments = [...assessments];
-        const hazardIndex = updatedAssessments[assessmentIndex].hazards.findIndex(h => h.id === hazard.id);
+        const hazardIndex = updatedAssessments[assessmentIndex].hazards.findIndex(h => h.id === updatedHazard.id);
         
         if (hazardIndex !== -1) {
-          updatedAssessments[assessmentIndex].hazards[hazardIndex] = {
-            ...updatedAssessments[assessmentIndex].hazards[hazardIndex],
-            ...updatedData
-          };
+          updatedAssessments[assessmentIndex].hazards[hazardIndex] = updatedHazard;
           
           setAssessments(updatedAssessments);
           setSelectedAssessment(updatedAssessments[assessmentIndex]);
         }
       }
 
+      setShowEditModal(false);
+      setEditingHazard(null);
       showToast('Danger mis à jour avec succès', 'success');
     } catch (error: any) {
       console.error('Failed to update hazard:', error);
@@ -1790,6 +2032,7 @@ export function RiskAssessmentScreen() {
 
           <AssessmentDetailModal visible={showDetail} assessment={selectedAssessment} onClose={() => { setShowDetail(false); setSelectedAssessment(null); }} onDelete={handleDelete} onUpdate={handleUpdate} />
           <AddAssessmentModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={handleAdd} />
+          {editingHazard && <EditHazardModal visible={showEditModal} hazard={editingHazard} onClose={() => { setShowEditModal(false); setEditingHazard(null); }} onSave={handleSaveHazardUpdate} />}
         </>
       )}
       <SimpleToastNotification message={toastMsg} />
