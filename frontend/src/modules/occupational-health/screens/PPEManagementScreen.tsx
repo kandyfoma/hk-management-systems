@@ -18,9 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
 import { useSimpleToast } from '../../../hooks/useSimpleToast';
 import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
+import { API_BASE_URL } from '../../../config/env';
 
-const ACCENT   = colors.primary;
-const API_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000');
+const ACCENT = colors.primary;
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -875,7 +875,7 @@ export function PPEManagementScreen() {
     try {
       setLoading(true);
       const headers = await getHeaders();
-      const res = await axios.get(`${API_BASE}/api/v1/occupational-health/ppe-catalog/`, { headers, timeout: 10000 });
+      const res = await axios.get(`${API_BASE_URL}/api/v1/occupational-health/ppe-catalog/`, { headers, timeout: 10000 });
       setItems(Array.isArray(res.data) ? res.data : (res.data.results ?? []));
     } catch (err: any) {
       console.warn('[PPE] load error:', err?.message);
@@ -891,7 +891,7 @@ export function PPEManagementScreen() {
   // ── Create ────────────────────────────────────────────────
   const handleCreate = async (data: PPECatalogItem) => {
     const headers = await getHeaders();
-    await axios.post(`${API_BASE}/api/v1/occupational-health/ppe-catalog/`, data, { headers, timeout: 10000 });
+    await axios.post(`${API_BASE_URL}/api/v1/occupational-health/ppe-catalog/`, data, { headers, timeout: 10000 });
     showToast('EPI ajoute au catalogue', 'success');
     setShowForm(false); setEditTarget(null);
     await loadData();
@@ -900,7 +900,7 @@ export function PPEManagementScreen() {
   // ── Update ────────────────────────────────────────────────
   const handleUpdate = async (data: PPECatalogItem) => {
     const headers = await getHeaders();
-    await axios.patch(`${API_BASE}/api/v1/occupational-health/ppe-catalog/${data.id}/`, data, { headers, timeout: 10000 });
+    await axios.patch(`${API_BASE_URL}/api/v1/occupational-health/ppe-catalog/${data.id}/`, data, { headers, timeout: 10000 });
     showToast('EPI mis a jour', 'success');
     setShowForm(false); setEditTarget(null); setShowDetail(false);
     await loadData();
@@ -931,7 +931,7 @@ export function PPEManagementScreen() {
           onPress: async () => {
             try {
               const headers = await getHeaders();
-              await axios.delete(`${API_BASE}/api/v1/occupational-health/ppe-catalog/${item.id}/`, { headers, timeout: 8000 });
+              await axios.delete(`${API_BASE_URL}/api/v1/occupational-health/ppe-catalog/${item.id}/`, { headers, timeout: 8000 });
               showToast('EPI supprime', 'success');
               setShowDetail(false); setSelectedItem(null);
               await loadData();
@@ -947,7 +947,7 @@ export function PPEManagementScreen() {
     if (!selectedItem?.id) return;
     const headers = await getHeaders();
     const res = await axios.post(
-      `${API_BASE}/api/v1/occupational-health/ppe-catalog/${selectedItem.id}/adjust_stock/`,
+      `${API_BASE_URL}/api/v1/occupational-health/ppe-catalog/${selectedItem.id}/adjust_stock/`,
       { delta, notes },
       { headers, timeout: 8000 },
     );
