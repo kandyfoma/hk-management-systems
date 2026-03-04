@@ -252,7 +252,7 @@ function DiseaseDetailModal({
           <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: spacing.lg }}>
             {/* Worker Selection */}
             <View style={[styles.section, styles.cardShadow]}>
-              <Text style={styles.sectionTitle}>Worker Assignment</Text>
+              <Text style={styles.sectionTitle}>Attribution du travailleur</Text>
               
               {loadingWorkers ? (
                 <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
@@ -279,7 +279,7 @@ function DiseaseDetailModal({
                     <View style={styles.workerDropdownList}>
                       <TextInput
                         style={styles.workerSearchInput}
-                        placeholder="Search by name or employee ID..."
+                        placeholder="Rechercher par nom ou ID d'employé..."
                         placeholderTextColor={colors.textSecondary}
                         value={workerSearchText}
                         onChangeText={setWorkerSearchText}
@@ -765,7 +765,7 @@ function ScreeningFormModal({
                     <View style={styles.workerDropdownList}>
                       <TextInput
                         style={styles.workerSearchInput}
-                        placeholder="Search by name or employee ID..."
+                        placeholder="Rechercher par nom ou ID d'employé..."
                         placeholderTextColor={colors.textSecondary}
                         value={workerSearchText}
                         onChangeText={setWorkerSearchText}
@@ -831,7 +831,7 @@ function ScreeningFormModal({
                 {q.type === 'number' && (
                   <TextInput
                     style={styles.numberInput}
-                    placeholder="Enter number"
+                    placeholder="Entrez un nombre"
                     keyboardType="number-pad"
                     onChangeText={text => setResponses({ ...responses, [q.id]: text })}
                     value={responses[q.id] || ''}
@@ -841,7 +841,7 @@ function ScreeningFormModal({
                 {q.type === 'text' && (
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Enter response"
+                    placeholder="Entrez une réponse"
                     onChangeText={text => setResponses({ ...responses, [q.id]: text })}
                     value={responses[q.id] || ''}
                   />
@@ -880,13 +880,13 @@ function ScreeningFormModal({
                   });
                   
                   if (result.error) {
-                    Alert.alert('Error', result.error || 'Failed to save screening');
+                    Alert.alert('Erreur', result.error || 'Impossible d\'enregistrer l\'examen');
                   } else {
-                    Alert.alert('Success', 'Screening saved successfully');
+                    Alert.alert('Succès', 'Examen enregistré avec succès');
                     onSuccess?.();
                   }
                 } catch (error: any) {
-                  Alert.alert('Error', error?.message || 'Failed to save screening');
+                  Alert.alert('Erreur', error?.message || 'Impossible d\'enregistrer l\'examen');
                 } finally {
                   setSaving(false);
                 }
@@ -899,7 +899,7 @@ function ScreeningFormModal({
                 <>
                   <Ionicons name="send" size={20} color="#FFF" />
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>
-                    {saving ? 'Saving...' : 'Submit Assessment'}
+                    {saving ? 'Enregistrement...' : 'Soumettre l\'évaluation'}
                   </Text>
                 </>
               )}
@@ -920,21 +920,21 @@ const exportScreening = (screening: any) => {
     const csvRows: string[] = [];
     
     // Header
-    csvRows.push('Health Screening Export');
-    csvRows.push(`Exported: ${new Date().toLocaleString()}`);
+    csvRows.push('Export de dépistage de santé');
+    csvRows.push(`Exporté : ${new Date().toLocaleString()}`);
     csvRows.push('');
     
     // Basic Info
-    csvRows.push('Basic Information');
-    csvRows.push(`Worker Name,${screening.workerName || 'N/A'}`);
-    csvRows.push(`Screening Type,${screening.screeningTypeDisplay || 'N/A'}`);
-    csvRows.push(`Completed Date,${new Date(screening.completedDate).toLocaleString()}`);
-    csvRows.push(`Status,${screening.status || 'N/A'}`);
+    csvRows.push('Informations de base');
+    csvRows.push(`Nom du travailleur,${screening.workerName || 'N/A'}`);
+    csvRows.push(`Type d'examen,${screening.screeningTypeDisplay || 'N/A'}`);
+    csvRows.push(`Date d'achèvement,${new Date(screening.completedDate).toLocaleString()}`);
+    csvRows.push(`Statut,${screening.status || 'N/A'}`);
     csvRows.push('');
     
     // Assessment Details
     if (screening.details && Object.keys(screening.details).length > 0) {
-      csvRows.push('Assessment Details');
+      csvRows.push('Détails de l\'évaluation');
       Object.entries(screening.details).forEach(([key, value]: [string, any]) => {
         if (Array.isArray(value)) {
           csvRows.push(`${key},"${value.join('; ')}"`);
@@ -960,28 +960,28 @@ const exportScreening = (screening: any) => {
       link.click();
       document.body.removeChild(link);
       (window.URL || window.webkitURL).revokeObjectURL(url);
-      Alert.alert('Success', `Screening exported as ${fileName}`);
+      Alert.alert('Succès', `Examen exporté en tant que ${fileName}`);
       return;
     }
 
-    Alert.alert('Info', 'Export feature available on web platform');
+    Alert.alert('Information', 'Fonction d\'export disponible sur la plateforme Web');
   } catch (error: any) {
     console.error('Export error:', error);
-    Alert.alert('Error', 'Failed to export screening: ' + error?.message);
+    Alert.alert('Erreur', 'Impossible d\'exporter l\'examen : ' + error?.message);
   }
 };
 
 const handleRescan = (screening: any) => {
   try {
     Alert.alert(
-      'Rescan Screening',
-      `Ready to retake the ${screening.screeningTypeDisplay} screening for ${screening.workerName}?`,
+      'Reprendre l\'examen',
+      `Êtes-vous prêt à reprendre l'examen ${screening.screeningTypeDisplay} pour ${screening.workerName}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Proceed',
+          text: 'Procéder',
           onPress: () => {
-            Alert.alert('Rescan Started', `Retaking screening ID: ${screening.id}. Please provide new assessment data.`);
+            Alert.alert('Reprise commencée', `Reprise de l'examen ID : ${screening.id}. Veuillez fournir de nouvelles données d'évaluation.`);
             console.log('Rescan screening:', screening.id);
           },
         },
@@ -989,7 +989,7 @@ const handleRescan = (screening: any) => {
     );
   } catch (error: any) {
     console.error('Rescan error:', error);
-    Alert.alert('Error', 'Failed to start rescan: ' + error?.message);
+    Alert.alert('Erreur', 'Impossible de démarrer la reprise : ' + error?.message);
   }
 };
 
