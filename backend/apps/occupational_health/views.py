@@ -1434,7 +1434,7 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return HazardIdentification.objects.select_related(
-            'enterprise', 'work_site', 'assessed_by', 'approved_by'
+            'enterprise', 'work_site', 'assessed_by', 'approved_by', 'updated_by'
         ).prefetch_related('workers_exposed')
     
     def perform_create(self, serializer):
@@ -1450,7 +1450,44 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
                 # Fallback to first active enterprise
                 enterprise = Enterprise.objects.filter(is_active=True).first()
         # Set assessor to current user and enterprise
-        serializer.save(assessed_by=self.request.user, enterprise=enterprise)
+        hazard = serializer.save(assessed_by=self.request.user, enterprise=enterprise)
+        
+        # Initialize status history with initial status
+        initial_status_entry = {
+            'status': hazard.status,
+            'changed_by_id': self.request.user.id,
+            'changed_by_name': self.request.user.get_full_name(),
+            'changed_at': hazard.created_at.isoformat(),
+            'note': 'Initial creation'
+        }
+        hazard.status_history = [initial_status_entry]
+        hazard.save(update_fields=['status_history'])
+    
+    def perform_update(self, serializer):
+        # Capture the old instance before saving
+        old_status = serializer.instance.status if serializer.instance else None
+        
+        # Save the updated hazard
+        hazard = serializer.save(updated_by=self.request.user)
+        
+        # Track status changes in history
+        if old_status != hazard.status:
+            status_entry = {
+                'status': hazard.status,
+                'changed_by_id': self.request.user.id,
+                'changed_by_name': self.request.user.get_full_name(),
+                'changed_at': hazard.updated_at.isoformat(),
+                'note': f'Status changed from {old_status} to {hazard.status}'
+            }
+            
+            # Append to status history
+            if not hazard.status_history:
+                hazard.status_history = []
+            if not isinstance(hazard.status_history, list):
+                hazard.status_history = []
+            
+            hazard.status_history.append(status_entry)
+            hazard.save(update_fields=['status_history', 'updated_by'])
     
     @action(detail=False, methods=['get'])
     def statistics(self, request):

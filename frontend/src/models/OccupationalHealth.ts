@@ -782,6 +782,15 @@ export interface FitnessCertificate {
 }
 
 // ─── Risk Assessment (ISO 45001 §6.1) ────────────────────────
+
+export interface StatusHistoryEntry {
+  status: string;
+  changed_by_id?: number;
+  changed_by_name?: string;
+  changed_at?: string;
+  note?: string;
+}
+
 export interface RiskAssessment {
   id: string;
   sector: IndustrySector;
@@ -789,15 +798,19 @@ export interface RiskAssessment {
   area: string;
   assessmentDate: string;
   assessorName: string;
+  assessorId?: number;
   hazards: HazardIdentification[];
   overallRiskLevel: SectorRiskLevel;
   reviewDate: string;
-  status: 'draft' | 'active' | 'under_review' | 'archived';
+  status: 'draft' | 'active' | 'under_review' | 'archived' | 'approved' | 'implemented' | 'reviewed';
   createdAt: string;
   updatedAt?: string;
+  updatedByName?: string;
+  statusHistory?: StatusHistoryEntry[];
 }
 
 export interface HazardIdentification {
+  id?: string | number;
   hazardType: ExposureRisk;
   description: string;
   affectedWorkers: number;
@@ -808,7 +821,17 @@ export interface HazardIdentification {
   additionalControls: string[];
   controlHierarchy: 'elimination' | 'substitution' | 'engineering' | 'administrative' | 'ppe';
   responsiblePerson: string;
+  responsiblePersonId?: string | number;
   targetDate: string;
+  // Additional audit fields
+  assessmentDate?: string;
+  reviewDate?: string;
+  nextReviewDate?: string;
+  assessmentStatus?: 'draft' | 'approved' | 'implemented' | 'reviewed';
+  activitiesAffected?: string;
+  controlEffectiveness?: 'very_effective' | 'effective' | 'partially_effective' | 'ineffective';
+  residualLikelihood?: number;
+  residualConsequence?: number;
 }
 
 // ─── Utility Functions ───────────────────────────────────────

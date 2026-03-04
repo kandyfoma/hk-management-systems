@@ -12,7 +12,7 @@ import DateInput from '../../../components/DateInput';
 import {
   SECTOR_PROFILES, OccHealthUtils,
   type IndustrySector, type RiskAssessment, type HazardIdentification,
-  type ExposureRisk, type SectorRiskLevel,
+  type ExposureRisk, type SectorRiskLevel, type StatusHistoryEntry,
 } from '../../../models/OccupationalHealth';
 import { useSimpleToast } from '../../../hooks/useSimpleToast';
 import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
@@ -40,9 +40,44 @@ function getStatusLabel(s: string): string {
   return m[s] || s;
 }
 function getStatusColor(s: string): string {
-  const m: Record<string, string> = { draft: '#94A3B8', active: '#22C55E', under_review: '#F59E0B', archived: '#64748B' };
+  const m: Record<string, string> = { draft: '#94A3B8', active: '#22C55E', under_review: '#F59E0B', archived: '#64748B', approved: '#3B82F6', implemented: '#10B981', reviewed: '#6366F1' };
   return m[s] || '#94A3B8';
 }
+
+// ─── Status Mapping ──────────────────────────────────────────
+const VALID_BACKEND_STATUSES = ['draft', 'approved', 'implemented', 'reviewed'];
+
+const mapBackendToHazard = (hazard: any): HazardIdentification => {
+  return {
+    id: hazard.id,
+    hazardType: hazard.hazard_type || hazard.hazardType || 'unknown',
+    description: hazard.hazard_description || hazard.description || '',
+    affectedWorkers: Number(hazard.workers_exposed || hazard.affectedWorkers || 0),
+    likelihood: Number(hazard.probability || hazard.likelihood || 3) as any,
+    consequence: Number(hazard.severity || hazard.consequence || 3) as any,
+    riskScore: Number(hazard.risk_score || hazard.riskScore || 0),
+    existingControls: typeof hazard.existing_controls === 'string' 
+      ? hazard.existing_controls.split('\n').filter((c: string) => c.trim()) 
+      : (Array.isArray(hazard.existingControls) ? hazard.existingControls : []),
+    additionalControls: Array.isArray(hazard.ppe_recommendations) 
+      ? hazard.ppe_recommendations 
+      : (typeof hazard.additional_controls === 'string' 
+        ? hazard.additional_controls.split('\n').filter((c: string) => c.trim())
+        : (Array.isArray(hazard.additionalControls) ? hazard.additionalControls : [])),
+    controlHierarchy: hazard.control_hierarchy || hazard.controlHierarchy || 'engineering',
+    responsiblePerson: hazard.responsible_person_name || hazard.responsiblePerson || 'Inconnu',
+    responsiblePersonId: hazard.responsible_person || hazard.responsiblePersonId,
+    targetDate: hazard.next_review_date || hazard.targetDate || new Date().toISOString().split('T')[0],
+    assessmentDate: hazard.assessment_date || hazard.assessmentDate,
+    reviewDate: hazard.review_date || hazard.reviewDate,
+    nextReviewDate: hazard.next_review_date || hazard.nextReviewDate,
+    assessmentStatus: hazard.status || hazard.assessmentStatus || 'draft',
+    activitiesAffected: hazard.activities_affected || hazard.activitiesAffected || '',
+    controlEffectiveness: hazard.control_effectiveness || hazard.controlEffectiveness || 'effective',
+    residualLikelihood: Number(hazard.residual_probability || hazard.residualLikelihood || 2),
+    residualConsequence: Number(hazard.residual_severity || hazard.residualConsequence || 2),
+  };
+};
 
 // ─── Sample Data ─────────────────────────────────────────────
 const SAMPLE_ASSESSMENTS: RiskAssessment[] = [
@@ -283,6 +318,35 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { vis
                 );
               })}
             </View>
+
+            {/* Audit Trail Section */}
+            {assessment.statusHistory && assessment.statusHistory.length > 0 && (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Historique des Modifications</Text>
+                {assessment.statusHistory.map((entry: StatusHistoryEntry, i: number) => (
+                  <View key={i} style={styles.historyEntry}>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <View style={{ alignItems: 'center' }}>
+                        <View style={styles.historyDot} />
+                        {i < assessment.statusHistory!.length - 1 && <View style={styles.historyLine} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <View style={[styles.historyStatus, { backgroundColor: getStatusColor(entry.status || 'draft') + '20' }]}>
+                            <Text style={[styles.historyStatusText, { color: getStatusColor(entry.status || 'draft') }]}>
+                              {getStatusLabel(entry.status || 'draft')}
+                            </Text>
+                          </View>
+                          <Text style={styles.historyMeta}>{entry.changed_by_name || 'Système'}</Text>
+                        </View>
+                        {entry.note && <Text style={styles.historyNote}>{entry.note}</Text>}
+                        <Text style={styles.historyTime}>{entry.changed_at ? new Date(entry.changed_at).toLocaleString('fr-CD') : ''}</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </ScrollView>
           <View style={styles.modalActions}>
             {onDelete && (
@@ -521,7 +585,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
       additionalControls: additionalControls.split('\n').filter(c => c.trim()),
       controlHierarchy,
       responsiblePerson: responsiblePerson.trim(),
-      responsiblePersonId: responsiblePersonId,
+      responsiblePersonId: responsiblePersonId || undefined,
       targetDate,
       // Additional fields for backend
       activitiesAffected: activitiesAffected.trim(),
@@ -1187,32 +1251,21 @@ export function RiskAssessmentScreen() {
                   area: h.location || '',
                   assessmentDate: assessmentDate,
                   assessorName: assessorName,
+                  assessorId: h.assessed_by,
+                  updatedByName: h.updated_by_name,
+                  statusHistory: h.status_history || [],
                   hazards: [],
                   overallRiskLevel: h.risk_level === 'critical' ? 'very_high' : (h.risk_level || 'low'),
                   reviewDate: h.review_date || '',
                   status: h.status || 'draft',
                   createdAt: h.created_at || new Date().toISOString(),
+                  updatedAt: h.updated_at,
                 };
               }
               
-              // Safely access and validate hazard properties
-              const workersExposed = Array.isArray(h.workers_exposed) ? h.workers_exposed.length : (typeof h.workers_exposed === 'number' ? h.workers_exposed : 0);
-              const existingControls = typeof h.existing_controls === 'string' ? h.existing_controls.split(',').map((c: string) => c.trim()) : [];
-              const responsiblePersonName = h.responsible_person_name || h.assessed_by_name || 'Inconnu';
-              
-              assessmentsMap[key].hazards.push({
-                hazardType: h.hazard_type || 'unknown',
-                description: h.hazard_description || '',
-                affectedWorkers: workersExposed,
-                likelihood: Number(h.probability) || 0,
-                consequence: Number(h.severity) || 0,
-                riskScore: Number(h.risk_score) || 0,
-                existingControls: existingControls,
-                additionalControls: Array.isArray(h.ppe_recommendations) ? h.ppe_recommendations : [],
-                controlHierarchy: 'engineering',
-                responsiblePerson: responsiblePersonName,
-                targetDate: h.next_review_date || '',
-              });
+              // Map hazard using the new function
+              const mappedHazard = mapBackendToHazard(h);
+              assessmentsMap[key].hazards.push(mappedHazard);
             } catch (itemError) {
               console.warn('Error processing hazard item:', itemError);
               // Continue processing other items
@@ -1587,4 +1640,14 @@ const styles = StyleSheet.create({
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
   optionChipText: { fontSize: 11, color: colors.textSecondary },
+
+  // Audit Trail
+  historyEntry: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  historyDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: ACCENT, marginTop: 3 },
+  historyLine: { width: 2, height: 40, backgroundColor: colors.outline, alignSelf: 'center' },
+  historyStatus: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: borderRadius.full },
+  historyStatusText: { fontSize: 10, fontWeight: '600' },
+  historyMeta: { fontSize: 11, fontWeight: '500', color: colors.textSecondary },
+  historyNote: { fontSize: 11, color: colors.text, marginVertical: 2 },
+  historyTime: { fontSize: 10, color: colors.textTertiary, marginTop: 2 },
 });

@@ -777,7 +777,8 @@ class HazardIdentificationSerializer(serializers.ModelSerializer):
     priority_display = serializers.CharField(source='get_priority_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     assessed_by_name = serializers.CharField(source='assessed_by.get_full_name', read_only=True)
-    approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True, required=False)
+    updated_by_name = serializers.SerializerMethodField(read_only=True)
     responsible_person_name = serializers.CharField(source='responsible_person.get_full_name', read_only=True, required=False)
     
     risk_score = serializers.ReadOnlyField()
@@ -786,10 +787,14 @@ class HazardIdentificationSerializer(serializers.ModelSerializer):
     # Workers exposed details
     workers_exposed_details = WorkerListSerializer(source='workers_exposed', many=True, read_only=True)
     
+    def get_updated_by_name(self, obj):
+        """Get full name of user who last updated, safe for null"""
+        return obj.updated_by.get_full_name() if obj.updated_by else None
+    
     class Meta:
         model = HazardIdentification
         fields = '__all__'
-        read_only_fields = ['risk_score', 'residual_risk_score', 'risk_level', 'action_required', 'priority', 'assessed_by', 'created_at', 'updated_at']
+        read_only_fields = ['risk_score', 'residual_risk_score', 'risk_level', 'action_required', 'priority', 'assessed_by', 'updated_by', 'status_history', 'created_at', 'updated_at']
         extra_kwargs = {
             'enterprise': {'required': False},
         }

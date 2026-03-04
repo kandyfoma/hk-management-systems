@@ -1688,6 +1688,8 @@ class HazardIdentification(models.Model):
     # Audit fields
     assessed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hazards_assessed')
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hazards_approved', blank=True)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='hazards_updated')
+    status_history = models.JSONField(default=list, help_text="Track all status changes: [{status, changed_by_id, changed_by_name, changed_at, note}, ...]")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
