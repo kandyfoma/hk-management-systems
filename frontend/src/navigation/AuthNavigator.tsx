@@ -988,16 +988,12 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error' | ''>('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
   const { success: showSuccessToast, error: showErrorToast, info: showInfoToast } = useToast();
 
   const { licenseKey, organization, license } = route.params || {};
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
-    ]).start();
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
   const handleLogin = async () => {
@@ -1056,223 +1052,153 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
     <SafeAreaView style={newLogS.safeArea}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={newLogS.keyboardContainer}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+        style={newLogS.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
-          style={newLogS.scrollView}
-          contentContainerStyle={newLogS.scrollContentContainer}
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={newLogS.scrollContainer}
+          showsVerticalScrollIndicator={true}
           keyboardShouldPersistTaps="handled"
-          bounces={true}
           scrollEnabled={true}
-          nestedScrollEnabled={true}
         >
-          {/* Background decorations */}
-          <View style={newLogS.backgroundDecorations}>
-            <View style={newLogS.bgCircle1} />
-            <View style={newLogS.bgCircle2} />
-          </View>
+          {/* Background */}
+          <View style={newLogS.background} />
 
-          <Animated.View
-            style={[newLogS.contentContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-          >
-            {/* Header Section */}
-            <View style={newLogS.headerSection}>
-              <View style={newLogS.logoContainer}>
-                <View style={newLogS.logoCircle}>
-                  <Ionicons name="medical" size={isDesktop ? 40 : 36} color="#FFF" />
-                </View>
-                <Text style={newLogS.brandName}>HK Santé</Text>
-                <Text style={newLogS.brandSubtitle}>Connectez-vous à votre espace</Text>
+          <Animated.View style={[newLogS.content, { opacity: fadeAnim }]}>
+            {/* Logo & Title */}
+            <View style={newLogS.header}>
+              <View style={newLogS.logoBox}>
+                <Ionicons name="medical" size={40} color="#FFF" />
               </View>
-
-              {/* Progress Steps */}
-              <View style={newLogS.progressContainer}>
-                <View style={newLogS.stepContainer}>
-                  <View style={[newLogS.stepDot, newLogS.stepDotCompleted]}>
-                    <Ionicons name="checkmark" size={16} color="#FFF" />
-                  </View>
-                  <Text style={newLogS.stepLabelCompleted}>Licence</Text>
-                </View>
-                <View style={newLogS.stepLineCompleted} />
-                <View style={newLogS.stepContainer}>
-                  <View style={[newLogS.stepDot, newLogS.stepDotActive]}>
-                    <Text style={newLogS.stepNumActive}>2</Text>
-                  </View>
-                  <Text style={newLogS.stepLabelActive}>Connexion</Text>
-                </View>
-                <View style={newLogS.stepLine} />
-                <View style={newLogS.stepContainer}>
-                  <View style={[newLogS.stepDot, newLogS.stepDotInactive]}>
-                    <Text style={newLogS.stepNumInactive}>3</Text>
-                  </View>
-                  <Text style={newLogS.stepLabelInactive}>Tableau de Bord</Text>
-                </View>
-              </View>
+              <Text style={newLogS.title}>HK Santé</Text>
+              <Text style={newLogS.subtitle}>Connectez-vous à votre espace</Text>
             </View>
 
-            {/* Organization Info Card */}
+            {/* Progress Indicator */}
+            <View style={newLogS.progressBar}>
+              <View style={newLogS.progressStep100} />
+              <View style={newLogS.progressStep50} />
+              <View style={newLogS.progressStep0} />
+            </View>
+
+            {/* Org Info */}
             {organization && (
-              <View style={newLogS.orgCard}>
-                <View style={newLogS.orgHeader}>
-                  <Ionicons name="business" size={20} color={colors.primary} />
-                  <Text style={newLogS.orgName}>{organization.name || 'Organisation'}</Text>
+              <View style={newLogS.infoCard}>
+                <View style={newLogS.infoPill}>
+                  <Ionicons name="business" size={16} color={colors.primary} />
+                  <Text style={newLogS.infoText}>{organization.name}</Text>
                 </View>
-                <Text style={newLogS.licenseInfo}>
-                  Licence: {licenseKey || 'N/A'}
-                </Text>
-                <SyncStatusIndicator compact={true} />
               </View>
             )}
 
-            {/* Main Login Card */}
-            <View style={newLogS.mainCard}>
-              <Text style={newLogS.cardTitle}>Connexion</Text>
-              <Text style={newLogS.cardDescription}>
-                Identifiez-vous pour accéder au système
-              </Text>
+            {/* Main Card */}
+            <View style={newLogS.card}>
+              <Text style={newLogS.cardTitle}>Inscription</Text>
+              <Text style={newLogS.cardSubtitle}>Entrez vos identifiants</Text>
 
-              {/* Status Message */}
-              {statusMessage ? (
-                <View
-                  style={[
-                    newLogS.statusBanner,
-                    statusType === 'success' ? newLogS.statusSuccess : newLogS.statusError,
-                  ]}
-                >
+              {/* Status Alert */}
+              {statusMessage && (
+                <View style={[
+                  newLogS.alert,
+                  statusType === 'success' ? newLogS.alertSuccess : newLogS.alertError
+                ]}>
                   <Ionicons
                     name={statusType === 'success' ? 'checkmark-circle' : 'alert-circle'}
-                    size={18}
+                    size={16}
                     color={statusType === 'success' ? colors.success : colors.error}
                   />
-                  <Text
-                    style={[
-                      newLogS.statusText,
-                      { color: statusType === 'success' ? colors.success : colors.error },
-                    ]}
-                  >
+                  <Text style={[
+                    newLogS.alertText,
+                    { color: statusType === 'success' ? colors.success : colors.error }
+                  ]}>
                     {statusMessage}
                   </Text>
                 </View>
-              ) : null}
+              )}
 
               {/* Phone Input */}
-              <View style={newLogS.sectionContainer}>
-                <Text style={newLogS.sectionTitle}>NUMÉRO DE TÉLÉPHONE</Text>
-                <View style={newLogS.inputContainer}>
-                  <View style={newLogS.inputWrapper}>
-                    <Ionicons 
-                      name="call-outline" 
-                      size={20} 
-                      color={colors.textSecondary} 
-                      style={newLogS.inputIcon}
-                    />
-                    <TextInput
-                      value={phone}
-                      onChangeText={setPhone}
-                      placeholder="admin ou +243123456789"
-                      placeholderTextColor={colors.textDisabled}
-                      style={newLogS.textInput}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="default"
-                      mode="flat"
-                      underlineColor="transparent"
-                      activeUnderlineColor="transparent"
-                      contentStyle={newLogS.textInputContent}
-                    />
-                  </View>
+              <View style={newLogS.inputGroup}>
+                <Text style={newLogS.label}>Téléphone</Text>
+                <View style={newLogS.inputBox}>
+                  <Ionicons name="call-outline" size={18} color={colors.textSecondary} />
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="admin ou +243123456789"
+                    placeholderTextColor={colors.textDisabled}
+                    style={newLogS.input}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
                 </View>
               </View>
 
               {/* Password Input */}
-              <View style={newLogS.sectionContainer}>
-                <Text style={newLogS.sectionTitle}>MOT DE PASSE</Text>
-                <View style={newLogS.inputContainer}>
-                  <View style={newLogS.inputWrapper}>
-                    <Ionicons 
-                      name="lock-closed-outline" 
-                      size={20} 
-                      color={colors.textSecondary} 
-                      style={newLogS.inputIcon}
+              <View style={newLogS.inputGroup}>
+                <Text style={newLogS.label}>Mot de passe</Text>
+                <View style={newLogS.inputBox}>
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor={colors.textDisabled}
+                    style={newLogS.input}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={colors.textSecondary}
                     />
-                    <TextInput
-                      value={password}
-                      onChangeText={setPassword}
-                      placeholder="••••••••"
-                      placeholderTextColor={colors.textDisabled}
-                      style={newLogS.textInput}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      mode="flat"
-                      underlineColor="transparent"
-                      activeUnderlineColor="transparent"
-                      contentStyle={newLogS.textInputContent}
-                    />
-                    <TouchableOpacity
-                      style={newLogS.eyeButton}
-                      onPress={() => setShowPassword(!showPassword)}
-                    >
-                      <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={20}
-                        color={colors.textSecondary}
-                      />
-                    </TouchableOpacity>
-                  </View>
+                  </TouchableOpacity>
                 </View>
               </View>
 
               {/* Login Button */}
               <TouchableOpacity
                 style={[
-                  newLogS.loginButton,
-                  (!phone.trim() || !password.trim() || isLoading) && newLogS.loginButtonDisabled,
+                  newLogS.button,
+                  (!phone.trim() || !password.trim() || isLoading) && newLogS.buttonDisabled
                 ]}
                 onPress={handleLogin}
                 disabled={!phone.trim() || !password.trim() || isLoading}
-                activeOpacity={0.8}
               >
                 {isLoading ? (
-                  <Text style={newLogS.loginButtonText}>Connexion en cours...</Text>
+                  <ActivityIndicator color="#FFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="log-in-outline" size={20} color="#FFF" style={newLogS.buttonIcon} />
-                    <Text style={newLogS.loginButtonText}>Se Connecter</Text>
+                    <Ionicons name="log-in-outline" size={18} color="#FFF" />
+                    <Text style={newLogS.buttonText}>Se Connecter</Text>
                   </>
                 )}
               </TouchableOpacity>
 
               {/* Demo Info */}
-              <View style={newLogS.demoContainer}>
-                <View style={newLogS.demoHeader}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.info} />
-                  <Text style={newLogS.demoTitle}>Compte de Démonstration</Text>
+              <View style={newLogS.demo}>
+                <View style={newLogS.demoPill}>
+                  <Ionicons name="information-circle" size={14} color={colors.info} />
+                  <Text style={newLogS.demoLabel}>Démo</Text>
                 </View>
-                <Text style={newLogS.demoCredentials}>
-                  Téléphone: +243123456789{'\n'}Mot de passe: adminadmin
-                </Text>
+                <Text style={newLogS.demoCreds}>Téléphone: +243123456789</Text>
+                <Text style={newLogS.demoCreds}>Mot de passe: adminadmin</Text>
               </View>
             </View>
 
             {/* Back Button */}
             <TouchableOpacity
-              style={newLogS.backButton}
+              style={newLogS.backBtn}
               onPress={() => navigation.goBack()}
-              activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={16} color={colors.textSecondary} />
+              <Ionicons name="arrow-back" size={14} color={colors.textSecondary} />
               <Text style={newLogS.backText}>Changer de licence</Text>
             </TouchableOpacity>
 
             {/* Footer */}
-            <View style={newLogS.footer}>
-              <Text style={newLogS.footerText}>
-                © 2025 HK Management Systems · République Démocratique du Congo
-              </Text>
-            </View>
+            <Text style={newLogS.footerText}>© 2025 HK Management Systems</Text>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1280,366 +1206,258 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
   );
 }
 
-// New Login Screen Styles - Matching the license screen design
+// Simplified Login Screen Styles
 const newLogS = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  keyboardContainer: {
+  container: {
     flex: 1,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContentContainer: {
+  scrollContainer: {
     flexGrow: 1,
-    minHeight: SCREEN_H * 0.9,
+    paddingTop: Platform.OS === 'web' ? 20 : 0,
+    paddingHorizontal: isTablet ? 24 : 16,
     paddingBottom: 40,
   },
-  backgroundDecorations: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
-  bgCircle1: {
+  background: {
     position: 'absolute',
     top: -100,
-    right: -60,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    right: -50,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
     backgroundColor: colors.primary + '08',
   },
-  bgCircle2: {
-    position: 'absolute',
-    bottom: -80,
-    left: -80,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: colors.secondary + '06',
-  },
-  contentContainer: {
-    flex: 1,
-    paddingHorizontal: isDesktop ? 24 : 16,
-    paddingVertical: isDesktop ? 32 : 20,
-    zIndex: 1,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: MAX_CARD_W,
-    alignSelf: 'center',
-  },
   
-  // Header Section
-  headerSection: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 32,
+  content: {
+    flex: 1,
   },
-  logoContainer: {
+
+  // Header
+  header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
+    marginTop: isTablet ? 12 : 8,
   },
-  logoCircle: {
-    width: isDesktop ? 64 : 56,
-    height: isDesktop ? 64 : 56,
-    borderRadius: isDesktop ? 32 : 28,
+  logoBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
     ...shadows.lg,
   },
-  brandName: {
-    fontSize: isDesktop ? 28 : 24,
+  title: {
+    fontSize: isTablet ? 26 : 24,
     fontWeight: '700',
     color: colors.text,
     marginBottom: 4,
   },
-  brandSubtitle: {
-    fontSize: isDesktop ? 16 : 14,
+  subtitle: {
+    fontSize: isTablet ? 15 : 14,
     color: colors.textSecondary,
-    textAlign: 'center',
   },
-  
-  // Progress Steps
-  progressContainer: {
+
+  // Progress Bar
+  progressBar: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 8,
+  },
+  progressStep100: {
+    flex: 1,
+    height: 3,
+    backgroundColor: colors.success,
+    borderRadius: 2,
+  },
+  progressStep50: {
+    flex: 1,
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  progressStep0: {
+    flex: 1,
+    height: 3,
+    backgroundColor: colors.outline,
+    borderRadius: 2,
+  },
+
+  // Info Card
+  infoCard: {
+    marginBottom: 16,
+    alignItems: 'flex-start',
+  },
+  infoPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    maxWidth: 300,
-  },
-  stepContainer: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  stepDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  stepDotActive: {
-    backgroundColor: colors.primary,
-  },
-  stepDotCompleted: {
-    backgroundColor: colors.success,
-  },
-  stepDotInactive: {
-    backgroundColor: colors.surfaceVariant,
-  },
-  stepNumActive: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  stepNumInactive: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  stepLabelActive: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-    textAlign: 'center',
-  },
-  stepLabelCompleted: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.success,
-    textAlign: 'center',
-  },
-  stepLabelInactive: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  stepLine: {
-    height: 2,
-    backgroundColor: colors.outline,
-    flex: 0.5,
-    marginHorizontal: 8,
-    marginTop: -20,
-  },
-  stepLineCompleted: {
-    height: 2,
-    backgroundColor: colors.success,
-    flex: 0.5,
-    marginHorizontal: 8,
-    marginTop: -20,
-  },
-  
-  // Organization Card
-  orgCard: {
-    width: '100%',
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    gap: 8,
+  },
+  infoText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text,
+  },
+
+  // Card
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: isTablet ? 28 : 20,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.outline,
-    ...shadows.sm,
-  },
-  orgHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  orgName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-    marginLeft: 8,
-    flex: 1,
-  },
-  licenseInfo: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  
-  // Main Card
-  mainCard: {
-    width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: isDesktop ? 32 : 24,
-    marginBottom: 24,
-    ...shadows.lg,
-    borderWidth: 1,
-    borderColor: colors.outline,
+    ...shadows.md,
   },
   cardTitle: {
-    fontSize: isDesktop ? 24 : 20,
+    fontSize: isTablet ? 22 : 20,
     fontWeight: '700',
     color: colors.text,
-    textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  cardDescription: {
-    fontSize: isDesktop ? 16 : 14,
+  cardSubtitle: {
+    fontSize: 14,
     color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: 20,
   },
-  
-  // Status Banner
-  statusBanner: {
+
+  // Alert
+  alert: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    gap: 10,
   },
-  statusSuccess: {
-    backgroundColor: colors.success + '12',
+  alertSuccess: {
+    backgroundColor: colors.success + '15',
+    borderWidth: 1,
     borderColor: colors.success + '30',
   },
-  statusError: {
-    backgroundColor: colors.error + '12',
+  alertError: {
+    backgroundColor: colors.error + '15',
+    borderWidth: 1,
     borderColor: colors.error + '30',
   },
-  statusText: {
-    fontSize: 14,
+  alertText: {
+    fontSize: 13,
     fontWeight: '500',
-    marginLeft: 8,
     flex: 1,
   },
-  
-  // Sections
-  sectionContainer: {
-    width: '100%',
-    marginBottom: 20,
+
+  // Input
+  inputGroup: {
+    marginBottom: 16,
   },
-  sectionTitle: {
+  label: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
-    letterSpacing: 1,
     marginBottom: 8,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  
-  // Input Section
-  inputContainer: {
-    width: '100%',
-  },
-  inputWrapper: {
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.outline,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    minHeight: 56,
+    paddingHorizontal: 12,
+    height: 48,
+    gap: 10,
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  textInput: {
+  input: {
     flex: 1,
-    backgroundColor: 'transparent',
-    height: 56,
+    fontSize: 14,
+    color: colors.text,
+    height: 48,
   },
-  textInputContent: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 0,
-  },
-  eyeButton: {
-    padding: 8,
-    marginLeft: 8,
-  },
-  
-  // Login Button
-  loginButton: {
+
+  // Button
+  button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     marginTop: 8,
+    gap: 8,
     ...shadows.md,
   },
-  loginButtonDisabled: {
+  buttonDisabled: {
     backgroundColor: colors.textDisabled,
-    opacity: 0.6,
+    opacity: 0.5,
   },
-  loginButtonText: {
-    fontSize: 16,
+  buttonText: {
+    fontSize: 15,
     fontWeight: '600',
     color: '#FFF',
   },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  
-  // Demo Container
-  demoContainer: {
-    backgroundColor: colors.info + '08',
+
+  // Demo Box
+  demo: {
+    backgroundColor: colors.info + '10',
     borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
+    padding: 12,
+    marginTop: 16,
     borderWidth: 1,
-    borderColor: colors.info + '18',
+    borderColor: colors.info + '20',
   },
-  demoHeader: {
+  demoPill: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    gap: 6,
   },
-  demoTitle: {
+  demoLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.info,
-    marginLeft: 8,
   },
-  demoCredentials: {
-    fontSize: 13,
+  demoCreds: {
+    fontSize: 12,
     color: colors.textSecondary,
-    fontFamily: Platform.OS === 'web' ? 'monospace' : 'System',
-    lineHeight: 18,
+    fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier',
+    lineHeight: 16,
   },
-  
+
   // Back Button
-  backButton: {
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    gap: 6,
   },
   backText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '500',
-    marginLeft: 8,
   },
-  
+
   // Footer
-  footer: {
-    width: '100%',
-    alignItems: 'center',
-    paddingTop: 20,
-  },
   footerText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 15,
   },
 });
 
