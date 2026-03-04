@@ -436,7 +436,7 @@ export function HealthScreeningFormScreen() {
           return {
             id: screening.id?.toString() || '',
             workerId: screening.worker?.toString() || '',
-            workerName: screening.worker_name || 'Unknown',
+            workerName: screening.worker_name || screening.worker_full_name || '(No worker assigned)',
             screeningType: screening.screening_type || '',
             screeningTypeDisplay: typeLabels[screening.screening_type] || screening.screening_type,
             completedDate: screening.created_at || new Date().toISOString(),

@@ -49,14 +49,27 @@ interface Incident {
 // ─── Helper Functions ───────────────────────────────────────
 function mapBackendToIncident(backendIncident: any): Incident {
   const severityMap: Record<number, string> = { 1: 'low', 2: 'medium', 3: 'high', 4: 'critical', 5: 'critical' };
+  
+  // Get the first injured worker from the detailed list returned by backend
   const injuredWorker = backendIncident.injured_workers_details?.[0];
+  
+  // Build worker name from available fields
+  let workerName = 
+    injuredWorker?.full_name ||
+    injuredWorker?.name ||
+    (injuredWorker?.first_name && injuredWorker?.last_name 
+      ? `${injuredWorker.first_name} ${injuredWorker.last_name}`
+      : injuredWorker?.first_name || 
+        injuredWorker?.last_name ||
+        '(No worker assigned)');
+  
   return {
     id: String(backendIncident.id),
     backendId: backendIncident.id,
     number: backendIncident.incident_number,
     date: backendIncident.incident_date,
     time: backendIncident.incident_time,
-    worker: injuredWorker?.full_name || 'Unknown',
+    worker: workerName,
     workerId: injuredWorker?.id?.toString() || '',
     type: (backendIncident.category as any) || 'other',
     severity: severityMap[backendIncident.severity] || 'medium',
@@ -1440,15 +1453,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   statsGridDesktop: { flexWrap: 'nowrap' },
   statCard: {
     flex: 1,
-    minWidth: '44%',
+    minWidth: '47%',
+    maxWidth: '47%',
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    padding: spacing.sm,
     alignItems: 'center',
   },
   statCardIcon: {

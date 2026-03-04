@@ -674,6 +674,7 @@ class WorkplaceIncidentListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     reported_by_name = serializers.CharField(source='reported_by.get_full_name', read_only=True)
     injured_count = serializers.IntegerField(source='injured_workers.count', read_only=True)
+    injured_workers_details = WorkerListSerializer(source='injured_workers', many=True, read_only=True)
     
     class Meta:
         model = WorkplaceIncident
@@ -681,7 +682,7 @@ class WorkplaceIncidentListSerializer(serializers.ModelSerializer):
             'id', 'incident_number', 'enterprise', 'enterprise_name', 'work_site',
             'work_site_name', 'category', 'category_display', 'severity',
             'severity_display', 'incident_date', 'incident_time', 'description',
-            'injured_count', 'work_days_lost', 'status', 'status_display',
+            'injured_count', 'injured_workers_details', 'work_days_lost', 'status', 'status_display',
             'reported_by', 'reported_by_name', 'created_at'
         ]
 
