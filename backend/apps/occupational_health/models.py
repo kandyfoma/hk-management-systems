@@ -1626,7 +1626,7 @@ class HazardIdentification(models.Model):
     hazard_description = models.TextField(_("Description Danger"))
     hazard_type = models.CharField(_("Type Danger"), max_length=20, choices=HAZARD_TYPES)
     location = models.CharField(_("Lieu"), max_length=200)
-    activities_affected = models.TextField(_("Activités Affectées"))
+    activities_affected = models.TextField(_("Activités Affectées"), blank=True)
     workers_exposed = models.ManyToManyField(Worker, related_name='hazard_exposures', blank=True)
     
     # Risk assessment (Probability × Severity)
@@ -1634,7 +1634,7 @@ class HazardIdentification(models.Model):
     severity = models.PositiveIntegerField(_("Gravité"), choices=SEVERITY_LEVELS)  
     
     # Existing controls
-    existing_controls = models.TextField(_("Contrôles Existants"))
+    existing_controls = models.TextField(_("Contrôles Existants"), blank=True)
     control_effectiveness = models.CharField(_("Efficacité Contrôles"), max_length=20, choices=[
         ('very_effective', _('Très Efficace')),
         ('effective', _('Efficace')),
@@ -1724,15 +1724,15 @@ class HazardIdentification(models.Model):
         # 16-25: Critical (red)
         if score >= 16:
             self.risk_level = 'critical'
-            if not self.priority or self.priority == 'low':
+            if not self.priority or self.priority in ('low', 'medium', 'high'):
                 self.priority = 'urgent'
         elif score >= 10:
             self.risk_level = 'high'
-            if self.priority == 'low':
+            if not self.priority or self.priority in ('low', 'medium'):
                 self.priority = 'high'
         elif score >= 5:
             self.risk_level = 'medium'
-            if self.priority == 'low':
+            if not self.priority or self.priority == 'low':
                 self.priority = 'medium'
         else:
             self.risk_level = 'low'

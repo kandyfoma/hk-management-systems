@@ -76,6 +76,10 @@ const mapBackendToHazard = (hazard: any): HazardIdentification => {
     controlEffectiveness: hazard.control_effectiveness || hazard.controlEffectiveness || 'effective',
     residualLikelihood: Number(hazard.residual_probability || hazard.residualLikelihood || 2),
     residualConsequence: Number(hazard.residual_severity || hazard.residualConsequence || 2),
+    exposedWorkerIds: Array.isArray(hazard.workers_exposed) ? hazard.workers_exposed : [],
+    exposedWorkerNames: Array.isArray(hazard.workers_exposed_details)
+      ? hazard.workers_exposed_details.map((w: any) => w.full_name || `${w.first_name} ${w.last_name}`)
+      : [],
   };
 };
 
@@ -290,6 +294,20 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { vis
                       <Text style={styles.hazardMeta}>{h.affectedWorkers} travailleurs</Text>
                     </View>
 
+                    {/* Exposed workers */}
+                    {(h as any).exposedWorkerNames?.length > 0 && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={styles.controlTitle}>Travailleurs exposés:</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                          {(h as any).exposedWorkerNames.map((name: string, j: number) => (
+                            <View key={j} style={{ backgroundColor: '#EF444415', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+                              <Text style={{ color: '#EF4444', fontSize: 11, fontWeight: '500' }}>{name}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
                     <View style={{ marginTop: 8 }}>
                       <Text style={styles.controlTitle}>Contrôles existants:</Text>
                       {h.existingControls.map((c, j) => (
@@ -379,6 +397,17 @@ interface User {
   primary_role?: string;
 }
 
+interface MineWorker {
+  id: string | number;
+  employee_id: string;
+  first_name: string;
+  last_name: string;
+  full_name?: string;
+  job_title?: string;
+  job_category_display?: string;
+  work_site_name?: string;
+}
+
 function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; onClose: () => void; onSave: (a: RiskAssessment) => void }) {
   const { showToast } = useSimpleToast();
   const [step, setStep] = useState<'assessment' | 'hazards'>('assessment');
@@ -394,6 +423,12 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
   const [workerSearchText, setWorkerSearchText] = useState('');
   const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
   const [filteredWorkers, setFilteredWorkers] = useState<User[]>([]);
+  // Mine workers (workers_exposed)
+  const [mineWorkers, setMineWorkers] = useState<MineWorker[]>([]);
+  const [filteredMineWorkers, setFilteredMineWorkers] = useState<MineWorker[]>([]);
+  const [selectedExposedWorkers, setSelectedExposedWorkers] = useState<MineWorker[]>([]);
+  const [mineWorkerSearchText, setMineWorkerSearchText] = useState('');
+  const [showExposedWorkersDropdown, setShowExposedWorkersDropdown] = useState(false);
   const [assessorSearchText, setAssessorSearchText] = useState('');
   const [filteredAssessors, setFilteredAssessors] = useState<User[]>([]);
   const [hazards, setHazards] = useState<HazardIdentification[]>([]);
@@ -462,6 +497,21 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
       setAvailableUsers(otherUsers);
       setWorkers(users); // Use users for responsible person selection
       setFilteredWorkers(users);
+
+      // Fetch mine workers for workers_exposed selection
+      try {
+        const workersResponse = await axios.get(
+          `${baseURL}/api/v1/occupational-health/workers/`,
+          { headers: { Authorization: `Token ${token}` }, timeout: 5000 }
+        );
+        const mineWorkersList: MineWorker[] = Array.isArray(workersResponse.data)
+          ? workersResponse.data
+          : workersResponse.data.results || [];
+        setMineWorkers(mineWorkersList);
+        setFilteredMineWorkers(mineWorkersList);
+      } catch {
+        // Workers endpoint optional — don't break the modal if it fails
+      }
     } catch (error) {
       console.error('Error fetching user data:', error);
     } finally {
@@ -574,7 +624,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
       return;
     }
 
-    const newHazard: HazardIdentification & Record<string, any> = {
+    const newHazardBase: HazardIdentification & Record<string, any> = {
       hazardType: hazType as ExposureRisk,
       description: hazDescription.trim(),
       affectedWorkers: Number(affectedWorkers) || 0,
@@ -598,6 +648,11 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
       assessmentStatus,
     };
 
+    const newHazard = {
+      ...newHazardBase,
+      exposedWorkerIds: selectedExposedWorkers.map(w => w.id),
+      exposedWorkerNames: selectedExposedWorkers.map(w => w.full_name || `${w.first_name} ${w.last_name}`),
+    };
     setHazards([...hazards, newHazard]);
     
     // Reset hazard form
@@ -615,6 +670,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
     setControlHierarchy('engineering');
     setResponsiblePerson('');
     setResponsiblePersonId(null);
+    setSelectedExposedWorkers([]);
+    setMineWorkerSearchText('');
+    setShowExposedWorkersDropdown(false);
     setTargetDate(new Date().toISOString().split('T')[0]);
     setReviewDate(new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
     setNextReviewDate(new Date(Date.now() + DEFAULT_REVIEW_OFFSET_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -680,6 +738,9 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
     setShowUserDropdown(false);
     setShowWorkerDropdown(false);
     setWorkerSearchText('');
+    setSelectedExposedWorkers([]);
+    setMineWorkerSearchText('');
+    setShowExposedWorkersDropdown(false);
     onClose();
   };
 
@@ -797,7 +858,8 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                                       {user.first_name} {user.last_name}
                                       {isCurrent && <Text style={{ color: ACCENT, fontWeight: '600' }}> (Moi)</Text>}
                                     </Text>
-                                    {user.email && <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{user.email}</Text>}
+                                    {user.primary_role && <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '600', marginTop: 1 }}>{user.primary_role}</Text>}
+                                    {user.email && <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 1 }}>{user.email}</Text>}
                                   </View>
                                   {isCurrent && <Ionicons name="checkmark-circle" size={20} color={ACCENT} />}
                                 </View>
@@ -1076,6 +1138,111 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                 </View>
 
                 <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Travailleurs Exposés</Text>
+                  <TouchableOpacity
+                    style={[styles.formInput, { paddingRight: 12, justifyContent: 'center' }]}
+                    onPress={() => {
+                      setShowExposedWorkersDropdown(!showExposedWorkersDropdown);
+                      if (!showExposedWorkersDropdown) setFilteredMineWorkers(mineWorkers);
+                      setMineWorkerSearchText('');
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: selectedExposedWorkers.length > 0 ? colors.text : colors.textSecondary, flex: 1 }} numberOfLines={1}>
+                        {selectedExposedWorkers.length === 0
+                          ? 'Sélectionner les travailleurs exposés'
+                          : `${selectedExposedWorkers.length} travailleur(s) sélectionné(s)`}
+                      </Text>
+                      <Ionicons name={showExposedWorkersDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Selected workers chips */}
+                  {selectedExposedWorkers.length > 0 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {selectedExposedWorkers.map(w => (
+                        <View key={w.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ACCENT + '15', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: ACCENT + '40' }}>
+                          <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '600', marginRight: 6 }}>
+                            {w.full_name || `${w.first_name} ${w.last_name}`}
+                          </Text>
+                          <TouchableOpacity onPress={() => setSelectedExposedWorkers(prev => prev.filter(x => x.id !== w.id))}>
+                            <Ionicons name="close-circle" size={16} color={ACCENT} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {showExposedWorkersDropdown && (
+                    <View style={{ backgroundColor: colors.surface, borderRadius: borderRadius.md, marginTop: 8, borderWidth: 1, borderColor: colors.outline, overflow: 'hidden' }}>
+                      <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.outline, backgroundColor: colors.surfaceVariant }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.md, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.outline }}>
+                          <Ionicons name="search" size={16} color={colors.textSecondary} />
+                          <TextInput
+                            style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, color: colors.text, fontSize: 13 }}
+                            placeholder="Rechercher par nom, ID ou poste..."
+                            placeholderTextColor={colors.textSecondary}
+                            value={mineWorkerSearchText}
+                            onChangeText={(text) => {
+                              setMineWorkerSearchText(text);
+                              if (!text.trim()) { setFilteredMineWorkers(mineWorkers); return; }
+                              const norm = normalizeText(text);
+                              setFilteredMineWorkers(mineWorkers.filter(w =>
+                                normalizeText(w.full_name || `${w.first_name} ${w.last_name}`).includes(norm) ||
+                                normalizeText(w.employee_id || '').includes(norm) ||
+                                normalizeText(w.job_title || '').includes(norm)
+                              ));
+                            }}
+                          />
+                        </View>
+                      </View>
+                      <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
+                        {mineWorkers.length === 0 ? (
+                          <View style={{ padding: 16, alignItems: 'center' }}>
+                            <Ionicons name="people-outline" size={24} color={colors.textSecondary} />
+                            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 6, textAlign: 'center' }}>Aucun travailleur trouvé.{`\n`}Ajoutez des travailleurs dans le module Travailleurs.</Text>
+                          </View>
+                        ) : filteredMineWorkers.length === 0 ? (
+                          <View style={{ padding: 12, alignItems: 'center' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Aucun résultat</Text>
+                          </View>
+                        ) : filteredMineWorkers.map(w => {
+                          const isSelected = selectedExposedWorkers.some(s => s.id === w.id);
+                          return (
+                            <TouchableOpacity
+                              key={w.id}
+                              style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: colors.outline, backgroundColor: isSelected ? ACCENT + '10' : 'transparent', flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                              onPress={() => {
+                                setSelectedExposedWorkers(prev =>
+                                  isSelected ? prev.filter(s => s.id !== w.id) : [...prev, w]
+                                );
+                              }}
+                            >
+                              <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: isSelected ? ACCENT + '25' : colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' }}>
+                                <Text style={{ color: isSelected ? ACCENT : colors.textSecondary, fontWeight: '700', fontSize: 11 }}>
+                                  {w.first_name[0]}{w.last_name[0]}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>{w.full_name || `${w.first_name} ${w.last_name}`}</Text>
+                                <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{w.employee_id} {w.job_title ? `• ${w.job_title}` : ''}</Text>
+                                {w.work_site_name && <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{w.work_site_name}</Text>}
+                              </View>
+                              {isSelected && <Ionicons name="checkmark-circle" size={20} color={ACCENT} />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                      {selectedExposedWorkers.length > 0 && (
+                        <TouchableOpacity style={{ padding: 10, borderTopWidth: 1, borderTopColor: colors.outline, alignItems: 'center', backgroundColor: colors.surfaceVariant }} onPress={() => setShowExposedWorkersDropdown(false)}>
+                          <Text style={{ color: ACCENT, fontWeight: '600', fontSize: 13 }}>Confirmer ({selectedExposedWorkers.length} sélectionné(s))</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formSection}>
                   <Text style={styles.formLabel}>Date Cible d'Action</Text>
                   <DateInput
                     value={targetDate}
@@ -1130,7 +1297,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                       <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.outline }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 11, fontWeight: '600', color: colors.text }}>{h.description.substring(0, 40)}...</Text>
-                          <Text style={{ fontSize: 10, color: colors.textSecondary }}>Score: {h.riskScore}</Text>
+                          <Text style={{ fontSize: 10, color: colors.textSecondary }}>Score: {h.riskScore} • {(h as any).exposedWorkerIds?.length || h.affectedWorkers || 0} exposé(s)</Text>
                         </View>
                         <TouchableOpacity onPress={() => handleRemoveHazard(i)}>
                           <Ionicons name="trash-outline" size={16} color="#EF4444" />
@@ -1317,6 +1484,7 @@ export function RiskAssessmentScreen() {
               hazard_type: hazard.hazardType || 'physical',
               location: assessment.area,
               activities_affected: hazard.activitiesAffected || '',
+              workers_exposed: Array.isArray(hazard.exposedWorkerIds) ? hazard.exposedWorkerIds : [],
               probability: Math.max(1, Math.min(5, Number(hazard.likelihood) || 1)),
               severity: Math.max(1, Math.min(5, Number(hazard.consequence) || 1)),
               existing_controls: (Array.isArray(hazard.existingControls) ? hazard.existingControls : []).join('\n'),

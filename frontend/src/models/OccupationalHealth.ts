@@ -832,6 +832,8 @@ export interface HazardIdentification {
   controlEffectiveness?: 'very_effective' | 'effective' | 'partially_effective' | 'ineffective';
   residualLikelihood?: number;
   residualConsequence?: number;
+  exposedWorkerIds?: (string | number)[];
+  exposedWorkerNames?: string[];
 }
 
 // ─── Utility Functions ───────────────────────────────────────
