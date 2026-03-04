@@ -1,8 +1,12 @@
-# Large video files
+# Large video files (but allow optimized videos)
 *.mp4
 *.mov
 *.avi
 *.mkv
+
+# Allow compressed/optimized videos used in production
+!frontend/website/public/videos/hero-bg-4k.mp4
+!frontend/assets/Images/9310125-uhd_3840_2160_30fps.mp4
 
 # Node modules
 node_modules/
