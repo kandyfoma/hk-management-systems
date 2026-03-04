@@ -656,6 +656,169 @@ function IncidentDetailModal({
               </View>
             )}
 
+            {/* Immediate Actions */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="flash-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Immediate Actions</Text>
+              </View>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.editableField, styles.multilineInput]}
+                  value={formData.immediateActions || ''}
+                  onChangeText={(text) => setFormData({ ...formData, immediateActions: text })}
+                  placeholder="What immediate actions were taken?"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                />
+              ) : (
+                <Text style={styles.modalBodyText}>{formData.immediateActions || '—'}</Text>
+              )}
+            </View>
+
+            {/* Equipment */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="construct-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Equipment Involved</Text>
+              </View>
+              {isEditing ? (
+                <TextInput
+                  style={styles.editableField}
+                  value={formData.equipmentInvolved || ''}
+                  onChangeText={(text) => setFormData({ ...formData, equipmentInvolved: text })}
+                  placeholder="Any equipment or machinery involved?"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={styles.modalBodyText}>{formData.equipmentInvolved || '—'}</Text>
+              )}
+            </View>
+
+            {/* First Aid & Medical */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="medkit-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Medical Response</Text>
+              </View>
+              <View style={styles.infoTable}>
+                {/* First Aid Toggle */}
+                <View style={styles.infoTableRow}>
+                  <Text style={styles.infoTableLabel}>First Aid Given</Text>
+                  {isEditing ? (
+                    <TouchableOpacity
+                      style={[styles.toggleBtn, { backgroundColor: formData.firstAidGiven ? '#22C55E20' : colors.surfaceVariant, borderColor: formData.firstAidGiven ? '#22C55E' : colors.outline }]}
+                      onPress={() => setFormData({ ...formData, firstAidGiven: !formData.firstAidGiven })}
+                    >
+                      <Ionicons name={formData.firstAidGiven ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.firstAidGiven ? '#22C55E' : colors.textSecondary} />
+                      <Text style={[styles.toggleBtnText, { color: formData.firstAidGiven ? '#22C55E' : colors.textSecondary }]}>{formData.firstAidGiven ? 'Yes' : 'No'}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.infoTableValue}>{formData.firstAidGiven ? 'Yes' : 'No'}</Text>
+                  )}
+                </View>
+                {formData.firstAidGiven && (
+                  <View style={[styles.infoTableRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
+                    <Text style={styles.infoTableLabel}>First Aid By</Text>
+                    {isEditing ? (
+                      <TextInput
+                        style={[styles.editableField, { marginTop: 4, width: '100%' }]}
+                        value={formData.firstAidBy || ''}
+                        onChangeText={(text) => setFormData({ ...formData, firstAidBy: text })}
+                        placeholder="Name of first aid provider"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                    ) : (
+                      <Text style={styles.infoTableValue}>{formData.firstAidBy || '—'}</Text>
+                    )}
+                  </View>
+                )}
+                {/* Medical Treatment Toggle */}
+                <View style={styles.infoTableRow}>
+                  <Text style={styles.infoTableLabel}>Medical Treatment Required</Text>
+                  {isEditing ? (
+                    <TouchableOpacity
+                      style={[styles.toggleBtn, { backgroundColor: formData.medicalTreatmentRequired ? '#3B82F620' : colors.surfaceVariant, borderColor: formData.medicalTreatmentRequired ? '#3B82F6' : colors.outline }]}
+                      onPress={() => setFormData({ ...formData, medicalTreatmentRequired: !formData.medicalTreatmentRequired })}
+                    >
+                      <Ionicons name={formData.medicalTreatmentRequired ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary} />
+                      <Text style={[styles.toggleBtnText, { color: formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary }]}>{formData.medicalTreatmentRequired ? 'Yes' : 'No'}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.infoTableValue}>{formData.medicalTreatmentRequired ? 'Yes' : 'No'}</Text>
+                  )}
+                </View>
+                {formData.medicalTreatmentRequired && (
+                  <View style={[styles.infoTableRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4, borderBottomWidth: 0 }]}>
+                    <Text style={styles.infoTableLabel}>Hospital / Clinic</Text>
+                    {isEditing ? (
+                      <TextInput
+                        style={[styles.editableField, { marginTop: 4, width: '100%' }]}
+                        value={formData.hospitalName || ''}
+                        onChangeText={(text) => setFormData({ ...formData, hospitalName: text })}
+                        placeholder="Hospital or clinic name"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                    ) : (
+                      <Text style={styles.infoTableValue}>{formData.hospitalName || '—'}</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Corrective Actions */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="checkmark-done-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Corrective Actions Planned</Text>
+              </View>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.editableField, styles.multilineInput]}
+                  value={formData.correctiveActionsPlanned || ''}
+                  onChangeText={(text) => setFormData({ ...formData, correctiveActionsPlanned: text })}
+                  placeholder="Describe planned corrective actions..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                />
+              ) : (
+                <Text style={styles.modalBodyText}>{formData.correctiveActionsPlanned || '—'}</Text>
+              )}
+            </View>
+
+            {/* Regulatory Compliance */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Regulatory Reporting</Text>
+              </View>
+              <View style={styles.infoTable}>
+                {[
+                  { key: 'reportableToAuthorities', label: 'Reportable to Authorities' },
+                  { key: 'reportedToCnss', label: 'Reported to CNSS' },
+                  { key: 'reportedToLabourInspection', label: 'Reported to Labour Inspection' },
+                ].map(({ key, label }) => (
+                  <View key={key} style={styles.infoTableRow}>
+                    <Text style={styles.infoTableLabel}>{label}</Text>
+                    {isEditing ? (
+                      <TouchableOpacity
+                        style={[styles.toggleBtn, { backgroundColor: (formData as any)[key] ? '#8B5CF620' : colors.surfaceVariant, borderColor: (formData as any)[key] ? '#8B5CF6' : colors.outline }]}
+                        onPress={() => setFormData({ ...formData, [key]: !(formData as any)[key] })}
+                      >
+                        <Ionicons name={(formData as any)[key] ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={(formData as any)[key] ? '#8B5CF6' : colors.textSecondary} />
+                        <Text style={[styles.toggleBtnText, { color: (formData as any)[key] ? '#8B5CF6' : colors.textSecondary }]}>{(formData as any)[key] ? 'Yes' : 'No'}</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.infoTableValue}>{(formData as any)[key] ? 'Yes' : 'No'}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+
             {/* Timestamps */}
             <View style={[styles.infoTable, { marginBottom: spacing.md }]}>
               <View style={styles.infoTableRow}>
@@ -723,6 +886,21 @@ function IncidentDetailModal({
                   <Text style={styles.attachmentButtonText}>Add Photo/Video</Text>
                 </TouchableOpacity>
               )}
+              {!isEditing && (
+                <TouchableOpacity
+                  style={[styles.attachmentButton, { marginTop: spacing.md }]}
+                  onPress={handleAddAttachment}
+                  disabled={uploadingAttachment}
+                >
+                  {uploadingAttachment
+                    ? <ActivityIndicator size="small" color={colors.primary} />
+                    : <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                  }
+                  <Text style={styles.attachmentButtonText}>
+                    {uploadingAttachment ? 'Uploading...' : 'Add Photo/Video'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
 
@@ -775,9 +953,56 @@ function CreateIncidentModal({
     severity: 1,
     ltiDays: 0,
     immediateActions: '',
-    injured_worker_id: null,
+    injured_worker_id: null as number | null,
     injured_worker_name: '',
+    equipmentInvolved: '',
+    firstAidGiven: false,
+    firstAidBy: '',
+    medicalTreatmentRequired: false,
+    hospitalName: '',
+    correctiveActionsPlanned: '',
+    reportableToAuthorities: false,
+    reportedToCnss: false,
+    reportedToLabourInspection: false,
   });
+
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{
+    uri: string;
+    attachmentType: 'image' | 'video';
+    mimeType?: string;
+    name: string;
+  }>>([]);
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (visible) {
+      setFormData({
+        type: 'lost_time_injury',
+        date: new Date().toISOString().split('T')[0],
+        time: '09:00:00',
+        description: '',
+        location: '',
+        rootCause: '',
+        severity: 1,
+        ltiDays: 0,
+        immediateActions: '',
+        injured_worker_id: null,
+        injured_worker_name: '',
+        equipmentInvolved: '',
+        firstAidGiven: false,
+        firstAidBy: '',
+        medicalTreatmentRequired: false,
+        hospitalName: '',
+        correctiveActionsPlanned: '',
+        reportableToAuthorities: false,
+        reportedToCnss: false,
+        reportedToLabourInspection: false,
+      });
+      setPendingAttachments([]);
+      setWorkerSearchText('');
+      setShowWorkerDropdown(false);
+    }
+  }, [visible]);
 
   const [workers, setWorkers] = useState<any[]>([]);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
@@ -839,12 +1064,53 @@ function CreateIncidentModal({
       return fullName.includes(query) || String(w.id).includes(query);
     });
   }, [workers, workerSearchText]);
+  const handlePickAttachment = () => {
+    Alert.alert('Add Evidence', 'Choose how to add photo or video:', [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') { Alert.alert('Permission Denied', 'Camera access required'); return; }
+            const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+            if (!result.canceled) {
+              const asset = result.assets[0];
+              const name = asset.uri.split('/').pop() || `photo-${Date.now()}.jpg`;
+              setPendingAttachments(prev => [...prev, { uri: asset.uri, attachmentType: 'image', mimeType: asset.mimeType || 'image/jpeg', name }]);
+            }
+          } catch { Alert.alert('Error', 'Failed to access camera'); }
+        },
+      },
+      {
+        text: 'Choose from Gallery',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') { Alert.alert('Permission Denied', 'Gallery access required'); return; }
+            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8 });
+            if (!result.canceled) {
+              const asset = result.assets[0];
+              const isVideo = asset.type === 'video' || asset.mimeType?.startsWith('video/');
+              const name = asset.uri.split('/').pop() || `file-${Date.now()}`;
+              setPendingAttachments(prev => [...prev, { uri: asset.uri, attachmentType: isVideo ? 'video' : 'image', mimeType: asset.mimeType || 'image/jpeg', name }]);
+            }
+          } catch { Alert.alert('Error', 'Failed to access gallery'); }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const handleRemovePendingAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     if (!formData.description || !formData.location || !formData.type || !formData.date || !formData.immediateActions) {
       showToast('Please fill in all required fields', 'error');
       return;
     }
-    await onCreate(formData);
+    await onCreate({ ...formData, pendingAttachments });
   };
 
   const isFormValid = formData.description && formData.location && formData.type && formData.date && formData.immediateActions;
@@ -1090,6 +1356,135 @@ function CreateIncidentModal({
                 </Text>
               </View>
 
+              {/* Equipment Involved */}
+              <View style={styles.modalSection}>
+                <Text style={styles.infoTableLabel}>Equipment Involved (Optional)</Text>
+                <TextInput
+                  style={styles.editableField}
+                  value={formData.equipmentInvolved}
+                  onChangeText={(text) => setFormData({ ...formData, equipmentInvolved: text })}
+                  placeholder="Any equipment or machinery involved?"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              {/* First Aid */}
+              <View style={styles.modalSection}>
+                <Text style={styles.infoTableLabel}>First Aid</Text>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { backgroundColor: formData.firstAidGiven ? '#22C55E20' : colors.surfaceVariant, borderColor: formData.firstAidGiven ? '#22C55E' : colors.outline, marginTop: spacing.sm }]}
+                  onPress={() => setFormData({ ...formData, firstAidGiven: !formData.firstAidGiven })}
+                >
+                  <Ionicons name={formData.firstAidGiven ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.firstAidGiven ? '#22C55E' : colors.textSecondary} />
+                  <Text style={[styles.toggleBtnText, { color: formData.firstAidGiven ? '#22C55E' : colors.textSecondary }]}>First aid was given</Text>
+                </TouchableOpacity>
+                {formData.firstAidGiven && (
+                  <TextInput
+                    style={[styles.editableField, { marginTop: spacing.sm }]}
+                    value={formData.firstAidBy}
+                    onChangeText={(text) => setFormData({ ...formData, firstAidBy: text })}
+                    placeholder="Name of first aid provider"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                )}
+              </View>
+
+              {/* Medical Treatment */}
+              <View style={styles.modalSection}>
+                <Text style={styles.infoTableLabel}>Medical Treatment</Text>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { backgroundColor: formData.medicalTreatmentRequired ? '#3B82F620' : colors.surfaceVariant, borderColor: formData.medicalTreatmentRequired ? '#3B82F6' : colors.outline, marginTop: spacing.sm }]}
+                  onPress={() => setFormData({ ...formData, medicalTreatmentRequired: !formData.medicalTreatmentRequired })}
+                >
+                  <Ionicons name={formData.medicalTreatmentRequired ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary} />
+                  <Text style={[styles.toggleBtnText, { color: formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary }]}>Medical treatment required</Text>
+                </TouchableOpacity>
+                {formData.medicalTreatmentRequired && (
+                  <TextInput
+                    style={[styles.editableField, { marginTop: spacing.sm }]}
+                    value={formData.hospitalName}
+                    onChangeText={(text) => setFormData({ ...formData, hospitalName: text })}
+                    placeholder="Hospital or clinic name"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                )}
+              </View>
+
+              {/* Corrective Actions */}
+              <View style={styles.modalSection}>
+                <Text style={[styles.infoTableLabel, { opacity: 0.7 }]}>Corrective Actions Planned (Optional)</Text>
+                <TextInput
+                  style={[styles.editableField, styles.multilineInput]}
+                  value={formData.correctiveActionsPlanned}
+                  onChangeText={(text) => setFormData({ ...formData, correctiveActionsPlanned: text })}
+                  placeholder="Describe planned corrective actions..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Regulatory Compliance */}
+              <View style={styles.modalSection}>
+                <Text style={styles.infoTableLabel}>Regulatory Reporting</Text>
+                <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+                  {([
+                    { key: 'reportableToAuthorities', label: 'Reportable to Authorities' },
+                    { key: 'reportedToCnss', label: 'Report to CNSS' },
+                    { key: 'reportedToLabourInspection', label: 'Report to Labour Inspection' },
+                  ] as const).map(({ key, label }) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.toggleBtn, { backgroundColor: formData[key] ? '#8B5CF620' : colors.surfaceVariant, borderColor: formData[key] ? '#8B5CF6' : colors.outline }]}
+                      onPress={() => setFormData({ ...formData, [key]: !formData[key] })}
+                    >
+                      <Ionicons name={formData[key] ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData[key] ? '#8B5CF6' : colors.textSecondary} />
+                      <Text style={[styles.toggleBtnText, { color: formData[key] ? '#8B5CF6' : colors.textSecondary }]}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Attachments / Evidence */}
+              <View style={styles.modalSection}>
+                <View style={styles.modalSectionHeader}>
+                  <Ionicons name="image-outline" size={16} color={colors.primary} />
+                  <Text style={styles.modalSectionTitle}>Evidence (Photos/Videos)</Text>
+                </View>
+                {pendingAttachments.length > 0 && (
+                  <View style={{ marginBottom: spacing.md }}>
+                    {pendingAttachments.map((att, idx) => (
+                      <View key={idx} style={[styles.attachmentItem, styles.cardShadow]}>
+                        <View style={styles.attachmentHeader}>
+                          <Ionicons
+                            name={att.attachmentType === 'image' ? 'image' : 'videocam'}
+                            size={18}
+                            color={att.attachmentType === 'image' ? '#3B82F6' : '#EF4444'}
+                          />
+                          <Text style={styles.attachmentType}>{att.name}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.attachmentDeleteBtn}
+                          onPress={() => handleRemovePendingAttachment(idx)}
+                        >
+                          <Ionicons name="close-circle" size={18} color="#EF4444" />
+                          <Text style={styles.attachmentDeleteBtnText}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <TouchableOpacity style={styles.attachmentButton} onPress={handlePickAttachment}>
+                  <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                  <Text style={styles.attachmentButtonText}>
+                    {pendingAttachments.length > 0 ? `Add More (${pendingAttachments.length} selected)` : 'Add Photo/Video'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={[styles.workerHelperText, { marginTop: spacing.xs }]}>
+                  Files will be uploaded after the incident is created
+                </Text>
+              </View>
+
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -1231,10 +1626,20 @@ export function IncidentDashboardScreen() {
         incident_time: updatedIncident.time,
         description: updatedIncident.description,
         location_description: updatedIncident.location,
-        immediate_cause: updatedIncident.rootCause || '',
-        immediate_actions_taken: updatedIncident.description,
+        immediate_cause: updatedIncident.immediateActions || updatedIncident.rootCause || '',
+        immediate_actions_taken: updatedIncident.immediateActions || '',
+        root_cause_analysis: updatedIncident.rootCause || '',
         status: updatedIncident.status,
         work_days_lost: updatedIncident.ltiDays || 0,
+        equipment_involved: updatedIncident.equipmentInvolved || '',
+        first_aid_given: updatedIncident.firstAidGiven || false,
+        first_aid_by: updatedIncident.firstAidBy || '',
+        medical_treatment_required: updatedIncident.medicalTreatmentRequired || false,
+        hospital_name: updatedIncident.hospitalName || '',
+        corrective_actions_planned: updatedIncident.correctiveActionsPlanned || '',
+        reportable_to_authorities: updatedIncident.reportableToAuthorities || false,
+        reported_to_cnss: updatedIncident.reportedToCnss || false,
+        reported_to_labour_inspection: updatedIncident.reportedToLabourInspection || false,
       };
       const result = await OccHealthApiService.getInstance().updateWorkplaceIncident(updatedIncident.backendId, payload);
       if (result.data) {
@@ -1273,10 +1678,20 @@ export function IncidentDashboardScreen() {
         location_description: formData.location,
         immediate_cause: formData.immediateActions,
         immediate_actions_taken: formData.immediateActions,
+        root_cause_analysis: formData.rootCause || '',
         status: 'reported',
         work_days_lost: formData.ltiDays || 0,
         severity: formData.severity || 1,
         injury_type: 'general',
+        equipment_involved: formData.equipmentInvolved || '',
+        first_aid_given: formData.firstAidGiven || false,
+        first_aid_by: formData.firstAidBy || '',
+        medical_treatment_required: formData.medicalTreatmentRequired || false,
+        hospital_name: formData.hospitalName || '',
+        corrective_actions_planned: formData.correctiveActionsPlanned || '',
+        reportable_to_authorities: formData.reportableToAuthorities || false,
+        reported_to_cnss: formData.reportedToCnss || false,
+        reported_to_labour_inspection: formData.reportedToLabourInspection || false,
       };
       
       if (formData.injured_worker_id) {
@@ -1288,6 +1703,23 @@ export function IncidentDashboardScreen() {
       
       const result = await OccHealthApiService.getInstance().createWorkplaceIncident(payload);
       if (result.data) {
+        const createdBackendId: number = result.data.id;
+        // Upload any pending attachments
+        if (formData.pendingAttachments?.length) {
+          for (const pending of formData.pendingAttachments) {
+            try {
+              const filename = pending.uri.split('/').pop() || `file-${Date.now()}.jpg`;
+              await OccHealthApiService.getInstance().uploadIncidentAttachment(
+                createdBackendId,
+                { uri: pending.uri, name: filename, type: pending.mimeType || 'image/jpeg' },
+                pending.attachmentType,
+                ''
+              );
+            } catch (uploadErr) {
+              console.warn('Failed to upload attachment:', uploadErr);
+            }
+          }
+        }
         const newIncident = mapBackendToIncident(result.data);
         setIncidents([newIncident, ...incidents]);
         setCreateModalVisible(false);
@@ -1921,6 +2353,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#EF4444',
+  },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  toggleBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   infoTable: {
     backgroundColor: colors.surfaceVariant,
