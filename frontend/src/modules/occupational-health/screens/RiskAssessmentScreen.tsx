@@ -402,7 +402,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
   
   // Hazard form state
   const [hazDescription, setHazDescription] = useState('');
-  const [hazType, setHazType] = useState('silica_dust');
+  const [hazType, setHazType] = useState('physical');
   const [likelihood, setLikelihood] = useState('3');
   const [consequence, setConsequence] = useState('3');
   const [affectedWorkers, setAffectedWorkers] = useState('0');
@@ -602,7 +602,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
     
     // Reset hazard form
     setHazDescription('');
-    setHazType('silica_dust');
+    setHazType('physical');
     setLikelihood('3');
     setConsequence('3');
     setAffectedWorkers('0');
@@ -857,13 +857,20 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                 <View style={styles.formSection}>
                   <Text style={styles.formLabel}>Type de Danger</Text>
                   <View style={styles.chipGrid}>
-                    {['silica_dust', 'noise', 'chemical_exposure', 'biological', 'ergonomic', 'psychosocial'].map(t => (
+                    {[
+                      { value: 'physical', label: 'Physique' },
+                      { value: 'chemical', label: 'Chimique' },
+                      { value: 'biological', label: 'Biologique' },
+                      { value: 'psychosocial', label: 'Psychosocial' },
+                      { value: 'ergonomic', label: 'Ergonomique' },
+                      { value: 'safety', label: 'Sécurité' },
+                    ].map(t => (
                       <TouchableOpacity 
-                        key={t} 
-                        style={[styles.optionChip, hazType === t && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]} 
-                        onPress={() => setHazType(t)}
+                        key={t.value} 
+                        style={[styles.optionChip, hazType === t.value && { backgroundColor: ACCENT + '20', borderColor: ACCENT }]} 
+                        onPress={() => setHazType(t.value)}
                       >
-                        <Text style={[styles.optionChipText, hazType === t && { color: ACCENT, fontWeight: '600' }]}>{t.replace(/_/g, ' ')}</Text>
+                        <Text style={[styles.optionChipText, hazType === t.value && { color: ACCENT, fontWeight: '600' }]}>{t.label}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
