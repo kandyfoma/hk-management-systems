@@ -44,6 +44,17 @@ interface Incident {
   modifiedDate?: string;
   backendId?: number;
   attachments?: IncidentAttachment[];
+  // Extended fields from backend model
+  equipmentInvolved?: string;
+  immediateActions?: string;
+  firstAidGiven?: boolean;
+  firstAidBy?: string;
+  medicalTreatmentRequired?: boolean;
+  hospitalName?: string;
+  correctiveActionsPlanned?: string;
+  reportableToAuthorities?: boolean;
+  reportedToCnss?: boolean;
+  reportedToLabourInspection?: boolean;
 }
 
 // ─── Helper Functions ───────────────────────────────────────
@@ -81,6 +92,16 @@ function mapBackendToIncident(backendIncident: any): Incident {
     ltiDays: backendIncident.work_days_lost || 0,
     rootCause: backendIncident.root_cause_analysis,
     modifiedDate: backendIncident.updated_at ? new Date(backendIncident.updated_at).toISOString().split('T')[0] : undefined,
+    equipmentInvolved: backendIncident.equipment_involved || '',
+    immediateActions: backendIncident.immediate_actions_taken || '',
+    firstAidGiven: backendIncident.first_aid_given || false,
+    firstAidBy: backendIncident.first_aid_by || '',
+    medicalTreatmentRequired: backendIncident.medical_treatment_required || false,
+    hospitalName: backendIncident.hospital_name || '',
+    correctiveActionsPlanned: backendIncident.corrective_actions_planned || '',
+    reportableToAuthorities: backendIncident.reportable_to_authorities || false,
+    reportedToCnss: backendIncident.reported_to_cnss || false,
+    reportedToLabourInspection: backendIncident.reported_to_labour_inspection || false,
   };
 }
 
