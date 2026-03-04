@@ -123,7 +123,7 @@ export function WorkerRegistrationScreen() {
           <Ionicons name="search" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search worker name or ID..."
+            placeholder="Rechercher par nom ou ID du travailleur..."
             value={searchText}
             onChangeText={setSearchText}
             placeholderTextColor={colors.textSecondary}

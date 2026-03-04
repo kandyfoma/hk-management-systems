@@ -1073,7 +1073,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                   <DateInput
                     value={targetDate}
                     onChangeText={(date) => setTargetDate(date)}
-                    placeholder="Select target date"
+                    placeholder="Sélectionnez la date cible"
                     format="iso"
                   />
                 </View>
@@ -1084,7 +1084,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                     <DateInput
                       value={reviewDate}
                       onChangeText={(date) => setReviewDate(date)}
-                      placeholder="Select review date"
+                      placeholder="Sélectionnez la date de révision"
                       format="iso"
                     />
                   </View>
@@ -1093,7 +1093,7 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                     <DateInput
                       value={nextReviewDate}
                       onChangeText={(date) => setNextReviewDate(date)}
-                      placeholder="Select next review"
+                      placeholder="Sélectionnez la prochaine révision"
                       format="iso"
                     />
                   </View>
