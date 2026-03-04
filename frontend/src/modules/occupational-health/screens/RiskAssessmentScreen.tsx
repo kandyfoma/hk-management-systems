@@ -43,43 +43,49 @@ function getStatusColor(s: string): string {
   const m: Record<string, string> = { draft: '#94A3B8', active: '#22C55E', under_review: '#F59E0B', archived: '#64748B', approved: '#3B82F6', implemented: '#10B981', reviewed: '#6366F1' };
   return m[s] || '#94A3B8';
 }
+function safeDate(val: string | undefined | null): string {
+  if (!val) return '—';
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-CD');
+}
 
 // ─── Status Mapping ──────────────────────────────────────────
 const VALID_BACKEND_STATUSES = ['draft', 'approved', 'implemented', 'reviewed'];
 
 const mapBackendToHazard = (hazard: any): HazardIdentification => {
+  // workers_exposed is an array of IDs (M2M), NOT a count — must use .length
+  const exposedIds: (string | number)[] = Array.isArray(hazard.workers_exposed) ? hazard.workers_exposed : [];
+  const exposedDetails: any[] = Array.isArray(hazard.workers_exposed_details) ? hazard.workers_exposed_details : [];
   return {
     id: hazard.id,
-    hazardType: hazard.hazard_type || hazard.hazardType || 'unknown',
+    hazardType: hazard.hazard_type || hazard.hazardType || 'physical',
     description: hazard.hazard_description || hazard.description || '',
-    affectedWorkers: Number(hazard.workers_exposed || hazard.affectedWorkers || 0),
-    likelihood: Number(hazard.probability || hazard.likelihood || 3) as any,
-    consequence: Number(hazard.severity || hazard.consequence || 3) as any,
-    riskScore: Number(hazard.risk_score || hazard.riskScore || 0),
-    existingControls: typeof hazard.existing_controls === 'string' 
-      ? hazard.existing_controls.split('\n').filter((c: string) => c.trim()) 
+    affectedWorkers: exposedIds.length || Number(hazard.affectedWorkers ?? 0),
+    likelihood: (Number(hazard.probability ?? hazard.likelihood) || 3) as any,
+    consequence: (Number(hazard.severity ?? hazard.consequence) || 3) as any,
+    riskScore: Number(hazard.risk_score ?? hazard.riskScore ?? 0),
+    existingControls: typeof hazard.existing_controls === 'string'
+      ? hazard.existing_controls.split('\n').filter((c: string) => c.trim())
       : (Array.isArray(hazard.existingControls) ? hazard.existingControls : []),
-    additionalControls: Array.isArray(hazard.ppe_recommendations) 
-      ? hazard.ppe_recommendations 
-      : (typeof hazard.additional_controls === 'string' 
+    additionalControls: Array.isArray(hazard.ppe_recommendations) && hazard.ppe_recommendations.length
+      ? hazard.ppe_recommendations
+      : (typeof hazard.additional_controls === 'string'
         ? hazard.additional_controls.split('\n').filter((c: string) => c.trim())
         : (Array.isArray(hazard.additionalControls) ? hazard.additionalControls : [])),
     controlHierarchy: hazard.control_hierarchy || hazard.controlHierarchy || 'engineering',
-    responsiblePerson: hazard.responsible_person_name || hazard.responsiblePerson || 'Inconnu',
+    responsiblePerson: hazard.responsible_person_name || hazard.responsiblePerson || 'Non assigné',
     responsiblePersonId: hazard.responsible_person || hazard.responsiblePersonId,
     targetDate: hazard.next_review_date || hazard.targetDate || new Date().toISOString().split('T')[0],
-    assessmentDate: hazard.assessment_date || hazard.assessmentDate,
-    reviewDate: hazard.review_date || hazard.reviewDate,
-    nextReviewDate: hazard.next_review_date || hazard.nextReviewDate,
+    assessmentDate: hazard.assessment_date || hazard.assessmentDate || '',
+    reviewDate: hazard.review_date || hazard.reviewDate || '',
+    nextReviewDate: hazard.next_review_date || hazard.nextReviewDate || '',
     assessmentStatus: hazard.status || hazard.assessmentStatus || 'draft',
     activitiesAffected: hazard.activities_affected || hazard.activitiesAffected || '',
     controlEffectiveness: hazard.control_effectiveness || hazard.controlEffectiveness || 'effective',
-    residualLikelihood: Number(hazard.residual_probability || hazard.residualLikelihood || 2),
-    residualConsequence: Number(hazard.residual_severity || hazard.residualConsequence || 2),
-    exposedWorkerIds: Array.isArray(hazard.workers_exposed) ? hazard.workers_exposed : [],
-    exposedWorkerNames: Array.isArray(hazard.workers_exposed_details)
-      ? hazard.workers_exposed_details.map((w: any) => w.full_name || `${w.first_name} ${w.last_name}`)
-      : [],
+    residualLikelihood: Number(hazard.residual_probability ?? hazard.residualLikelihood ?? 2),
+    residualConsequence: Number(hazard.residual_severity ?? hazard.residualConsequence ?? 2),
+    exposedWorkerIds: exposedIds,
+    exposedWorkerNames: exposedDetails.map((w: any) => w.full_name || `${w.first_name} ${w.last_name}`),
   };
 };
 
@@ -187,7 +193,7 @@ function AssessmentCard({ assessment, onPress }: { assessment: RiskAssessment; o
   const statusColor = getStatusColor(assessment.status);
 
   const highRisks = assessment.hazards.filter(h => h.riskScore >= 12).length;
-  const totalWorkers = assessment.hazards.reduce((s, h) => s + h.affectedWorkers, 0);
+  const totalWorkers = assessment.hazards.reduce((s, h) => s + (Number(h.affectedWorkers) || 0), 0);
 
   return (
     <TouchableOpacity style={styles.assessmentCard} onPress={onPress} activeOpacity={0.7}>
@@ -220,7 +226,7 @@ function AssessmentCard({ assessment, onPress }: { assessment: RiskAssessment; o
           </View>
           <View style={styles.assessmentInfoItem}>
             <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.assessmentInfoText}>{new Date(assessment.assessmentDate).toLocaleDateString('fr-CD')}</Text>
+            <Text style={styles.assessmentInfoText}>{safeDate(assessment.assessmentDate)}</Text>
           </View>
         </View>
         <View style={styles.assessmentInfoRow}>
@@ -259,9 +265,9 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { vis
               <DetailRow label="Site" value={assessment.site} />
               <DetailRow label="Zone" value={assessment.area} />
               <DetailRow label="Secteur" value={sectorProfile.label} />
-              <DetailRow label="Date évaluation" value={new Date(assessment.assessmentDate).toLocaleDateString('fr-CD')} />
+              <DetailRow label="Date évaluation" value={safeDate(assessment.assessmentDate)} />
               <DetailRow label="Évaluateur" value={assessment.assessorName} />
-              <DetailRow label="Prochaine révision" value={new Date(assessment.reviewDate).toLocaleDateString('fr-CD')} />
+              <DetailRow label="Prochaine révision" value={safeDate(assessment.reviewDate)} />
               <DetailRow label="Niveau global" value={OccHealthUtils.getSectorRiskLabel(assessment.overallRiskLevel)} />
             </View>
 
@@ -330,7 +336,7 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete }: { vis
                       <View style={[styles.controlHierarchyBadge, { backgroundColor: controlColor + '14' }]}>
                         <Text style={[styles.controlHierarchyText, { color: controlColor }]}>{getControlLabel(h.controlHierarchy)}</Text>
                       </View>
-                      <Text style={styles.hazardMeta}>→ {h.responsiblePerson} • {new Date(h.targetDate).toLocaleDateString('fr-CD')}</Text>
+                      <Text style={styles.hazardMeta}>→ {h.responsiblePerson} • {safeDate(h.targetDate)}</Text>
                     </View>
                   </View>
                 );
@@ -1639,7 +1645,7 @@ export function RiskAssessmentScreen() {
       totalHazards: allHazards.length,
       highRisks: allHazards.filter(h => h.riskScore >= 12).length,
       criticalRisks: allHazards.filter(h => h.riskScore >= 20).length,
-      workersExposed: allHazards.reduce((s, h) => s + h.affectedWorkers, 0),
+      workersExposed: allHazards.reduce((s, h) => s + (Number(h.affectedWorkers) || 0), 0),
     };
   }, [filtered]);
 

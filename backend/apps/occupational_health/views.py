@@ -1328,7 +1328,7 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
         initial_status = serializer.validated_data.get('status', 'reported')
         status_history = [{
             'status': initial_status,
-            'changed_by_id': self.request.user.id,
+            'changed_by_id': str(self.request.user.id),
             'changed_by_name': self.request.user.get_full_name() or self.request.user.username,
             'changed_at': timezone.now().isoformat(),
             'note': 'Incident reported',
@@ -1352,7 +1352,7 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
         if new_status != old_status:
             history_entry = {
                 'status': new_status,
-                'changed_by_id': self.request.user.id,
+                'changed_by_id': str(self.request.user.id),
                 'changed_by_name': self.request.user.get_full_name() or self.request.user.username,
                 'changed_at': now.isoformat(),
                 'note': f'Status changed from {old_status} to {new_status}',
@@ -1454,7 +1454,7 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
         # Initialize status history with initial status
         initial_status_entry = {
             'status': hazard.status,
-            'changed_by_id': self.request.user.id,
+            'changed_by_id': str(self.request.user.id),
             'changed_by_name': self.request.user.get_full_name(),
             'changed_at': hazard.created_at.isoformat(),
             'note': 'Initial creation'
@@ -1473,7 +1473,7 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
         if old_status != hazard.status:
             status_entry = {
                 'status': hazard.status,
-                'changed_by_id': self.request.user.id,
+                'changed_by_id': str(self.request.user.id),
                 'changed_by_name': self.request.user.get_full_name(),
                 'changed_at': hazard.updated_at.isoformat(),
                 'note': f'Status changed from {old_status} to {hazard.status}'
