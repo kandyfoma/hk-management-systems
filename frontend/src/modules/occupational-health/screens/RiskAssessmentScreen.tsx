@@ -1420,7 +1420,7 @@ export function RiskAssessmentScreen() {
               // Validate required fields
               const assessmentDate = h.assessment_date || '';
               const assessorName = h.assessed_by_name || 'Inconnu';
-              const workSiteName = h.work_site?.name || 'Site sans nom';
+              const workSiteName = h.work_site_name || h.work_site?.name || 'Site sans nom';
               
               const key = `${assessmentDate}-${assessorName}`;
               if (!assessmentsMap[key]) {
@@ -1428,7 +1428,7 @@ export function RiskAssessmentScreen() {
                   id: h.id || `ra-api-${key}-${index}`,
                   sector: 'mining', // Default sector, should ideally come from API
                   site: workSiteName,
-                  area: h.location || '',
+                  area: h.location || ''  ,
                   assessmentDate: assessmentDate,
                   assessorName: assessorName,
                   assessorId: h.assessed_by,
