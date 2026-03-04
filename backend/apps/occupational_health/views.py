@@ -2519,14 +2519,20 @@ class ExposureReadingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Auto-set measured_by and enterprise from the authenticated user"""
+        from rest_framework.exceptions import ValidationError
         # Get enterprise from user's enterprise FK relationship
-        enterprise = self.request.user.enterprise
+        enterprise = getattr(self.request.user, 'enterprise', None)
+
+        # Fallback: if user has no enterprise assigned, use the first available enterprise
         if not enterprise:
-            # If user has no enterprise, raise a validation error
-            from rest_framework.exceptions import ValidationError
+            from apps.occupational_health.models import Enterprise
+            enterprise = Enterprise.objects.filter(is_active=True).first() or Enterprise.objects.first()
+
+        if not enterprise:
             raise ValidationError({
-                'enterprise': 'User must be assigned to an enterprise to record exposure readings'
+                'enterprise': 'No enterprise found. Please create an enterprise first or assign one to your user account.'
             })
+
         serializer.save(
             measured_by=self.request.user,
             enterprise=enterprise,

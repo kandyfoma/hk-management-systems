@@ -249,101 +249,232 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
   if (!assessment) return null;
   const sectorProfile = SECTOR_PROFILES[assessment.sector];
   const riskColor = OccHealthUtils.getSectorRiskColor(assessment.overallRiskLevel);
+  const criticalCount = assessment.hazards.filter(h => h.riskScore >= 15).length;
+  const avgRisk = assessment.hazards.length > 0
+    ? Math.round(assessment.hazards.reduce((s, h) => s + h.riskScore, 0) / assessment.hazards.length)
+    : 0;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { maxHeight: '92%' }]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Évaluation des Risques</Text>
-              <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.dmOverlay}>
+        <View style={styles.dmSheet}>
+
+          {/* ── Colored Header Banner ── */}
+          <View style={[styles.dmHeader, { backgroundColor: riskColor }]}>
+            <View style={styles.dmHeaderRow}>
+              <View style={styles.dmHeaderIcon}>
+                <Ionicons name="shield-checkmark" size={22} color={riskColor} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dmHeaderSite} numberOfLines={1}>
+                  {assessment.site || 'Site non défini'}
+                </Text>
+                <Text style={styles.dmHeaderArea} numberOfLines={1}>
+                  {assessment.area || 'Zone non définie'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={onClose} style={styles.dmCloseBtn}>
+                <Ionicons name="close" size={18} color="rgba(255,255,255,0.95)" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dmHeaderBadges}>
+              <View style={styles.dmHeaderBadge}>
+                <Ionicons name="analytics-outline" size={11} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.dmHeaderBadgeText}>
+                  {OccHealthUtils.getSectorRiskLabel(assessment.overallRiskLevel)}
+                </Text>
+              </View>
+              <View style={[styles.dmHeaderBadge, styles.dmHeaderBadgeAlt]}>
+                <View style={styles.dmHeaderBadgeDot} />
+                <Text style={styles.dmHeaderBadgeText}>{getStatusLabel(assessment.status)}</Text>
+              </View>
+              <View style={[styles.dmHeaderBadge, styles.dmHeaderBadgeAlt]}>
+                <Ionicons name={sectorProfile.icon as any} size={11} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.dmHeaderBadgeText}>{sectorProfile.label}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Scrollable Body ── */}
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.dmBody}>
+
+            {/* Stats Row */}
+            <View style={styles.dmStatsRow}>
+              <View style={styles.dmStatCard}>
+                <Ionicons name="warning-outline" size={16} color={colors.error} />
+                <Text style={[styles.dmStatValue, { color: colors.error }]}>{assessment.hazards.length}</Text>
+                <Text style={styles.dmStatLabel}>Dangers</Text>
+              </View>
+              <View style={styles.dmStatCard}>
+                <Ionicons name="flame-outline" size={16} color={criticalCount > 0 ? colors.errorDark : colors.textTertiary} />
+                <Text style={[styles.dmStatValue, { color: criticalCount > 0 ? colors.errorDark : colors.textTertiary }]}>
+                  {criticalCount}
+                </Text>
+                <Text style={styles.dmStatLabel}>Critiques</Text>
+              </View>
+              <View style={styles.dmStatCard}>
+                <Ionicons name="speedometer-outline" size={16} color={ACCENT} />
+                <Text style={[styles.dmStatValue, { color: ACCENT }]}>{avgRisk}</Text>
+                <Text style={styles.dmStatLabel}>Score Moy.</Text>
+              </View>
+              <View style={styles.dmStatCard}>
+                <Ionicons name="people-outline" size={16} color={colors.secondary} />
+                <Text style={[styles.dmStatValue, { color: colors.secondary }]}>
+                  {assessment.hazards.reduce((s, h) => s + (Number(h.affectedWorkers) || 0), 0)}
+                </Text>
+                <Text style={styles.dmStatLabel}>Exposés</Text>
+              </View>
             </View>
 
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Informations Générales</Text>
-              <DetailRow label="Site" value={assessment.site} />
-              <DetailRow label="Zone" value={assessment.area} />
-              <DetailRow label="Secteur" value={sectorProfile.label} />
-              <DetailRow label="Date évaluation" value={safeDate(assessment.assessmentDate)} />
-              <DetailRow label="Évaluateur" value={assessment.assessorName} />
-              <DetailRow label="Prochaine révision" value={safeDate(assessment.reviewDate)} />
-              <DetailRow label="Niveau global" value={OccHealthUtils.getSectorRiskLabel(assessment.overallRiskLevel)} />
+            {/* General Info */}
+            <View style={styles.dmSectionCard}>
+              <View style={styles.dmSectionHeader}>
+                <View style={[styles.dmSectionIcon, { backgroundColor: ACCENT + '15' }]}>
+                  <Ionicons name="information-circle-outline" size={14} color={ACCENT} />
+                </View>
+                <Text style={styles.dmSectionTitle}>Informations Générales</Text>
+              </View>
+              <DetailRow icon="person-outline" label="Évaluateur" value={assessment.assessorName || '—'} />
+              {assessment.updatedByName ? (
+                <DetailRow icon="create-outline" label="Mis à jour par" value={assessment.updatedByName} />
+              ) : null}
+              <DetailRow icon="calendar-outline" label="Date d'évaluation" value={safeDate(assessment.assessmentDate)} />
+              <DetailRow icon="refresh-circle-outline" label="Prochaine révision" value={safeDate(assessment.reviewDate)} />
             </View>
 
             {/* Risk Matrix */}
             <RiskMatrix hazards={assessment.hazards} />
 
-            {/* Hazards List */}
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Dangers Identifiés</Text>
+            {/* Hazards */}
+            <View style={styles.dmSectionCard}>
+              <View style={styles.dmSectionHeader}>
+                <View style={[styles.dmSectionIcon, { backgroundColor: colors.error + '15' }]}>
+                  <Ionicons name="warning-outline" size={14} color={colors.error} />
+                </View>
+                <Text style={styles.dmSectionTitle}>
+                  Dangers Identifiés ({assessment.hazards.length})
+                </Text>
+              </View>
+
               {assessment.hazards.map((h, i) => {
-                const riskScoreColor = OccHealthUtils.getRiskScoreColor(h.riskScore);
-                const controlColor = getControlColor(h.controlHierarchy);
+                const rsc = OccHealthUtils.getRiskScoreColor(h.riskScore);
+                const cc = getControlColor(h.controlHierarchy);
                 return (
-                  <View key={i} style={styles.hazardCard}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                        <Ionicons name="warning" size={16} color={riskScoreColor} />
-                        <Text style={styles.hazardType}>{OccHealthUtils.getExposureRiskLabel(h.hazardType)}</Text>
+                  <View key={i} style={[styles.dmHazardCard, { borderLeftColor: rsc }]}>
+                    {/* Header */}
+                    <View style={styles.dmHazardHeader}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <View style={[styles.dmHazardTypeIcon, { backgroundColor: rsc + '20' }]}>
+                            <Ionicons name="warning" size={11} color={rsc} />
+                          </View>
+                          <Text style={styles.dmHazardType}>
+                            {OccHealthUtils.getExposureRiskLabel(h.hazardType)}
+                          </Text>
+                        </View>
+                        <Text style={styles.dmHazardDesc} numberOfLines={3}>{h.description}</Text>
                       </View>
-                      <View style={[styles.scoreBadge, { backgroundColor: riskScoreColor + '14' }]}>
-                        <Text style={[styles.scoreText, { color: riskScoreColor }]}>
-                          Score: {h.riskScore} ({OccHealthUtils.getRiskScoreLabel(h.riskScore)})
+                      <View style={{ alignItems: 'center', gap: 3, marginLeft: 10 }}>
+                        <View style={[styles.dmRiskCircle, { backgroundColor: rsc }]}>
+                          <Text style={styles.dmRiskCircleText}>{h.riskScore}</Text>
+                        </View>
+                        <Text style={[styles.dmRiskLevelText, { color: rsc }]}>
+                          {OccHealthUtils.getRiskScoreLabel(h.riskScore)}
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.hazardDesc}>{h.description}</Text>
-                    <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
-                      <Text style={styles.hazardMeta}>P: {h.likelihood}/5</Text>
-                      <Text style={styles.hazardMeta}>C: {h.consequence}/5</Text>
-                      <Text style={styles.hazardMeta}>{h.affectedWorkers} travailleurs</Text>
+
+                    {/* P × C Dot Bars */}
+                    <View style={styles.dmPCRow}>
+                      <View style={styles.dmPCItem}>
+                        <Text style={styles.dmPCLabel}>Probabilité</Text>
+                        <View style={styles.dmPCDots}>
+                          {[1,2,3,4,5].map(n => (
+                            <View key={n} style={[styles.dmPCDot, { backgroundColor: n <= h.likelihood ? rsc : colors.outline }]} />
+                          ))}
+                        </View>
+                        <Text style={[styles.dmPCValue, { color: rsc }]}>{h.likelihood}/5</Text>
+                      </View>
+                      <View style={styles.dmPCDivider} />
+                      <View style={styles.dmPCItem}>
+                        <Text style={styles.dmPCLabel}>Gravité</Text>
+                        <View style={styles.dmPCDots}>
+                          {[1,2,3,4,5].map(n => (
+                            <View key={n} style={[styles.dmPCDot, { backgroundColor: n <= h.consequence ? rsc : colors.outline }]} />
+                          ))}
+                        </View>
+                        <Text style={[styles.dmPCValue, { color: rsc }]}>{h.consequence}/5</Text>
+                      </View>
+                      <View style={styles.dmPCDivider} />
+                      <View style={styles.dmPCItem}>
+                        <Text style={styles.dmPCLabel}>Travailleurs</Text>
+                        <Text style={[styles.dmPCValue, { color: colors.text, fontSize: 17, marginTop: 2 }]}>
+                          {h.affectedWorkers}
+                        </Text>
+                        <Text style={styles.dmPCLabel}>exposés</Text>
+                      </View>
                     </View>
 
                     {/* Exposed workers */}
                     {(h as any).exposedWorkerNames?.length > 0 && (
-                      <View style={{ marginTop: 8 }}>
-                        <Text style={styles.controlTitle}>Travailleurs exposés:</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                      <View style={styles.dmWorkerSection}>
+                        <Text style={styles.dmControlTitle}>Travailleurs exposés</Text>
+                        <View style={styles.dmWorkerChips}>
                           {(h as any).exposedWorkerNames.map((name: string, j: number) => (
-                            <View key={j} style={{ backgroundColor: colors.error + '15', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
-                              <Text style={{ color: colors.error, fontSize: 11, fontWeight: '500' }}>{name}</Text>
+                            <View key={j} style={styles.dmWorkerChip}>
+                              <Ionicons name="person-outline" size={10} color={colors.error} />
+                              <Text style={styles.dmWorkerChipText}>{name}</Text>
                             </View>
                           ))}
                         </View>
                       </View>
                     )}
 
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={styles.controlTitle}>Contrôles existants:</Text>
-                      {h.existingControls.map((c, j) => (
-                        <View key={j} style={styles.controlItem}>
-                          <Ionicons name="checkmark-circle-outline" size={12} color="#22C55E" />
-                          <Text style={styles.controlText}>{c}</Text>
-                        </View>
-                      ))}
-                    </View>
-                    <View style={{ marginTop: 6 }}>
-                      <Text style={styles.controlTitle}>Contrôles additionnels:</Text>
-                      {h.additionalControls.map((c, j) => (
-                        <View key={j} style={styles.controlItem}>
-                          <Ionicons name="add-circle-outline" size={12} color={ACCENT} />
-                          <Text style={styles.controlText}>{c}</Text>
-                        </View>
-                      ))}
-                    </View>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                      <View style={[styles.controlHierarchyBadge, { backgroundColor: controlColor + '14' }]}>
-                        <Text style={[styles.controlHierarchyText, { color: controlColor }]}>{getControlLabel(h.controlHierarchy)}</Text>
+                    {/* Existing controls */}
+                    {h.existingControls.length > 0 && (
+                      <View style={styles.dmControlSection}>
+                        <Text style={styles.dmControlTitle}>Contrôles existants</Text>
+                        {h.existingControls.map((c, j) => (
+                          <View key={j} style={styles.dmControlItem}>
+                            <Ionicons name="checkmark-circle" size={13} color="#22C55E" />
+                            <Text style={styles.dmControlText}>{c}</Text>
+                          </View>
+                        ))}
                       </View>
-                      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                        <Text style={styles.hazardMeta}>→ {h.responsiblePerson} • {safeDate(h.targetDate)}</Text>
+                    )}
+
+                    {/* Additional controls */}
+                    {h.additionalControls.length > 0 && (
+                      <View style={styles.dmControlSection}>
+                        <Text style={styles.dmControlTitle}>Contrôles additionnels</Text>
+                        {h.additionalControls.map((c, j) => (
+                          <View key={j} style={styles.dmControlItem}>
+                            <Ionicons name="add-circle-outline" size={13} color={ACCENT} />
+                            <Text style={styles.dmControlText}>{c}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Footer */}
+                    <View style={styles.dmHazardFooter}>
+                      <View style={[styles.dmControlBadge, { backgroundColor: cc + '18', borderColor: cc + '50' }]}>
+                        <Ionicons name="shield-outline" size={11} color={cc} />
+                        <Text style={[styles.dmControlBadgeText, { color: cc }]}>
+                          {getControlLabel(h.controlHierarchy)}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {h.responsiblePerson ? (
+                          <View style={styles.dmResponsible}>
+                            <Ionicons name="person-circle-outline" size={12} color={colors.textSecondary} />
+                            <Text style={styles.dmResponsibleText} numberOfLines={1}>{h.responsiblePerson}</Text>
+                          </View>
+                        ) : null}
                         {onUpdate && (
-                          <TouchableOpacity 
-                            onPress={() => onUpdate(h)}
-                            style={{ padding: 4 }}
-                          >
-                            <Ionicons name="pencil-outline" size={16} color={ACCENT} />
+                          <TouchableOpacity onPress={() => onUpdate(h)} style={styles.dmEditBtn}>
+                            <Ionicons name="pencil-outline" size={13} color={ACCENT} />
+                            <Text style={styles.dmEditBtnText}>Modifier</Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -353,15 +484,20 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
               })}
             </View>
 
-            {/* Audit Trail Section */}
+            {/* Audit Trail */}
             {assessment.statusHistory && assessment.statusHistory.length > 0 && (
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Historique des Modifications</Text>
+              <View style={styles.dmSectionCard}>
+                <View style={styles.dmSectionHeader}>
+                  <View style={[styles.dmSectionIcon, { backgroundColor: ACCENT + '15' }]}>
+                    <Ionicons name="time-outline" size={14} color={ACCENT} />
+                  </View>
+                  <Text style={styles.dmSectionTitle}>Historique des Modifications</Text>
+                </View>
                 {assessment.statusHistory.map((entry: StatusHistoryEntry, i: number) => (
                   <View key={i} style={styles.historyEntry}>
                     <View style={{ flexDirection: 'row', gap: 12 }}>
                       <View style={{ alignItems: 'center' }}>
-                        <View style={styles.historyDot} />
+                        <View style={[styles.historyDot, { backgroundColor: getStatusColor(entry.status || 'draft') }]} />
                         {i < assessment.statusHistory!.length - 1 && <View style={styles.historyLine} />}
                       </View>
                       <View style={{ flex: 1 }}>
@@ -374,7 +510,9 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
                           <Text style={styles.historyMeta}>{entry.changed_by_name || 'Système'}</Text>
                         </View>
                         {entry.note && <Text style={styles.historyNote}>{entry.note}</Text>}
-                        <Text style={styles.historyTime}>{entry.changed_at ? new Date(entry.changed_at).toLocaleString('fr-CD') : ''}</Text>
+                        <Text style={styles.historyTime}>
+                          {entry.changed_at ? new Date(entry.changed_at).toLocaleString('fr-CD') : ''}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -382,25 +520,37 @@ function AssessmentDetailModal({ visible, assessment, onClose, onDelete, onUpdat
               </View>
             )}
           </ScrollView>
-          <View style={styles.modalActions}>
+
+          {/* ── Footer Actions ── */}
+          <View style={styles.dmFooter}>
             {onDelete && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.error }]} onPress={() => { onClose(); onDelete(assessment.id); }}>
-                <Ionicons name="trash-outline" size={18} color="#FFF" />
-                <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Supprimer</Text>
+              <TouchableOpacity
+                style={styles.dmDeleteBtn}
+                onPress={() => { onClose(); onDelete(assessment.id); }}
+              >
+                <Ionicons name="trash-outline" size={15} color={colors.error} />
+                <Text style={styles.dmDeleteBtnText}>Supprimer</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
-              <Text style={[styles.actionBtnText, { color: colors.text }]}>Fermer</Text>
+            <TouchableOpacity style={styles.dmCloseActionBtn} onPress={onClose}>
+              <Text style={styles.dmCloseActionBtnText}>Fermer</Text>
             </TouchableOpacity>
           </View>
+
         </View>
       </View>
     </Modal>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return <View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View>;
+function DetailRow({ icon, label, value }: { icon?: string; label: string; value: string }) {
+  return (
+    <View style={styles.detailRow}>
+      {icon ? <Ionicons name={icon as any} size={14} color={colors.textSecondary} style={{ marginRight: 2 }} /> : null}
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
 }
 
 // ─── Edit Hazard Modal ───────────────────────────────────────
@@ -1667,47 +1817,36 @@ export function RiskAssessmentScreen() {
             throw new Error('Invalid API response format');
           }
           
-          // Convert HazardIdentification records to RiskAssessment format
-          // Group by assessment date and assessor to create assessments
-          const assessmentsMap: Record<string, any> = {};
+          // Convert each HazardIdentification record to its own RiskAssessment entry
+          const assessmentsList: any[] = [];
           hazardsList.forEach((h: any, index: number) => {
             try {
-              // Validate required fields
               const assessmentDate = h.assessment_date || '';
               const assessorName = h.assessed_by_name || 'Inconnu';
-              const workSiteName = h.work_site_name || h.work_site?.name || 'Site sans nom';
+              const workSiteName = h.work_site_name || h.work_site?.name || h.location || 'Site sans nom';
               
-              const key = `${assessmentDate}-${assessorName}`;
-              if (!assessmentsMap[key]) {
-                assessmentsMap[key] = {
-                  id: h.id || `ra-api-${key}-${index}`,
-                  sector: 'mining', // Default sector, should ideally come from API
-                  site: workSiteName,
-                  area: h.location || ''  ,
-                  assessmentDate: assessmentDate,
-                  assessorName: assessorName,
-                  assessorId: h.assessed_by,
-                  updatedByName: h.updated_by_name,
-                  statusHistory: h.status_history || [],
-                  hazards: [],
-                  overallRiskLevel: h.risk_level === 'critical' ? 'very_high' : (h.risk_level || 'low'),
-                  reviewDate: h.review_date || '',
-                  status: h.status || 'draft',
-                  createdAt: h.created_at || new Date().toISOString(),
-                  updatedAt: h.updated_at,
-                };
-              }
-              
-              // Map hazard using the new function
               const mappedHazard = mapBackendToHazard(h);
-              assessmentsMap[key].hazards.push(mappedHazard);
+              assessmentsList.push({
+                id: h.id || `ra-api-${index}`,
+                sector: 'mining',
+                site: workSiteName,
+                area: h.location || '',
+                assessmentDate: assessmentDate,
+                assessorName: assessorName,
+                assessorId: h.assessed_by,
+                updatedByName: h.updated_by_name,
+                statusHistory: h.status_history || [],
+                hazards: [mappedHazard],
+                overallRiskLevel: h.risk_level === 'critical' ? 'very_high' : (h.risk_level || 'low'),
+                reviewDate: h.review_date || '',
+                status: h.status || 'draft',
+                createdAt: h.created_at || new Date().toISOString(),
+                updatedAt: h.updated_at,
+              });
             } catch (itemError) {
               console.warn('Error processing hazard item:', itemError);
-              // Continue processing other items
             }
           });
-          
-          const assessmentsList = Object.values(assessmentsMap);
           setAssessments(assessmentsList);
         }
       } catch (apiError: any) {
@@ -1732,6 +1871,26 @@ export function RiskAssessmentScreen() {
         const updatedAssessments = [assessment, ...assessments];
         setAssessments(updatedAssessments);
         return false;
+      }
+
+      // Resolve assessment.site string → work_site FK ID
+      let resolvedWorkSiteId: number | null = null;
+      if (assessment.site) {
+        try {
+          const wsResponse = await axios.get(
+            `${baseURL}/api/v1/occupational-health/work-sites/`,
+            { headers: { Authorization: `Token ${token}` }, timeout: 5000 }
+          );
+          const wsList = Array.isArray(wsResponse.data)
+            ? wsResponse.data
+            : wsResponse.data.results || [];
+          const match = wsList.find(
+            (ws: any) => ws.name?.toLowerCase() === assessment.site?.toLowerCase()
+          );
+          if (match) resolvedWorkSiteId = match.id;
+        } catch (wsError) {
+          console.warn('Could not fetch work sites for site resolution:', wsError);
+        }
       }
       
       // Create hazard identification records for each hazard in the assessment
@@ -1758,6 +1917,11 @@ export function RiskAssessmentScreen() {
               status: hazard.assessmentStatus || assessment.status,
             };
             
+            // Add optional work_site FK if resolved from site name
+            if (resolvedWorkSiteId) {
+              hazardData.work_site = resolvedWorkSiteId;
+            }
+
             // Add optional responsible person field if provided (enterprise is auto-assigned by backend)
             if (hazard.responsiblePersonId) {
               hazardData.responsible_person = hazard.responsiblePersonId;
@@ -1912,9 +2076,9 @@ export function RiskAssessmentScreen() {
       if (updatedHazard.consequence !== editingHazard?.consequence) updatePayload.severity = updatedHazard.consequence;
       if (updatedHazard.residualLikelihood !== editingHazard?.residualLikelihood) updatePayload.residual_probability = updatedHazard.residualLikelihood;
       if (updatedHazard.residualConsequence !== editingHazard?.residualConsequence) updatePayload.residual_severity = updatedHazard.residualConsequence;
-      if (updatedHazard.existingControls !== editingHazard?.existingControls) updatePayload.existing_controls = updatedHazard.existingControls;
+      if (updatedHazard.existingControls !== editingHazard?.existingControls) updatePayload.existing_controls = (Array.isArray(updatedHazard.existingControls) ? updatedHazard.existingControls : []).join('\n');
       if (updatedHazard.controlEffectiveness !== editingHazard?.controlEffectiveness) updatePayload.control_effectiveness = updatedHazard.controlEffectiveness;
-      if (updatedHazard.additionalControls !== editingHazard?.additionalControls) updatePayload.additional_control_measures = updatedHazard.additionalControls;
+      if (updatedHazard.additionalControls !== editingHazard?.additionalControls) updatePayload.additional_control_measures = (Array.isArray(updatedHazard.additionalControls) ? updatedHazard.additionalControls : []).join('\n');
       if (updatedHazard.responsiblePersonId !== editingHazard?.responsiblePersonId) updatePayload.responsible_person = updatedHazard.responsiblePersonId;
       if (updatedHazard.targetDate !== editingHazard?.targetDate) updatePayload.target_date = updatedHazard.targetDate;
       if (updatedHazard.assessmentStatus !== editingHazard?.assessmentStatus) updatePayload.status = updatedHazard.assessmentStatus;
@@ -2162,4 +2326,83 @@ const styles = StyleSheet.create({
   historyMeta: { fontSize: 11, fontWeight: '500', color: colors.textSecondary },
   historyNote: { fontSize: 11, color: colors.text, marginVertical: 2 },
   historyTime: { fontSize: 10, color: colors.textTertiary, marginTop: 2 },
+
+  // ── Detail Modal (dm*) ──────────────────────────────────────
+  dmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  dmSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '94%', ...shadows.xl, overflow: 'hidden' },
+
+  // Header banner
+  dmHeader: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16 },
+  dmHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dmHeaderIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center' },
+  dmHeaderSite: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.1 },
+  dmHeaderArea: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  dmCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.15)', alignItems: 'center', justifyContent: 'center' },
+  dmHeaderBadges: { flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap' },
+  dmHeaderBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: borderRadius.full, backgroundColor: 'rgba(0,0,0,0.18)' },
+  dmHeaderBadgeAlt: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  dmHeaderBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.9)' },
+  dmHeaderBadgeText: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.95)' },
+
+  // Scrollable body
+  dmBody: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20, gap: 12 },
+
+  // Stats row
+  dmStatsRow: { flexDirection: 'row', gap: 8 },
+  dmStatCard: { flex: 1, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, paddingVertical: 12, alignItems: 'center', gap: 3, borderWidth: 1, borderColor: colors.outline },
+  dmStatValue: { fontSize: 18, fontWeight: '700', color: colors.text },
+  dmStatLabel: { fontSize: 10, color: colors.textSecondary, fontWeight: '500', textAlign: 'center' },
+
+  // Section cards
+  dmSectionCard: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.xl, padding: 14, borderWidth: 1, borderColor: colors.outline },
+  dmSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  dmSectionIcon: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  dmSectionTitle: { fontSize: 13, fontWeight: '700', color: colors.text, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  // Hazard cards
+  dmHazardCard: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: 13, marginBottom: 10, borderLeftWidth: 3, borderWidth: 1, borderColor: colors.outline },
+  dmHazardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  dmHazardTypeIcon: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  dmHazardType: { fontSize: 13, fontWeight: '700', color: colors.text },
+  dmHazardDesc: { fontSize: 12, color: colors.textSecondary, lineHeight: 17, marginTop: 1 },
+  dmRiskCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  dmRiskCircleText: { fontSize: 14, fontWeight: '800', color: '#FFF' },
+  dmRiskLevelText: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+
+  // P×C dot bars
+  dmPCRow: { flexDirection: 'row', backgroundColor: colors.background, borderRadius: borderRadius.md, padding: 10, marginBottom: 8 },
+  dmPCItem: { flex: 1, alignItems: 'center', gap: 4 },
+  dmPCLabel: { fontSize: 9, color: colors.textTertiary, fontWeight: '500', textAlign: 'center' },
+  dmPCDots: { flexDirection: 'row', gap: 3 },
+  dmPCDot: { width: 8, height: 8, borderRadius: 4 },
+  dmPCValue: { fontSize: 13, fontWeight: '700' },
+  dmPCDivider: { width: 1, backgroundColor: colors.outline, marginHorizontal: 6 },
+
+  // Workers
+  dmWorkerSection: { marginBottom: 8 },
+  dmWorkerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  dmWorkerChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.error + '15', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
+  dmWorkerChipText: { fontSize: 10, color: colors.error, fontWeight: '500' },
+
+  // Controls
+  dmControlSection: { marginBottom: 6 },
+  dmControlTitle: { fontSize: 10, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
+  dmControlItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 },
+  dmControlText: { fontSize: 12, color: colors.text, flex: 1, lineHeight: 16 },
+
+  // Hazard footer
+  dmHazardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.outline },
+  dmControlBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: borderRadius.full, borderWidth: 1 },
+  dmControlBadgeText: { fontSize: 10, fontWeight: '600' },
+  dmResponsible: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dmResponsibleText: { fontSize: 11, color: colors.textSecondary, maxWidth: 90 },
+  dmEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: ACCENT + '15', paddingHorizontal: 9, paddingVertical: 5, borderRadius: borderRadius.md },
+  dmEditBtnText: { fontSize: 11, fontWeight: '600', color: ACCENT },
+
+  // Footer
+  dmFooter: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.outline, backgroundColor: colors.surface },
+  dmDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.error + '40', backgroundColor: colors.error + '08' },
+  dmDeleteBtnText: { fontSize: 13, fontWeight: '600', color: colors.error },
+  dmCloseActionBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: borderRadius.lg, backgroundColor: ACCENT },
+  dmCloseActionBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });

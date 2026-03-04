@@ -56,8 +56,8 @@ interface ExposureType {
 const EXPOSURE_TYPES: Record<string, ExposureType> = {
   silica_dust: {
     id: 'silica_dust',
-    name: 'Silica',
-    fullName: 'Crystalline Silica (Respirable)',
+    name: 'Silice',
+    fullName: 'Silice Cristalline (Respirable)',
     unit: 'mg/m³',
     osha_limit: 0.025,
     acgih_limit: 0.025,
@@ -68,7 +68,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
   cobalt: {
     id: 'cobalt',
     name: 'Cobalt',
-    fullName: 'Cobalt & Cobalt Compounds',
+    fullName: 'Cobalt & Composés de Cobalt',
     unit: 'µg/m³',
     osha_limit: 100,
     acgih_limit: 5,
@@ -78,8 +78,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
   },
   total_dust: {
     id: 'total_dust',
-    name: 'Dust',
-    fullName: 'Total Inhalable Dust',
+    name: 'Poussière',
+    fullName: 'Poussière Totale Inhalable',
     unit: 'mg/m³',
     osha_limit: 5,
     acgih_limit: 3,
@@ -89,8 +89,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
   },
   noise: {
     id: 'noise',
-    name: 'Noise',
-    fullName: 'Noise Level',
+    name: 'Bruit',
+    fullName: 'Niveau Sonore',
     unit: 'dB(A)',
     osha_limit: 90,
     acgih_limit: 85,
@@ -101,7 +101,7 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
   vibration: {
     id: 'vibration',
     name: 'Vibration',
-    fullName: 'Hand-Arm Vibration',
+    fullName: 'Vibration Main-Bras',
     unit: 'm/s²',
     osha_limit: 5,
     acgih_limit: 2.2,
@@ -111,8 +111,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
   },
   heat: {
     id: 'heat',
-    name: 'Heat',
-    fullName: 'Wet Bulb Globe Temperature',
+    name: 'Chaleur',
+    fullName: 'Température Globe Mouillé',
     unit: '°C',
     osha_limit: 32.2,
     acgih_limit: 28,
@@ -125,10 +125,10 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: 'safe' | 'warning' | 'critical' | 'exceeded' }) {
   const config: Record<string, { color: string; label: string; icon: string }> = {
-    safe: { color: colors.secondary, label: 'Safe', icon: 'checkmark-circle' },
-    warning: { color: colors.warning, label: 'Warning', icon: 'alert-circle' },
-    exceeded: { color: colors.error, label: 'Exceeded', icon: 'close-circle' },
-    critical: { color: colors.errorDark, label: 'Critical', icon: 'alert' },
+    safe: { color: colors.secondary, label: 'Sûr', icon: 'checkmark-circle' },
+    warning: { color: colors.warning, label: 'Attention', icon: 'alert-circle' },
+    exceeded: { color: colors.error, label: 'Dépassé', icon: 'close-circle' },
+    critical: { color: colors.errorDark, label: 'Critique', icon: 'alert' },
   };
   const cfg = config[status] ?? { color: '#9CA3AF', label: status, icon: 'help-circle' };
   return (
@@ -172,7 +172,7 @@ function ExposureTypeCard({
         {exceedCount > 0 && (
           <View style={styles.exceedBadge}>
             <Text style={styles.exceedCount}>{exceedCount}</Text>
-            <Text style={styles.exceedLabel}>Exceeded</Text>
+            <Text style={styles.exceedLabel}>Dépassé</Text>
           </View>
         )}
       </View>
@@ -180,7 +180,7 @@ function ExposureTypeCard({
       {latestReading && (
         <View style={styles.typeCardContent}>
           <View style={styles.readingRow}>
-            <Text style={styles.label}>Latest Reading:</Text>
+            <Text style={styles.label}>Dernière Mesure :</Text>
             <View style={styles.valueWithStatus}>
               <Text style={[styles.value, { color: exceeding ? exposure.color : colors.secondary }]}>
                 {Number(latestReading.exposure_value).toFixed(2)} {latestReading.unit_measurement}
@@ -189,7 +189,7 @@ function ExposureTypeCard({
             </View>
           </View>
           <View style={styles.readingRow}>
-            <Text style={styles.label}>ACGIH Limit:</Text>
+            <Text style={styles.label}>Limite ACGIH :</Text>
             <Text style={styles.limit}>{exposure.acgih_limit} {exposure.unit}</Text>
           </View>
           <View style={styles.limitBar}>
@@ -204,7 +204,7 @@ function ExposureTypeCard({
             />
           </View>
           <Text style={styles.limitText}>
-            {latestReading.worker_name || (latestReading.worker ? `Worker #${latestReading.worker}` : 'Area Reading')} • {latestReading.sampling_location} • {latestReading.measurement_date}
+            {latestReading.worker_name || (latestReading.worker ? `Travailleur #${latestReading.worker}` : 'Mesure de Zone')} • {latestReading.sampling_location} • {latestReading.measurement_date}
           </Text>
         </View>
       )}
@@ -255,32 +255,32 @@ function ExposureDetailModal({
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { borderTopColor: exposure.color }]}>
-                <Text style={styles.statLabel}>Readings</Text>
+                <Text style={styles.statLabel}>Mesures</Text>
                 <Text style={styles.statValue}>{exposureReadings.length}</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: colors.secondary }]}>
-                <Text style={styles.statLabel}>Safe</Text>
+                <Text style={styles.statLabel}>Sûres</Text>
                 <Text style={[styles.statValue, { color: colors.secondary }]}>{safeCount}</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: colors.error }]}>
-                <Text style={styles.statLabel}>Exceeded</Text>
+                <Text style={styles.statLabel}>Dépassées</Text>
                 <Text style={[styles.statValue, { color: colors.error }]}>{exceedCount}</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: exposure.color }]}>
-                <Text style={styles.statLabel}>Average</Text>
+                <Text style={styles.statLabel}>Moyenne</Text>
                 <Text style={styles.statValue}>{avgValue.toFixed(2)}</Text>
               </View>
             </View>
 
             {/* Limit Info */}
             <View style={styles.limitSection}>
-              <Text style={styles.sectionTitle}>Exposure Limits</Text>
+              <Text style={styles.sectionTitle}>Valeurs Limites d'Exposition</Text>
               <View style={styles.limitRow}>
-                <Text style={styles.limitRowLabel}>OSHA TWA:</Text>
+                <Text style={styles.limitRowLabel}>OSHA VLE :</Text>
                 <Text style={styles.limitRowValue}>{exposure.osha_limit} {exposure.unit}</Text>
               </View>
               <View style={styles.limitRow}>
-                <Text style={styles.limitRowLabel}>ACGIH TLV:</Text>
+                <Text style={styles.limitRowLabel}>ACGIH TLV :</Text>
                 <Text style={styles.limitRowValue}>{exposure.acgih_limit} {exposure.unit}</Text>
               </View>
               <View style={[styles.limitBar, { marginTop: 12 }]}>
@@ -302,17 +302,17 @@ function ExposureDetailModal({
 
             {/* Recent Readings Table */}
             <View style={styles.readingsSection}>
-              <Text style={styles.sectionTitle}>Recent Readings</Text>
+              <Text style={styles.sectionTitle}>Mesures Récentes</Text>
               <View style={styles.readingsTable}>
                 <View style={[styles.tableHeader, { backgroundColor: exposure.color + '15' }]}>
-                  <Text style={[styles.tableCell, { flex: 2 }]}>Worker</Text>
-                  <Text style={[styles.tableCell, { flex: 1.5 }]}>Reading</Text>
-                  <Text style={[styles.tableCell, { flex: 1 }]}>Area</Text>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>Travailleur</Text>
+                  <Text style={[styles.tableCell, { flex: 1.5 }]}>Valeur</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>Zone</Text>
                 </View>
                 {exposureReadings.map(reading => (
                   <View key={reading.id} style={styles.tableRow}>
                     <Text style={[styles.tableCell, { flex: 2 }]} numberOfLines={1}>
-                      {reading.worker_name?.split(' ')[0] || (reading.worker ? `#${reading.worker}` : 'Area')}
+                      {reading.worker_name?.split(' ')[0] || (reading.worker ? `#${reading.worker}` : 'Zone')}
                     </Text>
                     <Text style={[styles.tableCell, { flex: 1.5, color: reading.status === 'safe' ? colors.secondary : colors.error }]}>
                       {Number(reading.exposure_value).toFixed(2)}
@@ -328,7 +328,7 @@ function ExposureDetailModal({
 
           {/* Close Button */}
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeButtonText}>Close</Text>
+            <Text style={styles.closeButtonText}>Fermer</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -344,10 +344,13 @@ export function ExposureMonitoringScreen() {
   const [selectedExposure, setSelectedExposure] = useState<ExposureType | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'safe' | 'exceeded'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'safe' | 'warning' | 'exceeded' | 'critical'>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'value' | 'status'>('date');
+  const [searchText, setSearchText] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const [submitting, setSubmitting] = useState(false);
   const [userEnterprise, setUserEnterprise] = useState<number | null>(null);
 
@@ -360,6 +363,15 @@ export function ExposureMonitoringScreen() {
     equipment_name: '',
     source_type: 'manual_entry',
   });
+
+  // Form validation
+  const isFormValid = () => {
+    return (
+      newReading.exposure_type.trim() !== '' &&
+      newReading.exposure_value.trim() !== '' &&
+      newReading.sampling_location.trim() !== ''
+    );
+  };
 
   // Fetch user's enterprise on mount
   useEffect(() => {
@@ -398,7 +410,7 @@ export function ExposureMonitoringScreen() {
 
       const params = new URLSearchParams();
       if (filterStatus !== 'all') {
-        params.append('status', filterStatus === 'safe' ? 'safe' : 'exceeded,critical,warning');
+        params.append('status', filterStatus);
       }
       if (filterType !== 'all') {
         params.append('exposure_type', filterType);
@@ -411,7 +423,7 @@ export function ExposureMonitoringScreen() {
       setReadings(response.data.results || response.data);
     } catch (err: any) {
       console.error('Failed to load exposure readings:', err);
-      setError(err.response?.data?.detail || 'Failed to load readings');
+      setError(err.response?.data?.detail || 'Échec du chargement des mesures');
       setReadings([]);
     } finally {
       setLoading(false);
@@ -426,13 +438,13 @@ export function ExposureMonitoringScreen() {
   // Submit manual entry
   const handleSubmitReading = useCallback(async () => {
     if (!newReading.exposure_type || !newReading.exposure_value || !newReading.sampling_location) {
-      Alert.alert('Missing Fields', 'Please fill in all required fields');
+      Alert.alert('Champs manquants', 'Veuillez remplir tous les champs obligatoires');
       return;
     }
 
     const parsedValue = parseFloat(newReading.exposure_value);
     if (isNaN(parsedValue) || parsedValue < 0) {
-      Alert.alert('Invalid Value', 'Exposure value must be a positive number');
+      Alert.alert('Valeur invalide', 'La valeur d\'exposition doit être un nombre positif');
       return;
     }
 
@@ -446,7 +458,7 @@ export function ExposureMonitoringScreen() {
         exposure_value: parsedValue,
         unit_measurement: newReading.unit_measurement,
         sampling_location: newReading.sampling_location,
-        equipment_name: newReading.equipment_name || null,
+        equipment_name: newReading.equipment_name || '',
         source_type: newReading.source_type,
         measurement_date: new Date().toISOString().split('T')[0],
       };
@@ -464,7 +476,7 @@ export function ExposureMonitoringScreen() {
         }
       );
 
-      Alert.alert('Success', 'Exposure reading recorded');
+      Alert.alert('Succès', 'Mesure d\'exposition enregistrée');
       setManualEntryVisible(false);
       setNewReading({
         exposure_type: '',
@@ -479,7 +491,7 @@ export function ExposureMonitoringScreen() {
       const errorData = err.response?.data;
       const errorMessage = errorData?.detail || errorData?.enterprise?.[0] || JSON.stringify(errorData) || 'Failed to submit reading';
       console.error('Submission error:', { status: err.response?.status, errorData, message: errorMessage });
-      Alert.alert('Error', errorMessage);
+      Alert.alert('Erreur', errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -494,6 +506,18 @@ export function ExposureMonitoringScreen() {
   const filteredReadings = useMemo(() => {
     let filtered = readings;
     
+    // Apply search filter
+    if (searchText.trim()) {
+      const search = searchText.toLowerCase();
+      filtered = filtered.filter(r => 
+        (r.worker_name?.toLowerCase() || '').includes(search) ||
+        (r.sampling_location?.toLowerCase() || '').includes(search) ||
+        (r.equipment_name?.toLowerCase() || '').includes(search) ||
+        (r.exposure_type?.toLowerCase() || '').includes(search)
+      );
+    }
+    
+    // Apply sorting
     if (sortBy === 'value') {
       filtered = [...filtered].sort((a, b) => b.exposure_value - a.exposure_value);
     } else if (sortBy === 'status') {
@@ -502,7 +526,19 @@ export function ExposureMonitoringScreen() {
     }
 
     return filtered;
-  }, [readings, sortBy]);
+  }, [readings, sortBy, searchText]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredReadings.length / ITEMS_PER_PAGE);
+  const paginatedReadings = useMemo(() => {
+    const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredReadings.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+  }, [filteredReadings, currentPage]);
+
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText, filterStatus, filterType, sortBy]);
 
   const stats = useMemo(() => ({
     total: readings.length,
@@ -520,8 +556,8 @@ export function ExposureMonitoringScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Exposure Monitoring</Text>
-        <Text style={styles.headerSubtitle}>Real-time occupational exposure tracking</Text>
+        <Text style={styles.headerTitle}>Surveillance des Expositions</Text>
+        <Text style={styles.headerSubtitle}>Suivi des expositions professionnelles en temps réel</Text>
       </View>
 
       {error && (
@@ -539,7 +575,7 @@ export function ExposureMonitoringScreen() {
             onPress={() => setFilterStatus('all')}
           >
             <Text style={[styles.filterText, filterStatus === 'all' && { color: colors.primary }]}>
-              All ({stats.total})
+              Tout ({stats.total})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -547,7 +583,7 @@ export function ExposureMonitoringScreen() {
             onPress={() => setFilterStatus('safe')}
           >
             <Text style={[styles.filterText, filterStatus === 'safe' && { color: colors.secondary }]}>
-              Safe ({stats.safe})
+              Sûr ({stats.safe})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -555,7 +591,7 @@ export function ExposureMonitoringScreen() {
             onPress={() => setFilterStatus('exceeded')}
           >
             <Text style={[styles.filterText, filterStatus === 'exceeded' && { color: colors.error }]}>
-              Exceeded ({stats.exceeded})
+              Dépassé ({stats.exceeded})
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -578,13 +614,13 @@ export function ExposureMonitoringScreen() {
         {loading && readings.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading readings...</Text>
+            <Text style={styles.loadingText}>Chargement des mesures...</Text>
           </View>
         ) : (
           <>
             {/* Overview Cards */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Exposure Types</Text>
+              <Text style={styles.sectionTitle}>Types d'Exposition</Text>
               <View style={styles.typesGrid}>
                 {Object.values(EXPOSURE_TYPES).map(exposure => (
                   <ExposureTypeCard 
@@ -597,34 +633,96 @@ export function ExposureMonitoringScreen() {
               </View>
             </View>
 
-            {/* Recent Readings Summary */}
+            {/* Search & Filter Controls */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent Readings</Text>
-                <TouchableOpacity onPress={() => setSortBy(sortBy === 'date' ? 'value' : 'date')}>
-                  <Text style={styles.sortText}>Sort: {sortBy === 'date' ? 'Date' : 'Value'}</Text>
-                </TouchableOpacity>
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Chercher travailleur, lieu, équipement..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
 
-              {filteredReadings.length > 0 ? (
-                filteredReadings.map(reading => (
+              {/* Filter Chips */}
+              <View style={styles.filterChipsContainer}>
+                <Text style={styles.filterLabel}>Statut :</Text>
+                <View style={styles.chipsRow}>
+                  {[
+                    { id: 'all' as const, label: 'Tous' },
+                    { id: 'safe' as const, label: 'Sûr' },
+                    { id: 'warning' as const, label: 'Attention' },
+                    { id: 'exceeded' as const, label: 'Dépassé' },
+                    { id: 'critical' as const, label: 'Critique' }
+                  ].map(chip => (
+                    <TouchableOpacity
+                      key={chip.id}
+                      style={[
+                        styles.filterChip,
+                        filterStatus === chip.id && styles.filterChipActive
+                      ]}
+                      onPress={() => {
+                        setFilterStatus(chip.id);
+                        setCurrentPage(1);
+                      }}
+                      disabled={loading}
+                    >
+                      <Text style={[
+                        styles.filterChipText,
+                        filterStatus === chip.id && styles.filterChipActiveText
+                      ]}>
+                        {chip.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Results Summary & Sort */}
+              <View style={styles.resultsHeader}>
+                <Text style={styles.resultsText}>
+                  {filteredReadings.length} résultats • Page {currentPage} sur {totalPages}
+                </Text>
+                <TouchableOpacity onPress={() => setSortBy(sortBy === 'date' ? 'value' : 'date')} style={styles.sortButton}>
+                  <Ionicons name="swap-vertical" size={16} color={colors.primary} />
+                  <Text style={styles.sortButtonText}>
+                    {sortBy === 'date' ? 'Date ↓' : 'Valeur ↓'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Recent Readings Summary */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Mesures Récentes</Text>
+
+              {paginatedReadings.length > 0 ? (
+                <>
+                  {paginatedReadings.map(reading => (
                   <View key={reading.id} style={styles.readingCard}>
                     <View style={styles.readingHeader}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.readingWorker}>{reading.worker_name || (reading.worker ? `Worker #${reading.worker}` : 'Area Reading')}</Text>
+                        <Text style={styles.readingWorker}>{reading.worker_name || (reading.worker ? `Travailleur #${reading.worker}` : 'Mesure de Zone')}</Text>
                         <Text style={styles.readingArea}>{reading.sampling_location}</Text>
                       </View>
                       <StatusBadge status={reading.status} />
                     </View>
                     <View style={styles.readingDetails}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.detailLabel}>Value</Text>
+                        <Text style={styles.detailLabel}>Valeur</Text>
                         <Text style={[styles.detailValue, { color: reading.status === 'safe' ? colors.secondary : colors.error }]}>
                           {Number(reading.exposure_value).toFixed(3)} {reading.unit_measurement}
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.detailLabel}>Limit</Text>
+                        <Text style={styles.detailLabel}>Limite</Text>
                         <Text style={styles.detailValue}>{reading.acgih_tlv_limit != null ? reading.acgih_tlv_limit : '—'} {reading.unit_measurement}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
@@ -633,11 +731,51 @@ export function ExposureMonitoringScreen() {
                       </View>
                     </View>
                   </View>
-                ))
+                  ))}
+                  
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <View style={styles.paginationContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.paginationBtn,
+                          currentPage === 1 && styles.paginationBtnDisabled
+                        ]}
+                        onPress={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <Ionicons name="chevron-back" size={18} color={currentPage === 1 ? colors.textSecondary : colors.primary} />
+                        <Text style={[
+                          styles.paginationBtnText,
+                          currentPage === 1 && { color: colors.textSecondary }
+                        ]}>Précédent</Text>
+                      </TouchableOpacity>
+
+                      <Text style={styles.paginationInfo}>
+                        Page <Text style={styles.paginationPageNumber}>{currentPage}</Text> / <Text style={styles.paginationPageNumber}>{totalPages}</Text>
+                      </Text>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.paginationBtn,
+                          currentPage === totalPages && styles.paginationBtnDisabled
+                        ]}
+                        onPress={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        <Text style={[
+                          styles.paginationBtnText,
+                          currentPage === totalPages && { color: colors.textSecondary }
+                        ]}>Suivant</Text>
+                        <Ionicons name="chevron-forward" size={18} color={currentPage === totalPages ? colors.textSecondary : colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               ) : (
                 <View style={styles.emptyState}>
                   <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
-                  <Text style={styles.emptyStateText}>No readings found</Text>
+                  <Text style={styles.emptyStateText}>Aucune mesure trouvée</Text>
                 </View>
               )}
             </View>
@@ -660,14 +798,14 @@ export function ExposureMonitoringScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Record Exposure Reading</Text>
+              <Text style={styles.modalTitle}>Enregistrer une Mesure d'Exposition</Text>
               <TouchableOpacity onPress={() => setManualEntryVisible(false)}>
                 <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalBody}>
-              <Text style={styles.formLabel}>Exposure Type *</Text>
+              <Text style={styles.formLabel}>Type d'Exposition *</Text>
               <View style={styles.pickerContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {Object.values(EXPOSURE_TYPES).map(type => (
@@ -683,7 +821,7 @@ export function ExposureMonitoringScreen() {
                     >
                       <Text style={[
                         styles.typeOptionText,
-                        newReading.exposure_type === type.id && { color: colors.primary }
+                        newReading.exposure_type === type.id && { color: '#FFF', fontWeight: '700' }
                       ]}>
                         {type.name}
                       </Text>
@@ -692,48 +830,53 @@ export function ExposureMonitoringScreen() {
                 </ScrollView>
               </View>
 
-              <Text style={styles.formLabel}>Exposure Value *</Text>
+              <Text style={styles.formLabel}>Valeur d'Exposition *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter reading value"
+                placeholder="Saisir la valeur mesurée"
                 keyboardType="decimal-pad"
                 value={newReading.exposure_value}
                 onChangeText={(text) => setNewReading({ ...newReading, exposure_value: text })}
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <Text style={styles.formLabel}>Unit</Text>
+              <Text style={styles.formLabel}>Unité</Text>
               <Text style={styles.unitDisplay}>
-                {newReading.unit_measurement || 'Select exposure type first'}
+                {newReading.unit_measurement || 'Sélectionner un type d\'exposition d\'abord'}
               </Text>
 
-              <Text style={styles.formLabel}>Sampling Location *</Text>
+              <Text style={styles.formLabel}>Lieu de Prélèvement *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g., Main Shaft, Grinding Mill"
+                placeholder="ex: Puits Principal, Broyeur"
                 value={newReading.sampling_location}
                 onChangeText={(text) => setNewReading({ ...newReading, sampling_location: text })}
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <Text style={styles.formLabel}>Equipment Name (Optional)</Text>
+              <Text style={styles.formLabel}>Nom de l'Équipement (Optionnel)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g., Gravimetric Sampler #02"
+                placeholder="ex: Échantillonneur Gravimétrique #02"
                 value={newReading.equipment_name}
                 onChangeText={(text) => setNewReading({ ...newReading, equipment_name: text })}
                 placeholderTextColor={colors.textSecondary}
               />
 
               <TouchableOpacity
-                style={[styles.submitButton, submitting && { opacity: 0.6 }]}
+                style={[
+                  styles.submitButton,
+                  (!isFormValid() || submitting) && styles.submitButtonDisabled
+                ]}
                 onPress={handleSubmitReading}
-                disabled={submitting}
+                disabled={!isFormValid() || submitting}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Submit Reading</Text>
+                  <Text style={[styles.submitButtonText, !isFormValid() && styles.submitButtonTextDisabled]}>
+                    Enregistrer la Mesure
+                  </Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -1133,7 +1276,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceVariant,
   },
   typeOptionActive: {
-    backgroundColor: colors.primaryFaded,
+    backgroundColor: colors.primary,
   },
   typeOptionText: {
     fontSize: 12,
@@ -1175,5 +1318,129 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFF',
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: colors.textSecondary,
+  },
+  submitButtonTextDisabled: {
+    color: colors.textTertiary,
+  },
+  // Search & Filter Styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  filterChipsContainer: {
+    marginBottom: spacing.lg,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primaryFaded,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  filterChipActiveText: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  resultsText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primaryFaded,
+    gap: spacing.sm,
+  },
+  sortButtonText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.md,
+  },
+  paginationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primaryFaded,
+    gap: 4,
+  },
+  paginationBtnDisabled: {
+    backgroundColor: colors.outline,
+    opacity: 0.5,
+  },
+  paginationBtnText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  paginationInfo: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  paginationPageNumber: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '700',
   },
 });
