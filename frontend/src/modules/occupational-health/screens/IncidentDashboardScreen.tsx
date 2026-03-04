@@ -127,60 +127,60 @@ function mapBackendToIncident(backendIncident: any): Incident {
 
 // ─── Config Maps ─────────────────────────────────────────────
 const TYPE_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  fatality:                      { icon: 'skull',             color: '#DC2626', label: 'Fatality' },
-  lost_time_injury:              { icon: 'bandage',           color: '#EF4444', label: 'Lost Time' },
-  medical_treatment:             { icon: 'medical',           color: '#3B82F6', label: 'Medical' },
-  first_aid:                     { icon: 'medkit',            color: '#3B82F6', label: 'First Aid' },
-  near_miss:                     { icon: 'alert-circle',      color: '#F59E0B', label: 'Near Miss' },
-  dangerous_occurrence:          { icon: 'warning',           color: '#F59E0B', label: 'Dangerous' },
-  occupational_disease_incident: { icon: 'pulse',             color: '#8B5CF6', label: 'Disease' },
-  needle_stick:                  { icon: 'alert-circle',      color: '#DC2626', label: 'Needle Stick' },
+  fatality:                      { icon: 'skull',             color: '#DC2626', label: 'Décès' },
+  lost_time_injury:              { icon: 'bandage',           color: '#EF4444', label: 'Arrêt de travail' },
+  medical_treatment:             { icon: 'medical',           color: '#3B82F6', label: 'Traitement médical' },
+  first_aid:                     { icon: 'medkit',            color: '#3B82F6', label: 'Premiers soins' },
+  near_miss:                     { icon: 'alert-circle',      color: '#F59E0B', label: 'Quasi-accident' },
+  dangerous_occurrence:          { icon: 'warning',           color: '#F59E0B', label: 'Situation dangereuse' },
+  occupational_disease_incident: { icon: 'pulse',             color: '#8B5CF6', label: 'Maladie professionnelle' },
+  needle_stick:                  { icon: 'alert-circle',      color: '#DC2626', label: 'Piqûre d\'aiguille' },
   patient_violence:              { icon: 'alert',             color: '#DC2626', label: 'Violence' },
-  road_accident:                 { icon: 'car',               color: '#DC2626', label: 'Road' },
-  robbery_violence:              { icon: 'alert',             color: '#DC2626', label: 'Robbery' },
-  chemical_spill:                { icon: 'water',             color: '#8B5CF6', label: 'Chemical' },
-  fall_from_height:              { icon: 'alert-circle',      color: '#DC2626', label: 'Fall' },
-  machinery_accident:            { icon: 'hammer',            color: '#DC2626', label: 'Machinery' },
+  road_accident:                 { icon: 'car',               color: '#DC2626', label: 'Accident de route' },
+  robbery_violence:              { icon: 'alert',             color: '#DC2626', label: 'Agression' },
+  chemical_spill:                { icon: 'water',             color: '#8B5CF6', label: 'Déversement chimique' },
+  fall_from_height:              { icon: 'alert-circle',      color: '#DC2626', label: 'Chute en hauteur' },
+  machinery_accident:            { icon: 'hammer',            color: '#DC2626', label: 'Accident machine' },
   explosion:                     { icon: 'alert',             color: '#DC2626', label: 'Explosion' },
-  fire:                          { icon: 'alert',             color: '#DC2626', label: 'Fire' },
-  electrical_incident:           { icon: 'flash',             color: '#EF4444', label: 'Electrical' },
-  struck_by_object:              { icon: 'alert-circle',      color: '#DC2626', label: 'Struck' },
-  repetitive_strain:             { icon: 'hand-right-outline',color: '#F59E0B', label: 'RSI' },
-  stress_related:                { icon: 'alert-circle',      color: '#8B5CF6', label: 'Stress' },
-  injury:                        { icon: 'bandage',           color: '#EF4444', label: 'Injury' },
-  property_damage:               { icon: 'hammer',            color: '#8B5CF6', label: 'Property' },
-  environmental:                 { icon: 'leaf',              color: '#10B981', label: 'Environmental' },
-  other:                         { icon: 'help-circle',       color: '#94A3B8', label: 'Other' },
+  fire:                          { icon: 'alert',             color: '#DC2626', label: 'Incendie' },
+  electrical_incident:           { icon: 'flash',             color: '#EF4444', label: 'Incident électrique' },
+  struck_by_object:              { icon: 'alert-circle',      color: '#DC2626', label: 'Choc d\'objet' },
+  repetitive_strain:             { icon: 'hand-right-outline',color: '#F59E0B', label: 'TMS' },
+  stress_related:                { icon: 'alert-circle',      color: '#8B5CF6', label: 'Lié au stress' },
+  injury:                        { icon: 'bandage',           color: '#EF4444', label: 'Blessure' },
+  property_damage:               { icon: 'hammer',            color: '#8B5CF6', label: 'Dégâts matériels' },
+  environmental:                 { icon: 'leaf',              color: '#10B981', label: 'Environnemental' },
+  other:                         { icon: 'help-circle',       color: '#94A3B8', label: 'Autre' },
 };
 
 // Valid backend status values: reported | investigating | closed | follow_up
 const STATUS_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  reported:      { icon: 'flag-outline',             color: '#3B82F6', label: 'Reported' },
-  investigating: { icon: 'search-outline',           color: '#F59E0B', label: 'Investigating' },
-  follow_up:     { icon: 'refresh-circle-outline',   color: '#8B5CF6', label: 'Follow-up' },
-  closed:        { icon: 'checkmark-done-circle',    color: '#22C55E', label: 'Closed' },
+  reported:      { icon: 'flag-outline',             color: '#3B82F6', label: 'Signalé' },
+  investigating: { icon: 'search-outline',           color: '#F59E0B', label: 'En enquête' },
+  follow_up:     { icon: 'refresh-circle-outline',   color: '#8B5CF6', label: 'Suivi' },
+  closed:        { icon: 'checkmark-done-circle',    color: '#22C55E', label: 'Fermé' },
   // Legacy / display-only aliases kept for backwards compatibility
-  under_investigation:    { icon: 'search-outline',  color: '#F59E0B', label: 'Investigating' },
-  investigation_complete: { icon: 'checkmark-circle', color: '#8B5CF6', label: 'Complete' },
+  under_investigation:    { icon: 'search-outline',  color: '#F59E0B', label: 'En enquête' },
+  investigation_complete: { icon: 'checkmark-circle', color: '#8B5CF6', label: 'Complété' },
 };
 
 const VALID_BACKEND_STATUSES = ['reported', 'investigating', 'follow_up', 'closed'] as const;
 type BackendStatus = typeof VALID_BACKEND_STATUSES[number];
 
-const FALLBACK_STATUS_CFG = { icon: 'help-circle-outline', color: '#94A3B8', label: 'Unknown' };
-const FALLBACK_TYPE_CFG   = { icon: 'help-circle',         color: '#94A3B8', label: 'Other' };
+const FALLBACK_STATUS_CFG = { icon: 'help-circle-outline', color: '#94A3B8', label: 'Inconnu' };
+const FALLBACK_TYPE_CFG   = { icon: 'help-circle',         color: '#94A3B8', label: 'Autre' };
 const FALLBACK_SEV_CFG    = { color: '#94A3B8', label: '—' };
 
 const SEVERITY_CONFIG: Record<string, { color: string; label: string }> = {
-  '1': { color: '#22C55E', label: 'Negligible' },
-  '2': { color: '#F59E0B', label: 'Minor' },
-  '3': { color: '#EF4444', label: 'Moderate' },
-  '4': { color: '#DC2626', label: 'Major' },
-  '5': { color: '#8B0000', label: 'Catastrophic' },
-  low:      { color: '#22C55E', label: 'Low' },
-  medium:   { color: '#F59E0B', label: 'Medium' },
-  high:     { color: '#EF4444', label: 'High' },
-  critical: { color: '#DC2626', label: 'Critical' },
+  '1': { color: '#22C55E', label: 'Négligeable' },
+  '2': { color: '#F59E0B', label: 'Mineur' },
+  '3': { color: '#EF4444', label: 'Modéré' },
+  '4': { color: '#DC2626', label: 'Majeur' },
+  '5': { color: '#8B0000', label: 'Catastrophique' },
+  low:      { color: '#22C55E', label: 'Faible' },
+  medium:   { color: '#F59E0B', label: 'Moyen' },
+  high:     { color: '#EF4444', label: 'Élevé' },
+  critical: { color: '#DC2626', label: 'Critique' },
 };
 
 // ─── Sample Data ─────────────────────────────────────────────
@@ -295,20 +295,20 @@ function IncidentCard({ incident, onPress }: { incident: Incident; onPress: () =
           <View style={styles.alertPill}>
             <Ionicons name="alert-circle" size={13} color="#DC2626" />
             <Text style={styles.alertPillText}>
-              LTI — {incident.ltiDays}d
+              TT — {incident.ltiDays}j
             </Text>
           </View>
         )}
         {incident.capaDeadline && (
           <View style={[styles.alertPill, styles.alertPillAmber]}>
             <Ionicons name="calendar-outline" size={13} color="#D97706" />
-            <Text style={[styles.alertPillText, { color: '#92400E' }]}>CAPA due {incident.capaDeadline}</Text>
+            <Text style={[styles.alertPillText, { color: '#92400E' }]}>CAPA avant {incident.capaDeadline}</Text>
           </View>
         )}
         {attachmentCount > 0 && (
           <View style={[styles.alertPill, { backgroundColor: '#DBEAFE' }]}>
             <Ionicons name="image-outline" size={13} color="#0284C7" />
-            <Text style={[styles.alertPillText, { color: '#0C4A6E' }]}>{attachmentCount} file{attachmentCount !== 1 ? 's' : ''}</Text>
+            <Text style={[styles.alertPillText, { color: '#0C4A6E' }]}>{attachmentCount} fichier{attachmentCount !== 1 ? 's' : ''}</Text>
           </View>
         )}
       </View>
@@ -339,7 +339,7 @@ function IncidentCard({ incident, onPress }: { incident: Incident; onPress: () =
         </View>
         <TouchableOpacity style={styles.footerBtn} onPress={onPress}>
           <Ionicons name="eye-outline" size={14} color={colors.primary} />
-          <Text style={[styles.footerBtnText, { color: colors.primary }]}>View Details</Text>
+          <Text style={[styles.footerBtnText, { color: colors.primary }]}>Voir détails</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -369,11 +369,11 @@ function IncidentDetailModal({
 
   const handleSaveChanges = () => {
     if (!formData.description?.trim() || !formData.location?.trim()) {
-      Alert.alert('Validation Error', 'Description and Location are required');
+      Alert.alert('Erreur de validation', 'La description et le lieu sont obligatoires');
       return;
     }
     if ((formData.ltiDays ?? 0) < 0) {
-      Alert.alert('Validation Error', 'Work days lost cannot be negative');
+      Alert.alert('Erreur de validation', 'Les jours de travail perdus ne peuvent pas être négatifs');
       return;
     }
     onUpdate(formData);
@@ -382,28 +382,28 @@ function IncidentDetailModal({
   };
 
   const handleConfirmDelete = () => {
-    Alert.alert('Delete Incident', 'Are you sure you want to delete this incident? This action cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { onDelete(formData.backendId!); onClose(); } },
+    Alert.alert('Supprimer l\'incident', 'Êtes-vous sûr de vouloir supprimer cet incident? Cette action ne peut pas être annulée.', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => { onDelete(formData.backendId!); onClose(); } },
     ]);
   };
 
   const handleAddAttachment = async () => {
     if (!formData.backendId) {
-      Alert.alert('Error', 'This incident must be saved before adding attachments');
+      Alert.alert('Erreur', 'Cet incident doit être enregistré avant d\'ajouter des pièces jointes');
       return;
     }
     Alert.alert(
-      'Add Evidence',
-      'Choose how to add photo or video:',
+      'Ajouter une preuve',
+      'Choisissez comment ajouter une photo ou une vidéo',
       [
         {
-          text: 'Take Photo',
+          text: 'Prendre une photo',
           onPress: async () => {
             try {
               const { status } = await ImagePicker.requestCameraPermissionsAsync();
               if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Camera access is required to take photos');
+                Alert.alert('Accès refusé', 'L\'accès à la caméra est nécessaire pour prendre des photos');
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({
@@ -416,17 +416,17 @@ function IncidentDetailModal({
                 await uploadAttachment(result.assets[0], 'image');
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to access camera');
+              Alert.alert('Erreur', 'Impossible d\'accéder à la caméra');
             }
           },
         },
         {
-          text: 'Choose from Gallery',
+          text: 'Choisir dans la galerie',
           onPress: async () => {
             try {
               const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Gallery access is required to select photos');
+                Alert.alert('Accès refusé', 'L\'accès à la galérie est nécessaire pour sélectionner des photos');
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({
@@ -439,11 +439,11 @@ function IncidentDetailModal({
                 await uploadAttachment(result.assets[0], 'image');
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to access gallery');
+              Alert.alert('Erreur', 'Impossible d\'accéder à la galérie');
             }
           },
         },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Annuler', style: 'cancel' },
       ]
     );
   };
@@ -470,19 +470,19 @@ function IncidentDetailModal({
           ...formData,
           attachments: [...(formData.attachments || []), result.data],
         });
-        Alert.alert('Success', 'Evidence uploaded successfully');
+        Alert.alert('Succès', 'Preuve téléchargée avec succès');
       } else {
-        Alert.alert('Error', result.error || 'Failed to upload evidence');
+        Alert.alert('Erreur', result.error || 'Impossible de télécharger la preuve');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to upload evidence');
+      Alert.alert('Erreur', error.message || 'Impossible de télécharger la preuve');
     } finally {
       setUploadingAttachment(false);
     }
   };
 
   const handleDeleteAttachment = async (attachmentId: number) => {
-    Alert.alert('Delete Evidence', 'Remove this photo/video?', [
+    Alert.alert('Supprimer la preuve', 'Supprimer cette photo/vidéo?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -498,12 +498,12 @@ function IncidentDetailModal({
                   attachments: formData.attachments.filter(a => a.id !== attachmentId),
                 });
               }
-              Alert.alert('Success', 'Evidence removed');
+              Alert.alert('Succès', 'Preuve supprimée');
             } else {
-              Alert.alert('Error', result.error || 'Failed to delete evidence');
+              Alert.alert('Erreur', result.error || 'Impossible de supprimer la preuve');
             }
           } catch (error) {
-            Alert.alert('Error', 'Failed to delete evidence');
+            Alert.alert('Erreur', 'Impossible de supprimer la preuve');
           }
         },
       },
@@ -585,7 +585,7 @@ function IncidentDetailModal({
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.description}
                   onChangeText={(text) => setFormData({ ...formData, description: text })}
-                  placeholder="Enter incident description"
+                  placeholder="Entrez la description de l'incident"
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={4}
@@ -599,14 +599,14 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="location-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Location</Text>
+                <Text style={styles.modalSectionTitle}>Lieu</Text>
               </View>
               {isEditing ? (
                 <TextInput
                   style={styles.editableField}
                   value={formData.location}
                   onChangeText={(text) => setFormData({ ...formData, location: text })}
-                  placeholder="Enter incident location"
+                  placeholder="Lieu de l'incident"
                   placeholderTextColor={colors.textSecondary}
                 />
               ) : (
@@ -618,7 +618,7 @@ function IncidentDetailModal({
             <View style={[styles.modalSection, styles.cardShadow]}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="person-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Affected Worker</Text>
+                <Text style={styles.modalSectionTitle}>Travailleur affecté</Text>
               </View>
               <View style={styles.workerInfoCard}>
                 <View style={styles.workerInfoRow}>
@@ -655,11 +655,11 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="search-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Investigation</Text>
+                <Text style={styles.modalSectionTitle}>Enquête</Text>
               </View>
               {isEditing ? (
                 <>
-                  <Text style={[styles.infoTableLabel, { marginBottom: spacing.xs }]}>Root Cause Analysis</Text>
+                  <Text style={[styles.infoTableLabel, { marginBottom: spacing.xs }]}>Analyse des causes profondes</Text>
                   <TextInput
                     style={[styles.editableField, styles.multilineInput]}
                     value={formData.rootCause || ''}
@@ -729,14 +729,14 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="flash-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Immediate Actions</Text>
+                <Text style={styles.modalSectionTitle}>Actions immédiates</Text>
               </View>
               {isEditing ? (
                 <TextInput
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.immediateActions || ''}
                   onChangeText={(text) => setFormData({ ...formData, immediateActions: text })}
-                  placeholder="What immediate actions were taken?"
+                  placeholder="Quelles mesures immédiates ont été prises?"
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={3}
@@ -750,14 +750,14 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="construct-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Equipment Involved</Text>
+                <Text style={styles.modalSectionTitle}>Équipement impliqué</Text>
               </View>
               {isEditing ? (
                 <TextInput
                   style={styles.editableField}
                   value={formData.equipmentInvolved || ''}
                   onChangeText={(text) => setFormData({ ...formData, equipmentInvolved: text })}
-                  placeholder="Any equipment or machinery involved?"
+                  placeholder="Tout équipement ou machinerie impliquée?"
                   placeholderTextColor={colors.textSecondary}
                 />
               ) : (
@@ -769,33 +769,33 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="medkit-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Medical Response</Text>
+                <Text style={styles.modalSectionTitle}>Réponse médicale</Text>
               </View>
               <View style={styles.infoTable}>
                 {/* First Aid Toggle */}
                 <View style={styles.infoTableRow}>
-                  <Text style={styles.infoTableLabel}>First Aid Given</Text>
+                  <Text style={styles.infoTableLabel}>Premiers soins donnés</Text>
                   {isEditing ? (
                     <TouchableOpacity
                       style={[styles.toggleBtn, { backgroundColor: formData.firstAidGiven ? '#22C55E20' : colors.surfaceVariant, borderColor: formData.firstAidGiven ? '#22C55E' : colors.outline }]}
                       onPress={() => setFormData({ ...formData, firstAidGiven: !formData.firstAidGiven })}
                     >
                       <Ionicons name={formData.firstAidGiven ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.firstAidGiven ? '#22C55E' : colors.textSecondary} />
-                      <Text style={[styles.toggleBtnText, { color: formData.firstAidGiven ? '#22C55E' : colors.textSecondary }]}>{formData.firstAidGiven ? 'Yes' : 'No'}</Text>
+                      <Text style={[styles.toggleBtnText, { color: formData.firstAidGiven ? '#22C55E' : colors.textSecondary }]}>{formData.firstAidGiven ? 'Oui' : 'Non'}</Text>
                     </TouchableOpacity>
                   ) : (
-                    <Text style={styles.infoTableValue}>{formData.firstAidGiven ? 'Yes' : 'No'}</Text>
+                    <Text style={styles.infoTableValue}>{formData.firstAidGiven ? 'Oui' : 'Non'}</Text>
                   )}
                 </View>
                 {formData.firstAidGiven && (
                   <View style={[styles.infoTableRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
-                    <Text style={styles.infoTableLabel}>First Aid By</Text>
+                    <Text style={styles.infoTableLabel}>Premiers soins par</Text>
                     {isEditing ? (
                       <TextInput
                         style={[styles.editableField, { marginTop: 4, width: '100%' }]}
                         value={formData.firstAidBy || ''}
                         onChangeText={(text) => setFormData({ ...formData, firstAidBy: text })}
-                        placeholder="Name of first aid provider"
+                        placeholder="Nom du secouriste"
                         placeholderTextColor={colors.textSecondary}
                       />
                     ) : (
@@ -805,28 +805,28 @@ function IncidentDetailModal({
                 )}
                 {/* Medical Treatment Toggle */}
                 <View style={styles.infoTableRow}>
-                  <Text style={styles.infoTableLabel}>Medical Treatment Required</Text>
+                  <Text style={styles.infoTableLabel}>Traitement médical requis</Text>
                   {isEditing ? (
                     <TouchableOpacity
                       style={[styles.toggleBtn, { backgroundColor: formData.medicalTreatmentRequired ? '#3B82F620' : colors.surfaceVariant, borderColor: formData.medicalTreatmentRequired ? '#3B82F6' : colors.outline }]}
                       onPress={() => setFormData({ ...formData, medicalTreatmentRequired: !formData.medicalTreatmentRequired })}
                     >
                       <Ionicons name={formData.medicalTreatmentRequired ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary} />
-                      <Text style={[styles.toggleBtnText, { color: formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary }]}>{formData.medicalTreatmentRequired ? 'Yes' : 'No'}</Text>
+                      <Text style={[styles.toggleBtnText, { color: formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary }]}>{formData.medicalTreatmentRequired ? 'Oui' : 'Non'}</Text>
                     </TouchableOpacity>
                   ) : (
-                    <Text style={styles.infoTableValue}>{formData.medicalTreatmentRequired ? 'Yes' : 'No'}</Text>
+                    <Text style={styles.infoTableValue}>{formData.medicalTreatmentRequired ? 'Oui' : 'Non'}</Text>
                   )}
                 </View>
                 {formData.medicalTreatmentRequired && (
                   <View style={[styles.infoTableRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4, borderBottomWidth: 0 }]}>
-                    <Text style={styles.infoTableLabel}>Hospital / Clinic</Text>
+                    <Text style={styles.infoTableLabel}>Hôpital / Clinique</Text>
                     {isEditing ? (
                       <TextInput
                         style={[styles.editableField, { marginTop: 4, width: '100%' }]}
                         value={formData.hospitalName || ''}
                         onChangeText={(text) => setFormData({ ...formData, hospitalName: text })}
-                        placeholder="Hospital or clinic name"
+                        placeholder="Nom de l'établissement de santé"
                         placeholderTextColor={colors.textSecondary}
                       />
                     ) : (
@@ -841,14 +841,14 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="checkmark-done-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Corrective Actions Planned</Text>
+                <Text style={styles.modalSectionTitle}>Actions correctives planifiées</Text>
               </View>
               {isEditing ? (
                 <TextInput
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.correctiveActionsPlanned || ''}
                   onChangeText={(text) => setFormData({ ...formData, correctiveActionsPlanned: text })}
-                  placeholder="Describe planned corrective actions..."
+                  placeholder="Décrivez les actions correctives planifiées..."
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={3}
@@ -862,13 +862,13 @@ function IncidentDetailModal({
             <View style={styles.modalSection}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Regulatory Reporting</Text>
+                <Text style={styles.modalSectionTitle}>Déclaration réglementaire</Text>
               </View>
               <View style={styles.infoTable}>
                 {[
-                  { key: 'reportableToAuthorities', label: 'Reportable to Authorities' },
-                  { key: 'reportedToCnss', label: 'Reported to CNSS' },
-                  { key: 'reportedToLabourInspection', label: 'Reported to Labour Inspection' },
+                  { key: 'reportableToAuthorities', label: 'À déclarer aux autorités' },
+                  { key: 'reportedToCnss', label: 'Déclaré à la CNSS' },
+                  { key: 'reportedToLabourInspection', label: 'Signalé à l\'inspection du travail' },
                 ].map(({ key, label }) => (
                   <View key={key} style={styles.infoTableRow}>
                     <Text style={styles.infoTableLabel}>{label}</Text>
@@ -878,10 +878,10 @@ function IncidentDetailModal({
                         onPress={() => setFormData({ ...formData, [key]: !(formData as any)[key] })}
                       >
                         <Ionicons name={(formData as any)[key] ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={(formData as any)[key] ? '#8B5CF6' : colors.textSecondary} />
-                        <Text style={[styles.toggleBtnText, { color: (formData as any)[key] ? '#8B5CF6' : colors.textSecondary }]}>{(formData as any)[key] ? 'Yes' : 'No'}</Text>
+                        <Text style={[styles.toggleBtnText, { color: (formData as any)[key] ? '#8B5CF6' : colors.textSecondary }]}>{(formData as any)[key] ? 'Oui' : 'Non'}</Text>
                       </TouchableOpacity>
                     ) : (
-                      <Text style={styles.infoTableValue}>{(formData as any)[key] ? 'Yes' : 'No'}</Text>
+                      <Text style={styles.infoTableValue}>{(formData as any)[key] ? 'Oui' : 'Non'}</Text>
                     )}
                   </View>
                 ))}
@@ -892,11 +892,11 @@ function IncidentDetailModal({
             <View style={[styles.modalSection]}>
               <View style={styles.modalSectionHeader}>
                 <Ionicons name="time-outline" size={16} color={colors.primary} />
-                <Text style={styles.modalSectionTitle}>Audit Trail</Text>
+                <Text style={styles.modalSectionTitle}>Historique des modifications</Text>
               </View>
               <View style={styles.infoTable}>
                 <View style={styles.infoTableRow}>
-                  <Text style={styles.infoTableLabel}>Reported</Text>
+                  <Text style={styles.infoTableLabel}>Signalé</Text>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.infoTableValue}>{formData.date} {formData.time}</Text>
                     {formData.reportedByName ? <Text style={[styles.infoTableLabel, { marginTop: 2 }]}>{formData.reportedByName}</Text> : null}
@@ -904,7 +904,7 @@ function IncidentDetailModal({
                 </View>
                 {formData.modifiedDate || formData.updatedByName ? (
                   <View style={styles.infoTableRow}>
-                    <Text style={styles.infoTableLabel}>Last Updated</Text>
+                    <Text style={styles.infoTableLabel}>Dernière mise à jour</Text>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text style={styles.infoTableValue}>{formData.modifiedDate || '—'}</Text>
                       {formData.updatedByName ? <Text style={[styles.infoTableLabel, { marginTop: 2 }]}>{formData.updatedByName}</Text> : null}
@@ -1017,7 +1017,7 @@ function IncidentDetailModal({
 
           <View style={styles.modalFooter}>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => { setIsEditing(false); onClose(); }}>
-              <Text style={styles.cancelBtnText}>{isEditing ? 'Cancel' : 'Close'}</Text>
+              <Text style={styles.cancelBtnText}>{isEditing ? 'Annuler' : 'Fermer'}</Text>
             </TouchableOpacity>
             {isEditing ? (
               <>
@@ -1027,13 +1027,13 @@ function IncidentDetailModal({
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleSaveChanges}>
                   <Ionicons name="checkmark" size={16} color="#FFF" />
-                  <Text style={styles.saveBtnText}>Save</Text>
+                  <Text style={styles.saveBtnText}>Enregistrer</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <TouchableOpacity style={styles.saveBtn} onPress={() => setIsEditing(true)}>
                 <Ionicons name="pencil" size={16} color="#FFF" />
-                <Text style={styles.saveBtnText}>Edit</Text>
+                <Text style={styles.saveBtnText}>Modifier</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1139,7 +1139,7 @@ function CreateIncidentModal({
       }
     } catch (error) {
       console.error('Error loading workers:', error);
-      showToast('Failed to load workers', 'error');
+      showToast('Impossible de charger les travailleurs', 'error');
     } finally {
       setLoadingWorkers(false);
     }
@@ -1154,7 +1154,7 @@ function CreateIncidentModal({
     });
     setShowWorkerDropdown(false);
     setWorkerSearchText('');
-    showToast(`${fullName} selected`, 'success');
+    showToast(`${fullName} sélectionné`, 'success');
   };
 
   const handleClearWorker = () => {
@@ -1164,7 +1164,7 @@ function CreateIncidentModal({
       injured_worker_name: '' 
     });
     setWorkerSearchText('');
-    showToast('Worker cleared');
+    showToast('Travailleur supprimé');
   };
 
   const filteredWorkers = useMemo(() => {
@@ -1178,26 +1178,26 @@ function CreateIncidentModal({
   const handlePickAttachment = () => {
     Alert.alert('Add Evidence', 'Choose how to add photo or video:', [
       {
-        text: 'Take Photo',
+        text: 'Prendre une photo',
         onPress: async () => {
           try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') { Alert.alert('Permission Denied', 'Camera access required'); return; }
+            if (status !== 'granted') { Alert.alert('Accès refusé', 'Accès à la caméra requis'); return; }
             const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
             if (!result.canceled) {
               const asset = result.assets[0];
               const name = asset.uri.split('/').pop() || `photo-${Date.now()}.jpg`;
               setPendingAttachments(prev => [...prev, { uri: asset.uri, attachmentType: 'image', mimeType: asset.mimeType || 'image/jpeg', name }]);
             }
-          } catch { Alert.alert('Error', 'Failed to access camera'); }
+          } catch { Alert.alert('Erreur', 'Impossible d\'accéder à la caméra'); }
         },
       },
       {
-        text: 'Choose from Gallery',
+        text: 'Choisir dans la galerie',
         onPress: async () => {
           try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') { Alert.alert('Permission Denied', 'Gallery access required'); return; }
+            if (status !== 'granted') { Alert.alert('Accès refusé', 'Accès à la galérie requis'); return; }
             const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8 });
             if (!result.canceled) {
               const asset = result.assets[0];
@@ -1205,7 +1205,7 @@ function CreateIncidentModal({
               const name = asset.uri.split('/').pop() || `file-${Date.now()}`;
               setPendingAttachments(prev => [...prev, { uri: asset.uri, attachmentType: isVideo ? 'video' : 'image', mimeType: asset.mimeType || 'image/jpeg', name }]);
             }
-          } catch { Alert.alert('Error', 'Failed to access gallery'); }
+          } catch { Alert.alert('Erreur', 'Impossible d\'accéder à la galérie'); }
         },
       },
       { text: 'Cancel', style: 'cancel' },
@@ -1218,17 +1218,17 @@ function CreateIncidentModal({
 
   const handleSubmit = async () => {
     if (!formData.description?.trim() || !formData.location?.trim() || !formData.type || !formData.date || !formData.immediateActions?.trim()) {
-      showToast('Please fill in all required fields (Type, Date, Location, Description, Immediate Actions)', 'error');
+      showToast('Veuillez remplir tous les champs obligatoires (Type, Date, Lieu, Description, Actions immédiates)', 'error');
       return;
     }
     // Validate date format YYYY-MM-DD
     if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
-      showToast('Date must be in YYYY-MM-DD format (e.g. 2026-03-04)', 'error');
+      showToast('La date doit être au format AAAA-MM-JJ (par exemple 2026-03-04)', 'error');
       return;
     }
     // Validate time format HH:MM or HH:MM:SS
     if (!/^\d{2}:\d{2}(:\d{2})?$/.test(formData.time)) {
-      showToast('Time must be in HH:MM:SS format (e.g. 09:30:00)', 'error');
+      showToast('L\'heure doit être au format HH:MM:SS (par exemple 09:30:00)', 'error');
       return;
     }
     // Ensure time is always HH:MM:SS
@@ -1246,7 +1246,7 @@ function CreateIncidentModal({
 
             {/* Header */}
             <View style={[styles.modalHeader, { borderTopColor: colors.primary, borderTopWidth: 4 }]}>
-              <Text style={styles.modalTitle}>Report New Incident</Text>
+              <Text style={styles.modalTitle}>Signaler un nouvel incident</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Ionicons name="close" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -1279,19 +1279,19 @@ function CreateIncidentModal({
 
               {/* Date */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Date of Incident</Text>
+                <Text style={styles.infoTableLabel}>Date de l'incident</Text>
                 <TextInput
                   style={styles.editableField}
                   value={formData.date}
                   onChangeText={(text) => setFormData({ ...formData, date: text })}
-                  placeholder="YYYY-MM-DD"
+                  placeholder="AAAA-MM-JJ"
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
 
               {/* Time */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Time</Text>
+                <Text style={styles.infoTableLabel}>Heure</Text>
                 <TextInput
                   style={styles.editableField}
                   value={formData.time}
@@ -1303,12 +1303,12 @@ function CreateIncidentModal({
 
               {/* Location */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Location *</Text>
+                <Text style={styles.infoTableLabel}>Lieu *</Text>
                 <TextInput
                   style={styles.editableField}
                   value={formData.location}
                   onChangeText={(text) => setFormData({ ...formData, location: text })}
-                  placeholder="Where did the incident occur?"
+                  placeholder="Où l'incident s'est-il produit?"
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
@@ -1320,7 +1320,7 @@ function CreateIncidentModal({
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.description}
                   onChangeText={(text) => setFormData({ ...formData, description: text })}
-                  placeholder="Describe what happened..."
+                  placeholder="Décrivez ce qui s'est passé..."
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={4}
@@ -1353,12 +1353,12 @@ function CreateIncidentModal({
 
               {/* Root Cause (optional) */}
               <View style={styles.modalSection}>
-                <Text style={[styles.infoTableLabel, { opacity: 0.7 }]}>Root Cause (Optional)</Text>
+                <Text style={[styles.infoTableLabel, { opacity: 0.7 }]}>Cause profonde (Optionnel)</Text>
                 <TextInput
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.rootCause}
                   onChangeText={(text) => setFormData({ ...formData, rootCause: text })}
-                  placeholder="Initial assessment of root cause..."
+                  placeholder="Évaluation initiale de la cause profonde..."
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={3}
@@ -1367,12 +1367,12 @@ function CreateIncidentModal({
 
               {/* Immediate Actions */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Immediate Actions Taken *</Text>
+                <Text style={styles.infoTableLabel}>Actions immédiates prises *</Text>
                 <TextInput
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.immediateActions}
                   onChangeText={(text) => setFormData({ ...formData, immediateActions: text })}
-                  placeholder="What immediate actions were taken?"
+                  placeholder="Quelles mesures immédiates ont été prises?"
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={3}
@@ -1383,7 +1383,7 @@ function CreateIncidentModal({
               <View style={styles.modalSection}>
                 <View style={styles.workerSectionHeader}>
                   <Ionicons name="person-circle-outline" size={18} color={colors.primary} />
-                  <Text style={styles.infoTableLabel}>Injured Worker (Optional)</Text>
+                  <Text style={styles.infoTableLabel}>Travailleur blessé (Optionnel)</Text>
                 </View>
                 
                 {/* Selected Worker Display */}
@@ -1395,7 +1395,7 @@ function CreateIncidentModal({
                       </View>
                       <View style={styles.workerSelectedInfo}>
                         <Text style={styles.workerSelectedName}>{formData.injured_worker_name}</Text>
-                        <Text style={styles.workerSelectedId}>Worker ID: {formData.injured_worker_id}</Text>
+                        <Text style={styles.workerSelectedId}>ID du travailleur : {formData.injured_worker_id}</Text>
                       </View>
                     </View>
                     <TouchableOpacity 
@@ -1412,7 +1412,7 @@ function CreateIncidentModal({
                       <Ionicons name="search" size={16} color={colors.textSecondary} />
                       <TextInput
                         style={styles.workerSearchInput}
-                        placeholder="Search by name or worker ID..."
+                        placeholder="Rechercher par nom ou identifiant du travailleur..."
                         placeholderTextColor={colors.textSecondary}
                         value={workerSearchText}
                         onChangeText={setWorkerSearchText}
@@ -1432,7 +1432,7 @@ function CreateIncidentModal({
                         {loadingWorkers ? (
                           <View style={styles.workerDropdownLoading}>
                             <ActivityIndicator size="small" color={colors.primary} />
-                            <Text style={styles.workerDropdownLoadingText}>Loading workers...</Text>
+                            <Text style={styles.workerDropdownLoadingText}>Chargement des travailleurs...</Text>
                           </View>
                         ) : filteredWorkers.length > 0 ? (
                           <FlatList
@@ -1451,7 +1451,7 @@ function CreateIncidentModal({
                                 </View>
                                 <View style={styles.workerItemInfo}>
                                   <Text style={styles.workerItemName}>{`${item.firstName || ''} ${item.lastName || ''}`.trim()}</Text>
-                                  <Text style={styles.workerItemId}>Worker ID: {item.id}</Text>
+                                  <Text style={styles.workerItemId}>ID du travailleur : {item.id}</Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                               </TouchableOpacity>
@@ -1465,7 +1465,7 @@ function CreateIncidentModal({
                           <View style={styles.workerDropdownEmpty}>
                             <Ionicons name="people-outline" size={24} color={colors.textSecondary} />
                             <Text style={styles.workerDropdownEmptyText}>
-                              {workerSearchText ? 'No workers found' : 'No workers available'}
+                              {workerSearchText ? 'Aucun travailleur trouvé' : 'Aucun travailleur disponible'}
                             </Text>
                           </View>
                         )}
@@ -1475,38 +1475,38 @@ function CreateIncidentModal({
                 )}
                 <Text style={styles.workerHelperText}>
                   <Ionicons name="information-circle" size={12} color={colors.textSecondary} /> 
-                  {' '}Optional: Link affected worker to improve incident tracking
+                  {' '}Optionnel : Lier le travailleur affecté pour améliorer le suivi de l'incident
                 </Text>
               </View>
 
               {/* Equipment Involved */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Equipment Involved (Optional)</Text>
+                <Text style={styles.infoTableLabel}>Équipement impliqué (Optionnel)</Text>
                 <TextInput
                   style={styles.editableField}
                   value={formData.equipmentInvolved}
                   onChangeText={(text) => setFormData({ ...formData, equipmentInvolved: text })}
-                  placeholder="Any equipment or machinery involved?"
+                  placeholder="Tout équipement ou machinerie impliquée?"
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
 
               {/* First Aid */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>First Aid</Text>
+                <Text style={styles.infoTableLabel}>Premiers secours</Text>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { backgroundColor: formData.firstAidGiven ? '#22C55E20' : colors.surfaceVariant, borderColor: formData.firstAidGiven ? '#22C55E' : colors.outline, marginTop: spacing.sm }]}
                   onPress={() => setFormData({ ...formData, firstAidGiven: !formData.firstAidGiven })}
                 >
                   <Ionicons name={formData.firstAidGiven ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.firstAidGiven ? '#22C55E' : colors.textSecondary} />
-                  <Text style={[styles.toggleBtnText, { color: formData.firstAidGiven ? '#22C55E' : colors.textSecondary }]}>First aid was given</Text>
+                  <Text style={[styles.toggleBtnText, { color: formData.firstAidGiven ? '#22C55E' : colors.textSecondary }]}>Les premiers secours ont été administrés</Text>
                 </TouchableOpacity>
                 {formData.firstAidGiven && (
                   <TextInput
                     style={[styles.editableField, { marginTop: spacing.sm }]}
                     value={formData.firstAidBy}
                     onChangeText={(text) => setFormData({ ...formData, firstAidBy: text })}
-                    placeholder="Name of first aid provider"
+                    placeholder="Nom du prestataire de premiers secours"
                     placeholderTextColor={colors.textSecondary}
                   />
                 )}
@@ -1514,20 +1514,20 @@ function CreateIncidentModal({
 
               {/* Medical Treatment */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Medical Treatment</Text>
+                <Text style={styles.infoTableLabel}>Traitement médical</Text>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { backgroundColor: formData.medicalTreatmentRequired ? '#3B82F620' : colors.surfaceVariant, borderColor: formData.medicalTreatmentRequired ? '#3B82F6' : colors.outline, marginTop: spacing.sm }]}
                   onPress={() => setFormData({ ...formData, medicalTreatmentRequired: !formData.medicalTreatmentRequired })}
                 >
                   <Ionicons name={formData.medicalTreatmentRequired ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary} />
-                  <Text style={[styles.toggleBtnText, { color: formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary }]}>Medical treatment required</Text>
+                  <Text style={[styles.toggleBtnText, { color: formData.medicalTreatmentRequired ? '#3B82F6' : colors.textSecondary }]}>Traitement médical requis</Text>
                 </TouchableOpacity>
                 {formData.medicalTreatmentRequired && (
                   <TextInput
                     style={[styles.editableField, { marginTop: spacing.sm }]}
                     value={formData.hospitalName}
                     onChangeText={(text) => setFormData({ ...formData, hospitalName: text })}
-                    placeholder="Hospital or clinic name"
+                    placeholder="Nom de l'établissement de santé"
                     placeholderTextColor={colors.textSecondary}
                   />
                 )}
@@ -1535,12 +1535,12 @@ function CreateIncidentModal({
 
               {/* Corrective Actions */}
               <View style={styles.modalSection}>
-                <Text style={[styles.infoTableLabel, { opacity: 0.7 }]}>Corrective Actions Planned (Optional)</Text>
+                <Text style={[styles.infoTableLabel, { opacity: 0.7 }]}>Actions correctives planifiées (Optionnel)</Text>
                 <TextInput
                   style={[styles.editableField, styles.multilineInput]}
                   value={formData.correctiveActionsPlanned}
                   onChangeText={(text) => setFormData({ ...formData, correctiveActionsPlanned: text })}
-                  placeholder="Describe planned corrective actions..."
+                  placeholder="Décrivez les actions correctives prévues..."
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={3}
@@ -1549,12 +1549,12 @@ function CreateIncidentModal({
 
               {/* Regulatory Compliance */}
               <View style={styles.modalSection}>
-                <Text style={styles.infoTableLabel}>Regulatory Reporting</Text>
+                <Text style={styles.infoTableLabel}>Déclaration réglementaire</Text>
                 <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
                   {([
-                    { key: 'reportableToAuthorities', label: 'Reportable to Authorities' },
-                    { key: 'reportedToCnss', label: 'Report to CNSS' },
-                    { key: 'reportedToLabourInspection', label: 'Report to Labour Inspection' },
+                    { key: 'reportableToAuthorities', label: 'Signalable aux autorités' },
+                    { key: 'reportedToCnss', label: 'Déclarer à la CNSS' },
+                    { key: 'reportedToLabourInspection', label: 'Déclarer à l\'inspection du travail' },
                   ] as const).map(({ key, label }) => (
                     <TouchableOpacity
                       key={key}
@@ -1572,7 +1572,7 @@ function CreateIncidentModal({
               <View style={styles.modalSection}>
                 <View style={styles.modalSectionHeader}>
                   <Ionicons name="image-outline" size={16} color={colors.primary} />
-                  <Text style={styles.modalSectionTitle}>Evidence (Photos/Videos)</Text>
+                  <Text style={styles.modalSectionTitle}>Preuves (Photos/Vidéos)</Text>
                 </View>
                 {pendingAttachments.length > 0 && (
                   <View style={{ marginBottom: spacing.md }}>
@@ -1591,7 +1591,7 @@ function CreateIncidentModal({
                           onPress={() => handleRemovePendingAttachment(idx)}
                         >
                           <Ionicons name="close-circle" size={18} color="#EF4444" />
-                          <Text style={styles.attachmentDeleteBtnText}>Remove</Text>
+                          <Text style={styles.attachmentDeleteBtnText}>Supprimer</Text>
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -1600,11 +1600,11 @@ function CreateIncidentModal({
                 <TouchableOpacity style={styles.attachmentButton} onPress={handlePickAttachment}>
                   <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
                   <Text style={styles.attachmentButtonText}>
-                    {pendingAttachments.length > 0 ? `Add More (${pendingAttachments.length} selected)` : 'Add Photo/Video'}
+                    {pendingAttachments.length > 0 ? `Ajouter plus (${pendingAttachments.length} sélectionnés)` : 'Ajouter photo/vidéo'}
                   </Text>
                 </TouchableOpacity>
                 <Text style={[styles.workerHelperText, { marginTop: spacing.xs }]}>
-                  Files will be uploaded after the incident is created
+                  Les fichiers seront téléchargés après la création de l'incident
                 </Text>
               </View>
 
@@ -1612,7 +1612,7 @@ function CreateIncidentModal({
 
             <View style={styles.modalFooter}>
               <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={isLoading}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.saveBtn, (isLoading || !isFormValid) && { opacity: 0.5 }]} 
@@ -1620,7 +1620,7 @@ function CreateIncidentModal({
                 disabled={isLoading || !isFormValid}
               >
                 <Ionicons name={isLoading ? 'hourglass' : 'add'} size={16} color="#FFF" />
-                <Text style={styles.saveBtnText}>{isLoading ? 'Creating...' : 'Create Incident'}</Text>
+                <Text style={styles.saveBtnText}>{isLoading ? 'Création...' : 'Créer incident'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1716,7 +1716,7 @@ export function IncidentDashboardScreen() {
       }
     } catch (error) {
       console.error('Error loading incidents:', error);
-      showToast('Failed to load incidents', 'error');
+      showToast('Impossible de charger les incidents', 'error');
     } finally {
       setLoading(false);
     }
@@ -1729,7 +1729,7 @@ export function IncidentDashboardScreen() {
   }, []);
 
   const handleDeleteIncident = async (incidentId: number) => {
-    Alert.alert('Delete Incident', 'Are you sure you want to delete this incident?', [
+    Alert.alert('Supprimer l\'incident', 'Êtes-vous sûr de vouloir supprimer cet incident?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -1740,12 +1740,12 @@ export function IncidentDashboardScreen() {
             if (result.success) {
               setIncidents(incidents.filter(i => i.backendId !== incidentId));
               setModalVisible(false);
-              showToast('Incident deleted successfully', 'success');
+              showToast('Incident supprimé avec succès', 'success');
             } else {
-              showToast(result.error || 'Failed to delete incident', 'error');
+              showToast(result.error || 'Impossible de supprimer l\'incident', 'error');
             }
           } catch (error: any) {
-            showToast(error.message || 'Error deleting incident', 'error');
+            showToast(error.message || 'Erreur lors de la suppression de l\'incident', 'error');
           }
         },
       },
@@ -1754,7 +1754,7 @@ export function IncidentDashboardScreen() {
 
   const handleUpdateIncident = async (updatedIncident: Incident) => {
     if (!updatedIncident.backendId) {
-      showToast('Cannot update incident without ID', 'error');
+      showToast('Impossible de mettre à jour l\'incident sans ID', 'error');
       return;
     }
 
@@ -1787,18 +1787,18 @@ export function IncidentDashboardScreen() {
         const updated = mapBackendToIncident(result.data);
         setIncidents(incidents.map(i => i.backendId === updatedIncident.backendId ? updated : i));
         setModalVisible(false);
-        showToast('Incident updated successfully', 'success');
+        showToast('Incident mis à jour avec succès', 'success');
       } else {
-        showToast(result.error || 'Failed to update incident', 'error');
+        showToast(result.error || 'Impossible de mettre à jour l\'incident', 'error');
       }
     } catch (error: any) {
-      showToast(error.message || 'Failed to update incident', 'error');
+      showToast(error.message || 'Impossible de mettre à jour l\'incident', 'error');
     }
   };
 
   const handleCreateIncident = async (formData: any) => {
     if (!formData.description || !formData.location || !formData.type || !formData.date || !formData.immediateActions) {
-      showToast('Please fill in all required fields', 'error');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
 
@@ -1864,12 +1864,12 @@ export function IncidentDashboardScreen() {
         const newIncident = mapBackendToIncident(result.data);
         setIncidents([newIncident, ...incidents]);
         setCreateModalVisible(false);
-        showToast('Incident created successfully', 'success');
+        showToast('Incident créé avec succès', 'success');
       } else {
-        showToast(result.error || 'Failed to create incident', 'error');
+        showToast(result.error || 'Impossible de créer l\'incident', 'error');
       }
     } catch (error: any) {
-      showToast(error.message || 'Failed to create incident', 'error');
+      showToast(error.message || 'Impossible de créer l\'incident', 'error');
     } finally {
       setCreating(false);
     }
@@ -1962,31 +1962,31 @@ export function IncidentDashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Incident Dashboard</Text>
-          <Text style={styles.headerSubtitle}>Track and manage workplace incidents</Text>
+          <Text style={styles.headerTitle}>Tableau de bord des incidents</Text>
+          <Text style={styles.headerSubtitle}>Suivre et gérer les incidents du travail</Text>
         </View>
         <TouchableOpacity style={styles.newBtn} onPress={() => setCreateModalVisible(true)}>
           <Ionicons name="add" size={18} color="#FFF" />
-          <Text style={styles.newBtnText}>Report</Text>
+          <Text style={styles.newBtnText}>Signaler</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, color: colors.textSecondary }}>Loading incidents...</Text>
+          <Text style={{ marginTop: 12, color: colors.textSecondary }}>Chargement des incidents...</Text>
         </View>
       ) : (
         <>
           {/* Enhanced Stats grid — horizontal scrollable with more metrics */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScrollContainer}>
             <View style={styles.statsGridHorizontal}>
-              <StatCard icon="list-outline"         label="Total"    value={stats.total}    color={colors.primary} />
-              <StatCard icon="alert-circle-outline" label="Open"     value={stats.open}     color="#F59E0B" />
-              <StatCard icon="alert-outline"        label="LTI"      value={stats.lti}      color="#DC2626" />
-              <StatCard icon="warning-outline"      label="Critical" value={stats.critical} color="#EF4444" />
-              <StatCard icon="trending-up-outline"  label="High"     value={stats.high}     color="#EF4444" />
-              <StatCard icon="pulse-outline"        label="Medium"   value={stats.medium}   color="#F59E0B" />
+              <StatCard icon="list-outline"         label="Total"     value={stats.total}    color={colors.primary} />
+              <StatCard icon="alert-circle-outline" label="Ouvert"    value={stats.open}     color="#F59E0B" />
+              <StatCard icon="alert-outline"        label="TT"        value={stats.lti}      color="#DC2626" />
+              <StatCard icon="warning-outline"      label="Critique"  value={stats.critical} color="#EF4444" />
+              <StatCard icon="trending-up-outline"  label="Élevé"     value={stats.high}     color="#EF4444" />
+              <StatCard icon="pulse-outline"        label="Moyen"     value={stats.medium}   color="#F59E0B" />
             </View>
           </ScrollView>
 
@@ -1996,7 +1996,7 @@ export function IncidentDashboardScreen() {
               <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search incident..."
+                placeholder="Rechercher incident..."
                 placeholderTextColor={colors.textSecondary}
                 value={searchText}
                 onChangeText={setSearchText}
@@ -2022,24 +2022,24 @@ export function IncidentDashboardScreen() {
             <View style={styles.advancedFiltersSection}>
               {/* Sorting */}
               <View style={styles.filterGroupContainer}>
-                <Text style={styles.filterGroupLabel}>Sort By</Text>
+                <Text style={styles.filterGroupLabel}>Trier par</Text>
                 <View style={styles.sortButtonsRow}>
-                  <SortButton label="Latest" value="date-desc" active={sortBy === 'date-desc'} onPress={() => setSortBy('date-desc')} />
-                  <SortButton label="Oldest" value="date-asc" active={sortBy === 'date-asc'} onPress={() => setSortBy('date-asc')} />
-                  <SortButton label="Severity" value="severity" active={sortBy === 'severity'} onPress={() => setSortBy('severity')} />
-                  <SortButton label="Status" value="status" active={sortBy === 'status'} onPress={() => setSortBy('status')} />
+                  <SortButton label="Récent" value="date-desc" active={sortBy === 'date-desc'} onPress={() => setSortBy('date-desc')} />
+                  <SortButton label="Ancien" value="date-asc" active={sortBy === 'date-asc'} onPress={() => setSortBy('date-asc')} />
+                  <SortButton label="Sévérité" value="severity" active={sortBy === 'severity'} onPress={() => setSortBy('severity')} />
+                  <SortButton label="Statut" value="status" active={sortBy === 'status'} onPress={() => setSortBy('status')} />
                 </View>
               </View>
 
               {/* Severity Filter */}
               <View style={styles.filterGroupContainer}>
-                <Text style={styles.filterGroupLabel}>Severity</Text>
+                <Text style={styles.filterGroupLabel}>Sévérité</Text>
                 <View style={styles.filterChipsRow}>
-                  <FilterChip label="All" active={filterSeverity === 'all'} onPress={() => setFilterSeverity('all')} />
-                  <FilterChip label="Critical" active={filterSeverity === 'critical'} onPress={() => setFilterSeverity('critical')} dotColor="#DC2626" />
-                  <FilterChip label="High" active={filterSeverity === 'high'} onPress={() => setFilterSeverity('high')} dotColor="#EF4444" />
-                  <FilterChip label="Medium" active={filterSeverity === 'medium'} onPress={() => setFilterSeverity('medium')} dotColor="#F59E0B" />
-                  <FilterChip label="Low" active={filterSeverity === 'low'} onPress={() => setFilterSeverity('low')} dotColor="#22C55E" />
+                  <FilterChip label="Tous" active={filterSeverity === 'all'} onPress={() => setFilterSeverity('all')} />
+                  <FilterChip label="Critique" active={filterSeverity === 'critical'} onPress={() => setFilterSeverity('critical')} dotColor="#DC2626" />
+                  <FilterChip label="Élevé" active={filterSeverity === 'high'} onPress={() => setFilterSeverity('high')} dotColor="#EF4444" />
+                  <FilterChip label="Moyen" active={filterSeverity === 'medium'} onPress={() => setFilterSeverity('medium')} dotColor="#F59E0B" />
+                  <FilterChip label="Faible" active={filterSeverity === 'low'} onPress={() => setFilterSeverity('low')} dotColor="#22C55E" />
                 </View>
               </View>
 
@@ -2050,7 +2050,7 @@ export function IncidentDashboardScreen() {
                   onPress={() => setFilterLtiOnly(!filterLtiOnly)}
                 >
                   <Ionicons name={filterLtiOnly ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={filterLtiOnly ? '#DC2626' : colors.textSecondary} />
-                  <Text style={[styles.toggleBtnText, { color: filterLtiOnly ? '#DC2626' : colors.textSecondary }]}>Show LTI Incidents Only</Text>
+                  <Text style={[styles.toggleBtnText, { color: filterLtiOnly ? '#DC2626' : colors.textSecondary }]}>Afficher seulement les TT</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2059,13 +2059,13 @@ export function IncidentDashboardScreen() {
           {/* Type and Status Filters */}
           <View style={styles.filtersWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-              <FilterChip label="All types" active={filterType === 'all'} onPress={() => setFilterType('all')} />
+              <FilterChip label="Tous types" active={filterType === 'all'} onPress={() => setFilterType('all')} />
               {Object.entries(TYPE_CONFIG).map(([k, v]) => (
                 <FilterChip key={k} label={v.label} active={filterType === k} onPress={() => setFilterType(k)} dotColor={v.color} />
               ))}
             </ScrollView>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filterRow, styles.filterRowBordered]}>
-              <FilterChip label="All status" active={filterStatus === 'all'} onPress={() => setFilterStatus('all')} />
+              <FilterChip label="Tous statuts" active={filterStatus === 'all'} onPress={() => setFilterStatus('all')} />
               {Object.entries(STATUS_CONFIG).map(([k, v]) => (
                 <FilterChip key={k} label={v.label} active={filterStatus === k} onPress={() => setFilterStatus(k)} dotColor={v.color} />
               ))}
@@ -2075,7 +2075,7 @@ export function IncidentDashboardScreen() {
           {/* Results count */}
           <View style={styles.resultsBar}>
             <Text style={styles.resultsText}>
-              {filteredIncidents.length} of {incidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
+              {filteredIncidents.length} de {incidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
             </Text>
           </View>
 
@@ -2093,8 +2093,8 @@ export function IncidentDashboardScreen() {
                 <View style={styles.emptyIconBox}>
                   <Ionicons name="checkmark-circle-outline" size={40} color={colors.primary} />
                 </View>
-                <Text style={styles.emptyTitle}>No incidents found</Text>
-                <Text style={styles.emptySubtitle}>Try adjusting your filters or search</Text>
+                <Text style={styles.emptyTitle}>Aucun incident trouvé</Text>
+                <Text style={styles.emptySubtitle}>Essayez d'ajuster vos filtres ou votre recherche</Text>
               </View>
             }
           />
