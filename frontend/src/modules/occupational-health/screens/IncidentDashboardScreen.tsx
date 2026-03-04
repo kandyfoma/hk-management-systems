@@ -251,6 +251,7 @@ function MetricTile({ label, value, color }: { label: string; value: string | un
 function IncidentCard({ incident, onPress }: { incident: Incident; onPress: () => void }) {
   const typeCfg   = TYPE_CONFIG[incident.type]   ?? FALLBACK_TYPE_CFG;
   const statusCfg = STATUS_CONFIG[incident.status] ?? FALLBACK_STATUS_CFG;
+  const attachmentCount = incident.attachments?.length || 0;
 
   return (
     <TouchableOpacity
@@ -289,18 +290,44 @@ function IncidentCard({ incident, onPress }: { incident: Incident; onPress: () =
       <Text style={styles.description} numberOfLines={2}>{incident.description}</Text>
 
       {/* Alert pills */}
-      {incident.lti && (
-        <View style={styles.alertPill}>
-          <Ionicons name="alert-circle" size={13} color="#DC2626" />
-          <Text style={styles.alertPillText}>
-            LTI — {incident.ltiDays} day{incident.ltiDays !== 1 ? 's' : ''} lost
-          </Text>
-        </View>
-      )}
-      {incident.capaDeadline && (
-        <View style={[styles.alertPill, styles.alertPillAmber]}>
-          <Ionicons name="calendar-outline" size={13} color="#D97706" />
-          <Text style={[styles.alertPillText, { color: '#92400E' }]}>CAPA due {incident.capaDeadline}</Text>
+      <View style={styles.alertPillsRow}>
+        {incident.lti && (
+          <View style={styles.alertPill}>
+            <Ionicons name="alert-circle" size={13} color="#DC2626" />
+            <Text style={styles.alertPillText}>
+              LTI — {incident.ltiDays}d
+            </Text>
+          </View>
+        )}
+        {incident.capaDeadline && (
+          <View style={[styles.alertPill, styles.alertPillAmber]}>
+            <Ionicons name="calendar-outline" size={13} color="#D97706" />
+            <Text style={[styles.alertPillText, { color: '#92400E' }]}>CAPA due {incident.capaDeadline}</Text>
+          </View>
+        )}
+        {attachmentCount > 0 && (
+          <View style={[styles.alertPill, { backgroundColor: '#DBEAFE' }]}>
+            <Ionicons name="image-outline" size={13} color="#0284C7" />
+            <Text style={[styles.alertPillText, { color: '#0C4A6E' }]}>{attachmentCount} file{attachmentCount !== 1 ? 's' : ''}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Audit info */}
+      {(incident.updatedByName || incident.modifiedDate) && (
+        <View style={styles.auditInfoRow}>
+          {incident.updatedByName && (
+            <View style={styles.auditInfoItem}>
+              <Ionicons name="person-circle-outline" size={12} color={colors.textSecondary} />
+              <Text style={styles.auditInfoText} numberOfLines={1}>{incident.updatedByName}</Text>
+            </View>
+          )}
+          {incident.modifiedDate && (
+            <View style={styles.auditInfoItem}>
+              <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
+              <Text style={styles.auditInfoText}>{incident.modifiedDate}</Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -1611,11 +1638,23 @@ function StatCard({ icon, label, value, color }: { icon: string; label: string; 
   return (
     <View style={[styles.statCard, styles.cardShadow, { borderTopColor: color, borderTopWidth: 3 }]}>
       <View style={[styles.statCardIcon, { backgroundColor: color + '15' }]}>
-        <Ionicons name={icon as any} size={22} color={color} />
+        <Ionicons name={icon as any} size={20} color={color} />
       </View>
       <Text style={[styles.statCardValue, { color }]}>{value}</Text>
       <Text style={styles.statCardLabel}>{label}</Text>
     </View>
+  );
+}
+
+function SortButton({ label, value, active, onPress }: { label: string; value: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity 
+      style={[styles.sortBtn, active && styles.sortBtnActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.sortBtnText, active && styles.sortBtnTextActive]}>{label}</Text>
+      {active && <Ionicons name="checkmark" size={14} color={colors.primary} />}
+    </TouchableOpacity>
   );
 }
 
@@ -1657,6 +1696,10 @@ export function IncidentDashboardScreen() {
   const [searchText, setSearchText] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'severity' | 'status'>('date-desc');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filterSeverity, setFilterSeverity] = useState<'all' | string>('all');
+  const [filterLtiOnly, setFilterLtiOnly] = useState(false);
 
   // Load incidents from backend
   useEffect(() => {
@@ -1832,17 +1875,47 @@ export function IncidentDashboardScreen() {
     }
   };
 
-  const stats = useMemo(() => ({
-    total: incidents.length,
-    open:  incidents.filter(i => i.status !== 'closed').length,
-    lti:   incidents.filter(i => i.lti).length,
-    critical: incidents.filter(i => i.severity === 'critical').length,
-  }), [incidents]);
+  const stats = useMemo(() => {
+    const totalCount = incidents.length;
+    const openCount = incidents.filter(i => i.status !== 'closed').length;
+    const ltiCount = incidents.filter(i => i.lti).length;
+    const criticalCount = incidents.filter(i => i.severity === 'critical').length;
+    const highCount = incidents.filter(i => i.severity === 'high').length;
+    const mediumCount = incidents.filter(i => i.severity === 'medium').length;
+    
+    // Count by status
+    const statusCounts = {
+      reported: incidents.filter(i => i.status === 'reported').length,
+      investigating: incidents.filter(i => i.status === 'investigating').length,
+      follow_up: incidents.filter(i => i.status === 'follow_up').length,
+      closed: incidents.filter(i => i.status === 'closed').length,
+    };
+    
+    // Count by type - top 3
+    const typeCounts: Record<string, number> = {};
+    incidents.forEach(i => {
+      typeCounts[i.type] = (typeCounts[i.type] || 0) + 1;
+    });
+    const topTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    
+    return {
+      total: totalCount,
+      open: openCount,
+      lti: ltiCount,
+      critical: criticalCount,
+      high: highCount,
+      medium: mediumCount,
+      statusCounts,
+      topTypes,
+    };
+  }, [incidents]);
 
   const filteredIncidents = useMemo(() => {
     let list = [...incidents];
     if (filterType !== 'all') list = list.filter(i => i.type === filterType);
     if (filterStatus !== 'all') list = list.filter(i => i.status === filterStatus);
+    if (filterSeverity !== 'all') list = list.filter(i => i.severity === filterSeverity);
+    if (filterLtiOnly) list = list.filter(i => i.lti);
     if (searchText) {
       const q = searchText.toLowerCase();
       list = list.filter(i =>
@@ -1851,8 +1924,32 @@ export function IncidentDashboardScreen() {
         i.description.toLowerCase().includes(q),
       );
     }
-    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [incidents, filterType, filterStatus, searchText]);
+    
+    // Apply sorting
+    list.sort((a, b) => {
+      switch (sortBy) {
+        case 'date-asc':
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        case 'severity': {
+          const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+          const aSev = String(a.severity);
+          const bSev = String(b.severity);
+          return (severityOrder[aSev] ?? 4) - (severityOrder[bSev] ?? 4);
+        }
+        case 'status': {
+          const statusOrder: Record<string, number> = { reported: 0, investigating: 1, follow_up: 2, closed: 3 };
+          const aStat = String(a.status);
+          const bStat = String(b.status);
+          return (statusOrder[aStat] ?? 4) - (statusOrder[bStat] ?? 4);
+        }
+        case 'date-desc':
+        default:
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+      }
+    });
+    
+    return list;
+  }, [incidents, filterType, filterStatus, filterSeverity, filterLtiOnly, searchText, sortBy]);
 
   const openDetail = (incident: Incident) => {
     setSelectedIncident(incident);
@@ -1881,32 +1978,85 @@ export function IncidentDashboardScreen() {
         </View>
       ) : (
         <>
-          {/* Stats grid — 2×2 mobile, 1×4 desktop */}
-          <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-            <StatCard icon="list-outline"         label="Total"    value={stats.total}    color={colors.primary} />
-            <StatCard icon="alert-circle-outline" label="Open"     value={stats.open}     color="#F59E0B" />
-            <StatCard icon="alert-outline"        label="LTI"      value={stats.lti}      color="#DC2626" />
-            <StatCard icon="warning-outline"      label="Critical" value={stats.critical} color="#EF4444" />
+          {/* Enhanced Stats grid — horizontal scrollable with more metrics */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScrollContainer}>
+            <View style={styles.statsGridHorizontal}>
+              <StatCard icon="list-outline"         label="Total"    value={stats.total}    color={colors.primary} />
+              <StatCard icon="alert-circle-outline" label="Open"     value={stats.open}     color="#F59E0B" />
+              <StatCard icon="alert-outline"        label="LTI"      value={stats.lti}      color="#DC2626" />
+              <StatCard icon="warning-outline"      label="Critical" value={stats.critical} color="#EF4444" />
+              <StatCard icon="trending-up-outline"  label="High"     value={stats.high}     color="#EF4444" />
+              <StatCard icon="pulse-outline"        label="Medium"   value={stats.medium}   color="#F59E0B" />
+            </View>
+          </ScrollView>
+
+          {/* Search and Filter Bar */}
+          <View style={styles.toolbarContainer}>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search incident..."
+                placeholderTextColor={colors.textSecondary}
+                value={searchText}
+                onChangeText={setSearchText}
+              />
+              {!!searchText && (
+                <TouchableOpacity onPress={() => setSearchText('')}>
+                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Sorting Dropdown */}
+            <TouchableOpacity 
+              style={styles.sortDropdownBtn}
+              onPress={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            >
+              <Ionicons name={showAdvancedFilters ? "chevron-up" : "chevron-down"} size={18} color={colors.primary} />
+            </TouchableOpacity>
           </View>
 
-          {/* Search */}
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by number, worker, description..."
-              placeholderTextColor={colors.textSecondary}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            {!!searchText && (
-              <TouchableOpacity onPress={() => setSearchText('')}>
-                <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Advanced Filters Section */}
+          {showAdvancedFilters && (
+            <View style={styles.advancedFiltersSection}>
+              {/* Sorting */}
+              <View style={styles.filterGroupContainer}>
+                <Text style={styles.filterGroupLabel}>Sort By</Text>
+                <View style={styles.sortButtonsRow}>
+                  <SortButton label="Latest" value="date-desc" active={sortBy === 'date-desc'} onPress={() => setSortBy('date-desc')} />
+                  <SortButton label="Oldest" value="date-asc" active={sortBy === 'date-asc'} onPress={() => setSortBy('date-asc')} />
+                  <SortButton label="Severity" value="severity" active={sortBy === 'severity'} onPress={() => setSortBy('severity')} />
+                  <SortButton label="Status" value="status" active={sortBy === 'status'} onPress={() => setSortBy('status')} />
+                </View>
+              </View>
 
-          {/* Filters */}
+              {/* Severity Filter */}
+              <View style={styles.filterGroupContainer}>
+                <Text style={styles.filterGroupLabel}>Severity</Text>
+                <View style={styles.filterChipsRow}>
+                  <FilterChip label="All" active={filterSeverity === 'all'} onPress={() => setFilterSeverity('all')} />
+                  <FilterChip label="Critical" active={filterSeverity === 'critical'} onPress={() => setFilterSeverity('critical')} dotColor="#DC2626" />
+                  <FilterChip label="High" active={filterSeverity === 'high'} onPress={() => setFilterSeverity('high')} dotColor="#EF4444" />
+                  <FilterChip label="Medium" active={filterSeverity === 'medium'} onPress={() => setFilterSeverity('medium')} dotColor="#F59E0B" />
+                  <FilterChip label="Low" active={filterSeverity === 'low'} onPress={() => setFilterSeverity('low')} dotColor="#22C55E" />
+                </View>
+              </View>
+
+              {/* LTI Filter */}
+              <View style={styles.filterGroupContainer}>
+                <TouchableOpacity 
+                  style={[styles.toggleBtn, { backgroundColor: filterLtiOnly ? '#DC262620' : colors.surfaceVariant, borderColor: filterLtiOnly ? '#DC2626' : colors.outline }]}
+                  onPress={() => setFilterLtiOnly(!filterLtiOnly)}
+                >
+                  <Ionicons name={filterLtiOnly ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={filterLtiOnly ? '#DC2626' : colors.textSecondary} />
+                  <Text style={[styles.toggleBtnText, { color: filterLtiOnly ? '#DC2626' : colors.textSecondary }]}>Show LTI Incidents Only</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Type and Status Filters */}
           <View style={styles.filtersWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
               <FilterChip label="All types" active={filterType === 'all'} onPress={() => setFilterType('all')} />
@@ -1922,10 +2072,10 @@ export function IncidentDashboardScreen() {
             </ScrollView>
           </View>
 
-          {/* Results */}
+          {/* Results count */}
           <View style={styles.resultsBar}>
             <Text style={styles.resultsText}>
-              {filteredIncidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
+              {filteredIncidents.length} of {incidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
             </Text>
           </View>
 
@@ -1999,6 +2149,17 @@ const styles = StyleSheet.create({
   },
   newBtnText: { fontSize: 13, fontWeight: '600', color: '#FFF' },
 
+  // Enhanced stats scrollable layout
+  statsScrollContainer: {
+    flexGrow: 0,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  statsGridHorizontal: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2009,8 +2170,7 @@ const styles = StyleSheet.create({
   statsGridDesktop: { flexWrap: 'nowrap' },
   statCard: {
     flex: 1,
-    minWidth: '47%',
-    maxWidth: '47%',
+    minWidth: 90,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: spacing.sm,
@@ -2023,15 +2183,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  statCardValue: { fontSize: 26, fontWeight: '800' },
-  statCardLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  statCardValue: { fontSize: 22, fontWeight: '800' },
+  statCardLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, fontWeight: '500' },
   cardShadow: { ...shadows.sm },
 
-  searchContainer: {
+  // Improved toolbar with search and filter toggle
+  toolbarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.md,
@@ -2041,6 +2208,86 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   searchInput: { flex: 1, fontSize: 13, color: colors.text },
+  
+  sortDropdownBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary + '15',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Advanced filters section
+  advancedFiltersSection: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.outline,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  filterGroupContainer: {
+    marginBottom: spacing.md,
+  },
+  filterGroupLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sortButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    backgroundColor: colors.surfaceVariant,
+    gap: spacing.xs,
+  },
+  sortBtnActive: {
+    backgroundColor: colors.primary + '15',
+    borderColor: colors.primary,
+  },
+  sortBtnText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  sortBtnTextActive: {
+    color: colors.primary,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  toggleBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
   filtersWrapper: {
     borderTopWidth: 1,
@@ -2105,6 +2352,12 @@ const styles = StyleSheet.create({
 
   description: { fontSize: 12, color: colors.text, lineHeight: 17, marginBottom: spacing.sm },
 
+  alertPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
   alertPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2113,11 +2366,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     gap: 5,
-    marginBottom: 4,
     alignSelf: 'flex-start',
   },
   alertPillAmber: { backgroundColor: '#FEF3C7' },
   alertPillText:  { fontSize: 11, fontWeight: '600', color: '#991B1B' },
+
+  auditInfoRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.outline,
+    marginTop: spacing.xs,
+  },
+  auditInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  auditInfoText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    flex: 1,
+  },
 
   cardFooter: {
     flexDirection: 'row',
@@ -2451,20 +2724,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#EF4444',
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-  },
-  toggleBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   historyEntry: {
     flexDirection: 'row',
