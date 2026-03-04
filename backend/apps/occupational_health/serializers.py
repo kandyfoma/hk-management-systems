@@ -672,9 +672,20 @@ class WorkplaceIncidentListSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    reported_by_name = serializers.CharField(source='reported_by.get_full_name', read_only=True)
+    reported_by_name = serializers.SerializerMethodField()
+    updated_by_name = serializers.SerializerMethodField()
     injured_count = serializers.IntegerField(source='injured_workers.count', read_only=True)
     injured_workers_details = WorkerListSerializer(source='injured_workers', many=True, read_only=True)
+
+    def get_reported_by_name(self, obj):
+        if obj.reported_by:
+            return obj.reported_by.get_full_name() or obj.reported_by.username
+        return None
+
+    def get_updated_by_name(self, obj):
+        if obj.updated_by:
+            return obj.updated_by.get_full_name() or obj.updated_by.username
+        return None
     
     class Meta:
         model = WorkplaceIncident
@@ -682,8 +693,11 @@ class WorkplaceIncidentListSerializer(serializers.ModelSerializer):
             'id', 'incident_number', 'enterprise', 'enterprise_name', 'work_site',
             'work_site_name', 'category', 'category_display', 'severity',
             'severity_display', 'incident_date', 'incident_time', 'description',
-            'injured_count', 'injured_workers_details', 'work_days_lost', 'status', 'status_display',
-            'reported_by', 'reported_by_name', 'created_at'
+            'injured_count', 'injured_workers_details', 'work_days_lost',
+            'status', 'status_display',
+            'reported_by', 'reported_by_name',
+            'updated_by', 'updated_by_name',
+            'created_at', 'updated_at',
         ]
 
 class WorkplaceIncidentDetailSerializer(serializers.ModelSerializer):
@@ -694,7 +708,24 @@ class WorkplaceIncidentDetailSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    reported_by_name = serializers.CharField(source='reported_by.get_full_name', read_only=True)
+    reported_by_name = serializers.SerializerMethodField()
+    updated_by_name = serializers.SerializerMethodField()
+    closed_by_name = serializers.SerializerMethodField()
+
+    def get_reported_by_name(self, obj):
+        if obj.reported_by:
+            return obj.reported_by.get_full_name() or obj.reported_by.username
+        return None
+
+    def get_updated_by_name(self, obj):
+        if obj.updated_by:
+            return obj.updated_by.get_full_name() or obj.updated_by.username
+        return None
+
+    def get_closed_by_name(self, obj):
+        if obj.closed_by:
+            return obj.closed_by.get_full_name() or obj.closed_by.username
+        return None
     
     # Related workers
     injured_workers_details = WorkerListSerializer(source='injured_workers', many=True, read_only=True)
@@ -708,6 +739,14 @@ class WorkplaceIncidentDetailSerializer(serializers.ModelSerializer):
         fields = '__all__'
         extra_kwargs = {
             'enterprise': {'required': False},
+            # Audit fields are set by the view, not writable via API
+            'reported_by': {'read_only': True},
+            'updated_by': {'read_only': True},
+            'closed_by': {'read_only': True},
+            'closed_at': {'read_only': True},
+            'status_history': {'read_only': True},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
         }
 
 # ==================== PPE AND RISK SERIALIZERS ====================

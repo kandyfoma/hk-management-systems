@@ -24,6 +24,14 @@ interface IncidentAttachment {
   file_size_mb: number;
 }
 
+interface StatusHistoryEntry {
+  status: string;
+  changed_by_id?: number;
+  changed_by_name: string;
+  changed_at: string;
+  note?: string;
+}
+
 interface Incident {
   id: string;
   number: string;
@@ -55,6 +63,12 @@ interface Incident {
   reportableToAuthorities?: boolean;
   reportedToCnss?: boolean;
   reportedToLabourInspection?: boolean;
+  // Audit trail
+  reportedByName?: string;
+  updatedByName?: string;
+  closedByName?: string;
+  closedAt?: string;
+  statusHistory?: StatusHistoryEntry[];
 }
 
 // ─── Helper Functions ───────────────────────────────────────
@@ -102,6 +116,12 @@ function mapBackendToIncident(backendIncident: any): Incident {
     reportableToAuthorities: backendIncident.reportable_to_authorities || false,
     reportedToCnss: backendIncident.reported_to_cnss || false,
     reportedToLabourInspection: backendIncident.reported_to_labour_inspection || false,
+    // Audit trail
+    reportedByName: backendIncident.reported_by_name || '',
+    updatedByName: backendIncident.updated_by_name || '',
+    closedByName: backendIncident.closed_by_name || '',
+    closedAt: backendIncident.closed_at || undefined,
+    statusHistory: Array.isArray(backendIncident.status_history) ? backendIncident.status_history : [],
   };
 }
 
@@ -133,14 +153,23 @@ const TYPE_CONFIG: Record<string, { icon: string; color: string; label: string }
   other:                         { icon: 'help-circle',       color: '#94A3B8', label: 'Other' },
 };
 
+// Valid backend status values: reported | investigating | closed | follow_up
 const STATUS_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  reported:      { icon: 'flag',                  color: '#3B82F6', label: 'Reported' },
-  investigating: { icon: 'search',                 color: '#F59E0B', label: 'Investigating' },
-  under_investigation:    { icon: 'search',       color: '#F59E0B', label: 'Investigating' },
+  reported:      { icon: 'flag-outline',             color: '#3B82F6', label: 'Reported' },
+  investigating: { icon: 'search-outline',           color: '#F59E0B', label: 'Investigating' },
+  follow_up:     { icon: 'refresh-circle-outline',   color: '#8B5CF6', label: 'Follow-up' },
+  closed:        { icon: 'checkmark-done-circle',    color: '#22C55E', label: 'Closed' },
+  // Legacy / display-only aliases kept for backwards compatibility
+  under_investigation:    { icon: 'search-outline',  color: '#F59E0B', label: 'Investigating' },
   investigation_complete: { icon: 'checkmark-circle', color: '#8B5CF6', label: 'Complete' },
-  closed:        { icon: 'checkmark-done-circle',  color: '#22C55E', label: 'Closed' },
-  follow_up:     { icon: 'alert-circle',           color: '#F59E0B', label: 'Follow-up' },
 };
+
+const VALID_BACKEND_STATUSES = ['reported', 'investigating', 'follow_up', 'closed'] as const;
+type BackendStatus = typeof VALID_BACKEND_STATUSES[number];
+
+const FALLBACK_STATUS_CFG = { icon: 'help-circle-outline', color: '#94A3B8', label: 'Unknown' };
+const FALLBACK_TYPE_CFG   = { icon: 'help-circle',         color: '#94A3B8', label: 'Other' };
+const FALLBACK_SEV_CFG    = { color: '#94A3B8', label: '—' };
 
 const SEVERITY_CONFIG: Record<string, { color: string; label: string }> = {
   '1': { color: '#22C55E', label: 'Negligible' },
@@ -157,32 +186,32 @@ const SEVERITY_CONFIG: Record<string, { color: string; label: string }> = {
 // ─── Sample Data ─────────────────────────────────────────────
 const SAMPLE_INCIDENTS: Incident[] = [
   {
-    id: 'i1', number: 'INC-2025-0342', date: '2025-02-20', time: '09:15',
+    id: 'i1', number: 'INC-2025-0342', date: '2025-02-20', time: '09:15:00',
     worker: 'Pierre Kabamba', workerId: 'w003', type: 'injury',
-    severity: 'high', status: 'under_investigation',
+    severity: '3', status: 'investigating',
     description: 'Cut to left hand from sharp edge during equipment maintenance',
     location: 'Processing Building - Section C', department: 'Maintenance', lti: false,
   },
   {
-    id: 'i2', number: 'INC-2025-0341', date: '2025-02-19', time: '14:30',
+    id: 'i2', number: 'INC-2025-0341', date: '2025-02-19', time: '14:30:00',
     worker: 'Robert Mbala', workerId: 'w004', type: 'near_miss',
-    severity: 'medium', status: 'investigation_complete',
+    severity: '2', status: 'follow_up',
     description: 'Near miss: Equipment fell from shelf but did not hit worker',
     location: 'Storage Area - Building B', department: 'Warehouse',
     lti: false, rootCause: 'Improper securing of equipment',
   },
   {
-    id: 'i3', number: 'INC-2025-0340', date: '2025-02-18', time: '11:00',
+    id: 'i3', number: 'INC-2025-0340', date: '2025-02-18', time: '11:00:00',
     worker: 'Marie Lusaka', workerId: 'w002', type: 'medical_treatment',
-    severity: 'medium', status: 'closed',
+    severity: '2', status: 'closed',
     description: 'Eye irritation from dust exposure - first aid treatment provided',
     location: 'Main Shaft Extraction', department: 'Operations',
     lti: false, modifiedDate: '2025-02-20',
   },
   {
-    id: 'i4', number: 'INC-2025-0339', date: '2025-02-17', time: '08:45',
-    worker: 'Jean-Charles Mulinga', workerId: 'w001', type: 'injury',
-    severity: 'critical', status: 'under_investigation',
+    id: 'i4', number: 'INC-2025-0339', date: '2025-02-17', time: '08:45:00',
+    worker: 'Jean-Charles Mulinga', workerId: 'w001', type: 'fall_from_height',
+    severity: '4', status: 'investigating',
     description: 'Slip and fall on wet surface, suspected broken ankle',
     location: 'Processing Area - Building A', department: 'Processing',
     lti: true, ltiDays: 5, capaDeadline: '2025-03-03',
@@ -191,7 +220,7 @@ const SAMPLE_INCIDENTS: Incident[] = [
 
 // ─── Sub-components ──────────────────────────────────────────
 function StatusBadge({ status }: { status: Incident['status'] }) {
-  const cfg = STATUS_CONFIG[status];
+  const cfg = STATUS_CONFIG[status] ?? FALLBACK_STATUS_CFG;
   return (
     <View style={[styles.badge, { backgroundColor: cfg.color + '18' }]}>
       <Ionicons name={cfg.icon as any} size={11} color={cfg.color} />
@@ -201,7 +230,7 @@ function StatusBadge({ status }: { status: Incident['status'] }) {
 }
 
 function SeverityBadge({ severity }: { severity: Incident['severity'] }) {
-  const cfg = SEVERITY_CONFIG[severity];
+  const cfg = SEVERITY_CONFIG[String(severity)] ?? FALLBACK_SEV_CFG;
   return (
     <View style={[styles.severityBadge, { backgroundColor: cfg.color }]}>
       <Text style={styles.severityText}>{cfg.label}</Text>
@@ -209,19 +238,19 @@ function SeverityBadge({ severity }: { severity: Incident['severity'] }) {
   );
 }
 
-function MetricTile({ label, value, color }: { label: string; value: string; color: string }) {
+function MetricTile({ label, value, color }: { label: string; value: string | undefined; color: string }) {
   return (
     <View style={[styles.metricTile, { borderTopColor: color, borderTopWidth: 3 }]}>
       <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={[styles.metricValue, { color }]}>{value}</Text>
+      <Text style={[styles.metricValue, { color }]}>{value ?? '—'}</Text>
     </View>
   );
 }
 
 // ─── Incident Card ───────────────────────────────────────────
 function IncidentCard({ incident, onPress }: { incident: Incident; onPress: () => void }) {
-  const typeCfg   = TYPE_CONFIG[incident.type];
-  const statusCfg = STATUS_CONFIG[incident.status];
+  const typeCfg   = TYPE_CONFIG[incident.type]   ?? FALLBACK_TYPE_CFG;
+  const statusCfg = STATUS_CONFIG[incident.status] ?? FALLBACK_STATUS_CFG;
 
   return (
     <TouchableOpacity
@@ -307,13 +336,17 @@ function IncidentDetailModal({
   React.useEffect(() => { setFormData(incident); setIsEditing(false); }, [incident, visible]);
   if (!formData) return null;
 
-  const typeCfg   = TYPE_CONFIG[formData.type];
-  const statusCfg = STATUS_CONFIG[formData.status];
-  const sevCfg    = SEVERITY_CONFIG[formData.severity];
+  const typeCfg   = TYPE_CONFIG[formData.type]     ?? FALLBACK_TYPE_CFG;
+  const statusCfg = STATUS_CONFIG[formData.status] ?? FALLBACK_STATUS_CFG;
+  const sevCfg    = SEVERITY_CONFIG[String(formData.severity)] ?? FALLBACK_SEV_CFG;
 
   const handleSaveChanges = () => {
-    if (!formData.description || !formData.location) {
+    if (!formData.description?.trim() || !formData.location?.trim()) {
       Alert.alert('Validation Error', 'Description and Location are required');
+      return;
+    }
+    if ((formData.ltiDays ?? 0) < 0) {
+      Alert.alert('Validation Error', 'Work days lost cannot be negative');
       return;
     }
     onUpdate(formData);
@@ -324,11 +357,15 @@ function IncidentDetailModal({
   const handleConfirmDelete = () => {
     Alert.alert('Delete Incident', 'Are you sure you want to delete this incident? This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { onDelete(formData.backendId); onClose(); } },
+      { text: 'Delete', style: 'destructive', onPress: () => { onDelete(formData.backendId!); onClose(); } },
     ]);
   };
 
   const handleAddAttachment = async () => {
+    if (!formData.backendId) {
+      Alert.alert('Error', 'This incident must be saved before adding attachments');
+      return;
+    }
     Alert.alert(
       'Add Evidence',
       'Choose how to add photo or video:',
@@ -587,74 +624,79 @@ function IncidentDetailModal({
               </View>
             )}
 
-            {/* Investigation */}
-            {formData.status !== 'reported' && (
-              <View style={styles.modalSection}>
-                <View style={styles.modalSectionHeader}>
-                  <Ionicons name="search-outline" size={16} color={colors.primary} />
-                  <Text style={styles.modalSectionTitle}>Investigation</Text>
-                </View>
-                {isEditing ? (
-                  <>
-                    <Text style={[styles.infoTableLabel, { marginBottom: spacing.xs }]}>Root Cause Analysis</Text>
-                    <TextInput
-                      style={[styles.editableField, styles.multilineInput]}
-                      value={formData.rootCause || ''}
-                      onChangeText={(text) => setFormData({ ...formData, rootCause: text })}
-                      placeholder="Enter root cause analysis"
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      numberOfLines={3}
-                    />
-                    <Text style={[styles.infoTableLabel, { marginTop: spacing.md, marginBottom: spacing.xs }]}>Work Days Lost</Text>
-                    <TextInput
-                      style={styles.editableField}
-                      value={String(formData.ltiDays || 0)}
-                      onChangeText={(text) => setFormData({ ...formData, ltiDays: parseInt(text) || 0 })}
-                      placeholder="Number of days lost"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numeric"
-                    />
-                  </>
-                ) : (
-                  <>
-                    {formData.rootCause && (
-                      <View style={styles.rootCauseBox}>
-                        <Text style={styles.infoTableLabel}>Root Cause</Text>
-                        <Text style={styles.modalBodyText}>{formData.rootCause}</Text>
-                      </View>
-                    )}
-                    {formData.capaDeadline && (
-                      <View style={styles.capaBanner}>
-                        <Ionicons name="calendar-outline" size={15} color="#D97706" />
-                        <Text style={styles.capaBannerText}>CAPA Deadline: {formData.capaDeadline}</Text>
-                      </View>
-                    )}
-                  </>
-                )}
-                <Text style={[styles.infoTableLabel, { marginTop: spacing.sm }]}>Update Status</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
-                  {(Object.entries(STATUS_CONFIG) as [Incident['status'], typeof STATUS_CONFIG[Incident['status']]][])
-                    .filter(([k]) => k !== 'reported')
-                    .map(([st, cfg]) => (
-                      <TouchableOpacity
-                        key={st}
-                        style={[
-                          styles.statusChip,
-                          formData.status === st && { backgroundColor: cfg.color + '20', borderColor: cfg.color },
-                        ]}
-                        onPress={() => isEditing && setFormData({ ...formData, status: st })}
-                        disabled={!isEditing}
-                      >
-                        <Ionicons name={cfg.icon as any} size={13} color={formData.status === st ? cfg.color : colors.textSecondary} />
-                        <Text style={[styles.statusChipText, formData.status === st && { color: cfg.color, fontWeight: '600' }]}>
-                          {cfg.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                </ScrollView>
+            {/* Investigation & Status */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="search-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Investigation</Text>
               </View>
-            )}
+              {isEditing ? (
+                <>
+                  <Text style={[styles.infoTableLabel, { marginBottom: spacing.xs }]}>Root Cause Analysis</Text>
+                  <TextInput
+                    style={[styles.editableField, styles.multilineInput]}
+                    value={formData.rootCause || ''}
+                    onChangeText={(text) => setFormData({ ...formData, rootCause: text })}
+                    placeholder="Enter root cause analysis"
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={3}
+                  />
+                  <Text style={[styles.infoTableLabel, { marginTop: spacing.md, marginBottom: spacing.xs }]}>Work Days Lost</Text>
+                  <TextInput
+                    style={styles.editableField}
+                    value={String(formData.ltiDays || 0)}
+                    onChangeText={(text) => {
+                      const n = parseInt(text) || 0;
+                      setFormData({ ...formData, ltiDays: n < 0 ? 0 : n });
+                    }}
+                    placeholder="Number of days lost"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                  />
+                </>
+              ) : (
+                <>
+                  {formData.rootCause ? (
+                    <View style={styles.rootCauseBox}>
+                      <Text style={styles.infoTableLabel}>Root Cause</Text>
+                      <Text style={styles.modalBodyText}>{formData.rootCause}</Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.modalBodyText, { color: colors.textSecondary, fontStyle: 'italic' }]}>No root cause analysis yet</Text>
+                  )}
+                  {formData.capaDeadline && (
+                    <View style={styles.capaBanner}>
+                      <Ionicons name="calendar-outline" size={15} color="#D97706" />
+                      <Text style={styles.capaBannerText}>CAPA Deadline: {formData.capaDeadline}</Text>
+                    </View>
+                  )}
+                </>
+              )}
+              <Text style={[styles.infoTableLabel, { marginTop: spacing.md }]}>Status</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
+                {(VALID_BACKEND_STATUSES as readonly string[]).map((st) => {
+                  const cfg = STATUS_CONFIG[st] ?? FALLBACK_STATUS_CFG;
+                  return (
+                    <TouchableOpacity
+                      key={st}
+                      style={[
+                        styles.statusChip,
+                        formData.status === st && { backgroundColor: cfg.color + '20', borderColor: cfg.color },
+                        !isEditing && { opacity: 0.6 },
+                      ]}
+                      onPress={() => isEditing && setFormData({ ...formData, status: st })}
+                      disabled={!isEditing}
+                    >
+                      <Ionicons name={cfg.icon as any} size={13} color={formData.status === st ? cfg.color : colors.textSecondary} />
+                      <Text style={[styles.statusChipText, formData.status === st && { color: cfg.color, fontWeight: '600' }]}>
+                        {cfg.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
             {/* Immediate Actions */}
             <View style={styles.modalSection}>
@@ -819,16 +861,58 @@ function IncidentDetailModal({
               </View>
             </View>
 
-            {/* Timestamps */}
-            <View style={[styles.infoTable, { marginBottom: spacing.md }]}>
-              <View style={styles.infoTableRow}>
-                <Text style={styles.infoTableLabel}>Reported</Text>
-                <Text style={styles.infoTableValue}>{formData.date} {formData.time}</Text>
+            {/* Audit Trail */}
+            <View style={[styles.modalSection]}>
+              <View style={styles.modalSectionHeader}>
+                <Ionicons name="time-outline" size={16} color={colors.primary} />
+                <Text style={styles.modalSectionTitle}>Audit Trail</Text>
               </View>
-              {formData.modifiedDate && (
-                <View style={[styles.infoTableRow, { borderBottomWidth: 0 }]}>
-                  <Text style={styles.infoTableLabel}>Last Updated</Text>
-                  <Text style={styles.infoTableValue}>{formData.modifiedDate}</Text>
+              <View style={styles.infoTable}>
+                <View style={styles.infoTableRow}>
+                  <Text style={styles.infoTableLabel}>Reported</Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.infoTableValue}>{formData.date} {formData.time}</Text>
+                    {formData.reportedByName ? <Text style={[styles.infoTableLabel, { marginTop: 2 }]}>{formData.reportedByName}</Text> : null}
+                  </View>
+                </View>
+                {formData.modifiedDate || formData.updatedByName ? (
+                  <View style={styles.infoTableRow}>
+                    <Text style={styles.infoTableLabel}>Last Updated</Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.infoTableValue}>{formData.modifiedDate || '—'}</Text>
+                      {formData.updatedByName ? <Text style={[styles.infoTableLabel, { marginTop: 2 }]}>{formData.updatedByName}</Text> : null}
+                    </View>
+                  </View>
+                ) : null}
+                {formData.closedAt ? (
+                  <View style={[styles.infoTableRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.infoTableLabel}>Closed</Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.infoTableValue}>{new Date(formData.closedAt).toLocaleDateString()}</Text>
+                      {formData.closedByName ? <Text style={[styles.infoTableLabel, { marginTop: 2 }]}>{formData.closedByName}</Text> : null}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+              {/* Status History */}
+              {formData.statusHistory && formData.statusHistory.length > 1 && (
+                <View style={{ marginTop: spacing.md }}>
+                  <Text style={[styles.infoTableLabel, { marginBottom: spacing.sm }]}>Status History</Text>
+                  {formData.statusHistory.map((entry, idx) => {
+                    const cfg = STATUS_CONFIG[entry.status] ?? FALLBACK_STATUS_CFG;
+                    return (
+                      <View key={idx} style={styles.historyEntry}>
+                        <View style={[styles.historyDot, { backgroundColor: cfg.color }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.historyStatus, { color: cfg.color }]}>{cfg.label}</Text>
+                          <Text style={styles.historyMeta}>
+                            {entry.changed_by_name} · {new Date(entry.changed_at).toLocaleDateString()}
+                          </Text>
+                          {entry.note ? <Text style={styles.historyNote}>{entry.note}</Text> : null}
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -1053,7 +1137,7 @@ function CreateIncidentModal({
       injured_worker_name: '' 
     });
     setWorkerSearchText('');
-    showToast('Worker cleared', 'info');
+    showToast('Worker cleared');
   };
 
   const filteredWorkers = useMemo(() => {
@@ -1106,11 +1190,23 @@ function CreateIncidentModal({
   };
 
   const handleSubmit = async () => {
-    if (!formData.description || !formData.location || !formData.type || !formData.date || !formData.immediateActions) {
-      showToast('Please fill in all required fields', 'error');
+    if (!formData.description?.trim() || !formData.location?.trim() || !formData.type || !formData.date || !formData.immediateActions?.trim()) {
+      showToast('Please fill in all required fields (Type, Date, Location, Description, Immediate Actions)', 'error');
       return;
     }
-    await onCreate({ ...formData, pendingAttachments });
+    // Validate date format YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
+      showToast('Date must be in YYYY-MM-DD format (e.g. 2026-03-04)', 'error');
+      return;
+    }
+    // Validate time format HH:MM or HH:MM:SS
+    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(formData.time)) {
+      showToast('Time must be in HH:MM:SS format (e.g. 09:30:00)', 'error');
+      return;
+    }
+    // Ensure time is always HH:MM:SS
+    const normalizedTime = formData.time.length === 5 ? `${formData.time}:00` : formData.time;
+    await onCreate({ ...formData, time: normalizedTime, pendingAttachments });
   };
 
   const isFormValid = formData.description && formData.location && formData.type && formData.date && formData.immediateActions;
@@ -1505,7 +1601,7 @@ function CreateIncidentModal({
       </Modal>
       
       {/* Toast Notification */}
-      {toastMsg && <SimpleToastNotification message={toastMsg.message} type={toastMsg.type} />}
+      {toastMsg && <SimpleToastNotification message={toastMsg} />}
     </>
   );
 }
@@ -1630,7 +1726,7 @@ export function IncidentDashboardScreen() {
         immediate_actions_taken: updatedIncident.immediateActions || '',
         root_cause_analysis: updatedIncident.rootCause || '',
         status: updatedIncident.status,
-        work_days_lost: updatedIncident.ltiDays || 0,
+        work_days_lost: Math.max(0, updatedIncident.ltiDays || 0),
         equipment_involved: updatedIncident.equipmentInvolved || '',
         first_aid_given: updatedIncident.firstAidGiven || false,
         first_aid_by: updatedIncident.firstAidBy || '',
@@ -1640,6 +1736,8 @@ export function IncidentDashboardScreen() {
         reportable_to_authorities: updatedIncident.reportableToAuthorities || false,
         reported_to_cnss: updatedIncident.reportedToCnss || false,
         reported_to_labour_inspection: updatedIncident.reportedToLabourInspection || false,
+        // Auto-mark as investigated when root cause is provided
+        investigated: !!(updatedIncident.rootCause?.trim()),
       };
       const result = await OccHealthApiService.getInstance().updateWorkplaceIncident(updatedIncident.backendId, payload);
       if (result.data) {
@@ -1736,9 +1834,9 @@ export function IncidentDashboardScreen() {
 
   const stats = useMemo(() => ({
     total: incidents.length,
-    open:  incidents.filter(i => !i.status.includes('closed')).length,
+    open:  incidents.filter(i => i.status !== 'closed').length,
     lti:   incidents.filter(i => i.lti).length,
-    critical: incidents.filter(i => i.severity === 'critical' || i.severity === 4 || i.severity === 5).length,
+    critical: incidents.filter(i => i.severity === 'critical').length,
   }), [incidents]);
 
   const filteredIncidents = useMemo(() => {
@@ -1869,7 +1967,7 @@ export function IncidentDashboardScreen() {
           />
 
           {/* Toast Notification */}
-          {toastMsg && <SimpleToastNotification message={toastMsg.message} type={toastMsg.type} />}
+          {toastMsg && <SimpleToastNotification message={toastMsg} />}
         </>
       )}
     </View>
@@ -2368,14 +2466,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  infoTable: {
-    backgroundColor: colors.surfaceVariant,
-    borderRadius: borderRadius.md,
-    overflow: 'hidden',
+  historyEntry: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
   },
-  infoTableRow: { padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  infoTableLabel: { fontSize: 12, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  infoTableValue: { fontSize: 13, color: colors.text, fontWeight: '600', marginTop: 4 },
+  historyDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  historyStatus: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  historyMeta: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  historyNote: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
   workerInfoCard: {
     backgroundColor: colors.surfaceVariant,
     borderRadius: borderRadius.md,

@@ -1310,7 +1310,9 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
     ordering = ['-incident_date']
     
     def get_queryset(self):
-        return WorkplaceIncident.objects.select_related('enterprise', 'work_site', 'reported_by')
+        return WorkplaceIncident.objects.select_related(
+            'enterprise', 'work_site', 'reported_by', 'updated_by', 'closed_by'
+        ).prefetch_related('injured_workers', 'witnesses', 'attachments')
     
     def get_serializer_class(self):
         if self.action in ['list']:
@@ -1323,7 +1325,56 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
         if not enterprise:
             # Assign the first active enterprise
             enterprise = Enterprise.objects.filter(is_active=True).first()
-        serializer.save(reported_by=self.request.user, enterprise=enterprise)
+        initial_status = serializer.validated_data.get('status', 'reported')
+        status_history = [{
+            'status': initial_status,
+            'changed_by_id': self.request.user.id,
+            'changed_by_name': self.request.user.get_full_name() or self.request.user.username,
+            'changed_at': timezone.now().isoformat(),
+            'note': 'Incident reported',
+        }]
+        serializer.save(
+            reported_by=self.request.user,
+            updated_by=self.request.user,
+            enterprise=enterprise,
+            status_history=status_history,
+        )
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        old_status = instance.status
+        new_status = serializer.validated_data.get('status', old_status)
+        now = timezone.now()
+
+        extra_fields = {'updated_by': self.request.user}
+
+        # Track status changes
+        if new_status != old_status:
+            history_entry = {
+                'status': new_status,
+                'changed_by_id': self.request.user.id,
+                'changed_by_name': self.request.user.get_full_name() or self.request.user.username,
+                'changed_at': now.isoformat(),
+                'note': f'Status changed from {old_status} to {new_status}',
+            }
+            previous_history = list(instance.status_history or [])
+            previous_history.append(history_entry)
+            extra_fields['status_history'] = previous_history
+
+            # Record close audit fields
+            if new_status == 'closed':
+                extra_fields['closed_by'] = self.request.user
+                extra_fields['closed_at'] = now
+            # Clear closed_at if re-opened
+            elif old_status == 'closed' and new_status != 'closed':
+                extra_fields['closed_by'] = None
+                extra_fields['closed_at'] = None
+
+            # Mark as investigated when status moves to investigating or beyond
+            if new_status in ('investigating', 'follow_up', 'closed'):
+                extra_fields['investigated'] = True
+
+        serializer.save(**extra_fields)
     
     @action(detail=False, methods=['get'])
     def statistics(self, request):

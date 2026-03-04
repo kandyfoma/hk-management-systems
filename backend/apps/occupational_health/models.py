@@ -1423,9 +1423,15 @@ class WorkplaceIncident(models.Model):
     ], default='reported')
     
     # Audit fields
-    reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='incidents_reported')
+    reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidents_reported')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Extended audit trail
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidents_updated')
+    closed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidents_closed')
+    closed_at = models.DateTimeField(_("Fermé le"), null=True, blank=True)
+    # Status change history: [{status, changed_by_id, changed_by_name, changed_at, note}]
+    status_history = models.JSONField(_("Historique Statut"), default=list, blank=True)
     
     class Meta:
         verbose_name = _("Incident Travail")
