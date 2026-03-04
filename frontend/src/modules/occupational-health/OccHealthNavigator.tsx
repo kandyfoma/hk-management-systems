@@ -25,7 +25,7 @@ import { WorkerRegistrationScreen, EnterpriseManagementScreen } from './screens/
 import { MedicalTestVisualizationScreen, ExitExamScreen } from './screens/MedicalTestVisualizationScreen';
 import { MedicalTestCatalogScreen } from './screens/MedicalTestCatalogScreen';
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from './screens/DiseaseRegistryAndHealthScreeningScreen';
-import { ExposureMonitoringDashboard, RegulatoryReportsScreen } from './screens/ExposureAndReportingScreen';
+import { RegulatoryReportsScreen } from './screens/ExposureAndReportingScreen';
 import { ISO45001DashboardScreen, ISO27001DashboardScreen } from './screens/ComplianceDashboardsScreen';
 import { WorkerRiskProfileScreen } from './screens/WorkerRiskProfileScreen';
 import { OverexposureAlertScreen } from './screens/OverexposureAlertScreen';
@@ -477,7 +477,7 @@ export function OccHealthNavigator() {
     }
 
     if (activeScreen === 'exposure-monitoring') {
-      return <ExposureMonitoringDashboard />;
+      return <ExposureMonitoringScreen />;
     }
 
     if (activeScreen === 'regulatory-reports') {

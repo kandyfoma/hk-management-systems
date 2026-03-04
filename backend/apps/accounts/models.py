@@ -68,6 +68,14 @@ class User(AbstractUser):
         on_delete=models.CASCADE,
         related_name='users'
     )
+    enterprise = models.ForeignKey(
+        'occupational_health.Enterprise',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='users',
+        help_text='Associated enterprise for occupational health and safety'
+    )
     last_login = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True, help_text='Indicateur de compte actif')
     created_at = models.DateTimeField(auto_now_add=True)

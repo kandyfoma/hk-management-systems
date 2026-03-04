@@ -2519,10 +2519,17 @@ class ExposureReadingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Auto-set measured_by and enterprise from the authenticated user"""
-        enterprise_id = getattr(self.request.user, 'enterprise_id', None)
+        # Get enterprise from user's enterprise FK relationship
+        enterprise = self.request.user.enterprise
+        if not enterprise:
+            # If user has no enterprise, raise a validation error
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                'enterprise': 'User must be assigned to an enterprise to record exposure readings'
+            })
         serializer.save(
             measured_by=self.request.user,
-            enterprise_id=enterprise_id,
+            enterprise=enterprise,
         )
     
     @action(detail=True, methods=['post'])

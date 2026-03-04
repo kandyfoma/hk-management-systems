@@ -32,7 +32,8 @@ import { PersonnelRegistryScreen } from '../modules/occupational-health/screens/
 import { EnterpriseManagementScreen } from '../modules/occupational-health/screens/WorkerAndEnterpriseScreen';
 import { MedicalTestVisualizationScreen, ExitExamScreen } from '../modules/occupational-health/screens/MedicalTestVisualizationScreen';
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from '../modules/occupational-health/screens/DiseaseRegistryAndHealthScreeningScreen';
-import { ExposureMonitoringDashboard, RegulatoryReportsScreen } from '../modules/occupational-health/screens/ExposureAndReportingScreen';
+import { RegulatoryReportsScreen } from '../modules/occupational-health/screens/ExposureAndReportingScreen';
+import { ExposureMonitoringScreen } from '../modules/occupational-health/screens/ExposureMonitoringScreen';
 import { ISO45001DashboardScreen, ISO27001DashboardScreen } from '../modules/occupational-health/screens/ComplianceDashboardsScreen';
 import { MedicalExamManagementScreen } from '../modules/occupational-health/screens/MedicalExamManagementScreen';
 import { WorkerRiskProfileScreen } from '../modules/occupational-health/screens/WorkerRiskProfileScreen';
@@ -856,7 +857,7 @@ function DesktopApp() {
     if (activeScreen === 'oh-diseases') return <DiseasesScreen />;
     if (activeScreen === 'oh-surveillance') return <SurveillanceScreen />;
     if (activeScreen === 'oh-risk') return <RiskAssessmentScreen />;
-    if (activeScreen === 'oh-exposure-monitoring') return <ExposureMonitoringDashboard />;
+    if (activeScreen === 'oh-exposure-monitoring') return <ExposureMonitoringScreen />;
     if (activeScreen === 'oh-ppe') return <PPEManagementScreen />;
     if (activeScreen === 'oh-worker-risk-profiles') return <WorkerRiskProfileScreen />;
     if (activeScreen === 'oh-overexposure-alerts') return <OverexposureAlertScreen />;

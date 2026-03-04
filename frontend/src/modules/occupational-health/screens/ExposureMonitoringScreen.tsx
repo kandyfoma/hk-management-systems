@@ -62,8 +62,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     osha_limit: 0.025,
     acgih_limit: 0.025,
     icon: 'water-outline',
-    color: '#EF4444',
-    riskColor: (val, limit) => val >= limit * 1.5 ? '#DC2626' : val >= limit ? '#EF4444' : '#FCA5A5'
+    color: colors.error,
+    riskColor: (val, limit) => val >= limit * 1.5 ? colors.errorDark : val >= limit ? colors.error : '#FCA5A5'
   },
   cobalt: {
     id: 'cobalt',
@@ -73,8 +73,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     osha_limit: 100,
     acgih_limit: 5,
     icon: 'sparkles-outline',
-    color: '#F59E0B',
-    riskColor: (val, limit) => val >= limit * 1.5 ? '#D97706' : val >= limit ? '#F59E0B' : '#FED7AA'
+    color: colors.warning,
+    riskColor: (val, limit) => val >= limit * 1.5 ? colors.warningDark : val >= limit ? colors.warning : '#FED7AA'
   },
   total_dust: {
     id: 'total_dust',
@@ -84,8 +84,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     osha_limit: 5,
     acgih_limit: 3,
     icon: 'cloud-outline',
-    color: '#8B5CF6',
-    riskColor: (val, limit) => val >= limit * 1.5 ? '#7C3AED' : val >= limit ? '#8B5CF6' : '#DDD6FE'
+    color: colors.accent,
+    riskColor: (val, limit) => val >= limit * 1.5 ? colors.accentDark : val >= limit ? colors.accent : 'rgba(129, 140, 248, 0.2)'
   },
   noise: {
     id: 'noise',
@@ -95,8 +95,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     osha_limit: 90,
     acgih_limit: 85,
     icon: 'volume-high-outline',
-    color: '#06B6D4',
-    riskColor: (val, limit) => val >= limit * 1.1 ? '#0891B2' : val >= limit ? '#06B6D4' : '#A5F3FC'
+    color: colors.info,
+    riskColor: (val, limit) => val >= limit * 1.1 ? colors.infoDark : val >= limit ? colors.info : 'rgba(129, 140, 248, 0.2)'
   },
   vibration: {
     id: 'vibration',
@@ -106,8 +106,8 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     osha_limit: 5,
     acgih_limit: 2.2,
     icon: 'radio-outline',
-    color: '#EC4899',
-    riskColor: (val, limit) => val >= limit * 1.5 ? '#BE185D' : val >= limit ? '#EC4899' : '#FCE7F3'
+    color: colors.secondary,
+    riskColor: (val, limit) => val >= limit * 1.5 ? colors.secondaryDark : val >= limit ? colors.secondary : 'rgba(91, 101, 220, 0.2)'
   },
   heat: {
     id: 'heat',
@@ -117,18 +117,18 @@ const EXPOSURE_TYPES: Record<string, ExposureType> = {
     osha_limit: 32.2,
     acgih_limit: 28,
     icon: 'flame-outline',
-    color: '#FF6B6B',
-    riskColor: (val, limit) => val >= limit * 1.15 ? '#D32F2F' : val >= limit ? '#FF6B6B' : '#FFCDD2'
+    color: colors.error,
+    riskColor: (val, limit) => val >= limit * 1.15 ? colors.errorDark : val >= limit ? colors.error : 'rgba(239, 68, 68, 0.2)'
   }
 };
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: 'safe' | 'warning' | 'critical' | 'exceeded' }) {
   const config: Record<string, { color: string; label: string; icon: string }> = {
-    safe: { color: '#22C55E', label: 'Safe', icon: 'checkmark-circle' },
-    warning: { color: '#F59E0B', label: 'Warning', icon: 'alert-circle' },
-    exceeded: { color: '#EF4444', label: 'Exceeded', icon: 'close-circle' },
-    critical: { color: '#DC2626', label: 'Critical', icon: 'alert' },
+    safe: { color: colors.secondary, label: 'Safe', icon: 'checkmark-circle' },
+    warning: { color: colors.warning, label: 'Warning', icon: 'alert-circle' },
+    exceeded: { color: colors.error, label: 'Exceeded', icon: 'close-circle' },
+    critical: { color: colors.errorDark, label: 'Critical', icon: 'alert' },
   };
   const cfg = config[status] ?? { color: '#9CA3AF', label: status, icon: 'help-circle' };
   return (
@@ -182,7 +182,7 @@ function ExposureTypeCard({
           <View style={styles.readingRow}>
             <Text style={styles.label}>Latest Reading:</Text>
             <View style={styles.valueWithStatus}>
-              <Text style={[styles.value, { color: exceeding ? exposure.color : '#16A34A' }]}>
+              <Text style={[styles.value, { color: exceeding ? exposure.color : colors.secondary }]}>
                 {Number(latestReading.exposure_value).toFixed(2)} {latestReading.unit_measurement}
               </Text>
               <StatusBadge status={latestReading.status} />
@@ -258,13 +258,13 @@ function ExposureDetailModal({
                 <Text style={styles.statLabel}>Readings</Text>
                 <Text style={styles.statValue}>{exposureReadings.length}</Text>
               </View>
-              <View style={[styles.statCard, { borderTopColor: '#22C55E' }]}>
+              <View style={[styles.statCard, { borderTopColor: colors.secondary }]}>
                 <Text style={styles.statLabel}>Safe</Text>
-                <Text style={[styles.statValue, { color: '#22C55E' }]}>{safeCount}</Text>
+                <Text style={[styles.statValue, { color: colors.secondary }]}>{safeCount}</Text>
               </View>
-              <View style={[styles.statCard, { borderTopColor: '#EF4444' }]}>
+              <View style={[styles.statCard, { borderTopColor: colors.error }]}>
                 <Text style={styles.statLabel}>Exceeded</Text>
-                <Text style={[styles.statValue, { color: '#EF4444' }]}>{exceedCount}</Text>
+                <Text style={[styles.statValue, { color: colors.error }]}>{exceedCount}</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: exposure.color }]}>
                 <Text style={styles.statLabel}>Average</Text>
@@ -314,7 +314,7 @@ function ExposureDetailModal({
                     <Text style={[styles.tableCell, { flex: 2 }]} numberOfLines={1}>
                       {reading.worker_name?.split(' ')[0] || (reading.worker ? `#${reading.worker}` : 'Area')}
                     </Text>
-                    <Text style={[styles.tableCell, { flex: 1.5, color: reading.status === 'safe' ? '#22C55E' : '#EF4444' }]}>
+                    <Text style={[styles.tableCell, { flex: 1.5, color: reading.status === 'safe' ? colors.secondary : colors.error }]}>
                       {Number(reading.exposure_value).toFixed(2)}
                     </Text>
                     <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
@@ -349,6 +349,7 @@ export function ExposureMonitoringScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'value' | 'status'>('date');
   const [submitting, setSubmitting] = useState(false);
+  const [userEnterprise, setUserEnterprise] = useState<number | null>(null);
 
   // Manual entry form state
   const [newReading, setNewReading] = useState({
@@ -359,6 +360,32 @@ export function ExposureMonitoringScreen() {
     equipment_name: '',
     source_type: 'manual_entry',
   });
+
+  // Fetch user's enterprise on mount
+  useEffect(() => {
+    const fetchUserEnterprise = async () => {
+      try {
+        const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        const token = await AsyncStorage.getItem('auth_token');
+        if (!token) return;
+
+        const response = await axios.get(`${baseURL}/api/v1/auth/profile/`, {
+          headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
+          timeout: 5000,
+        });
+        
+        const profileData = response.data.user || response.data;
+        if (profileData.enterprise_id) {
+          setUserEnterprise(profileData.enterprise_id);
+        } else if (profileData.enterprise) {
+          setUserEnterprise(profileData.enterprise);
+        }
+      } catch (err) {
+        console.error('Failed to fetch user enterprise:', err);
+      }
+    };
+    fetchUserEnterprise();
+  }, []);
 
   // Load readings from API
   const loadReadings = useCallback(async () => {
@@ -414,17 +441,24 @@ export function ExposureMonitoringScreen() {
       const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
       const token = await AsyncStorage.getItem('auth_token');
 
+      const readingData: any = {
+        exposure_type: newReading.exposure_type,
+        exposure_value: parsedValue,
+        unit_measurement: newReading.unit_measurement,
+        sampling_location: newReading.sampling_location,
+        equipment_name: newReading.equipment_name || null,
+        source_type: newReading.source_type,
+        measurement_date: new Date().toISOString().split('T')[0],
+      };
+
+      // Only include enterprise if available (backend will auto-assign from request.user if not provided)
+      if (userEnterprise) {
+        readingData.enterprise = userEnterprise;
+      }
+
       await axios.post(
         `${baseURL}/api/v1/occupational-health/exposure-readings/`,
-        {
-          exposure_type: newReading.exposure_type,
-          exposure_value: parsedValue,
-          unit_measurement: newReading.unit_measurement,
-          sampling_location: newReading.sampling_location,
-          equipment_name: newReading.equipment_name || null,
-          source_type: newReading.source_type,
-          measurement_date: new Date().toISOString().split('T')[0],
-        },
+        readingData,
         {
           headers: token ? { Authorization: `Token ${token}`, 'Content-Type': 'application/json' } : {},
         }
@@ -442,7 +476,10 @@ export function ExposureMonitoringScreen() {
       });
       await loadReadings();
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit reading');
+      const errorData = err.response?.data;
+      const errorMessage = errorData?.detail || errorData?.enterprise?.[0] || JSON.stringify(errorData) || 'Failed to submit reading';
+      console.error('Submission error:', { status: err.response?.status, errorData, message: errorMessage });
+      Alert.alert('Error', errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -489,7 +526,7 @@ export function ExposureMonitoringScreen() {
 
       {error && (
         <View style={styles.errorBar}>
-          <Ionicons name="alert-circle" size={16} color="#EF4444" />
+          <Ionicons name="alert-circle" size={16} color={colors.error} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
@@ -509,7 +546,7 @@ export function ExposureMonitoringScreen() {
             style={[styles.filterBadge, filterStatus === 'safe' && styles.filterBadgeActive]}
             onPress={() => setFilterStatus('safe')}
           >
-            <Text style={[styles.filterText, filterStatus === 'safe' && { color: '#22C55E' }]}>
+            <Text style={[styles.filterText, filterStatus === 'safe' && { color: colors.secondary }]}>
               Safe ({stats.safe})
             </Text>
           </TouchableOpacity>
@@ -517,7 +554,7 @@ export function ExposureMonitoringScreen() {
             style={[styles.filterBadge, filterStatus === 'exceeded' && styles.filterBadgeActive]}
             onPress={() => setFilterStatus('exceeded')}
           >
-            <Text style={[styles.filterText, filterStatus === 'exceeded' && { color: '#EF4444' }]}>
+            <Text style={[styles.filterText, filterStatus === 'exceeded' && { color: colors.error }]}>
               Exceeded ({stats.exceeded})
             </Text>
           </TouchableOpacity>
@@ -582,7 +619,7 @@ export function ExposureMonitoringScreen() {
                     <View style={styles.readingDetails}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.detailLabel}>Value</Text>
-                        <Text style={[styles.detailValue, { color: reading.status === 'safe' ? '#22C55E' : '#EF4444' }]}>
+                        <Text style={[styles.detailValue, { color: reading.status === 'safe' ? colors.secondary : colors.error }]}>
                           {Number(reading.exposure_value).toFixed(3)} {reading.unit_measurement}
                         </Text>
                       </View>
@@ -738,7 +775,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: '#DC2626',
+    color: colors.errorDark,
     flex: 1,
   },
   filterBar: {
@@ -850,11 +887,11 @@ const styles = StyleSheet.create({
   exceedCount: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#DC2626',
+    color: colors.errorDark,
   },
   exceedLabel: {
     fontSize: 10,
-    color: '#DC2626',
+    color: colors.errorDark,
     fontWeight: '500',
   },
   typeCardContent: {

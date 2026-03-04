@@ -1590,13 +1590,21 @@ function AddAssessmentModal({ visible, onClose, onSave }: { visible: boolean; on
                   <Ionicons name="arrow-back" size={18} color={colors.text} />
                   <Text style={[styles.actionBtnText, { color: colors.text }]}>Retour</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={handleAddHazard}>
-                  <Ionicons name="add-circle-outline" size={18} color="#FFF" />
-                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>+ Danger</Text>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, { backgroundColor: (!hazDescription.trim() || !responsiblePerson.trim()) ? colors.outline : colors.secondary, opacity: (!hazDescription.trim() || !responsiblePerson.trim()) ? 0.5 : 1 }]} 
+                  onPress={handleAddHazard}
+                  disabled={!hazDescription.trim() || !responsiblePerson.trim()}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color={(!hazDescription.trim() || !responsiblePerson.trim()) ? colors.textSecondary : "#FFF"} />
+                  <Text style={[styles.actionBtnText, { color: (!hazDescription.trim() || !responsiblePerson.trim()) ? colors.textSecondary : '#FFF' }]}>+ Danger</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: ACCENT }]} onPress={handleSave} disabled={hazards.length === 0}>
-                  <Ionicons name="save-outline" size={18} color="#FFF" />
-                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Créer ({hazards.length})</Text>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, { backgroundColor: hazards.length === 0 ? colors.outline : ACCENT, opacity: hazards.length === 0 ? 0.5 : 1 }]} 
+                  onPress={handleSave} 
+                  disabled={hazards.length === 0}
+                >
+                  <Ionicons name="save-outline" size={18} color={hazards.length === 0 ? colors.textSecondary : "#FFF"} />
+                  <Text style={[styles.actionBtnText, { color: hazards.length === 0 ? colors.textSecondary : '#FFF' }]}>Créer ({hazards.length})</Text>
                 </TouchableOpacity>
               </>
             )}
