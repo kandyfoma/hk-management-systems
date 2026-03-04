@@ -10,6 +10,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Button, Text, TextInput, Surface, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';

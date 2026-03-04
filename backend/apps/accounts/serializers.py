@@ -90,6 +90,7 @@ class UserPermissionSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     phone = serializers.CharField()
     password = serializers.CharField(write_only=True)
+    license_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     def validate(self, attrs):
         phone = attrs.get('phone')

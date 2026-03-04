@@ -1307,7 +1307,7 @@ export function RiskAssessmentScreen() {
           try {
             const hazardData: any = {
               hazard_description: hazard.description || '',
-              hazard_type: hazard.hazardType || 'unknown',
+              hazard_type: hazard.hazardType || 'physical',
               location: assessment.area,
               activities_affected: hazard.activitiesAffected || '',
               probability: Math.max(1, Math.min(5, Number(hazard.likelihood) || 1)),
