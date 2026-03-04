@@ -1,8 +1,8 @@
 {
-  "buildCommand": "npm run build:web",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "framework": "expo",
+  "framework": "react-router",
   "env": {
     "REACT_APP_ENV": "@app_env",
     "REACT_APP_API_URL": "@api_url"
