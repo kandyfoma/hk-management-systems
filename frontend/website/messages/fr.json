@@ -6,59 +6,145 @@
     "benefits": "Avantages",
     "launch": "Lancer l'App"
   },
+  "header": {
+    "subtitle": "Système de Gestion",
+    "badge1": "100% Congolais",
+    "badge2": "100% Dirigé par une Femme"
+  },
   "hero": {
-    "title": "Système Unifié de Gestion",
-    "subtitle": "Pharmacie, Hôpital et Santé Occupationnelle",
-    "description": "Solutions de gestion de niveau entreprise pour les pharmacies, hôpitaux et santé occupationnelle. Plateforme intégrée pour les entreprises de la RDC. Examens médicaux, évaluations des risques, suivi de la conformité et gestion des opérations — tout en un système.",
-    "cta": "Commencer l'Essai Gratuit"
+    "location": "Lubumbashi · RD Congo",
+    "title1": "Médecine du Travail",
+    "title2": "Gestion",
+    "title3": "Système",
+    "description": "Système complet de gestion de la santé et de la sécurité au travail pour les entreprises de la RDC. Gérez les examens médicaux, évaluations des risques, signalement des incidents et conformité réglementaire — tout en une plateforme.",
+    "cta": "Commencer Gratuitement",
+    "seeFeatures": "Voir les Fonctionnalités",
+    "badge1": "Conforme ISO 45001",
+    "badge2": "Surveillance en Temps Réel",
+    "badge3": "Sécurité Entreprise",
+    "statsTitle": "Aperçu de la Plateforme",
+    "stat1Label": "Entreprises",
+    "stat2Label": "Travailleurs Gérés",
+    "stat3Label": "Disponibilité",
+    "stat4Label": "Support Expert",
+    "trustedIn": "Approuvé localement à"
   },
   "features": {
-    "title": "Fonctionnalités de la Plateforme",
+    "badge": "Fonctionnalités",
+    "title": "Tout Ce Dont Vous Avez Besoin",
+    "subtitle": "Outils complets pour la gestion de la médecine du travail",
     "medical": {
       "name": "Examens Médicaux",
-      "desc": "Effectuer des évaluations complètes de santé occupationnelle"
+      "desc": "Effectuer des évaluations complètes de médecine du travail",
+      "b1": "Dépistage à l'embauche",
+      "b2": "Bilans de santé périodiques",
+      "b3": "Évaluations d'aptitude"
     },
     "risk": {
       "name": "Évaluation des Risques",
-      "desc": "Identifier et gérer systématiquement les risques professionnels"
+      "desc": "Identifier et gérer systématiquement les risques professionnels",
+      "b1": "Identification des dangers",
+      "b2": "Matrice de cotation des risques",
+      "b3": "Plan de réduction des risques"
     },
     "compliance": {
       "name": "Suivi de la Conformité",
-      "desc": "Normes ISO 45001, conventions OIT et réglementations locales"
+      "desc": "Normes ISO 45001, conventions OIT et réglementations locales",
+      "b1": "Pistes d'audit ISO 45001",
+      "b2": "Rapports réglementaires",
+      "b3": "Archives documentaires"
     },
     "incident": {
       "name": "Gestion des Incidents",
-      "desc": "Signaler et suivre les incidents professionnels"
+      "desc": "Signaler et suivre les incidents professionnels",
+      "b1": "Formulaires de déclaration",
+      "b2": "Analyse des causes racines",
+      "b3": "Suivi des actions correctives"
     },
     "analytics": {
       "name": "Tableau de Bord Analytique",
-      "desc": "Aperçus en temps réel des indicateurs de santé"
+      "desc": "Aperçus en temps réel des indicateurs de santé",
+      "b1": "Analyse des tendances sanitaires",
+      "b2": "Tableaux de bord KPI",
+      "b3": "Rapports exportables"
     },
     "documentation": {
       "name": "Gestion de la Documentation",
-      "desc": "Stockage centralisé pour tous les dossiers de santé"
+      "desc": "Stockage centralisé pour tous les dossiers de santé",
+      "b1": "Stockage sécurisé",
+      "b2": "Contrôle des versions",
+      "b3": "Accès par rôle"
     }
   },
   "modules": {
-    "title": "Modules du Système"
+    "badge": "Modules Spécialisés",
+    "title": "Outils Adaptés aux Secteurs",
+    "subtitle": "Des modules conçus spécifiquement pour chaque discipline de la médecine du travail — configurés selon vos normes de travail.",
+    "medical": { "title": "Consultations Médicales", "f1": "Accueil et triage des patients", "f2": "Examens cliniques", "f3": "Suivi de santé", "f4": "Certificats d'aptitude" },
+    "audio": { "title": "Tests d'Audiométrie", "f1": "Bilans auditifs", "f2": "Analyse des tendances", "f3": "Rapports de conformité", "f4": "Alertes de seuil" },
+    "vision": { "title": "Tests de Vision", "f1": "Examens de la vue", "f2": "Tests d'acuité visuelle", "f3": "Dépistage daltonisme", "f4": "Autorisation de sécurité" },
+    "spiro": { "title": "Spirométrie", "f1": "Tests de fonction pulmonaire", "f2": "Bilan respiratoire de base", "f3": "Suivi des tendances", "f4": "Détection des maladies" },
+    "drug": { "title": "Tests Drogue & Alcool", "f1": "Programmes de dépistage", "f2": "Tests de conformité", "f3": "Suivi des résultats", "f4": "Rapports réglementaires" },
+    "incident": { "title": "Incidents au Travail", "f1": "Déclaration d'incidents", "f2": "Outils d'enquête", "f3": "Analyse des causes racines", "f4": "Suivi préventif" }
   },
   "benefits": {
-    "title": "Pourquoi Choisir KAT OHMS",
+    "badge": "Pourquoi Choisir KATMS",
+    "title": "Conçu pour les Entreprises de la RDC",
+    "subtitle": "Adapté aux besoins spécifiques de la médecine du travail en Afrique centrale",
     "efficiency": "Efficacité Accrue",
+    "efficiencyDesc": "Automatisez les tâches répétitives, réduisez la paperasse et rationalisez les flux de travail.",
     "compliance": "Conformité Complète",
+    "complianceDesc": "Restez aligné avec ISO 45001, les conventions OIT et les réglementations locales de la RDC.",
     "safety": "Sécurité Renforcée",
-    "data": "Meilleures Données"
+    "safetyDesc": "Gérez proactivement les risques professionnels et prévenez les incidents avant qu'ils surviennent.",
+    "data": "Meilleures Données",
+    "dataDesc": "Décisions basées sur les données avec des tableaux de bord en temps réel et des analyses complètes.",
+    "platformMetrics": "Indicateurs de la Plateforme",
+    "stat1Label": "Temps admin économisé",
+    "stat2Label": "Rapports plus rapides",
+    "stat3Label": "Garantie de disponibilité",
+    "gdprLabel": "Données conformes",
+    "isoLabel": "Norme de sécurité"
   },
   "compliance": {
+    "badge": "Certifications",
     "title": "Normes et Conformité",
+    "subtitle": "Conçu pour répondre aux normes internationales de médecine du travail",
     "iso": "Certifié ISO 45001:2018",
-    "ilo": "Conforme aux Conventions OIT"
+    "isoDesc": "Entièrement aligné avec la norme internationale pour les systèmes de management de la santé et de la sécurité au travail.",
+    "ilo": "Conforme aux Conventions OIT",
+    "iloDesc": "Conforme aux conventions de l'Organisation Internationale du Travail pour la santé et la sécurité des travailleurs."
+  },
+  "cta": {
+    "title": "Prêt à Transformer la Santé au Travail?",
+    "subtitle": "Rejoignez les organisations à travers la RDC qui gèrent la médecine du travail intelligemment.",
+    "button": "Commencer l'Essai Gratuit",
+    "contact": "Nous Contacter",
+    "location": "Lubumbashi, République Démocratique du Congo",
+    "whatYouGet": "Ce que vous obtenez",
+    "item1Title": "Configuration et Intégration Complètes",
+    "item1Desc": "Intégration et formation professionnelles pour votre équipe dès le premier jour.",
+    "item2Title": "Support Expert 24h/24",
+    "item2Desc": "Équipe de support dédiée disponible en permanence en français et en anglais.",
+    "item3Title": "Hébergement Cloud Sécurisé",
+    "item3Desc": "Hébergement de qualité entreprise avec sauvegardes automatiques et 99,9% de disponibilité.",
+    "item4Title": "Rapports de Conformité",
+    "item4Desc": "Rapports auto-générés pour ISO 45001, OIT et les réglementations de la RDC."
+  },
+  "gallery": {
+    "badge": "Milieux Réels",
+    "title": "Conçu pour les Secteurs Moteurs de la RDC",
+    "subtitle": "Des sites miniers aux établissements de santé, KATMS aide les organisations de tous secteurs à protéger les travailleurs et à respecter les réglementations.",
+    "watchVideo": "Voir Notre Démo"
   },
   "footer": {
+    "tagline": "Système de gestion pour la pharmacie, les opérations hospitalières et la médecine du travail. Conçu à Lubumbashi, bâti pour l'Afrique.",
     "contact": "Contact",
     "phone": "+243 82 88 12 498",
     "email": "foma.kandy@gmail.com",
     "location": "Lubumbashi, République Démocratique du Congo",
-    "rights": "Tous droits réservés"
+    "rights": "Tous droits réservés",
+    "product": "Produit",
+    "company": "Société"
   }
 }

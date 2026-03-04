@@ -2,11 +2,26 @@
 
 import React from 'react'
 import { ArrowRight, Shield, Zap, MapPin } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import ScrollReveal from './ScrollReveal'
 
 export default function HeroSection() {
+  const t = useTranslations('hero')
+
   return (
     <section className="relative bg-gradient-to-br from-primary via-primaryLight to-primaryDark text-white overflow-hidden">
+      {/* Video background */}
+      <video
+        className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-overlay"
+        autoPlay
+        muted
+        loop
+        playsInline
+        poster="/images/workers-1.jpg"
+      >
+        <source src="/videos/hero-bg.mp4" type="video/mp4" />
+      </video>
+
       {/* Background grid pattern */}
       <div className="absolute inset-0 opacity-5"
         style={{
@@ -23,24 +38,22 @@ export default function HeroSection() {
               <div className="flex items-center gap-2 mb-6">
                 <MapPin size={14} className="text-secondaryLight" />
                 <span className="pill bg-white/10 text-secondaryLight border border-secondaryLight/30">
-                  Lubumbashi · DR Congo
+                  {t('location')}
                 </span>
               </div>
             </ScrollReveal>
 
             <ScrollReveal delay={1}>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-6 leading-[1.1] tracking-tight">
-                Occupational Health<br />
-                Management<br />
-                <span className="gradient-text">System</span>
+                {t('title1')}<br />
+                {t('title2')}<br />
+                <span className="gradient-text">{t('title3')}</span>
               </h1>
             </ScrollReveal>
 
             <ScrollReveal delay={2}>
               <p className="text-lg sm:text-xl text-white/75 mb-10 leading-relaxed max-w-xl">
-                Comprehensive workplace health &amp; safety system built for
-                DR Congo enterprises. Manage medical examinations, risk assessments,
-                incident reporting, and regulatory compliance — all in one platform.
+                {t('description')}
               </p>
             </ScrollReveal>
 
@@ -52,13 +65,13 @@ export default function HeroSection() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-secondaryLight hover:bg-accent text-primary font-bold text-base transition-all duration-200 hover:-translate-y-0.5 shadow-lg shadow-secondaryLight/20"
                 >
-                  Get Started Free <ArrowRight size={18} />
+                  {t('cta')} <ArrowRight size={18} />
                 </a>
                 <button
                   onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl border-2 border-white/30 text-white hover:bg-white/10 font-bold text-base transition-all duration-200"
                 >
-                  See Features
+                  {t('seeFeatures')}
                 </button>
               </div>
             </ScrollReveal>
@@ -67,15 +80,15 @@ export default function HeroSection() {
               <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm text-white/60">
                 <div className="flex items-center gap-2">
                   <Shield size={16} className="text-secondaryLight" />
-                  <span>ISO 45001 Compliant</span>
+                  <span>{t('badge1')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Zap size={16} className="text-secondaryLight" />
-                  <span>Real-Time Monitoring</span>
+                  <span>{t('badge2')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Shield size={16} className="text-secondaryLight" />
-                  <span>Enterprise Security</span>
+                  <span>{t('badge3')}</span>
                 </div>
               </div>
             </ScrollReveal>
@@ -84,13 +97,13 @@ export default function HeroSection() {
           {/* Stats card */}
           <ScrollReveal delay={2} className="hidden lg:block">
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20 shadow-2xl">
-              <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-6">Platform at a Glance</p>
+              <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-6">{t('statsTitle')}</p>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { value: '500+', label: 'Enterprises' },
-                  { value: '50K+', label: 'Workers Managed' },
-                  { value: '99.9%', label: 'System Uptime' },
-                  { value: '24/7', label: 'Expert Support' },
+                  { value: '500+', label: t('stat1Label') },
+                  { value: '50K+', label: t('stat2Label') },
+                  { value: '99.9%', label: t('stat3Label') },
+                  { value: '24/7', label: t('stat4Label') },
                 ].map((stat, i) => (
                   <div key={i} className="bg-white/10 hover:bg-white/15 transition rounded-xl p-5 text-center">
                     <div className="text-3xl font-extrabold text-secondaryLight mb-1">{stat.value}</div>
@@ -99,7 +112,7 @@ export default function HeroSection() {
                 ))}
               </div>
               <div className="mt-6 pt-6 border-t border-white/10 flex items-center justify-between text-sm">
-                <span className="text-white/50">Trusted locally in</span>
+                <span className="text-white/50">{t('trustedIn')}</span>
                 <span className="font-semibold text-secondaryLight">Lubumbashi, DR Congo</span>
               </div>
             </div>

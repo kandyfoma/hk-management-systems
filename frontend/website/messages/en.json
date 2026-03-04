@@ -6,59 +6,145 @@
     "benefits": "Benefits",
     "launch": "Launch App"
   },
+  "header": {
+    "subtitle": "Management System",
+    "badge1": "100% Congolese Owned",
+    "badge2": "100% Woman Owned"
+  },
   "hero": {
-    "title": "Unified Management System",
-    "subtitle": "Pharmacy, Hospital & Occupational Health",
-    "description": "Enterprise-grade management solutions for pharmacies, hospitals, and occupational health. Integrated platform for DR Congo enterprises. Medical examinations, risk assessments, compliance tracking, and operations management — all in one system.",
-    "cta": "Start Free Trial"
+    "location": "Lubumbashi · DR Congo",
+    "title1": "Occupational Health",
+    "title2": "Management",
+    "title3": "System",
+    "description": "Comprehensive workplace health & safety system built for DR Congo enterprises. Manage medical examinations, risk assessments, incident reporting, and regulatory compliance — all in one platform.",
+    "cta": "Get Started Free",
+    "seeFeatures": "See Features",
+    "badge1": "ISO 45001 Compliant",
+    "badge2": "Real-Time Monitoring",
+    "badge3": "Enterprise Security",
+    "statsTitle": "Platform at a Glance",
+    "stat1Label": "Enterprises",
+    "stat2Label": "Workers Managed",
+    "stat3Label": "System Uptime",
+    "stat4Label": "Expert Support",
+    "trustedIn": "Trusted locally in"
   },
   "features": {
-    "title": "Platform Features",
+    "badge": "Platform Features",
+    "title": "Everything You Need",
+    "subtitle": "Comprehensive tools for occupational health management",
     "medical": {
       "name": "Medical Examinations",
-      "desc": "Conduct thorough occupational health assessments"
+      "desc": "Conduct thorough occupational health assessments",
+      "b1": "Pre-employment screening",
+      "b2": "Periodic health reviews",
+      "b3": "Fitness-for-duty assessments"
     },
     "risk": {
       "name": "Risk Assessment",
-      "desc": "Identify and manage workplace risks systematically"
+      "desc": "Identify and manage workplace risks systematically",
+      "b1": "Hazard identification",
+      "b2": "Risk scoring matrix",
+      "b3": "Mitigation planning"
     },
     "compliance": {
       "name": "Compliance Tracking",
-      "desc": "ISO 45001, ILO standards, and local regulations"
+      "desc": "ISO 45001, ILO standards, and local regulations",
+      "b1": "ISO 45001 audit trails",
+      "b2": "Regulatory reporting",
+      "b3": "Documentation archive"
     },
     "incident": {
       "name": "Incident Management",
-      "desc": "Report and track workplace incidents"
+      "desc": "Report and track workplace incidents",
+      "b1": "Incident reporting forms",
+      "b2": "Root cause analysis",
+      "b3": "Corrective action tracking"
     },
     "analytics": {
       "name": "Analytics Dashboard",
-      "desc": "Real-time insights into health metrics"
+      "desc": "Real-time insights into health metrics",
+      "b1": "Health trend analysis",
+      "b2": "KPI dashboards",
+      "b3": "Exportable reports"
     },
     "documentation": {
       "name": "Documentation Management",
-      "desc": "Centralized storage for all health records"
+      "desc": "Centralized storage for all health records",
+      "b1": "Secure file storage",
+      "b2": "Version control",
+      "b3": "Role-based access"
     }
   },
   "modules": {
-    "title": "System Modules"
+    "badge": "Specialized Modules",
+    "title": "Industry-Specific Tools",
+    "subtitle": "Purpose-built modules for every occupational health testing discipline — configured for your workplace standard.",
+    "medical": { "title": "Medical Consultations", "f1": "Patient intake & triage", "f2": "Clinical exams", "f3": "Health tracking", "f4": "Fitness certificates" },
+    "audio": { "title": "Audiometry Tests", "f1": "Hearing assessments", "f2": "Trend analysis", "f3": "Compliance reporting", "f4": "Threshold alerts" },
+    "vision": { "title": "Vision Testing", "f1": "Eye exams", "f2": "Visual acuity tests", "f3": "Color blindness screening", "f4": "Safety clearance" },
+    "spiro": { "title": "Spirometry", "f1": "Lung function tests", "f2": "Respiratory baseline", "f3": "Trend tracking", "f4": "Disease detection" },
+    "drug": { "title": "Drug & Alcohol Tests", "f1": "Screening programs", "f2": "Compliance testing", "f3": "Results tracking", "f4": "Regulatory reporting" },
+    "incident": { "title": "Workplace Incidents", "f1": "Incident reporting", "f2": "Investigation tools", "f3": "Root cause analysis", "f4": "Prevention tracking" }
   },
   "benefits": {
-    "title": "Why Choose KAT OHMS",
+    "badge": "Why Choose KATMS",
+    "title": "Built for DR Congo Enterprises",
+    "subtitle": "Designed for the unique needs of occupational health management in Central Africa",
     "efficiency": "Increased Efficiency",
+    "efficiencyDesc": "Automate repetitive tasks, reduce paperwork, and streamline health reporting workflows.",
     "compliance": "Full Compliance",
+    "complianceDesc": "Stay aligned with ISO 45001, ILO conventions, and local DR Congo regulations.",
     "safety": "Enhanced Safety",
-    "data": "Better Insights"
+    "safetyDesc": "Proactively manage workplace risks and prevent incidents before they occur.",
+    "data": "Better Insights",
+    "dataDesc": "Data-driven decisions with real-time dashboards and comprehensive analytics.",
+    "platformMetrics": "Platform Metrics",
+    "stat1Label": "Admin time saved",
+    "stat2Label": "Faster reporting",
+    "stat3Label": "Uptime guarantee",
+    "gdprLabel": "Data compliant",
+    "isoLabel": "Security standard"
   },
   "compliance": {
+    "badge": "Certifications",
     "title": "Standards & Compliance",
+    "subtitle": "Built to meet international occupational health standards",
     "iso": "ISO 45001:2018 Certified",
-    "ilo": "ILO Conventions Compliant"
+    "isoDesc": "Fully aligned with the international standard for occupational health and safety management systems.",
+    "ilo": "ILO Conventions Compliant",
+    "iloDesc": "Adheres to International Labour Organization conventions for worker health and safety."
+  },
+  "cta": {
+    "title": "Ready to Transform Your Workplace Health?",
+    "subtitle": "Join organizations across DR Congo managing occupational health the smart way.",
+    "button": "Start Free Trial",
+    "contact": "Contact Us",
+    "location": "Lubumbashi, DR Congo",
+    "whatYouGet": "What You Get",
+    "item1Title": "Complete Setup & Onboarding",
+    "item1Desc": "Professional onboarding and training for your team from day one.",
+    "item2Title": "24/7 Expert Support",
+    "item2Desc": "Dedicated support team available round the clock in French & English.",
+    "item3Title": "Secure Cloud Hosting",
+    "item3Desc": "Enterprise-grade hosting with automatic backups and 99.9% uptime.",
+    "item4Title": "Compliance Reporting",
+    "item4Desc": "Auto-generated reports for ISO 45001, ILO, and DR Congo regulations."
+  },
+  "gallery": {
+    "badge": "Real Workplaces",
+    "title": "Built for the Industries That Drive DRC",
+    "subtitle": "From mining sites to healthcare facilities, KATMS helps organizations across sectors protect workers and stay compliant with regulations.",
+    "watchVideo": "Watch Our Demo"
   },
   "footer": {
+    "tagline": "Management system for pharmacy, hospital operations, and occupational health. Designed in Lubumbashi, built for Africa.",
     "contact": "Contact",
     "phone": "+243 82 88 12 498",
     "email": "foma.kandy@gmail.com",
     "location": "Lubumbashi, DR Congo",
-    "rights": "All rights reserved"
+    "rights": "All rights reserved",
+    "product": "Product",
+    "company": "Company"
   }
 }

@@ -3,8 +3,10 @@
 import React from 'react'
 import Image from 'next/image'
 import { Phone, Mail, MapPin } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 export default function Footer() {
+  const t = useTranslations('footer')
   const currentYear = new Date().getFullYear()
 
   return (
@@ -18,35 +20,34 @@ export default function Footer() {
               <span className="font-extrabold text-xl">KATMS</span>
             </div>
             <p className="text-sidebarText text-sm leading-relaxed mb-6 max-w-xs">
-              Unified management system for pharmacy, hospital operations, and occupational health.
-              Designed in Lubumbashi, built for Africa.
+              {t('tagline')}
             </p>
             <div className="space-y-2">
               <a href="tel:+243828812498" className="flex items-center gap-2 text-sidebarText hover:text-white transition text-sm">
                 <Phone size={14} className="text-secondaryLight" />
-                +243 82 88 12 498
+                {t('phone')}
               </a>
               <a href="mailto:foma.kandy@gmail.com" className="flex items-center gap-2 text-sidebarText hover:text-white transition text-sm">
                 <Mail size={14} className="text-secondaryLight" />
-                foma.kandy@gmail.com
+                {t('email')}
               </a>
               <div className="flex items-center gap-2 text-sidebarText text-sm">
                 <MapPin size={14} className="text-secondaryLight" />
-                Lubumbashi, DR Congo
+                {t('location')}
               </div>
             </div>
           </div>
 
           {/* Product */}
           <div>
-            <h4 className="font-bold text-sm uppercase tracking-widest text-white/50 mb-5">Product</h4>
+            <h4 className="font-bold text-sm uppercase tracking-widest text-white/50 mb-5">{t('product')}</h4>
             <ul className="space-y-3">
               {[
                 { label: 'Features', href: '#features' },
                 { label: 'Modules', href: '#modules' },
                 { label: 'Compliance', href: '#compliance' },
                 { label: 'Benefits', href: '#benefits' },
-                { label: 'Launch App', href: 'https://app.katohms.com' },
+                { label: 'Launch App', href: 'https://app.katms.org' },
               ].map((item) => (
                 <li key={item.label}>
                   <a href={item.href} className="text-sidebarText hover:text-white transition text-sm">
@@ -79,7 +80,7 @@ export default function Footer() {
 
         <div className="border-t border-sidebarHover pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-sidebarText text-sm">
-            © {currentYear} KAT Occupational Health Management System. All rights reserved.
+            © {currentYear} KAT Management System (KATMS). {t('rights')}.
           </p>
           <p className="text-sidebarText text-xs">
             Lubumbashi · DR Congo · ISO 45001 Ready

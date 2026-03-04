@@ -2,16 +2,11 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
-})
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'KAT Management System - Pharmacy, Hospital & Occupational Health',
-  description: 'Unified management system for pharmacy, hospital operations, and occupational health. Comprehensive solutions for DR Congo enterprises.',
-  keywords: 'management system, pharmacy management, hospital management, occupational health, DR Congo, Lubumbashi, KATMS',
+  title: 'KATMS',
+  description: 'Unified Management System',
 }
 
 export default function RootLayout({
@@ -20,8 +15,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>{children}</body>
+    <html suppressHydrationWarning className={inter.variable}>
+      <body className="font-sans antialiased">
+        {children}
+      </body>
     </html>
   )
 }

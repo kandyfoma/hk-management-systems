@@ -2,39 +2,42 @@
 
 import React from 'react'
 import { Heart, AlertCircle, Shield, BarChart3, Users, CheckCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import ScrollReveal from './ScrollReveal'
 
 export default function FeaturesSection() {
+  const t = useTranslations('features')
+
   const features = [
     {
       icon: Heart,
-      title: 'Medical Examinations',
-      points: ['Structured clinical workflows', 'Vital signs & fitness tracking', 'Fitness-for-duty certificates', 'Occupational disease registry'],
+      title: t('medical.name'),
+      points: [t('medical.b1'), t('medical.b2'), t('medical.b3'), t('medical.desc')],
     },
     {
       icon: AlertCircle,
-      title: 'Incident Management',
-      points: ['Real-time incident reporting', 'Investigation workflows', 'Root cause analysis', 'Automated compliance tracking'],
+      title: t('incident.name'),
+      points: [t('incident.b1'), t('incident.b2'), t('incident.b3'), t('incident.desc')],
     },
     {
       icon: BarChart3,
-      title: 'Risk Assessment',
-      points: ['Advanced risk matrix calculations', 'Probability & severity scoring', 'Real-time risk level view', 'Corrective action tracking'],
+      title: t('risk.name'),
+      points: [t('risk.b1'), t('risk.b2'), t('risk.b3'), t('risk.desc')],
     },
     {
       icon: Shield,
-      title: 'Compliance Management',
-      points: ['ISO 45001 & ISO 27001 ready', 'ILO standards alignment', 'Audit trail & reporting', 'Regulatory document store'],
+      title: t('compliance.name'),
+      points: [t('compliance.b1'), t('compliance.b2'), t('compliance.b3'), t('compliance.desc')],
     },
     {
       icon: Users,
-      title: 'Worker Management',
-      points: ['Enterprise worker profiles', 'Role-based access control', 'Health surveillance programs', 'Training records'],
+      title: t('analytics.name'),
+      points: [t('analytics.b1'), t('analytics.b2'), t('analytics.b3'), t('analytics.desc')],
     },
     {
       icon: CheckCircle,
-      title: 'Health Surveillance',
-      points: ['Continuous health monitoring', 'Threshold-based alerts', 'Periodic exam scheduling', 'Trend analytics'],
+      title: t('documentation.name'),
+      points: [t('documentation.b1'), t('documentation.b2'), t('documentation.b3'), t('documentation.desc')],
     },
   ]
 
@@ -42,12 +45,12 @@ export default function FeaturesSection() {
     <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
       <div className="max-w-7xl mx-auto">
         <ScrollReveal className="text-center mb-16">
-          <span className="pill bg-successLight text-secondary mb-4">Platform Features</span>
+          <span className="pill bg-successLight text-secondary mb-4">{t('badge')}</span>
           <h2 className="text-4xl sm:text-5xl font-extrabold text-primary mb-4 mt-3 tracking-tight">
-            Everything You Need
+            {t('title')}
           </h2>
           <p className="text-lg text-onSurfaceVariant max-w-2xl mx-auto">
-            A complete toolset for occupational health professionals — designed for DR Congo workplace realities.
+            {t('subtitle')}
           </p>
         </ScrollReveal>
 

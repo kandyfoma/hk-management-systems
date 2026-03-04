@@ -2,9 +2,11 @@
 
 import React from 'react'
 import { CheckCircle2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import ScrollReveal from './ScrollReveal'
 
 export default function ComplianceSection() {
+  const t = useTranslations('compliance')
   const standards = [
     {
       name: 'ISO 45001',
@@ -29,16 +31,27 @@ export default function ComplianceSection() {
   ]
 
   return (
-    <section id="compliance" className="py-24 px-4 sm:px-6 lg:px-8 bg-primary">
-      <div className="max-w-7xl mx-auto">
+    <section id="compliance" className="relative py-24 px-4 sm:px-6 lg:px-8 bg-primary overflow-hidden">
+      {/* Video background */}
+      <video
+        className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-overlay"
+        autoPlay
+        muted
+        loop
+        playsInline
+        poster="/images/workers-2.jpg"
+      >
+        <source src="/videos/hero-bg-4k.mp4" type="video/mp4" />
+      </video>
+
+      <div className="relative max-w-7xl mx-auto">
         <ScrollReveal className="text-center mb-16">
-          <span className="pill bg-white/10 text-secondaryLight border border-secondaryLight/30 mb-4">Compliance</span>
+          <span className="pill bg-white/10 text-secondaryLight border border-secondaryLight/30 mb-4">{t('badge')}</span>
           <h2 className="text-4xl sm:text-5xl font-extrabold text-white mb-4 mt-3 tracking-tight">
-            Built for Global Standards
+            {t('title')}
           </h2>
           <p className="text-lg text-white/60 max-w-2xl mx-auto">
-            Designed from the ground up to meet international regulatory requirements —
-            customised for DR Congo enterprise operations.
+            {t('subtitle')}
           </p>
         </ScrollReveal>
 

@@ -4,10 +4,13 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import LanguageSwitcher from './LanguageSwitcher'
 
 export default function Header() {
   const [isMobileOpen, setIsOpen] = useState(false)
+  const t = useTranslations('nav')
+  const th = useTranslations('header')
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-outline shadow-sm">
@@ -28,15 +31,15 @@ export default function Header() {
                   KATMS
                 </span>
                 <span className="text-xs text-onSurfaceVariant hidden sm:inline font-medium">
-                  Unified Management System
+                  {th('subtitle')}
                 </span>
               </div>
               <div className="hidden sm:flex gap-1.5 mt-1">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primaryFaded text-primary">
-                  100% Congolese Owned
+                  {th('badge1')}
                 </span>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-white">
-                  100% Woman Owned
+                  {th('badge2')}
                 </span>
               </div>
             </div>
@@ -45,16 +48,16 @@ export default function Header() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             <Link href="#features" className="text-onSurfaceVariant hover:text-primary transition">
-              Features
+              {t('features')}
             </Link>
             <Link href="#modules" className="text-onSurfaceVariant hover:text-primary transition">
-              Modules
+              {t('modules')}
             </Link>
             <Link href="#compliance" className="text-onSurfaceVariant hover:text-primary transition">
-              Compliance
+              {t('compliance')}
             </Link>
             <Link href="#benefits" className="text-onSurfaceVariant hover:text-primary transition">
-              Benefits
+              {t('benefits')}
             </Link>
           </div>
 
@@ -67,7 +70,7 @@ export default function Header() {
               rel="noopener noreferrer"
               className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primaryDark transition font-medium"
             >
-              Launch App
+              {t('launch')}
             </a>
           </div>
 
@@ -88,28 +91,28 @@ export default function Header() {
               className="block py-2 text-onSurfaceVariant hover:text-primary transition"
               onClick={() => setIsOpen(false)}
             >
-              Features
+              {t('features')}
             </Link>
             <Link
               href="#modules"
               className="block py-2 text-onSurfaceVariant hover:text-primary transition"
               onClick={() => setIsOpen(false)}
             >
-              Modules
+              {t('modules')}
             </Link>
             <Link
               href="#compliance"
               className="block py-2 text-onSurfaceVariant hover:text-primary transition"
               onClick={() => setIsOpen(false)}
             >
-              Compliance
+              {t('compliance')}
             </Link>
             <Link
               href="#benefits"
               className="block py-2 text-onSurfaceVariant hover:text-primary transition"
               onClick={() => setIsOpen(false)}
             >
-              Benefits
+              {t('benefits')}
             </Link>
             <div className="py-3 border-t border-outline my-3">
               <LanguageSwitcher />
@@ -120,7 +123,7 @@ export default function Header() {
               rel="noopener noreferrer"
               className="block mt-4 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primaryDark transition font-medium text-center"
             >
-              Launch App
+              {t('launch')}
             </a>
           </div>
         )}

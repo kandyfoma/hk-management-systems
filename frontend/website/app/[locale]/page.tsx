@@ -9,6 +9,7 @@ import FeaturesSection from '@/components/FeaturesSection'
 import BenefitsSection from '@/components/BenefitsSection'
 import ModulesSection from '@/components/ModulesSection'
 import ComplianceSection from '@/components/ComplianceSection'
+import GallerySection from '@/components/GallerySection'
 import CTASection from '@/components/CTASection'
 
 export default function Home() {
@@ -19,6 +20,7 @@ export default function Home() {
       <FeaturesSection />
       <ModulesSection />
       <BenefitsSection />
+      <GallerySection />
       <ComplianceSection />
       <CTASection />
       <Footer />
