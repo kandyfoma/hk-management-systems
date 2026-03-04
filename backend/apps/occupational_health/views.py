@@ -1441,7 +1441,6 @@ class HazardIdentificationViewSet(viewsets.ModelViewSet):
         # Auto-assign enterprise if not provided
         enterprise = serializer.validated_data.get('enterprise')
         if not enterprise:
-            from apps.administration.models import Enterprise
             # Try to get user's enterprise
             user = self.request.user
             if hasattr(user, 'enterprise') and user.enterprise:
