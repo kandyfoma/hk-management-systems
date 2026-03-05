@@ -69,6 +69,16 @@ echo "[4/6] Loading demo seed data (users + patients)..."
 python manage.py seed_demo_data || echo "   [WARN] seed_demo_data failed (non-fatal, continuing...)"
 echo "   [OK] Demo seed step done"
 
+# ── 4b. Seed CAPA (IncidentInvestigation) demo data ────────────────────────
+#
+#   seed_capa_demo is fully idempotent (skips existing records).
+#   Requires WorkplaceIncident records to exist first; emits a warning and
+#   exits cleanly if none are found.
+#
+echo "[4b/6] Loading CAPA demo data (incident investigations)..."
+python manage.py seed_capa_demo || echo "   [WARN] seed_capa_demo failed (non-fatal, continuing...)"
+echo "   [OK] CAPA demo seed step done"
+
 # ── 5. Collect static files ─────────────────────────────────────────────────
 echo "[5/6] Collecting static files..."
 python manage.py collectstatic --noinput --clear || echo "   [WARN] collectstatic failed (non-fatal, continuing...)"
