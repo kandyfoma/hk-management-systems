@@ -190,13 +190,13 @@ const SAMPLE_INVESTIGATIONS: IncidentInvestigation[] = [
 // â”€â”€â”€ Investigation Status Timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function InvestigationTimeline({ status }: { status: IncidentInvestigation['status'] }) {
   const steps = [
-    { id: 'reported', label: 'SignalÃ©', icon: 'alert-circle' },
+    { id: 'reported', label: 'Signalé', icon: 'alert-circle' },
     { id: 'under_investigation', label: 'En Investigation', icon: 'search' },
-    { id: 'root_cause_identified', label: 'Cause IdentifiÃ©e', icon: 'checkmark-circle' },
-    { id: 'corrective_action_planned', label: 'Actions PlanifiÃ©es', icon: 'clipboard' },
-    { id: 'corrective_action_implemented', label: 'Actions Mises en Å’uvre', icon: 'construct' },
-    { id: 'effectiveness_verified', label: 'EfficacitÃ© VÃ©rifiÃ©e', icon: 'checkmark' },
-    { id: 'closed', label: 'FermÃ©', icon: 'checkmark-done' },
+    { id: 'root_cause_identified', label: 'Cause Identifiée', icon: 'checkmark-circle' },
+    { id: 'corrective_action_planned', label: 'Actions Planifiées', icon: 'clipboard' },
+    { id: 'corrective_action_implemented', label: 'Actions Mises en Œuvre', icon: 'construct' },
+    { id: 'effectiveness_verified', label: 'Efficacité Vérifiée', icon: 'checkmark' },
+    { id: 'closed', label: 'Fermé', icon: 'checkmark-done' },
   ];
 
   const statusIndex = steps.findIndex(s => s.id === status);
@@ -228,15 +228,15 @@ function CAPAItem({ capa, onPress }: { capa: CAPA; onPress: () => void }) {
   const statusConfig = {
     pending: { color: '#94A3B8', label: 'En attente' },
     in_progress: { color: '#F59E0B', label: 'En cours' },
-    completed: { color: '#22C55E', label: 'ComplÃ©tÃ©e' },
-    cancelled: { color: '#EF4444', label: 'AnnulÃ©e' },
+    completed: { color: '#22C55E', label: 'Complétée' },
+    cancelled: { color: '#EF4444', label: 'Annulée' },
   };
   const effectivenessConfig = {
-    not_assessed: { color: '#94A3B8', label: 'Non Ã©valuÃ©e' },
+    not_assessed: { color: '#94A3B8', label: 'Non évaluée' },
     ineffective: { color: '#EF4444', label: 'Inefficace' },
     partially_effective: { color: '#F59E0B', label: 'Partiellement efficace' },
     effective: { color: '#22C55E', label: 'Efficace' },
-    highly_effective: { color: '#16A34A', label: 'TrÃ¨s efficace' },
+    highly_effective: { color: '#16A34A', label: 'Très efficace' },
   };
 
   const statusCfg = statusConfig[capa.status];

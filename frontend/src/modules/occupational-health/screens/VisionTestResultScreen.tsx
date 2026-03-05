@@ -55,7 +55,7 @@ export function VisionTestResultScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <View><Text style={styles.screenTitle}>Tests de Vision</Text><Text style={styles.screenSubtitle}>AcuitÃ© visuelle â€” DÃ©pistage de la vision</Text></View>
+        <View><Text style={styles.screenTitle}>Tests de Vision</Text><Text style={styles.screenSubtitle}>Acuité visuelle – Dépistage de la vision</Text></View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: '#8B5CF6' }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add-circle" size={20} color="#FFF" /><Text style={styles.addButtonText}>Nouveau Test</Text>
         </TouchableOpacity>
@@ -71,21 +71,21 @@ export function VisionTestResultScreen() {
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>{item.worker_name}</Text>
             <View style={[styles.badge, { backgroundColor: item.status === 'pass' ? '#22C55E' : item.status === 'fail' ? '#DC2626' : '#F59E0B' }]}>
-              <Text style={styles.badgeText}>{item.status === 'pass' ? 'OK' : item.status === 'fail' ? 'Ã‰CHOUÃ‰' : 'RESTREINT'}</Text>
+              <Text style={styles.badgeText}>{item.status === 'pass' ? 'OK' : item.status === 'fail' ? 'ÉCHOUÉ' : 'RESTREINT'}</Text>
             </View>
           </View>
           <Text style={styles.cardMeta}>{item.test_date}</Text>
           <View style={styles.visionGrid}>
             <View style={styles.visionItem}>
-              <Text style={styles.visionLabel}>Å’il Gauche</Text>
+              <Text style={styles.visionLabel}>Œil Gauche</Text>
               <Text style={styles.visionValue}>{item.visual_acuity_left}</Text>
             </View>
             <View style={styles.visionItem}>
-              <Text style={styles.visionLabel}>Å’il Droit</Text>
+              <Text style={styles.visionLabel}>Œil Droit</Text>
               <Text style={styles.visionValue}>{item.visual_acuity_right}</Text>
             </View>
           </View>
-          <Text style={styles.colorBlindness}>Vision des couleurs: {item.color_blindness === 'normal' ? 'Normal' : 'Anomalie dÃ©tectÃ©e'}</Text>
+          <Text style={styles.colorBlindness}>Vision des couleurs: {item.color_blindness === 'normal' ? 'Normal' : 'Anomalie détectée'}</Text>
         </View>
       )} ListEmptyComponent={<Text style={styles.emptyText}>Aucun test</Text>} />
 
@@ -101,15 +101,15 @@ export function VisionTestResultScreen() {
             <ScrollView style={styles.formContainer}>
               <Text style={styles.formLabel}>Travailleur</Text>
               <TextInput style={styles.input} placeholder="Nom..." placeholderTextColor={colors.placeholder} />
-              <Text style={styles.formLabel}>AcuitÃ© Å’il Gauche</Text>
+              <Text style={styles.formLabel}>Acuité Œil Gauche</Text>
               <TextInput style={styles.input} placeholder="20/20" placeholderTextColor={colors.placeholder} />
-              <Text style={styles.formLabel}>AcuitÃ© Å’il Droit</Text>
+              <Text style={styles.formLabel}>Acuité Œil Droit</Text>
               <TextInput style={styles.input} placeholder="20/20" placeholderTextColor={colors.placeholder} />
               <Text style={styles.formLabel}>Statut</Text>
               <View style={styles.buttonGroup}>
                 {['pass', 'fail', 'restricted'].map(status => (
                   <TouchableOpacity key={status} style={styles.groupBtn}>
-                    <Text style={styles.groupBtnText}>{status === 'pass' ? 'OK' : status === 'fail' ? 'Ã‰chouÃ©' : 'Restreint'}</Text>
+                    <Text style={styles.groupBtnText}>{status === 'pass' ? 'OK' : status === 'fail' ? 'Échoué' : 'Restreint'}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

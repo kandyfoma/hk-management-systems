@@ -58,8 +58,8 @@ export function SpirometryResultScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.screenTitle}>Tests de SpiromÃ©trie</Text>
-          <Text style={styles.screenSubtitle}>Fonction pulmonaire â€” Ã‰valuation respiratoire</Text>
+          <Text style={styles.screenTitle}>Tests de Spirométrie</Text>
+          <Text style={styles.screenSubtitle}>Fonction pulmonaire – Évaluation respiratoire</Text>
         </View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: '#3B82F6' }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add-circle" size={20} color="#FFF" />
@@ -103,7 +103,7 @@ export function SpirometryResultScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isDesktop && styles.modalContentDesktop]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau Test de SpiromÃ©trie</Text>
+              <Text style={styles.modalTitle}>Nouveau Test de Spirométrie</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close-circle-outline" size={28} color={ACCENT} />
               </TouchableOpacity>
@@ -118,7 +118,7 @@ export function SpirometryResultScreen() {
               <Text style={styles.formLabel}>Notes</Text>
               <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Observations..." multiline numberOfLines={4} placeholderTextColor={colors.placeholder} />
             </ScrollView>
-            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#3B82F6' }]} onPress={() => { setShowAddModal(false); Alert.alert('SuccÃ¨s', 'Test crÃ©Ã©'); }}>
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#3B82F6' }]} onPress={() => { setShowAddModal(false); Alert.alert('Succès', 'Test créé'); }}>
               <Text style={styles.submitBtnText}>Enregistrer</Text>
             </TouchableOpacity>
           </View>
