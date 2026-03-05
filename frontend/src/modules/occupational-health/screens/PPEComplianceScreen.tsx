@@ -98,13 +98,18 @@ export function PPEComplianceScreen() {
     try {
       const api = ApiService.getInstance();
       // ?worker= is the DRF filterset param; ?worker_id= also handled by backend as fallback
+      console.log(`[PPECompliance] Loading PPE items for worker ${workerId}...`);
       const response = await api.get('/occupational-health/ppe-items/', { worker: Number(workerId), page_size: 100 });
+      console.log(`[PPECompliance] API Response:`, response);
       if (response.data) {
         const items = Array.isArray(response.data) ? response.data : response.data.results || [];
+        console.log(`[PPECompliance] Found ${items.length} PPE items for worker ${workerId}:`, items);
         setPpeItems(items);
+      } else {
+        console.warn(`[PPECompliance] No data in response for worker ${workerId}`);
       }
     } catch (error) {
-      console.error('Error loading PPE items:', error);
+      console.error(`[PPECompliance] Error loading PPE items for worker ${workerId}:`, error);
       setPpeItems([]);
     }
   };
@@ -350,7 +355,19 @@ export function PPEComplianceScreen() {
                   ))}
                 </ScrollView>
               ) : selectedWorker ? (
-                <Text style={{ fontSize: 12, color: colors.textSecondary, marginVertical: spacing.md }}>Aucun EPI assigné</Text>
+                <View style={{ paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.warning + '12', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.warning + '30' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                    <Ionicons name="alert-circle" size={20} color={colors.warning} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warning, marginBottom: 4 }}>Aucun EPI assigné</Text>
+                      <Text style={{ fontSize: 11, color: colors.warning, lineHeight: 16 }}>
+                        Ce travailleur n'a aucun équipement EPI enregistré. Vous devez d'abord{'\n'}
+                        <Text style={{ fontWeight: '600' }}>créer et assigner des articles EPI</Text> via l'écran{'\n'}
+                        <Text style={{ fontStyle: 'italic' }}>Gestion EPI</Text> (catalogue d'équipements).
+                      </Text>
+                    </View>
+                  </View>
+                </View>
               ) : (
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginVertical: spacing.md }}>Sélectionnez d'abord un travailleur</Text>
               )}
