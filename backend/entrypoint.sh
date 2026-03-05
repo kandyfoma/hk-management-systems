@@ -3,15 +3,15 @@
 # Docker Entrypoint — KAT Management Systems Backend
 #
 # Runs automatically on every container start (UAT / Production).
-# Order is intentional: wait → migrate → seed → collectstatic → serve.
+# Order is intentional: wait -> migrate -> seed -> collectstatic -> serve.
 # =============================================================================
 
 set -e  # Exit immediately on any error
 
-echo "──────────────────────────────────────────"
-echo "  KAT Management Systems — Backend startup"
+echo "=========================================="
+echo "  KAT Management Systems - Backend startup"
 echo "  ENV: ${DJANGO_ENV:-production}"
-echo "──────────────────────────────────────────"
+echo "=========================================="
 
 # ── 1. Wait for Postgres to be ready ────────────────────────────────────────
 if [ -n "$DB_HOST" ]; then
@@ -30,7 +30,7 @@ try:
 except Exception:
     sys.exit(1)
 "; do
-    echo "   → Database not ready, retrying in 2s..."
+    echo "   -> Database not ready, retrying in 2s..."
     sleep 2
   done
   echo "   [OK] Database is ready"

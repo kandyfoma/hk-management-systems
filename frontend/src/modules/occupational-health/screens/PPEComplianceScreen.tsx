@@ -471,24 +471,28 @@ export function PPEComplianceScreen() {
                 ))}
               </View>
 
-              <TouchableOpacity 
-                style={[
-                  styles.submitButton,
-                  {
-                    backgroundColor: !isFormValid ? '#ccc' : ACCENT,
-                    opacity: submitting ? 0.6 : 1,
-                  }
-                ]}
-                onPress={handleSubmit}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Enregistrer</Text>
-                )}
-              </TouchableOpacity>
             </ScrollView>
+
+            {/* Submit button OUTSIDE ScrollView — fixes React Native Web touch-interception bug */}
+            <TouchableOpacity 
+              style={[
+                styles.submitButton,
+                {
+                  marginHorizontal: spacing.md,
+                  marginBottom: spacing.md,
+                  backgroundColor: !isFormValid ? '#9CA3AF' : ACCENT,
+                  opacity: submitting ? 0.6 : 1,
+                }
+              ]}
+              onPress={handleSubmit}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.submitButtonText}>Enregistrer</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

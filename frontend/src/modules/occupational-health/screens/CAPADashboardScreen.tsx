@@ -533,7 +533,7 @@ export function CAPADashboardScreen({ navigation }: any) {
   const [selected, setSelected] = useState<Investigation | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'deadline' | 'severity'>('newest');
-  const { toast, showToast } = useSimpleToast();
+  const { toastMsg, showToast } = useSimpleToast();
 
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -598,12 +598,14 @@ export function CAPADashboardScreen({ navigation }: any) {
 
   return (
     <View style={ss.screen}>
-      <SimpleToastNotification
-        visible={toast.visible}
-        message={toast.message}
-        type={toast.type}
-        onHide={() => {}}
-      />
+      {toastMsg && (
+        <SimpleToastNotification
+          visible={!!toastMsg}
+          message={toastMsg.text}
+          type={toastMsg.type}
+          onHide={() => {}}
+        />
+      )}
 
       {/* Header */}
       <View style={ss.header}>

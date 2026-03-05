@@ -25,9 +25,9 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # Copy project source
 COPY . .
 
-# Copy & set entrypoint
+# Copy & set entrypoint (sed strips Windows CRLF line-endings)
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 8000
 

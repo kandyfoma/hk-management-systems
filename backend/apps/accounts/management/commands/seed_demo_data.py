@@ -490,38 +490,9 @@ class Command(BaseCommand):
         created_count = 0
         updated_count = 0
         for config in STAFF:
-            user = User.objects.filter(email=config['email']).first()
-            if not user:
-                user = User.objects.filter(phone=config['phone']).first()
-
-            created = False
-            if not user:
-                user = User.objects.create(
-                    email=config['email'],
-                    phone=config['phone'],
-                    first_name=config['first_name'],
-                    last_name=config['last_name'],
-                    primary_role=config['role'],
-                    employee_id=config.get('employee_id', ''),
-                    department=config.get('department', ''),
-                    professional_license=config.get('professional_license', ''),
-                    organization=org,
-                    is_staff=config.get('is_staff', False),
-                    is_superuser=config.get('is_superuser', False),
-                    is_active=True,
-                )
-                created = True
-
-            if created:
-                pwd = SEED_PWD.get(config['role'], _seed_default)
-                user.set_password(pwd)
-                user.save()
-                created_count += 1
-                self.stdout.write(f'    [NEW] {config["role"]:20s} {config["phone"]}  /  {pwd}')
-            else:
-                changed_fields = []
-                synced_fields = {
-                    'email': config['email'],
+            user, created = User.objects.get_or_create(
+                email=config['email'],
+                defaults={
                     'phone': config['phone'],
                     'first_name': config['first_name'],
                     'last_name': config['last_name'],
@@ -534,14 +505,28 @@ class Command(BaseCommand):
                     'is_superuser': config.get('is_superuser', False),
                     'is_active': True,
                 }
-
-                phone_conflict = User.objects.filter(phone=config['phone']).exclude(pk=user.pk).exists()
-                if phone_conflict:
-                    synced_fields.pop('phone', None)
-                    self.stdout.write(
-                        f'    [WARN] {config["role"]:20s} {config["phone"]} already used by another account; kept existing phone'
-                    )
-
+            )
+            if created:
+                pwd = SEED_PWD.get(config['role'], _seed_default)
+                user.set_password(pwd)
+                user.save()
+                created_count += 1
+                self.stdout.write(f'    [NEW] {config["role"]:20s} {config["phone"]}  /  {pwd}')
+            else:
+                changed_fields = []
+                synced_fields = {
+                    'phone': config['phone'],
+                    'first_name': config['first_name'],
+                    'last_name': config['last_name'],
+                    'primary_role': config['role'],
+                    'employee_id': config.get('employee_id', ''),
+                    'department': config.get('department', ''),
+                    'professional_license': config.get('professional_license', ''),
+                    'organization': org,
+                    'is_staff': config.get('is_staff', False),
+                    'is_superuser': config.get('is_superuser', False),
+                    'is_active': True,
+                }
                 for field_name, expected_value in synced_fields.items():
                     if getattr(user, field_name) != expected_value:
                         setattr(user, field_name, expected_value)
