@@ -672,7 +672,8 @@ class MedicalExamination(models.Model):
     exam_number = models.CharField(_("Numéro Examen"), max_length=50, unique=True)
     exam_type = models.CharField(_("Type Examen"), max_length=20, choices=EXAM_TYPES)
     exam_date = models.DateField(_("Date Examen"))
-    examining_doctor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='examinations_performed')
+    examining_doctor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='examinations_performed')
+    location = models.CharField(_("Lieu Examen"), max_length=200, blank=True, default='KCC Health Center')
     
     # Examination details
     chief_complaint = models.TextField(_("Motif Principal"), blank=True)

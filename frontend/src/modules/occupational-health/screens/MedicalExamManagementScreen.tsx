@@ -197,19 +197,26 @@ function CalendarGrid({ year, month, exams, selectedDay, onSelectDay, onPrevMont
       {/* Grid */}
       <View style={cgS.grid}>
         {cells.map((cell, idx) => {
-          const dayExams  = dayMap[cell.key] || [];
+          const dayExams   = dayMap[cell.key] || [];
           const isSelected = selectedDay === cell.key;
           const isToday    = cell.key === today;
-          const dotColors  = [...new Set(dayExams.map(e => ALL_EXAM_TYPES[e.examType]?.color || colors.primary))].slice(0, 3);
-          const overflow   = Math.max(0, dayExams.length - 3);
+
+          // Unique exam colors for pip indicators (up to 2)
+          const uniqueColors = [...new Set(dayExams.map(e => ALL_EXAM_TYPES[e.examType]?.color || colors.primary))].slice(0, 2);
+          const overflow     = Math.max(0, dayExams.length - 2);
+
+          // Status-based priority color for badge bg
+          const hasScheduled = dayExams.some(e => e.status === 'scheduled');
+          const badgeBg      = hasScheduled ? colors.primary : '#22C55E';
 
           return (
             <TouchableOpacity
               key={idx}
-              style={[cgS.cell, { width: CELL_W, height: CELL_W + 20 }, isSelected && cgS.cellSel]}
+              style={[cgS.cell, { width: CELL_W }, isSelected && cgS.cellSel, isToday && !isSelected && cgS.cellToday]}
               onPress={() => cell.current && onSelectDay(cell.key)}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
+              {/* Day number */}
               <View style={[cgS.dayNum, isToday && cgS.todayCircle, isSelected && cgS.selCircle]}>
                 <Text style={[
                   cgS.dayNumTxt,
@@ -220,12 +227,27 @@ function CalendarGrid({ year, month, exams, selectedDay, onSelectDay, onPrevMont
                   {cell.date.getDate()}
                 </Text>
               </View>
-              {dayExams.length > 0 && (
-                <View style={cgS.dotsRow}>
-                  {dotColors.map((col, di) => (
-                    <View key={di} style={[cgS.dot, { backgroundColor: col }]} />
+
+              {/* Exam count badge */}
+              {dayExams.length > 0 && cell.current && (
+                <View style={[cgS.countBadge, { backgroundColor: isSelected ? '#FFF' : badgeBg }]}>
+                  <Text style={[cgS.countBadgeTxt, { color: isSelected ? colors.primary : '#FFF' }]}>
+                    {dayExams.length}
+                  </Text>
+                </View>
+              )}
+
+              {/* Color pips */}
+              {dayExams.length > 0 && cell.current && (
+                <View style={cgS.pipsRow}>
+                  {uniqueColors.map((col, di) => (
+                    <View key={di} style={[cgS.pip, { backgroundColor: isSelected ? 'rgba(255,255,255,0.8)' : col }]} />
                   ))}
-                  {overflow > 0 && <Text style={cgS.overflow}>+{overflow}</Text>}
+                  {overflow > 0 && (
+                    <View style={[cgS.overflowPip, { backgroundColor: isSelected ? 'rgba(255,255,255,0.5)' : colors.outline }]}>
+                      <Text style={[cgS.overflowTxt, { color: isSelected ? colors.primary : colors.textSecondary }]}>+{overflow}</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </TouchableOpacity>
@@ -237,127 +259,280 @@ function CalendarGrid({ year, month, exams, selectedDay, onSelectDay, onPrevMont
 }
 
 const cgS = StyleSheet.create({
-  container:    { backgroundColor: colors.surface, borderRadius: borderRadius.xl, marginHorizontal: spacing.md, padding: spacing.md, ...shadows.sm },
-  nav:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  navBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
-  monthTitle:   { fontSize: 17, fontWeight: '700', color: colors.text },
-  dayHeaders:   { flexDirection: 'row', marginBottom: 4 },
-  dayHeader:    { alignItems: 'center', paddingVertical: 4 },
-  dayHeaderTxt: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  grid:         { flexDirection: 'row', flexWrap: 'wrap' },
-  cell:         { alignItems: 'center', paddingTop: 5, paddingBottom: 3 },
-  cellSel:      { backgroundColor: colors.primary + '10', borderRadius: borderRadius.md },
-  dayNum:       { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  todayCircle:  { backgroundColor: colors.primary + '22' },
-  selCircle:    { backgroundColor: colors.primary },
-  dayNumTxt:    { fontSize: 13, fontWeight: '500', color: colors.text },
-  dayNumOther:  { color: colors.outline },
-  todayTxt:     { color: colors.primary, fontWeight: '700' },
-  selTxt:       { color: '#FFFFFF', fontWeight: '700' },
-  dotsRow:      { flexDirection: 'row', gap: 2, marginTop: 3, alignItems: 'center' },
-  dot:          { width: 5, height: 5, borderRadius: 3 },
-  overflow:     { fontSize: 8, color: colors.textSecondary, fontWeight: '700' },
+  container:      { backgroundColor: colors.surface, borderRadius: borderRadius.xl, marginHorizontal: spacing.md, padding: spacing.md, ...shadows.sm },
+  nav:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  navBtn:         { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  monthTitle:     { fontSize: 17, fontWeight: '700', color: colors.text },
+  dayHeaders:     { flexDirection: 'row', marginBottom: 4 },
+  dayHeader:      { alignItems: 'center', paddingVertical: 4 },
+  dayHeaderTxt:   { fontSize: 11, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  grid:           { flexDirection: 'row', flexWrap: 'wrap' },
+  cell:           { alignItems: 'center', paddingTop: 6, paddingBottom: 5, minHeight: 58, position: 'relative' },
+  cellSel:        { backgroundColor: colors.primary, borderRadius: borderRadius.md },
+  cellToday:      { backgroundColor: colors.primary + '0A', borderRadius: borderRadius.md },
+  dayNum:         { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  todayCircle:    { backgroundColor: 'transparent' },
+  selCircle:      { backgroundColor: 'rgba(255,255,255,0.22)' },
+  dayNumTxt:      { fontSize: 13, fontWeight: '600', color: colors.text },
+  dayNumOther:    { color: colors.outline },
+  todayTxt:       { color: colors.primary, fontWeight: '800' },
+  selTxt:         { color: '#FFFFFF', fontWeight: '800' },
+  // count badge
+  countBadge:     { minWidth: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', marginTop: 2, paddingHorizontal: 4 },
+  countBadgeTxt:  { fontSize: 10, fontWeight: '800', lineHeight: 14 },
+  // color pips
+  pipsRow:        { flexDirection: 'row', gap: 2, marginTop: 2, alignItems: 'center' },
+  pip:            { width: 5, height: 5, borderRadius: 3 },
+  overflowPip:    { paddingHorizontal: 3, paddingVertical: 1, borderRadius: 4 },
+  overflowTxt:    { fontSize: 8, fontWeight: '700' },
 });
 
-// ─── Day Appointments Panel ───────────────────────────────────────────────────
-function DayPanel({
-  day, exams, onSelect,
+// ─── Day Modal ───────────────────────────────────────────────────────────────
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function DayModal({
+  visible, day, exams, onClose, onSelect, onAddAppointment,
 }: {
+  visible: boolean;
   day: string | null;
   exams: ExamSchedule[];
+  onClose: () => void;
   onSelect: (e: ExamSchedule) => void;
+  onAddAppointment: () => void;
 }) {
+  const slideY = useRef(new Animated.Value(600)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 72, friction: 11 }).start();
+    } else {
+      Animated.timing(slideY, { toValue: 600, duration: 220, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+
   if (!day) return null;
-  const d     = isoToDate(day);
-  const label = `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+  const d         = isoToDate(day);
+  const dayName   = DAY_NAMES[d.getDay()];
+  const dateLabel = `${dayName}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  const isToday   = day === todayKey();
+
+  // Group exams by status for the summary strip
+  const scheduled  = exams.filter(e => e.status === 'scheduled').length;
+  const completed  = exams.filter(e => e.status === 'completed').length;
+  const others     = exams.length - scheduled - completed;
 
   return (
-    <View style={dpS.container}>
-      <View style={dpS.header}>
-        <Text style={dpS.dateLabel}>{label}</Text>
-        <View style={dpS.countPill}>
-          <Text style={dpS.countTxt}>{exams.length} RDV</Text>
-        </View>
-      </View>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <View style={dmS.overlay}>
+        <TouchableOpacity style={dmS.backdrop} onPress={onClose} activeOpacity={1} />
+        <Animated.View style={[dmS.sheet, { transform: [{ translateY: slideY }] }]}>
+          {/* Handle */}
+          <View style={dmS.handle} />
 
-      {exams.length === 0 ? (
-        <View style={dpS.empty}>
-          <Ionicons name="calendar-clear-outline" size={36} color={colors.outline} />
-          <Text style={dpS.emptyTxt}>No appointments on this day</Text>
-        </View>
-      ) : (
-        exams.map(exam => {
-          const t = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
-          return (
-            <TouchableOpacity key={exam.id} style={dpS.card} onPress={() => onSelect(exam)} activeOpacity={0.75}>
-              <View style={[dpS.colorBar, { backgroundColor: t.color }]} />
-              <View style={[dpS.iconBox, { backgroundColor: t.color + '18' }]}>
-                <Ionicons name={t.icon as any} size={18} color={t.color} />
+          {/* Header */}
+          <View style={dmS.header}>
+            <View style={{ flex: 1 }}>
+              <View style={dmS.headerTop}>
+                {isToday && (
+                  <View style={dmS.todayChip}>
+                    <Text style={dmS.todayChipTxt}>Aujourd'hui</Text>
+                  </View>
+                )}
+                <Text style={dmS.dateLabel}>{dateLabel}</Text>
               </View>
-              <View style={dpS.cardBody}>
-                <Text style={dpS.workerName} numberOfLines={1}>{exam.workerName}</Text>
-                <Text style={dpS.examType}>{t.label}</Text>
-                {exam.examiner ? (
-                  <Text style={dpS.examiner} numberOfLines={1}>Dr. {exam.examiner}</Text>
-                ) : null}
+              {exams.length > 0 && (
+                <View style={dmS.summaryStrip}>
+                  {scheduled > 0 && (
+                    <View style={[dmS.sumChip, { backgroundColor: '#EFF6FF' }]}>
+                      <View style={[dmS.sumDot, { backgroundColor: '#3B82F6' }]} />
+                      <Text style={[dmS.sumTxt, { color: '#3B82F6' }]}>{scheduled} prévu(s)</Text>
+                    </View>
+                  )}
+                  {completed > 0 && (
+                    <View style={[dmS.sumChip, { backgroundColor: '#F0FDF4' }]}>
+                      <View style={[dmS.sumDot, { backgroundColor: '#22C55E' }]} />
+                      <Text style={[dmS.sumTxt, { color: '#22C55E' }]}>{completed} complétés</Text>
+                    </View>
+                  )}
+                  {others > 0 && (
+                    <View style={[dmS.sumChip, { backgroundColor: colors.surfaceVariant }]}>
+                      <View style={[dmS.sumDot, { backgroundColor: colors.textSecondary }]} />
+                      <Text style={[dmS.sumTxt, { color: colors.textSecondary }]}>{others} autre(s)</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+            <View style={dmS.headerActions}>
+              {exams.length > 0 && (
+                <TouchableOpacity style={dmS.addBtn} onPress={onAddAppointment} activeOpacity={0.8}>
+                  <Ionicons name="add" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={dmS.closeBtn} onPress={onClose} activeOpacity={0.8}>
+                <Ionicons name="close" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Content */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={dmS.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {exams.length === 0 ? (
+              <View style={dmS.empty}>
+                <View style={dmS.emptyIcon}>
+                  <Ionicons name="calendar-clear-outline" size={40} color={colors.outline} />
+                </View>
+                <Text style={dmS.emptyTitle}>Aucun rendez-vous</Text>
+                <Text style={dmS.emptyHint}>Aucun examen prévu pour d'autres jours.</Text>
+                <TouchableOpacity style={dmS.addAppointmentBtn} onPress={onAddAppointment}>
+                  <Ionicons name="add" size={16} color="#FFF" />
+                  <Text style={dmS.addAppointmentTxt}>Ajouter rendez-vous</Text>
+                </TouchableOpacity>
               </View>
-              <StatusBadge status={exam.status} />
-              <Ionicons name="chevron-forward" size={15} color={colors.outline} />
-            </TouchableOpacity>
-          );
-        })
-      )}
-    </View>
+            ) : (
+              exams.map(exam => {
+                const t   = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
+                const cfg = STATUS_CFG[exam.status]        || STATUS_CFG.scheduled;
+                const initials = getInitials(exam.workerName);
+                return (
+                  <TouchableOpacity
+                    key={exam.id}
+                    style={dmS.card}
+                    onPress={() => { onClose(); setTimeout(() => onSelect(exam), 260); }}
+                    activeOpacity={0.8}
+                  >
+                    {/* Left accent */}
+                    <View style={[dmS.cardAccent, { backgroundColor: t.color }]} />
+
+                    {/* Worker avatar */}
+                    <View style={[dmS.avatar, { backgroundColor: t.color + '20' }]}>
+                      <Text style={[dmS.avatarTxt, { color: t.color }]}>{initials}</Text>
+                    </View>
+
+                    {/* Main info */}
+                    <View style={dmS.cardBody}>
+                      <Text style={dmS.workerName} numberOfLines={1}>{exam.workerName}</Text>
+
+                      {/* Exam type chip */}
+                      <View style={[dmS.examChip, { backgroundColor: t.color + '14' }]}>
+                        <Ionicons name={t.icon as any} size={11} color={t.color} />
+                        <Text style={[dmS.examChipTxt, { color: t.color }]}>{t.label}</Text>
+                      </View>
+
+                      {/* Meta row */}
+                      <View style={dmS.metaRow}>
+                        {exam.examiner ? (
+                          <View style={dmS.metaItem}>
+                            <Ionicons name="person-outline" size={11} color={colors.textSecondary} />
+                            <Text style={dmS.metaTxt} numberOfLines={1}>Dr. {exam.examiner}</Text>
+                          </View>
+                        ) : null}
+                        {exam.location ? (
+                          <View style={dmS.metaItem}>
+                            <Ionicons name="location-outline" size={11} color={colors.textSecondary} />
+                            <Text style={dmS.metaTxt} numberOfLines={1}>{exam.location}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    {/* Right: status + chevron */}
+                    <View style={dmS.cardRight}>
+                      <View style={[dmS.statusBadge, { backgroundColor: cfg.bg }]}>
+                        <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />
+                        <Text style={[dmS.statusTxt, { color: cfg.color }]}>{cfg.label}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={14} color={colors.outline} style={{ marginTop: 4 }} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
-const dpS = StyleSheet.create({
-  container:  { marginHorizontal: spacing.md, marginTop: spacing.md },
-  header:     { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  dateLabel:  { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
-  countPill:  { backgroundColor: colors.primary + '18', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  countTxt:   { fontSize: 11, fontWeight: '700', color: colors.primary },
-  empty:      { alignItems: 'center', paddingVertical: 36, gap: spacing.sm },
-  emptyTxt:   { fontSize: 13, color: colors.textSecondary },
-  card:       { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: borderRadius.lg, marginBottom: spacing.sm, overflow: 'hidden', ...shadows.sm, minHeight: 64 },
-  colorBar:   { width: 4, alignSelf: 'stretch' },
-  iconBox:    { width: 38, height: 38, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center', marginLeft: 4 },
-  cardBody:   { flex: 1, paddingVertical: spacing.sm },
-  workerName: { fontSize: 13, fontWeight: '700', color: colors.text },
-  examType:   { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
-  examiner:   { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+const dmS = StyleSheet.create({
+  overlay:            { flex: 1, justifyContent: 'flex-end' },
+  backdrop:           { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  sheet:              { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '80%', ...shadows.lg },
+  handle:             { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.outline, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  header:             { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: spacing.lg, paddingTop: 4, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline, gap: spacing.sm },
+  headerTop:          { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 },
+  dateLabel:          { fontSize: 16, fontWeight: '800', color: colors.text },
+  todayChip:          { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
+  todayChipTxt:       { fontSize: 10, fontWeight: '800', color: '#FFF', letterSpacing: 0.4 },
+  summaryStrip:       { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  sumChip:            { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  sumDot:             { width: 6, height: 6, borderRadius: 3 },
+  sumTxt:             { fontSize: 11, fontWeight: '600' },
+  headerActions:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  addBtn:             { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary + '12', justifyContent: 'center', alignItems: 'center' },
+  closeBtn:           { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginTop: 2 },
+  scrollContent:      { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: 32 },
+  // Empty state
+  empty:              { alignItems: 'center', paddingVertical: 48, gap: spacing.sm },
+  emptyIcon:          { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  emptyTitle:         { fontSize: 16, fontWeight: '700', color: colors.text },
+  emptyHint:          { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 8 },
+  addAppointmentBtn:  { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg },
+  addAppointmentTxt:  { fontSize: 13, fontWeight: '600', color: '#FFF' },
+  // Appointment card
+  card:          { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.xl, marginBottom: spacing.sm, overflow: 'hidden', borderWidth: 1, borderColor: colors.outline, ...shadows.sm, minHeight: 76 },
+  cardAccent:    { width: 5, alignSelf: 'stretch' },
+  avatar:        { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginHorizontal: 10 },
+  avatarTxt:     { fontSize: 16, fontWeight: '800' },
+  cardBody:      { flex: 1, paddingVertical: 10 },
+  workerName:    { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  examChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, marginBottom: 4 },
+  examChipTxt:   { fontSize: 11, fontWeight: '700' },
+  metaRow:       { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  metaItem:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metaTxt:       { fontSize: 11, color: colors.textSecondary, maxWidth: 130 },
+  cardRight:     { alignItems: 'center', paddingRight: 10, gap: 2 },
+  statusBadge:        { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 16 },
+  statusTxt:          { fontSize: 10, fontWeight: '700' },
 });
 
 // ─── Appointment Detail Modal ─────────────────────────────────────────────────
 function AppointmentDetailModal({
-  visible, exam, onClose, onEdit,
+  visible, exam, onClose, onUpdate,
 }: {
   visible: boolean;
   exam: ExamSchedule | null;
   onClose: () => void;
-  onEdit: () => void;
+  onUpdate: (exam: ExamSchedule) => void;
 }) {
   const slideY = useRef(new Animated.Value(400)).current;
+  const [editMode, setEditMode] = useState(false);
+  const [editData, setEditData] = useState<ExamSchedule | null>(null);
 
   useEffect(() => {
     if (visible) {
       Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+      setEditMode(false);
+      setEditData(exam);
     } else {
       slideY.setValue(400);
     }
-  }, [visible]);
+  }, [visible, exam]);
 
-  if (!exam) return null;
+  if (!exam || !editData) return null;
   const t          = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
   const statusCfg  = STATUS_CFG[exam.status] || STATUS_CFG.scheduled;
   const initials   = getInitials(exam.workerName);
 
-  const detailRows = [
-    { icon: 'calendar-outline',      label: 'Date',     value: exam.scheduledDate     },
-    { icon: 'person-circle-outline', label: 'Examiner', value: exam.examiner || '—'   },
-    { icon: 'location-outline',      label: 'Location', value: exam.location  || '—'  },
-    ...(exam.notes ? [{ icon: 'document-text-outline', label: 'Notes', value: exam.notes }] : []),
-  ];
+  const handleUpdate = () => {
+    onUpdate(editData);
+    setEditMode(false);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -367,7 +542,7 @@ function AppointmentDetailModal({
           <View style={adS.handle} />
           <View style={[adS.stripe, { backgroundColor: t.color }]} />
 
-          <View style={adS.body}>
+          <ScrollView style={adS.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
             {/* Worker row */}
             <View style={adS.workerRow}>
               <View style={[adS.avatar, { backgroundColor: t.color + '22' }]}>
@@ -383,68 +558,157 @@ function AppointmentDetailModal({
               <StatusBadge status={exam.status} size="lg" />
             </View>
 
-            {/* Details */}
-            {detailRows.map((row, i) => (
-              <View key={i} style={adS.detailRow}>
-                <View style={[adS.detailIcon, { backgroundColor: t.color + '12' }]}>
-                  <Ionicons name={row.icon as any} size={16} color={t.color} />
+            {/* Edit mode fields */}
+            {editMode ? (
+              <View>
+                <View style={adS.editFieldGroup}>
+                  <Text style={adS.editLabel}>Date de rendez-vous</Text>
+                  <DateInput
+                    value={editData.scheduledDate}
+                    onChangeText={d => setEditData({ ...editData, scheduledDate: d })}
+                    minimumDate={new Date()}
+                  />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={adS.detailLabel}>{row.label}</Text>
-                  <Text style={adS.detailValue}>{row.value}</Text>
+
+                <View style={adS.editFieldGroup}>
+                  <Text style={adS.editLabel}>Médecin examinateur</Text>
+                  <TextInput
+                    style={adS.editInput}
+                    value={editData.examiner}
+                    onChangeText={v => setEditData({ ...editData, examiner: v })}
+                    placeholder="Nom du médecin"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+
+                <View style={adS.editFieldGroup}>
+                  <Text style={adS.editLabel}>Lieu</Text>
+                  <TextInput
+                    style={adS.editInput}
+                    value={editData.location}
+                    onChangeText={v => setEditData({ ...editData, location: v })}
+                    placeholder="Salle d'examen / clinique"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+
+                <View style={adS.editFieldGroup}>
+                  <Text style={adS.editLabel}>Remarques</Text>
+                  <TextInput
+                    style={[adS.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                    value={editData.notes}
+                    onChangeText={v => setEditData({ ...editData, notes: v })}
+                    placeholder="Remarques supplémentaires..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                  />
                 </View>
               </View>
-            ))}
+            ) : (
+              <View>
+                <DetailItem label="Date" value={exam.scheduledDate} icon="calendar-outline" style={adS.detailRow} />
+                <DetailItem label="Médecin examinateur" value={exam.examiner || '—'} icon="person-circle-outline" style={adS.detailRow} />
+                <DetailItem label="Lieu" value={exam.location || '—'} icon="location-outline" style={adS.detailRow} />
+                {exam.notes && <DetailItem label="Remarques" value={exam.notes} icon="document-text-outline" style={adS.detailRow} />}
+              </View>
+            )}
 
             {/* Actions */}
             <View style={adS.actions}>
-              <TouchableOpacity style={adS.actionBtn} onPress={onEdit} activeOpacity={0.8}>
-                <Ionicons name="create-outline" size={17} color={colors.primary} />
-                <Text style={[adS.actionTxt, { color: colors.primary }]}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[adS.actionBtn, { backgroundColor: '#F0FDF4', borderColor: '#22C55E60' }]} activeOpacity={0.8}>
-                <Ionicons name="mail-outline" size={17} color="#22C55E" />
-                <Text style={[adS.actionTxt, { color: '#22C55E' }]}>Notify</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[adS.actionBtn, { backgroundColor: '#FEF2F2', borderColor: '#EF444460' }]} activeOpacity={0.8}>
-                <Ionicons name="close-circle-outline" size={17} color="#EF4444" />
-                <Text style={[adS.actionTxt, { color: '#EF4444' }]}>Cancel</Text>
-              </TouchableOpacity>
+              {editMode ? (
+                <>
+                  <TouchableOpacity style={adS.actionBtn} onPress={handleUpdate} activeOpacity={0.8}>
+                    <Ionicons name="checkmark" size={17} color="#22C55E" />
+                    <Text style={[adS.actionTxt, { color: '#22C55E' }]}>Enregistrer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[adS.actionBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.outline }]} onPress={() => { setEditMode(false); setEditData(exam); }} activeOpacity={0.8}>
+                    <Ionicons name="close" size={17} color={colors.textSecondary} />
+                    <Text style={[adS.actionTxt, { color: colors.textSecondary }]}>Annuler</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity style={adS.actionBtn} onPress={() => setEditMode(true)} activeOpacity={0.8}>
+                    <Ionicons name="create-outline" size={17} color={colors.primary} />
+                    <Text style={[adS.actionTxt, { color: colors.primary }]}>Modifier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[adS.actionBtn, { backgroundColor: '#F0FDF4', borderColor: '#22C55E60' }]} activeOpacity={0.8}>
+                    <Ionicons name="mail-outline" size={17} color="#22C55E" />
+                    <Text style={[adS.actionTxt, { color: '#22C55E' }]}>Notifier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[adS.actionBtn, { backgroundColor: '#FEF2F2', borderColor: '#EF444460' }]} activeOpacity={0.8}>
+                    <Ionicons name="close-circle-outline" size={17} color="#EF4444" />
+                    <Text style={[adS.actionTxt, { color: '#EF4444' }]}>Annuler</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
-          </View>
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
   );
 }
 
+function DetailItem({
+  label, value, icon, style,
+}: {
+  label: string;
+  value: string;
+  icon: string;
+  style?: any;
+}) {
+  return (
+    <View style={style || adS.detailRow}>
+      <View style={[adS.detailIcon, { backgroundColor: colors.primary + '12' }]}>
+        <Ionicons name={icon as any} size={16} color={colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={adS.detailLabel}>{label}</Text>
+        <Text style={adS.detailValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 const adS = StyleSheet.create({
-  overlay:     { flex: 1, justifyContent: 'flex-end' },
-  backdrop:    { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet:       { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 32, overflow: 'hidden', ...shadows.lg },
-  handle:      { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.outline, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
-  stripe:      { height: 4, width: '100%' },
-  body:        { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  workerRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  avatar:      { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
-  avatarTxt:   { fontSize: 20, fontWeight: '800' },
-  workerName:  { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  typeChip:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  typeTxt:     { fontSize: 12, fontWeight: '600' },
-  detailRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
-  detailIcon:  { width: 36, height: 36, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
-  detailLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500', marginBottom: 2 },
-  detailValue: { fontSize: 14, color: colors.text, fontWeight: '500' },
-  actions:     { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.outline },
-  actionBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary + '60', backgroundColor: colors.primary + '10' },
-  actionTxt:   { fontSize: 13, fontWeight: '600' },
+  overlay:           { flex: 1, justifyContent: 'flex-end' },
+  backdrop:          { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet:             { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', overflow: 'hidden', ...shadows.lg },
+  handle:            { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.outline, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  stripe:            { height: 4, width: '100%' },
+  body:              { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  workerRow:         { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  avatar:            { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
+  avatarTxt:         { fontSize: 20, fontWeight: '800' },
+  workerName:        { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  typeChip:          { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  typeTxt:           { fontSize: 12, fontWeight: '600' },
+  detailRow:         { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
+  detailIcon:        { width: 36, height: 36, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
+  detailLabel:       { fontSize: 11, color: colors.textSecondary, fontWeight: '500', marginBottom: 2 },
+  detailValue:       { fontSize: 14, color: colors.text, fontWeight: '500' },
+  editFieldGroup:    { marginBottom: spacing.lg },
+  editLabel:         { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  editInput:         { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14, color: colors.text, minHeight: 46 },
+  actions:           { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.outline },
+  actionBtn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary + '60', backgroundColor: colors.primary + '10' },
+  actionTxt:         { fontSize: 13, fontWeight: '600' },
 });
 
-// ─── Exam Catalog Picker ──────────────────────────────────────────────────────
+// ─── Exam Catalog Picker (Multi-select) ────────────────────────────────────────
 function ExamCatalogPicker({
   selected, onSelect,
-}: { selected: string | null; onSelect: (id: string) => void }) {
+}: { selected: string[]; onSelect: (ids: string[]) => void }) {
   const CARD_W = (SCREEN_W - 32 - 16 - spacing.sm) / 2;
+
+  const toggleSelect = (id: string) => {
+    if (selected.includes(id)) {
+      onSelect(selected.filter(s => s !== id));
+    } else {
+      onSelect([...selected, id]);
+    }
+  };
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
@@ -456,12 +720,12 @@ function ExamCatalogPicker({
           </View>
           <View style={ecS.grid}>
             {cat.items.map(item => {
-              const isSel = selected === item.id;
+              const isSel = selected.includes(item.id);
               return (
                 <TouchableOpacity
                   key={item.id}
                   style={[ecS.card, { width: CARD_W }, isSel && { borderColor: item.color, borderWidth: 2, backgroundColor: item.color + '0D' }]}
-                  onPress={() => onSelect(item.id)}
+                  onPress={() => toggleSelect(item.id)}
                   activeOpacity={0.8}
                 >
                   {isSel && (
@@ -506,7 +770,7 @@ const ecS = StyleSheet.create({
 interface ScheduleFormData {
   workerId: string;
   workerName: string;
-  examType: string;
+  examTypes: string[];
   scheduledDate: string;
   examiner: string;
   examinerId: string;
@@ -515,18 +779,19 @@ interface ScheduleFormData {
 }
 
 const BLANK_FORM: ScheduleFormData = {
-  workerId: '', workerName: '', examType: '', scheduledDate: '',
+  workerId: '', workerName: '', examTypes: [], scheduledDate: '',
   examiner: '', examinerId: '', location: '', notes: '',
 };
 
 function ScheduleFormModal({
-  visible, workers, users, onClose, onSave,
+  visible, workers, users, onClose, onSave, prefilledDate,
 }: {
   visible: boolean;
   workers: any[];
   users: any[];
   onClose: () => void;
   onSave: (data: ScheduleFormData) => void;
+  prefilledDate?: string;
 }) {
   const [step, setStep]             = useState(0);
   const [form, setForm]             = useState<ScheduleFormData>(BLANK_FORM);
@@ -537,10 +802,14 @@ function ScheduleFormModal({
   useEffect(() => {
     if (visible) {
       setStep(0);
-      setForm(BLANK_FORM);
+      const initialForm = { ...BLANK_FORM };
+      if (prefilledDate) {
+        initialForm.scheduledDate = prefilledDate;
+      }
+      setForm(initialForm);
       setWorkerSearch('');
     }
-  }, [visible]);
+  }, [visible, prefilledDate]);
 
   const animeTo = useCallback((next: number) => {
     Animated.timing(slideX, { toValue: -SCREEN_W, duration: 180, useNativeDriver: true }).start(() => {
@@ -557,11 +826,11 @@ function ScheduleFormModal({
 
   const canAdvance = [
     form.workerId !== '',
-    form.examType !== '',
-    form.scheduledDate !== '' && form.examiner !== '',
+    form.examTypes.length > 0,
+    form.scheduledDate !== '',
   ];
 
-  const STEP_TITLES = ['Select Worker', 'Choose Exam Type', 'Schedule Details'];
+  const STEP_TITLES = ['Sélectionner travailleur', 'Types d\'examen', 'Détails'];
   const STEP_ICONS  = ['person-outline', 'flask-outline', 'calendar-outline'] as const;
 
   return (
@@ -654,9 +923,13 @@ function ScheduleFormModal({
             {/* STEP 1 – Exam catalog */}
             {step === 1 && (
               <View style={{ flex: 1, paddingHorizontal: spacing.md }}>
+                <View style={sfS.multiSelectHint}>
+                  <Ionicons name="information-circle" size={14} color={colors.primary} />
+                  <Text style={sfS.multiSelectHintTxt}>Sélectionnez un ou plusieurs types d'examen</Text>
+                </View>
                 <ExamCatalogPicker
-                  selected={form.examType || null}
-                  onSelect={id => setForm(f => ({ ...f, examType: id }))}
+                  selected={form.examTypes || []}
+                  onSelect={ids => setForm(f => ({ ...f, examTypes: ids }))}
                 />
               </View>
             )}
@@ -676,19 +949,19 @@ function ScheduleFormModal({
                       <Text style={sfS.summaryChipTxt} numberOfLines={1}>{form.workerName}</Text>
                     </View>
                   ) : null}
-                  {form.examType ? (() => {
-                    const t = ALL_EXAM_TYPES[form.examType];
+                  {form.examTypes.map(examTypeId => {
+                    const t = ALL_EXAM_TYPES[examTypeId];
                     return t ? (
-                      <View style={[sfS.summaryChip, { backgroundColor: t.color + '14', borderColor: t.color + '40' }]}>
+                      <View key={examTypeId} style={[sfS.summaryChip, { backgroundColor: t.color + '14', borderColor: t.color + '40' }]}>
                         <Ionicons name={t.icon as any} size={12} color={t.color} />
                         <Text style={[sfS.summaryChipTxt, { color: t.color }]} numberOfLines={1}>{t.label}</Text>
                       </View>
                     ) : null;
-                  })() : null}
+                  })}
                 </View>
 
                 <View style={sfS.formGroup}>
-                  <Text style={sfS.label}>Scheduled Date *</Text>
+                  <Text style={sfS.label}>Date du rendez-vous *</Text>
                   <DateInput
                     value={form.scheduledDate}
                     onChangeText={d => setForm(f => ({ ...f, scheduledDate: d }))}
@@ -697,14 +970,14 @@ function ScheduleFormModal({
                 </View>
 
                 <View style={sfS.formGroup}>
-                  <Text style={sfS.label}>Examiner *</Text>
+                  <Text style={sfS.label}>Médecin examinateur</Text>
                   <TouchableOpacity
                     style={sfS.dropdownBtn}
                     onPress={() => setShowExaminerPicker(true)}
                     activeOpacity={0.8}
                   >
                     <Text style={[sfS.dropdownTxt, !form.examiner && { color: colors.textSecondary }]}>
-                      {form.examiner || 'Select examiner'}
+                      {form.examiner || 'Sélectionner médecin'}
                     </Text>
                     <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
@@ -713,7 +986,7 @@ function ScheduleFormModal({
                     <View style={sfS.pickerOverlay}>
                       <View style={sfS.pickerSheet}>
                         <View style={sfS.pickerHeader}>
-                          <Text style={sfS.pickerTitle}>Select Examiner</Text>
+                          <Text style={sfS.pickerTitle}>Sélectionner médecin</Text>
                           <TouchableOpacity onPress={() => setShowExaminerPicker(false)}>
                             <Ionicons name="close" size={22} color={colors.textSecondary} />
                           </TouchableOpacity>
@@ -738,23 +1011,23 @@ function ScheduleFormModal({
                 </View>
 
                 <View style={sfS.formGroup}>
-                  <Text style={sfS.label}>Location</Text>
+                  <Text style={sfS.label}>Lieu</Text>
                   <TextInput
                     style={sfS.input}
                     value={form.location}
                     onChangeText={v => setForm(f => ({ ...f, location: v }))}
-                    placeholder="Exam room / clinic"
+                    placeholder="Salle d'examen / clinique"
                     placeholderTextColor={colors.textSecondary}
                   />
                 </View>
 
                 <View style={sfS.formGroup}>
-                  <Text style={sfS.label}>Notes</Text>
+                  <Text style={sfS.label}>Remarques</Text>
                   <TextInput
                     style={[sfS.input, { minHeight: 90, textAlignVertical: 'top' }]}
                     value={form.notes}
                     onChangeText={v => setForm(f => ({ ...f, notes: v }))}
-                    placeholder="Additional instructions…"
+                    placeholder="Instructions supplémentaires…"
                     placeholderTextColor={colors.textSecondary}
                     multiline
                   />
@@ -771,7 +1044,7 @@ function ScheduleFormModal({
                 onPress={() => canAdvance[step] && animeTo(step + 1)}
                 activeOpacity={0.85}
               >
-                <Text style={sfS.primaryBtnTxt}>Continue</Text>
+                <Text style={sfS.primaryBtnTxt}>Continuer</Text>
                 <Ionicons name="arrow-forward" size={18} color="#FFF" />
               </TouchableOpacity>
             ) : (
@@ -781,7 +1054,7 @@ function ScheduleFormModal({
                 activeOpacity={0.85}
               >
                 <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-                <Text style={sfS.primaryBtnTxt}>Schedule Exam</Text>
+                <Text style={sfS.primaryBtnTxt}>Planifier examen</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -792,46 +1065,48 @@ function ScheduleFormModal({
 }
 
 const sfS = StyleSheet.create({
-  overlay:          { flex: 1, justifyContent: 'flex-end' },
-  sheet:            { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%', overflow: 'hidden', ...shadows.lg },
-  header:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  iconBtn:          { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
-  title:            { fontSize: 17, fontWeight: '700', color: colors.text },
-  stepRow:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  stepItem:         { alignItems: 'center', gap: 4 },
-  stepCircle:       { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
-  stepDone:         { backgroundColor: '#22C55E' },
-  stepActive:       { backgroundColor: colors.primary },
-  stepLabel:        { fontSize: 10, color: colors.textSecondary, fontWeight: '500', textAlign: 'center', maxWidth: 68 },
-  stepLabelActive:  { color: colors.primary, fontWeight: '700' },
-  stepLine:         { flex: 1, height: 1, backgroundColor: colors.outline, marginBottom: 18 },
-  stepLineDone:     { backgroundColor: '#22C55E' },
-  searchBox:        { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.md },
-  searchInput:      { flex: 1, fontSize: 14, color: colors.text },
-  workerRow:        { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: 6, borderWidth: 1, borderColor: colors.outline },
-  workerRowSel:     { borderColor: colors.primary, backgroundColor: colors.primary + '08' },
-  workerAvatar:     { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
-  workerAvatarTxt:  { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
-  workerName:       { fontSize: 13, fontWeight: '600', color: colors.text },
-  workerMeta:       { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
-  summaryRow:       { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
-  summaryChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.primary + '12', borderWidth: 1, borderColor: colors.primary + '30' },
-  summaryChipTxt:   { fontSize: 12, fontWeight: '600', color: colors.primary },
-  formGroup:        { marginBottom: spacing.lg },
-  label:            { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 7 },
-  dropdownBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, minHeight: 46 },
-  dropdownTxt:      { fontSize: 14, color: colors.text, flex: 1 },
-  input:            { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14, color: colors.text, minHeight: 46 },
-  pickerOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  pickerSheet:      { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  pickerHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  pickerTitle:      { fontSize: 16, fontWeight: '600', color: colors.text },
-  pickerOption:     { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  pickerOptionTxt:  { fontSize: 14, color: colors.text },
-  footer:           { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
-  primaryBtn:       { backgroundColor: colors.primary, borderRadius: borderRadius.lg, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  primaryBtnDisabled:{ backgroundColor: colors.outline },
-  primaryBtnTxt:    { fontSize: 15, fontWeight: '700', color: '#FFF' },
+  overlay:            { flex: 1, justifyContent: 'flex-end' },
+  sheet:              { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%', overflow: 'hidden', ...shadows.lg },
+  header:             { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  iconBtn:            { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  title:              { fontSize: 17, fontWeight: '700', color: colors.text },
+  stepRow:            { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  stepItem:           { alignItems: 'center', gap: 4 },
+  stepCircle:         { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  stepDone:           { backgroundColor: '#22C55E' },
+  stepActive:         { backgroundColor: colors.primary },
+  stepLabel:          { fontSize: 10, color: colors.textSecondary, fontWeight: '500', textAlign: 'center', maxWidth: 68 },
+  stepLabelActive:    { color: colors.primary, fontWeight: '700' },
+  stepLine:           { flex: 1, height: 1, backgroundColor: colors.outline, marginBottom: 18 },
+  stepLineDone:       { backgroundColor: '#22C55E' },
+  multiSelectHint:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary + '12', borderColor: colors.primary + '40', borderWidth: 1, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.md },
+  multiSelectHintTxt: { flex: 1, fontSize: 12, color: colors.primary, fontWeight: '500' },
+  searchBox:          { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.md },
+  searchInput:        { flex: 1, fontSize: 14, color: colors.text },
+  workerRow:          { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: 6, borderWidth: 1, borderColor: colors.outline },
+  workerRowSel:       { borderColor: colors.primary, backgroundColor: colors.primary + '08' },
+  workerAvatar:       { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  workerAvatarTxt:    { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
+  workerName:         { fontSize: 13, fontWeight: '600', color: colors.text },
+  workerMeta:         { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  summaryRow:         { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
+  summaryChip:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.primary + '12', borderWidth: 1, borderColor: colors.primary + '30' },
+  summaryChipTxt:     { fontSize: 12, fontWeight: '600', color: colors.primary },
+  formGroup:          { marginBottom: spacing.lg },
+  label:              { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 7 },
+  dropdownBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, minHeight: 46 },
+  dropdownTxt:        { fontSize: 14, color: colors.text, flex: 1 },
+  input:              { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14, color: colors.text, minHeight: 46 },
+  pickerOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  pickerSheet:        { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  pickerHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerTitle:        { fontSize: 16, fontWeight: '600', color: colors.text },
+  pickerOption:       { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerOptionTxt:    { fontSize: 14, color: colors.text },
+  footer:             { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  primaryBtn:         { backgroundColor: colors.primary, borderRadius: borderRadius.lg, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  primaryBtnDisabled: { backgroundColor: colors.outline },
+  primaryBtnTxt:      { fontSize: 15, fontWeight: '700', color: '#FFF' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -854,6 +1129,7 @@ export function MedicalExamManagementScreen() {
   // UI modals
   const [selectedExam, setSelectedExam]     = useState<ExamSchedule | null>(null);
   const [detailVisible, setDetailVisible]   = useState(false);
+  const [dayModalVisible, setDayModalVisible] = useState(false);
   const [formVisible, setFormVisible]       = useState(false);
 
   const apiService = useMemo(() => ApiService.getInstance(), []);
@@ -900,29 +1176,61 @@ export function MedicalExamManagementScreen() {
     loadData().finally(() => setRefreshing(false));
   }, [loadData]);
 
+  const mapExamTypeToBackend = (frontendExamId: string): string => {
+    const typeMap: Record<string, string> = {
+      'pre_employment':   'pre_employment',
+      'periodic':         'periodic',
+      'return_to_work':   'return_to_work',
+      'exit':             'exit',
+      'follow_up':        'periodic',
+      'night_work':       'night_work',
+      'pregnancy_related':'pregnancy_related',
+      'post_incident':    'post_incident',
+      'audiometry':       'special',
+      'spirometry':       'special',
+      'vision':           'special',
+      'cardiovascular':   'special',
+      'blood_panel':      'special',
+      'chest_xray':       'special',
+      'dermatological':   'special',
+      'musculoskeletal':  'special',
+    };
+    return typeMap[frontendExamId] || 'special';
+  };
+
   const handleSave = useCallback(async (form: ScheduleFormData) => {
     try {
-      if (!form.workerId || !form.examType || !form.scheduledDate) {
-        showToast('Please fill all required fields', 'error');
+      if (!form.workerId || form.examTypes.length === 0 || !form.scheduledDate) {
+        showToast('Veuillez remplir tous les champs requis', 'error');
         return;
       }
-      const payload = {
-        worker:                parseInt(form.workerId),
-        exam_type:             form.examType,
-        exam_date:             form.scheduledDate,
-        examining_doctor:      form.examinerId ? parseInt(form.examinerId) : undefined,
-        chief_complaint:       form.notes || '',
-        results_summary:       '',
-        recommendations:       '',
-        examination_completed: false,
-        follow_up_required:    false,
-      };
-      await apiService.post('/occupational-health/medical-exams/', payload);
-      showToast('Exam scheduled successfully', 'success');
+      
+      const promises = form.examTypes.map(examTypeId => {
+        const backendExamType = mapExamTypeToBackend(examTypeId);
+        const t = ALL_EXAM_TYPES[examTypeId] || { label: examTypeId };
+        const payload: any = {
+          worker:                parseInt(form.workerId),
+          exam_type:             backendExamType,
+          exam_date:             form.scheduledDate,
+          chief_complaint:       `${t.label}${form.notes ? ' - ' + form.notes : ''}`,
+          results_summary:       '',
+          recommendations:       '',
+          examination_completed: false,
+          follow_up_required:    false,
+          location:              form.location || '',
+        };
+        if (form.examinerId && parseInt(form.examinerId) > 0) {
+          payload.examining_doctor = parseInt(form.examinerId);
+        }
+        return apiService.post('/occupational-health/medical-exams/', payload);
+      });
+      
+      await Promise.all(promises);
+      showToast(`${form.examTypes.length} examen(s) planifié(s) avec succès`, 'success');
       setFormVisible(false);
-      handleRefresh();
+      await handleRefresh();
     } catch (err: any) {
-      showToast(err?.response?.data?.detail || err?.message || 'Failed to schedule exam', 'error');
+      showToast(err?.response?.data?.detail || err?.message || 'Échec de la planification', 'error');
     }
   }, [apiService, handleRefresh, showToast]);
 
@@ -952,7 +1260,7 @@ export function MedicalExamManagementScreen() {
     return (
       <View style={ms.loadingWrap}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={ms.loadingTxt}>Loading schedule…</Text>
+        <Text style={ms.loadingTxt}>Chargement du calendrier...</Text>
       </View>
     );
   }
@@ -964,18 +1272,18 @@ export function MedicalExamManagementScreen() {
       {/* ─── Header with compact KPI strip ─── */}
       <View style={ms.header}>
         <View style={{ flex: 1 }}>
-          <Text style={ms.headerTitle}>Medical Exams</Text>
-          <Text style={ms.headerSub}>Occupational health scheduling</Text>
+          <Text style={ms.headerTitle}>Examens médicaux</Text>
+          <Text style={ms.headerSub}>Planification de santé occupationnelle</Text>
         </View>
         <View style={ms.kpiStrip}>
           <View style={ms.kpiItem}>
             <Text style={[ms.kpiNum, { color: '#3B82F6' }]}>{stats.upcoming}</Text>
-            <Text style={ms.kpiLbl}>Upcoming</Text>
+            <Text style={ms.kpiLbl}>À venir</Text>
           </View>
           <View style={ms.kpiDivider} />
           <View style={ms.kpiItem}>
             <Text style={[ms.kpiNum, { color: '#22C55E' }]}>{stats.completed}</Text>
-            <Text style={ms.kpiLbl}>Done</Text>
+            <Text style={ms.kpiLbl}>Complétés</Text>
           </View>
           <View style={ms.kpiDivider} />
           <View style={ms.kpiItem}>
@@ -997,7 +1305,7 @@ export function MedicalExamManagementScreen() {
             <Ionicons name="alert-circle-outline" size={36} color={colors.error || '#EF4444'} />
             <Text style={ms.errorTxt}>{error}</Text>
             <TouchableOpacity style={ms.retryBtn} onPress={handleRefresh}>
-              <Text style={ms.retryTxt}>Retry</Text>
+              <Text style={ms.retryTxt}>Réessayer</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1009,7 +1317,7 @@ export function MedicalExamManagementScreen() {
                 month={calMonth}
                 exams={schedules}
                 selectedDay={selectedDay}
-                onSelectDay={setSelectedDay}
+                onSelectDay={key => { setSelectedDay(key); setDayModalVisible(true); }}
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}
               />
@@ -1030,27 +1338,49 @@ export function MedicalExamManagementScreen() {
               ))}
             </ScrollView>
 
-            {/* Day appointments */}
-            <DayPanel
-              day={selectedDay}
-              exams={dayExams}
-              onSelect={exam => { setSelectedExam(exam); setDetailVisible(true); }}
-            />
+            {/* Tap-hint below calendar */}
+            <View style={ms.tapHint}>
+              <Ionicons name="finger-print-outline" size={13} color={colors.textSecondary} />
+              <Text style={ms.tapHintTxt}>Cliquez sur une date pour voir les rendez-vous</Text>
+            </View>
           </>
         )}
       </ScrollView>
 
       {/* ─── FAB ─── */}
-      <TouchableOpacity style={ms.fab} onPress={() => setFormVisible(true)} activeOpacity={0.85}>
+      <TouchableOpacity style={ms.fab} onPress={() => { setSelectedDay(null); setFormVisible(true); }} activeOpacity={0.85}>
         <Ionicons name="add" size={30} color="#FFF" />
       </TouchableOpacity>
 
       {/* ─── Modals ─── */}
+      <DayModal
+        visible={dayModalVisible}
+        day={selectedDay}
+        exams={dayExams}
+        onClose={() => setDayModalVisible(false)}
+        onSelect={exam => { setSelectedExam(exam); setDetailVisible(true); }}
+        onAddAppointment={() => { setDayModalVisible(false); setFormVisible(true); }}
+      />
+
       <AppointmentDetailModal
         visible={detailVisible}
         exam={selectedExam}
         onClose={() => setDetailVisible(false)}
-        onEdit={() => { setDetailVisible(false); setFormVisible(true); }}
+        onUpdate={async (updated) => {
+          try {
+            await apiService.patch(`/occupational-health/medical-exams/${updated.id}/`, {
+              exam_date: updated.scheduledDate,
+              location: updated.location,
+              examining_doctor_name: updated.examiner,
+              chief_complaint: updated.notes,
+            });
+            showToast('Rendez-vous mis à jour', 'success');
+            setDetailVisible(false);
+            handleRefresh();
+          } catch (err: any) {
+            showToast('Erreur de mise à jour', 'error');
+          }
+        }}
       />
 
       <ScheduleFormModal
@@ -1059,6 +1389,7 @@ export function MedicalExamManagementScreen() {
         users={users}
         onClose={() => setFormVisible(false)}
         onSave={handleSave}
+        prefilledDate={selectedDay || undefined}
       />
     </View>
   );
@@ -1081,6 +1412,8 @@ const ms = StyleSheet.create({
   legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot:    { width: 8, height: 8, borderRadius: 4 },
   legendTxt:    { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  tapHint:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 6, opacity: 0.55 },
+  tapHintTxt:   { fontSize: 11, color: colors.textSecondary },
   errorBox:     { alignItems: 'center', paddingVertical: 60, gap: spacing.md },
   errorTxt:     { fontSize: 14, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 40 },
   retryBtn:     { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.lg },

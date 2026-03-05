@@ -968,6 +968,12 @@ class WorkerRiskProfileSerializer(serializers.Serializer):
 class MedicalExaminationCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating medical examinations with nested data"""
     
+    examining_doctor = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    
     class Meta:
         model = MedicalExamination
         fields = [
