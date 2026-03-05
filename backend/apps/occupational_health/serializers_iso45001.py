@@ -19,6 +19,7 @@ from .models_iso45001 import (
     ManagementReview,
     WorkerFeedback,
 )
+from .models import WorkplaceIncident
 
 
 class OHSPolicySerializer(serializers.ModelSerializer):
@@ -60,24 +61,43 @@ class HazardRegisterSerializer(serializers.ModelSerializer):
         return 0
 
 
+class IncidentSummarySerializer(serializers.ModelSerializer):
+    """Minimal serializer for embedding incident details inside investigation"""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    severity_display = serializers.CharField(source='get_severity_display', read_only=True)
+
+    class Meta:
+        model = WorkplaceIncident
+        fields = ['id', 'incident_number', 'category', 'category_display', 'severity', 'severity_display', 'incident_date', 'status']
+
+
 class IncidentInvestigationSerializer(serializers.ModelSerializer):
     """Serializer for incident investigations"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     rca_method_display = serializers.CharField(source='get_rca_method_display', read_only=True)
     corrective_action_owner_name = serializers.CharField(source='corrective_action_owner.get_full_name', read_only=True, allow_null=True)
     investigation_team = serializers.StringRelatedField(many=True, read_only=True)
-    
+    incident_detail = IncidentSummarySerializer(source='incident', read_only=True)
+    is_overdue = serializers.SerializerMethodField()
+
     class Meta:
         model = IncidentInvestigation
         fields = [
-            'id', 'investigation_id', 'incident', 'status', 'status_display', 'investigation_date',
+            'id', 'investigation_id', 'incident', 'incident_detail',
+            'status', 'status_display', 'investigation_date',
             'investigation_team', 'investigation_findings', 'rca_method', 'rca_method_display',
             'rca_documentation', 'root_causes', 'contributing_factors', 'corrective_actions',
             'corrective_action_owner', 'corrective_action_owner_name', 'corrective_action_deadline',
             'corrective_action_implemented_date', 'preventive_actions', 'preventive_action_deadline',
             'effectiveness_check_date', 'effectiveness_verified', 'effectiveness_notes',
-            'completion_date', 'lessons_learned'
+            'completion_date', 'lessons_learned', 'is_overdue',
         ]
+
+    def get_is_overdue(self, obj):
+        from datetime import date
+        if obj.status != 'closed' and obj.corrective_action_deadline:
+            return obj.corrective_action_deadline < date.today()
+        return False
 
 
 class SafetyTrainingSerializer(serializers.ModelSerializer):
