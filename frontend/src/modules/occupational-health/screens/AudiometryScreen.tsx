@@ -19,12 +19,19 @@ const ACCENT = '#122056'; // Audiometry Primary Blue
 
 interface AudiometryResult {
   id: string;
-  worker_id: string;
+  worker_id?: string;
   worker_name: string;
   test_date: string;
-  left_ear_db: number;
-  right_ear_db: number;
-  frequency: number;
+  // Real backend field names (API returns these)
+  left_ear_500hz?: number;
+  right_ear_500hz?: number;
+  left_ear_1000hz?: number;
+  right_ear_1000hz?: number;
+  left_ear_2000hz?: number;
+  right_ear_2000hz?: number;
+  left_ear_4000hz?: number;
+  right_ear_4000hz?: number;
+  hearing_loss_classification?: string;
   status: 'normal' | 'warning' | 'critical';
   notes?: string;
   created_at: string;
@@ -61,6 +68,7 @@ export function AudiometryScreen() {
     left_ear_db: '',
     right_ear_db: '',
     frequency: '4000',
+    hearing_loss_classification: '' as '' | 'normal' | 'mild' | 'moderate' | 'severe' | 'profound',
     notes: '',
   });
 
@@ -103,12 +111,24 @@ export function AudiometryScreen() {
     try {
       const api = ApiService.getInstance();
       
+      // Auto-compute hearing_loss_classification from average dB if not manually set
+      const avgDb = (parseInt(formData.left_ear_db || '0') + parseInt(formData.right_ear_db || '0')) / 2;
+      const autoClassification = formData.hearing_loss_classification ||
+        (avgDb <= 25 ? 'normal' : avgDb <= 40 ? 'mild' : avgDb <= 55 ? 'moderate' : avgDb <= 70 ? 'severe' : 'profound');
+
       const newResult = {
         worker_id_input: selectedWorker.id,
         examination: selectedExam?.id ?? null,
         test_date: formData.test_date,
-        left_ear_500hz: parseInt(formData.left_ear_db),
-        right_ear_500hz: parseInt(formData.right_ear_db),
+        left_ear_500hz: parseInt(formData.left_ear_db) || 0,
+        right_ear_500hz: parseInt(formData.right_ear_db) || 0,
+        left_ear_1000hz: parseInt(formData.left_ear_db) || 0,
+        right_ear_1000hz: parseInt(formData.right_ear_db) || 0,
+        left_ear_2000hz: parseInt(formData.left_ear_db) || 0,
+        right_ear_2000hz: parseInt(formData.right_ear_db) || 0,
+        left_ear_4000hz: parseInt(formData.left_ear_db) || 0,
+        right_ear_4000hz: parseInt(formData.right_ear_db) || 0,
+        hearing_loss_classification: autoClassification,
         notes: formData.notes,
         performed_by: authUser?.id ? Number(authUser.id) : undefined,
       };
@@ -124,6 +144,7 @@ export function AudiometryScreen() {
           left_ear_db: '',
           right_ear_db: '',
           frequency: '4000',
+          hearing_loss_classification: '',
           notes: '',
         });
         showToast('Résultat d\'audiométrie enregistré', 'success');
@@ -230,7 +251,7 @@ export function AudiometryScreen() {
                   <Text style={styles.resultWorkerName}>{result.worker_name}</Text>
                   <Text style={styles.resultDate}>{new Date(result.test_date).toLocaleDateString('fr-FR')}</Text>
                   <View style={styles.dbValues}>
-                    <Text style={styles.dbText}>OG: {result.left_ear_db} dB | OD: {result.right_ear_db} dB</Text>
+                    <Text style={styles.dbText}>OG: {result.left_ear_500hz ?? '–'} dB | OD: {result.right_ear_500hz ?? '–'} dB</Text>
                   </View>
                 </View>
 
@@ -320,6 +341,28 @@ export function AudiometryScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
+              <Text style={styles.formLabel}>Classification auditive (optionnel — calculée auto)</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {(['', 'normal', 'mild', 'moderate', 'severe', 'profound'] as const).map(cls => (
+                  <TouchableOpacity
+                    key={cls}
+                    onPress={() => setFormData({ ...formData, hearing_loss_classification: cls })}
+                    style={[
+                      styles.input,
+                      { paddingVertical: 6, paddingHorizontal: 10, minWidth: 80, alignItems: 'center' },
+                      formData.hearing_loss_classification === cls && { backgroundColor: ACCENT, borderColor: ACCENT },
+                    ]}
+                  >
+                    <Text style={[
+                      { fontSize: 11, color: colors.text },
+                      formData.hearing_loss_classification === cls && { color: 'white', fontWeight: '600' },
+                    ]}>
+                      {cls === '' ? 'Auto' : cls === 'normal' ? 'Normal' : cls === 'mild' ? 'Légère' : cls === 'moderate' ? 'Modérée' : cls === 'severe' ? 'Sévère' : 'Profonde'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <Text style={styles.formLabel}>Notes</Text>
               <TextInput
                 style={[styles.input, { minHeight: 80 }]}
@@ -364,20 +407,39 @@ export function AudiometryScreen() {
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Audition OG</Text>
-                  <Text style={styles.detailValue}>{selectedResult.left_ear_db} dB</Text>
+                  <Text style={styles.detailLabel}>Audition OG (500 Hz)</Text>
+                  <Text style={styles.detailValue}>{selectedResult.left_ear_500hz ?? '–'} dB</Text>
                 </View>
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Audition OD</Text>
-                  <Text style={styles.detailValue}>{selectedResult.right_ear_db} dB</Text>
+                  <Text style={styles.detailLabel}>Audition OD (500 Hz)</Text>
+                  <Text style={styles.detailValue}>{selectedResult.right_ear_500hz ?? '–'} dB</Text>
                 </View>
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Fréquence</Text>
-                  <Text style={styles.detailValue}>{selectedResult.frequency} Hz</Text>
+                  <Text style={styles.detailLabel}>OG 1000 Hz</Text>
+                  <Text style={styles.detailValue}>{selectedResult.left_ear_1000hz ?? '–'} dB</Text>
+                </View>
+                <View style={styles.divider} />
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>OD 1000 Hz</Text>
+                  <Text style={styles.detailValue}>{selectedResult.right_ear_1000hz ?? '–'} dB</Text>
+                </View>
+                <View style={styles.divider} />
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Classification</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedResult.hearing_loss_classification === 'normal' ? 'Normal (≤25 dB HL)'
+                     : selectedResult.hearing_loss_classification === 'mild' ? 'Légère (26-40 dB HL)'
+                     : selectedResult.hearing_loss_classification === 'moderate' ? 'Modérée (41-55 dB HL)'
+                     : selectedResult.hearing_loss_classification === 'severe' ? 'Sévère (56-70 dB HL)'
+                     : selectedResult.hearing_loss_classification === 'profound' ? 'Profonde (>70 dB HL)'
+                     : '–'}
+                  </Text>
                 </View>
                 <View style={styles.divider} />
 

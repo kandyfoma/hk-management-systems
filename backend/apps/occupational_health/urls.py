@@ -84,7 +84,6 @@ router.register(r'drc-reports', DRCRegulatoryReportViewSet, basename='drc-report
 
 # PPE compliance tracking
 router.register(r'ppe-compliance', PPEComplianceRecordViewSet, basename='ppe-compliance')
-router.register(r'ppe-compliance-results', PPEComplianceRecordViewSet, basename='ppe-compliance-results')
 
 # ==================== MEDICAL EXAMINATION EXTENDED ENDPOINTS ====================
 # X-ray imaging with ILO classification

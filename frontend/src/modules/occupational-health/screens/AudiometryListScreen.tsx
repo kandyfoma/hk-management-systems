@@ -17,9 +17,16 @@ interface AudiometryResult {
   worker_name: string;
   employee_id?: string;
   test_date: string;
-  left_ear_db: number;
-  right_ear_db: number;
-  frequency: number;
+  // Real backend field names
+  left_ear_500hz?: number;
+  right_ear_500hz?: number;
+  left_ear_1000hz?: number;
+  right_ear_1000hz?: number;
+  left_ear_2000hz?: number;
+  right_ear_2000hz?: number;
+  left_ear_4000hz?: number;
+  right_ear_4000hz?: number;
+  hearing_loss_classification?: string;
   status: 'normal' | 'warning' | 'critical';
   notes?: string;
   created_at: string;
@@ -51,9 +58,9 @@ export function AudiometryListScreen() {
   // Edit form state
   const [editFormData, setEditFormData] = useState({
     test_date: '',
-    left_ear_db: '',
-    right_ear_db: '',
-    frequency: '',
+    left_ear_db: '',   // local UI name, maps to left_ear_500hz on save
+    right_ear_db: '',  // local UI name, maps to right_ear_500hz on save
+    hearing_loss_classification: '' as '' | 'normal' | 'mild' | 'moderate' | 'severe' | 'profound',
     notes: '',
   });
 
@@ -69,8 +76,7 @@ export function AudiometryListScreen() {
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
         data = data
-          .sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime())
-          .slice(0, 5);
+          .sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime());
         setResults(data);
       }
     } catch (error) {
@@ -98,11 +104,16 @@ export function AudiometryListScreen() {
 
     try {
       const api = ApiService.getInstance();
+      const avgDb = (parseInt(formData.left_ear_db || '0') + parseInt(formData.right_ear_db || '0')) / 2;
+      const autoClassification = avgDb <= 25 ? 'normal' : avgDb <= 40 ? 'mild' : avgDb <= 55 ? 'moderate' : avgDb <= 70 ? 'severe' : 'profound';
       const payload = {
         worker_id: selectedWorker.id,
         test_date: formData.test_date,
         left_ear_500hz: formData.left_ear_db ? parseInt(formData.left_ear_db) : null,
         right_ear_500hz: formData.right_ear_db ? parseInt(formData.right_ear_db) : null,
+        left_ear_1000hz: formData.left_ear_db ? parseInt(formData.left_ear_db) : null,
+        right_ear_1000hz: formData.right_ear_db ? parseInt(formData.right_ear_db) : null,
+        hearing_loss_classification: autoClassification,
         notes: formData.notes,
       };
 
@@ -118,7 +129,6 @@ export function AudiometryListScreen() {
           frequency: '4000',
           notes: '',
         });
-        // Refetch data to ensure consistency
         await loadResults();
       } else {
         Alert.alert('Erreur', response.message || 'Erreur lors de la création');
@@ -133,9 +143,9 @@ export function AudiometryListScreen() {
     setSelectedItem(item);
     setEditFormData({
       test_date: item.test_date || '',
-      left_ear_db: item.left_ear_db?.toString() || '',
-      right_ear_db: item.right_ear_db?.toString() || '',
-      frequency: item.frequency?.toString() || '',
+      left_ear_db: (item.left_ear_500hz ?? '').toString(),
+      right_ear_db: (item.right_ear_500hz ?? '').toString(),
+      hearing_loss_classification: (item.hearing_loss_classification || '') as any,
       notes: item.notes || '',
     });
     setShowEditModal(true);
@@ -146,11 +156,17 @@ export function AudiometryListScreen() {
 
     try {
       const api = ApiService.getInstance();
+      const leftDb = parseFloat(editFormData.left_ear_db) || 0;
+      const rightDb = parseFloat(editFormData.right_ear_db) || 0;
+      const avgDb = (leftDb + rightDb) / 2;
+      const autoClassification = editFormData.hearing_loss_classification ||
+        (avgDb <= 25 ? 'normal' : avgDb <= 40 ? 'mild' : avgDb <= 55 ? 'moderate' : avgDb <= 70 ? 'severe' : 'profound');
       const patchData = {
-        test_date: editFormData.test_date,
-        left_ear_db: parseFloat(editFormData.left_ear_db) || 0,
-        right_ear_db: parseFloat(editFormData.right_ear_db) || 0,
-        frequency: editFormData.frequency ? parseFloat(editFormData.frequency) : null,
+        left_ear_500hz: leftDb,
+        right_ear_500hz: rightDb,
+        left_ear_1000hz: leftDb,
+        right_ear_1000hz: rightDb,
+        hearing_loss_classification: autoClassification,
         notes: editFormData.notes,
       };
 
@@ -166,10 +182,9 @@ export function AudiometryListScreen() {
             r.id === selectedItem.id
               ? {
                   ...r,
-                  test_date: patchData.test_date,
-                  left_ear_db: patchData.left_ear_db,
-                  right_ear_db: patchData.right_ear_db,
-                  frequency: patchData.frequency,
+                  left_ear_500hz: patchData.left_ear_500hz,
+                  right_ear_500hz: patchData.right_ear_500hz,
+                  hearing_loss_classification: patchData.hearing_loss_classification,
                   notes: patchData.notes,
                 }
               : r
@@ -619,7 +634,7 @@ export function AudiometryListScreen() {
                   <Text style={styles.resultWorkerName}>{result.worker_name}</Text>
                   <Text style={styles.resultDate}>{new Date(result.test_date).toLocaleDateString('fr-FR')}</Text>
                   <View style={styles.dbValues}>
-                    <Text style={styles.dbText}>OG: {result.left_ear_db} dB | OD: {result.right_ear_db} dB</Text>
+                    <Text style={styles.dbText}>OG: {result.left_ear_500hz ?? '–'} dB | OD: {result.right_ear_500hz ?? '–'} dB</Text>
                   </View>
                 </View>
 
@@ -770,14 +785,27 @@ export function AudiometryListScreen() {
                 onChangeText={(text) => setEditFormData({ ...editFormData, right_ear_db: text })}
               />
 
-              <Text style={styles.formLabel}>Fréquence (Hz)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="500, 1000, 2000, 4000"
-                keyboardType="number-pad"
-                value={editFormData.frequency}
-                onChangeText={(text) => setEditFormData({ ...editFormData, frequency: text })}
-              />
+              <Text style={styles.formLabel}>Classification auditive</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {(['', 'normal', 'mild', 'moderate', 'severe', 'profound'] as const).map(cls => (
+                  <TouchableOpacity
+                    key={cls}
+                    onPress={() => setEditFormData({ ...editFormData, hearing_loss_classification: cls })}
+                    style={[
+                      styles.input,
+                      { paddingVertical: 6, paddingHorizontal: 10, minWidth: 70, alignItems: 'center' },
+                      editFormData.hearing_loss_classification === cls && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                  >
+                    <Text style={[
+                      { fontSize: 11, color: colors.text },
+                      editFormData.hearing_loss_classification === cls && { color: 'white', fontWeight: '600' },
+                    ]}>
+                      {cls === '' ? 'Auto' : cls === 'normal' ? 'Normal' : cls === 'mild' ? 'Légère' : cls === 'moderate' ? 'Modérée' : cls === 'severe' ? 'Sévère' : 'Profonde'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
               <Text style={styles.formLabel}>Notes</Text>
               <TextInput

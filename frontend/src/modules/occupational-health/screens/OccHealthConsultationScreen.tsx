@@ -190,10 +190,12 @@ const summarizeExistingResult = (testId: string, rawData: any): string => {
   if (!rawData) return 'Résultat disponible';
   switch (testId) {
     case 'audiometry': {
-      const left = rawData.left_ear_average_db ?? rawData.left_ear_loss_db;
-      const right = rawData.right_ear_average_db ?? rawData.right_ear_loss_db;
+      // Backend fields: left_ear_500hz, right_ear_500hz, hearing_loss_classification, status
+      const left = rawData.left_ear_500hz ?? rawData.left_ear_1000hz ?? rawData.left_ear_average_db ?? rawData.left_ear_loss_db;
+      const right = rawData.right_ear_500hz ?? rawData.right_ear_1000hz ?? rawData.right_ear_average_db ?? rawData.right_ear_loss_db;
       const cls = rawData.hearing_loss_classification ?? rawData.interpretation ?? '';
-      return [left != null && `OG ${left}dB`, right != null && `OD ${right}dB`, cls].filter(Boolean).join(' · ') || 'Données audiométriques';
+      const clsLabel = cls === 'normal' ? 'Normal' : cls === 'mild' ? 'Légère' : cls === 'moderate' ? 'Modérée' : cls === 'severe' ? 'Sévère' : cls === 'profound' ? 'Profonde' : cls;
+      return [left != null && `OG ${left}dB`, right != null && `OD ${right}dB`, clsLabel].filter(Boolean).join(' · ') || 'Données audiométriques';
     }
     case 'spirometry': {
       const fev1 = rawData.fev1_percent_predicted ?? rawData.fev1;
