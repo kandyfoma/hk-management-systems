@@ -1692,6 +1692,7 @@ class PPECatalog(models.Model):
 
     # ── Identity ──────────────────────────────────────────────
     enterprise    = models.ForeignKey(Enterprise, on_delete=models.CASCADE,
+                                      null=True, blank=True,
                                       related_name='ppe_catalog')
     work_site     = models.ForeignKey(WorkSite, on_delete=models.SET_NULL,
                                       null=True, blank=True,

@@ -830,15 +830,31 @@ function PPEFormModal({ visible, initial, onClose, onSave }: {
           </ScrollView>
 
           <View style={[s.actionRow, { marginTop: 14 }]}>
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.surfaceVariant, opacity: saving ? 0.6 : 1 }]} onPress={() => !saving && onClose()} disabled={saving}>
-              <Text style={[s.actionBtnTxt, { color: colors.text }]}>Annuler</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor: ACCENT, opacity: saving ? 0.6 : 1 }]} onPress={handleSave} disabled={saving}>
-              {saving
-                ? <ActivityIndicator size="small" color="#FFF" />
-                : <><Ionicons name="save-outline" size={16} color="#FFF" /><Text style={[s.actionBtnTxt, { color: '#FFF' }]}>{isEdit ? 'Mettre a jour' : 'Enregistrer'}</Text></>
-              }
-            </TouchableOpacity>
+            {/* Left button: Cancel on first tab, Back on subsequent tabs */}
+            {TABS[0].id === tab ? (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.surfaceVariant, opacity: saving ? 0.6 : 1 }]} onPress={() => !saving && onClose()} disabled={saving}>
+                <Text style={[s.actionBtnTxt, { color: colors.text }]}>Annuler</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.surfaceVariant, opacity: saving ? 0.6 : 1 }]} onPress={() => { const idx = TABS.findIndex(t => t.id === tab); if (idx > 0) setTab(TABS[idx - 1].id); }} disabled={saving}>
+                <Ionicons name="arrow-back-outline" size={16} color={colors.text} />
+                <Text style={[s.actionBtnTxt, { color: colors.text }]}>Retour</Text>
+              </TouchableOpacity>
+            )}
+            {/* Right button: Next on all tabs except last, Save on last tab */}
+            {TABS[TABS.length - 1].id !== tab ? (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: ACCENT }]} onPress={() => { const idx = TABS.findIndex(t => t.id === tab); if (idx < TABS.length - 1) setTab(TABS[idx + 1].id); }} disabled={saving}>
+                <Text style={[s.actionBtnTxt, { color: '#FFF' }]}>Suivant</Text>
+                <Ionicons name="arrow-forward-outline" size={16} color="#FFF" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: ACCENT, opacity: saving ? 0.6 : 1 }]} onPress={handleSave} disabled={saving}>
+                {saving
+                  ? <ActivityIndicator size="small" color="#FFF" />
+                  : <><Ionicons name="save-outline" size={16} color="#FFF" /><Text style={[s.actionBtnTxt, { color: '#FFF' }]}>{isEdit ? 'Mettre a jour' : 'Enregistrer'}</Text></>
+                }
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
