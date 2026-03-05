@@ -1609,6 +1609,16 @@ class PPEItem(models.Model):
     serial_number = models.CharField(_("Numéro Série"), max_length=100, blank=True)
     size = models.CharField(_("Taille"), max_length=20, blank=True)
     
+    # Technical standards & documentation (ISO 45001 §8.1.2 — normative reference traceability)
+    standard_ref = models.CharField(
+        _("Référence Norme"), max_length=100, blank=True,
+        help_text=_("Ex: EN 397:2012, ANSI Z89.1-2014, EN 149 FFP2, ISO 20345:2021")
+    )
+    document_ref = models.CharField(
+        _("Réf. Document Conformité"), max_length=255, blank=True,
+        help_text=_("Déclaration CE de conformité, certificat d'essai ou référence documentaire")
+    )
+    
     # Dates
     issue_date = models.DateField(_("Date Attribution"))
     expiry_date = models.DateField(_("Date Expiration"), null=True, blank=True)
@@ -2728,7 +2738,7 @@ class PPEComplianceRecord(models.Model):
     
     ppe_item = models.ForeignKey(PPEItem, on_delete=models.CASCADE, related_name='compliance_records')
     check_date = models.DateField()
-    check_type = models.CharField(max_length=50, choices=[('routine', 'Routine'), ('pre_use', 'Pre-Use'), ('post_incident', 'Post-Incident'), ('inventory', 'Inventory'), ('expiry', 'Expiry'), ('damage', 'Damage')])
+    check_type = models.CharField(max_length=50, choices=[('routine', 'Routine'), ('pre_use', 'Pre-Use'), ('post_incident', 'Post-Incident'), ('inventory', 'Inventory'), ('expiry_check', 'Expiry Check'), ('damage', 'Damage')])
     status = models.CharField(max_length=50, choices=STATUS_CHOICES)
     condition_notes = models.TextField(blank=True)
     is_compliant = models.BooleanField(default=True)

@@ -322,7 +322,7 @@ export function PPEComplianceScreen() {
                       key={item.id}
                       onPress={() => setFormData({ ...formData, ppe_item: String(item.id) })}
                       style={[
-                        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5 },
+                        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5, minWidth: 100 },
                         formData.ppe_item === String(item.id)
                           ? { backgroundColor: ACCENT, borderColor: ACCENT }
                           : { backgroundColor: colors.surface, borderColor: colors.outline }
@@ -332,8 +332,18 @@ export function PPEComplianceScreen() {
                         { fontSize: 12, fontWeight: formData.ppe_item === String(item.id) ? '600' : '500' },
                         formData.ppe_item === String(item.id) ? { color: '#FFF' } : { color: colors.text }
                       ]}>
-                        {item.ppe_type}
+                        {item.ppe_type_display || item.ppe_type}
                       </Text>
+                      {item.brand_model ? (
+                        <Text style={[{ fontSize: 10, marginTop: 2 }, formData.ppe_item === String(item.id) ? { color: '#FFF', opacity: 0.8 } : { color: colors.textSecondary }]}>
+                          {item.brand_model}
+                        </Text>
+                      ) : null}
+                      {item.standard_ref ? (
+                        <Text style={[{ fontSize: 9, marginTop: 1 }, formData.ppe_item === String(item.id) ? { color: '#FFF', opacity: 0.7 } : { color: colors.textSecondary }]}>
+                          {item.standard_ref}
+                        </Text>
+                      ) : null}
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -353,7 +363,7 @@ export function PPEComplianceScreen() {
 
               <Text style={styles.formLabel}>Type d'inspection</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {['routine', 'pre_use', 'post_incident', 'inventory', 'expiry', 'damage'].map(type => (
+                {['routine', 'pre_use', 'post_incident', 'inventory', 'expiry_check', 'damage'].map(type => (
                   <TouchableOpacity
                     key={type}
                     onPress={() => setFormData({ ...formData, check_type: type })}
@@ -367,7 +377,7 @@ export function PPEComplianceScreen() {
                       { fontSize: 11, color: colors.text },
                       formData.check_type === type && { color: 'white', fontWeight: '600' },
                     ]}>
-                      {type === 'routine' ? 'Classique' : type === 'pre_use' ? 'Avant usage' : type === 'post_incident' ? 'Post-incident' : type === 'inventory' ? 'Inventaire' : type === 'expiry' ? 'Expiration' : 'Dommage'}
+                      {type === 'routine' ? 'Classique' : type === 'pre_use' ? 'Avant usage' : type === 'post_incident' ? 'Post-incident' : type === 'inventory' ? 'Inventaire' : type === 'expiry_check' ? 'Vérif. Expiration' : 'Dommage'}
                     </Text>
                   </TouchableOpacity>
                 ))}
