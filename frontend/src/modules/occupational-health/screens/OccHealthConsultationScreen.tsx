@@ -2110,7 +2110,7 @@ export function OccHealthConsultationScreen({
   const canGoNext = (): boolean => {
     // Anamnesis: requires worker, exam type, and vitals
     if (currentStep === 'anamnesis') {
-      return !!(selectedWorker && vitals?.systolic && vitals?.diastolic && vitals?.temperature && vitals?.heartRate);
+      return !!(selectedWorker && vitals?.bloodPressureSystolic && vitals?.bloodPressureDiastolic && vitals?.temperature && vitals?.heartRate);
     }
     
     // Physical exam: requires worker selection
@@ -2373,7 +2373,16 @@ export function OccHealthConsultationScreen({
       const certificateNumber = `CERT-${Date.now().toString(36).toUpperCase()}`;
       const currentDate = new Date().toISOString();
       const examDateOnly = currentDate.split('T')[0];
-      const doctorName = `${authUser?.firstName || ''} ${authUser?.lastName || ''}`.trim() || 'Dr. Système';
+      
+      // Build doctor name with fallbacks for debugging
+      const firstNameTrim = (authUser?.firstName || '').trim();
+      const lastNameTrim = (authUser?.lastName || '').trim();
+      const doctorName = firstNameTrim && lastNameTrim 
+        ? `${firstNameTrim} ${lastNameTrim}`
+        : firstNameTrim || lastNameTrim || `Dr. ${authUser?.employeeId || 'Médecin non identifié'}`;
+      
+      console.log('👨‍⚕️ Doctor info:', { authUser: { firstName: authUser?.firstName, lastName: authUser?.lastName, employeeId: authUser?.employeeId }, doctorName });
+      
       const doctorLicense = authUser?.professionalLicense ? ` (${authUser.professionalLicense})` : '';
       const organizationName = authOrganization?.name || selectedWorker.company || 'Organisation';
       const scheduledNextAppointment = (nextAppointmentDate || getSuggestedNextAppointmentDate(fitnessDecision, examType)).trim();
@@ -3059,16 +3068,16 @@ export function OccHealthConsultationScreen({
         <View style={styles.vitalsGrid}>
           <VitalField label="Température (°C)" value={vitals.temperature?.toString() || ''} placeholder="36.5"
             onChange={v => setVitals(p => ({ ...p, temperature: v ? parseFloat(v) : undefined }))}
-            icon="thermometer" unit="°C" />
+            icon="thermometer" unit="°C" required />
           <VitalField label="TA Systolique (mmHg)" value={vitals.bloodPressureSystolic?.toString() || ''} placeholder="120"
             onChange={v => setVitals(p => ({ ...p, bloodPressureSystolic: v ? parseInt(v) : undefined }))}
-            icon="heart" unit="mmHg" alert={vitals.bloodPressureSystolic && vitals.bloodPressureSystolic >= 140} />
+            icon="heart" unit="mmHg" alert={vitals.bloodPressureSystolic && vitals.bloodPressureSystolic >= 140} required />
           <VitalField label="TA Diastolique (mmHg)" value={vitals.bloodPressureDiastolic?.toString() || ''} placeholder="80"
             onChange={v => setVitals(p => ({ ...p, bloodPressureDiastolic: v ? parseInt(v) : undefined }))}
-            icon="heart" unit="mmHg" alert={vitals.bloodPressureDiastolic && vitals.bloodPressureDiastolic >= 90} />
+            icon="heart" unit="mmHg" alert={vitals.bloodPressureDiastolic && vitals.bloodPressureDiastolic >= 90} required />
           <VitalField label="Fréq. Cardiaque (bpm)" value={vitals.heartRate?.toString() || ''} placeholder="72"
             onChange={v => setVitals(p => ({ ...p, heartRate: v ? parseInt(v) : undefined }))}
-            icon="pulse" unit="bpm" />
+            icon="pulse" unit="bpm" required />
           <VitalField label="Fréq. Respiratoire" value={vitals.respiratoryRate?.toString() || ''} placeholder="16"
             onChange={v => setVitals(p => ({ ...p, respiratoryRate: v ? parseInt(v) : undefined }))}
             icon="cloud" unit="/min" />
@@ -3141,6 +3150,8 @@ export function OccHealthConsultationScreen({
   const renderAnamnesis = () => {
     if (!selectedWorker) return null;
 
+    const organizationName = authOrganization?.name || selectedWorker.company || 'Organisation';
+
     return (
       <View>
         <StepHeader
@@ -3158,7 +3169,13 @@ export function OccHealthConsultationScreen({
           <View style={{ gap: 8 }}>
             <DetailItem
               label="Médecin Évaluateur"
-              value={`${authUser?.firstName || ''} ${authUser?.lastName || ''}`.trim() || 'Dr. Système'}
+              value={(() => {
+                const firstNameTrim = (authUser?.firstName || '').trim();
+                const lastNameTrim = (authUser?.lastName || '').trim();
+                return firstNameTrim && lastNameTrim 
+                  ? `${firstNameTrim} ${lastNameTrim}`
+                  : firstNameTrim || lastNameTrim || `Dr. ${authUser?.employeeId || 'Non identifié'}`;
+              })()}
               icon="person-circle"
             />
             {authUser?.professionalLicense && (
@@ -5174,6 +5191,28 @@ export function OccHealthConsultationScreen({
         )}
       </View>
 
+      {/* Validation Error Message */}
+      {!canGoNext() && currentStep !== 'summary' && (
+        <View style={styles.validationErrorContainer}>
+          <Ionicons name="alert-circle" size={16} color={colors.error} />
+          <Text style={styles.validationErrorText}>
+            {currentStep === 'anamnesis'
+              ? 'Remplissez tous les signes vitaux requis (température, TA systolique, TA diastolique, fréquence cardiaque)'
+              : currentStep === 'physical_exam'
+              ? 'Veuillez sélectionner un travailleur'
+              : currentStep === 'sector_tests'
+              ? 'Sélectionnez au moins un test'
+              : currentStep === 'test_results'
+              ? 'Enregistrez les résultats pour tous les tests ou marquez comme référé'
+              : currentStep === 'fitness_decision'
+              ? 'Sélectionnez une décision d\'aptitude'
+              : currentStep === 'next_appointment'
+              ? 'Entrez une date de prochain rendez-vous'
+              : 'Complétez les informations requises'}
+          </Text>
+        </View>
+      )}
+
         </>
       )}
       <SimpleToastNotification message={toastMsg} />
@@ -5241,15 +5280,18 @@ function DetailItem({ label, value, icon, color }: { label: string; value: strin
   );
 }
 
-function VitalField({ label, value, placeholder, onChange, icon, unit, isText, alert: isAlert }: {
+function VitalField({ label, value, placeholder, onChange, icon, unit, isText, alert: isAlert, required }: {
   label: string; value: string; placeholder: string; onChange: (v: string) => void;
-  icon: keyof typeof Ionicons.glyphMap; unit?: string; isText?: boolean; alert?: boolean | number;
+  icon: keyof typeof Ionicons.glyphMap; unit?: string; isText?: boolean; alert?: boolean | number; required?: boolean;
 }) {
   return (
     <View style={[styles.vitalField, isAlert ? { borderColor: '#EF4444', backgroundColor: '#EF444408' } : undefined]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <Ionicons name={icon} size={14} color={isAlert ? '#EF4444' : colors.textSecondary} />
-        <Text style={[styles.vitalLabel, isAlert ? { color: '#EF4444' } : undefined]}>{label}</Text>
+        <Text style={[styles.vitalLabel, isAlert ? { color: '#EF4444' } : undefined]}>
+          {label}
+          {required && <Text style={{ color: colors.error, fontWeight: '700' }}> *</Text>}
+        </Text>
       </View>
       <TextInput
         style={styles.vitalInput}
@@ -5677,6 +5719,15 @@ const styles = StyleSheet.create({
   workerItemName: { fontSize: 14, fontWeight: '600', color: colors.text },
   workerItemMeta: { fontSize: 11, color: colors.textSecondary },
   workerItemSector: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  
+  // ── Validation Error ──
+  validationErrorContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    padding: 12, marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: colors.error + '08', borderRadius: borderRadius.md,
+    borderLeftWidth: 3, borderLeftColor: colors.error,
+  },
+  validationErrorText: { flex: 1, fontSize: 12, color: colors.error, fontWeight: '500', lineHeight: 16 },
 });
 
 // ═══════════════════════════════════════════════════════════════
