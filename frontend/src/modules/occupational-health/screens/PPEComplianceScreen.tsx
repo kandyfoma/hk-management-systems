@@ -93,11 +93,13 @@ export function PPEComplianceScreen() {
     setRefreshing(false);
   };
 
-  const loadPpeItems = async (workerId: string) => {
+  const loadPpeItems = async (workerId: string | number) => {
+    setPpeItems([]);
     try {
       const api = ApiService.getInstance();
-      const response = await api.get(`/occupational-health/ppe-items/?worker_id=${workerId}`);
-      if (response.success && response.data) {
+      // ?worker= is the DRF filterset param; ?worker_id= also handled by backend as fallback
+      const response = await api.get('/occupational-health/ppe-items/', { worker: Number(workerId), page_size: 100 });
+      if (response.data) {
         const items = Array.isArray(response.data) ? response.data : response.data.results || [];
         setPpeItems(items);
       }

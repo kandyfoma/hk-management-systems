@@ -1392,7 +1392,7 @@ export function OccHealthConsultationScreen({
   useEffect(() => {
     if (!selectedWorker?.id) { setWorkerPPEItems([]); return; }
     const api = ApiService.getInstance();
-    api.get('/occupational-health/ppe-items/', { worker_id: Number(selectedWorker.id), page_size: 50 })
+    api.get('/occupational-health/ppe-items/', { worker: Number(selectedWorker.id), page_size: 50 })
       .then(res => {
         const items = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
         setWorkerPPEItems(items);

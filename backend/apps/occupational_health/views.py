@@ -1512,14 +1512,19 @@ class PPEItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
-        'ppe_type', 'condition', 'training_provided', 'replaced', 'compliance_checked'
+        'worker', 'ppe_type', 'condition', 'training_provided', 'replaced', 'compliance_checked'
     ]
     search_fields = ['serial_number', 'brand_model', 'worker__user__first_name', 'worker__user__last_name']
     ordering = ['-created_at']
     serializer_class = PPEItemSerializer
     
     def get_queryset(self):
-        return PPEItem.objects.select_related('assigned_by', 'worker')
+        qs = PPEItem.objects.select_related('assigned_by', 'worker', 'worker__user')
+        # Support legacy ?worker_id= param in addition to django-filter ?worker=
+        worker_id = self.request.query_params.get('worker_id')
+        if worker_id:
+            qs = qs.filter(worker_id=worker_id)
+        return qs
     
     def perform_create(self, serializer):
         serializer.save(assigned_by=self.request.user)
