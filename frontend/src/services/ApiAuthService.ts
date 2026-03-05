@@ -65,11 +65,13 @@ const LOGOUT_EXACT_STORAGE_KEYS = [
   'HK_PHARMACY_REPORTS_CACHE',
   'pharmacy_pos_draft_v1',
   'pharmacy_pos_queue_v1',
-  '@occ_pending_consultations',
+  // NOTE: '@occ_pending_consultations' and 'consultation_draft_*' are intentionally
+  // NOT cleared on logout — they are clinical records that must survive a session
+  // restart (e.g. doctor logs out and back in mid-consultation).
 ];
 
-const LOGOUT_KEY_PREFIXES = [
-  'consultation_draft_',
+const LOGOUT_KEY_PREFIXES: string[] = [
+  // 'consultation_draft_' intentionally excluded — see note above
 ];
 
 // ═══════════════════════════════════════════════════════════════
