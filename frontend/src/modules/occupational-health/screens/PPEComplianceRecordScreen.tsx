@@ -24,16 +24,16 @@ interface PPEComplianceRecord {
 
 const SAMPLE_RECORDS: PPEComplianceRecord[] = [
   {
-    id: '1', worker_name: 'Jean-Pierre Kabongo', ppe_item: 'Casque de sÃ©curitÃ© MSA',
+    id: '1', worker_name: 'Jean-Pierre Kabongo', ppe_item: 'Casque de sécurité MSA',
     assignment_date: '2025-01-15', condition: 'good',
     compliance_status: 'compliant', inspection_date: '2025-02-20',
-    notes: 'Ã‰tat satisfaisant', created_at: '2025-01-15T10:00:00Z'
+    notes: 'État satisfaisant', created_at: '2025-01-15T10:00:00Z'
   },
   {
     id: '2', worker_name: 'Patrick Lukusa', ppe_item: 'Respirateur FFP3',
     assignment_date: '2025-02-01', condition: 'worn',
     compliance_status: 'non_compliant', inspection_date: '2025-02-19',
-    notes: 'Remplacement recommandÃ©', created_at: '2025-02-01T10:00:00Z'
+    notes: 'Remplacement recommandé', created_at: '2025-02-01T10:00:00Z'
   },
 ];
 
