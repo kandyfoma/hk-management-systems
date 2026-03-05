@@ -22,6 +22,10 @@ if railway_static_url:
     if railway_host and railway_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(railway_host)
 
+# Railway internal health-check host
+if 'healthcheck.railway.app' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('healthcheck.railway.app')
+
 # Application definition
 DJANGO_APPS = [
     'jazzmin',  # Modern admin interface
