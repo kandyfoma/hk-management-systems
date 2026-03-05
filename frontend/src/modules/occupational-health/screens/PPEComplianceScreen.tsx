@@ -418,6 +418,23 @@ export function PPEComplianceScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
+              {/* Debug validation status */}
+              <View style={{ marginTop: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.info + '14', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.info + '40' }}>
+                <Text style={{ fontSize: 11, color: colors.info, fontWeight: '700', marginBottom: 4 }}>État de validation:</Text>
+                <Text style={{ fontSize: 10, color: colors.info }}>
+                  {selectedWorker ? '✓' : '✗'} Travailleur{'\n'}
+                  {formData.ppe_item ? '✓' : '✗'} EPI sélectionné{'\n'}
+                  {formData.check_date ? '✓' : '✗'} Date: {formData.check_date}{'\n'}
+                  {formData.check_type ? '✓' : `✗ Type: ${formData.check_type || 'aucun'}`}{'\n'}
+                  {formData.status ? '✓' : `✗ Statut: ${formData.status || 'aucun'}`}
+                </Text>
+                {ppeItems.length === 0 && selectedWorker && (
+                  <Text style={{ fontSize: 10, color: colors.warning, marginTop: 8, fontWeight: '600' }}>
+                    ⚠️ Ce travailleur n'a aucun EPI assigné. Ajoutez d'abord des équipements.
+                  </Text>
+                )}
+              </View>
+
               <TouchableOpacity 
                 style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
                 onPress={handleSubmit}
