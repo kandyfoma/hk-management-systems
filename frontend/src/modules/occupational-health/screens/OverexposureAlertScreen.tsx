@@ -60,6 +60,35 @@ interface OverexposureAlert {
   recurrence_count: number;
   // Computed server-side (serializer) or client fallback
   is_overdue_followup?: boolean;
+  // ═══════════════════════════════════════════════════════════
+  // AUDIT TRACKING — Full audit trail for all changes
+  // ═══════════════════════════════════════════════════════════
+  created_by_id?: number;                     // User ID who created the alert
+  created_by_name?: string;                   // Full name of creator
+  created_at?: string;                        // ISO datetime of creation
+  updated_by_id?: number;                     // Last user to update
+  updated_by_name?: string;                   // Full name of last updater
+  updated_at?: string;                        // ISO datetime of last update
+  acknowledged_by_id?: number;                // User who acknowledged alert
+  resolved_by_id?: number;                    // User who resolved alert
+  resolved_by_name?: string;                  // Name of who resolved it
+  // Change history & version tracking
+  version?: number;                           // Version number for this record
+  change_log?: Array<{                        // Complete audit trail
+    timestamp: string;                        // ISO datetime
+    action: 'created' | 'updated' | 'acknowledged' | 'resolved' | 'note_added' | 'status_changed';
+    changed_by_id: number;
+    changed_by_name: string;
+    old_value?: any;                          // Previous value (for updates)
+    new_value?: any;                          // New value (for updates)
+    field?: string;                           // Which field changed
+    notes?: string;                           // Contextual info
+    ip_address?: string;                      // Client IP
+    user_agent?: string;                      // Device/browser info
+  }>;
+  // Compliance tracking
+  regulatory_check_date?: string;             // Last compliance audit date
+  compliance_status?: 'compliant' | 'non_compliant' | 'pending_review';
 }
 
 interface WorkerOption {
@@ -487,27 +516,78 @@ export function OverexposureAlertScreen() {
 
   // ── Acknowledge ───────────────────────────────────────────
 
+  /** Capture audit context (device, IP proxy via headers, user agent) */
+  const getAuditContext = () => ({
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+    timestamp: new Date().toISOString(),
+    device_type: Platform.OS || 'web',
+  });
+
   const handleAcknowledge = async (alert: OverexposureAlert) => {
+    const auditCtx = getAuditContext();
     const res = await occHealthApi.acknowledgeOverexposureAlert(alert.id);
     if (res.error) { Alert.alert('Erreur', res.error); return; }
-    const updated = { ...alert, ...res.data };
+    const updated = { ...alert, ...res.data,
+      // Log audit entry
+      change_log: [
+        ...(alert.change_log ?? []),
+        {
+          timestamp: auditCtx.timestamp,
+          action: 'acknowledged',
+          changed_by_id: res.data?.acknowledged_by_id ?? 0,
+          changed_by_name: res.data?.acknowledged_by_name ?? 'Système',
+          old_value: { status: alert.status },
+          new_value: { status: 'acknowledged' },
+          field: 'status',
+          user_agent: auditCtx.user_agent,
+        },
+      ],
+    };
     setAlerts(prev => prev.map(a => a.id === alert.id ? updated : a));
     if (detailAlert?.id === alert.id) setDetailAlert(updated);
+    console.log(`[AUDIT] Alert #${alert.id} acknowledged by ${res.data?.acknowledged_by_name ?? 'system'} at ${auditCtx.timestamp}`);
   };
 
   // ── Save CAPA Note ────────────────────────────────────────
 
   const handleSaveNote = async () => {
     if (editingNoteId === null) return;
+    const auditCtx = getAuditContext();
     setNoteBusy(true);
     const res = await occHealthApi.addNoteToAlert(editingNoteId, noteText);
     setNoteBusy(false);
     if (res.error) { Alert.alert('Erreur', res.error); return; }
     const updatedNotes = res.data?.notes ?? noteText;
-    setAlerts(prev => prev.map(a => a.id === editingNoteId ? { ...a, notes: updatedNotes } : a));
-    if (detailAlert?.id === editingNoteId) setDetailAlert(d => d ? { ...d, notes: updatedNotes } : d);
+    const currentAlert = alerts.find(a => a.id === editingNoteId);
+    const oldNotes = currentAlert?.notes ?? '';
+    setAlerts(prev => prev.map(a => a.id === editingNoteId ? {
+      ...a,
+      notes: updatedNotes,
+      updated_at: auditCtx.timestamp,
+      change_log: [
+        ...(a.change_log ?? []),
+        {
+          timestamp: auditCtx.timestamp,
+          action: 'note_added',
+          changed_by_id: res.data?.updated_by_id ?? 0,
+          changed_by_name: res.data?.updated_by_name ?? 'Système',
+          old_value: { notes: oldNotes },
+          new_value: { notes: updatedNotes },
+          field: 'notes',
+          user_agent: auditCtx.user_agent,
+        },
+      ],
+    } : a));
+    if (detailAlert?.id === editingNoteId) {
+      setDetailAlert(d => d ? {
+        ...d,
+        notes: updatedNotes,
+        updated_at: auditCtx.timestamp,
+      } : d);
+    }
     setEditingNoteId(null);
     setNoteText('');
+    console.log(`[AUDIT] Note added to alert #${editingNoteId} at ${auditCtx.timestamp}`);
   };
 
   // ── Resolve ───────────────────────────────────────────────
