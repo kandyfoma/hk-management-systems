@@ -564,4 +564,20 @@ const styles = StyleSheet.create({
   detailValue:          { fontSize: 14, fontWeight: '500', color: colors.text, textAlign: 'right', flex: 1, marginLeft: spacing.md },
   recommendationBox:    { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginTop: spacing.sm },
   recommendationText:   { fontSize: 13, color: colors.text, lineHeight: 20 },
+
+  // Info Panel
+  infoPanel:            { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.lg, marginHorizontal: 0, borderLeftWidth: 3, borderLeftColor: ACCENT, ...shadows.sm },
+  infoPanelHeader:      { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingBottom: spacing.sm },
+  infoPanelTitle:       { fontSize: 14, fontWeight: '700', color: colors.text, flex: 1 },
+  infoPanelContent:     { paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  infoSection:          { marginBottom: spacing.md },
+  infoSectionTitle:     { fontSize: 13, fontWeight: '700', color: ACCENT, marginBottom: spacing.sm },
+  infoItem:             { marginBottom: spacing.sm, paddingVertical: spacing.xs },
+  infoItemLabel:        { fontSize: 12, fontWeight: '600', color: colors.text, marginBottom: 2 },
+  infoItemDesc:         { fontSize: 12, color: colors.textSecondary, lineHeight: 17, marginLeft: spacing.xs },
+  infoRiskLevel:        { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm, paddingVertical: spacing.xs },
+  riskColorBox:         { width: 18, height: 18, borderRadius: borderRadius.sm },
+  riskLevelName:        { fontSize: 12, fontWeight: '700', color: colors.text },
+  riskLevelDesc:        { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  infoIndicator:        { fontSize: 12, color: colors.text, lineHeight: 20, marginBottom: spacing.xs },
 });

@@ -2285,18 +2285,24 @@ class RiskProfileAuditLog(models.Model):
 
 
 class OverexposureAlert(models.Model):
-    """Real-time alerts for worker overexposure to hazards"""
+    """Real-time alerts for worker overexposure and area monitoring"""
     
     SEVERITY_CHOICES = [('warning', 'Warning'), ('critical', 'Critical'), ('emergency', 'Emergency')]
     STATUS_CHOICES = [('active', 'Active'), ('acknowledged', 'Acknowledged'), ('resolved', 'Resolved')]
     
-    worker = models.ForeignKey(Worker, on_delete=models.CASCADE, related_name='overexposure_alerts')
+    worker = models.ForeignKey(Worker, on_delete=models.CASCADE, related_name='overexposure_alerts',
+                               null=True, blank=True, help_text="Leave blank for area monitoring alerts")
     exposure_type = models.CharField(max_length=100, default='unknown')
     exposure_level = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     exposure_threshold = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     unit_measurement = models.CharField(max_length=50, default='unknown')
     severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='warning')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    
+    # Optional: context for area monitoring alerts (when worker is null)
+    area_location = models.CharField(max_length=200, blank=True, help_text="e.g., Mining Shaft A, Grinding Mill") 
+    monitoring_type = models.CharField(max_length=50, blank=True, help_text="environmental, area, ambient")
+    
     detected_date = models.DateTimeField(auto_now_add=True)
     acknowledged_date = models.DateTimeField(null=True, blank=True)
     resolved_date = models.DateTimeField(null=True, blank=True)
@@ -2306,13 +2312,24 @@ class OverexposureAlert(models.Model):
     medical_followup_required = models.BooleanField(default=False)
     medical_followup_date = models.DateField(null=True, blank=True)
     
+    # Internal notes / CAPA comments (ISO 45001 §10.2)
+    notes = models.TextField(blank=True, help_text="Internal CAPA comments and investigation notes")
+    
+    # Auto-generated flag (from ExposureReading signal vs manual creation)
+    is_auto_generated = models.BooleanField(default=False, help_text="True when auto-triggered from an ExposureReading measurement")
+    
     class Meta:
         verbose_name = 'Overexposure Alert'
         verbose_name_plural = 'Overexposure Alerts'
         ordering = ['-detected_date']
+        indexes = [
+            models.Index(fields=['worker', '-detected_date']),
+            models.Index(fields=['severity', 'status', '-detected_date']),
+        ]
     
     def __str__(self):
-        return f"{self.worker.full_name} - {self.exposure_type} ({self.severity})"
+        subject = self.worker.full_name if self.worker_id else (self.area_location or 'Area Reading')
+        return f"{subject} - {self.exposure_type} ({self.severity})"
     
     def mark_acknowledged(self, user):
         self.status = 'acknowledged'
@@ -2324,6 +2341,41 @@ class OverexposureAlert(models.Model):
         self.status = 'resolved'
         self.resolved_date = timezone.now()
         self.save()
+
+
+class ExposureTypeLimit(models.Model):
+    """
+    Standard exposure limits for each hazard type.
+    Provides default OSHA TWA, ACGIH TLV, and local limits for alert triggering.
+    """
+    
+    EXPOSURE_TYPES = [
+        ('silica_dust', 'Crystalline Silica (Respirable)'),
+        ('cobalt', 'Cobalt & Compounds'),
+        ('total_dust', 'Total Inhalable Dust'),
+        ('noise', 'Noise Level'),
+        ('vibration', 'Hand-Arm Vibration'),
+        ('heat', 'Wet Bulb Globe Temperature (WBGT)'),
+        ('lead', 'Lead & Compounds'),
+        ('asbestos', 'Asbestos Fibers'),
+        ('chemical', 'Chemical Vapor'),
+        ('biological', 'Biological Agents'),
+    ]
+    
+    exposure_type = models.CharField(max_length=50, choices=EXPOSURE_TYPES, unique=True)
+    osha_twa_limit = models.DecimalField(_("Limite OSHA TWA"), max_digits=10, decimal_places=3)
+    acgih_tlv_limit = models.DecimalField(_("Limite ACGIH TLV"), max_digits=10, decimal_places=3)
+    local_limit = models.DecimalField(_("Limite Locale (DRC)"), max_digits=10, decimal_places=3,
+                                     help_text="Default DRC/Congo local limit")
+    unit_measurement = models.CharField(_("Unité"), max_length=20, help_text="e.g., mg/m³, µg/m³, dB(A)")
+    
+    class Meta:
+        verbose_name = _('Exposure Type Limit')
+        verbose_name_plural = _('Exposure Type Limits')
+        ordering = ['exposure_type']
+    
+    def __str__(self):
+        return f"{self.get_exposure_type_display()} - OSHA: {self.osha_twa_limit} {self.unit_measurement}"
 
 
 class ExposureReading(models.Model):
@@ -2470,6 +2522,20 @@ class ExposureReading(models.Model):
     
     def save(self, *args, **kwargs):
         """Calculate status on save and trigger alerts if needed"""
+        # Auto-populate limits from ExposureTypeLimit defaults if not provided
+        if not self.local_limit or not self.acgih_tlv_limit or not self.osha_twa_limit:
+            try:
+                limit_defaults = ExposureTypeLimit.objects.get(exposure_type=self.exposure_type)
+                if not self.osha_twa_limit:
+                    self.osha_twa_limit = limit_defaults.osha_twa_limit
+                if not self.acgih_tlv_limit:
+                    self.acgih_tlv_limit = limit_defaults.acgih_tlv_limit
+                if not self.local_limit:
+                    self.local_limit = limit_defaults.local_limit
+            except ExposureTypeLimit.DoesNotExist:
+                # If no defaults exist for this exposure type, limits remain as provided
+                pass
+
         # Determine status based on limit comparison
         limit_to_check = self.local_limit or self.acgih_tlv_limit or self.osha_twa_limit
         
@@ -2491,28 +2557,36 @@ class ExposureReading(models.Model):
     
     def _create_overexposure_alert(self):
         """Auto-create OverexposureAlert when reading exceeds limits"""
-        # Cannot create alert without a linked worker
-        if not self.worker_id:
-            return
-
         limit_to_check = self.local_limit or self.acgih_tlv_limit or self.osha_twa_limit
 
-        alert = OverexposureAlert.objects.create(
-            worker=self.worker,
-            exposure_type=self.get_exposure_type_display(),
-            exposure_level=self.exposure_value,
-            exposure_threshold=limit_to_check or Decimal('0'),
-            unit_measurement=self.unit_measurement,
-            severity='critical' if self.status == 'exceeded' else 'warning',
-            status='active',
-            recommended_action=self._get_recommended_action(),
-        )
+        # Build alert data
+        alert_data = {
+            'exposure_type': self.get_exposure_type_display(),
+            'exposure_level': self.exposure_value,
+            'exposure_threshold': limit_to_check or Decimal('0'),
+            'unit_measurement': self.unit_measurement,
+            'severity': 'critical' if self.status == 'exceeded' else 'warning',
+            'status': 'active',
+            'recommended_action': self._get_recommended_action(),
+        }
+        
+        if self.worker_id:
+            # Worker-specific alert
+            alert_data['worker'] = self.worker
+        else:
+            # Area monitoring alert (environmental)
+            alert_data['area_location'] = self.sampling_location or 'Unspecified Location'
+            alert_data['monitoring_type'] = self.source_type
+
+        alert = OverexposureAlert.objects.create(**alert_data)
 
         # Use QuerySet.update to avoid a recursive save() call
         ExposureReading.objects.filter(pk=self.pk).update(
             related_alert=alert,
             alert_triggered=True,
         )
+        # Mark alert as auto-generated
+        OverexposureAlert.objects.filter(pk=alert.pk).update(is_auto_generated=True)
         # Keep in-memory state consistent
         self.related_alert = alert
         self.alert_triggered = True

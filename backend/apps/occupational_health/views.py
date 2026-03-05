@@ -2433,12 +2433,37 @@ class OverexposureAlertViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['severity', 'status', 'exposure_type', 'worker__enterprise']
-    search_fields = ['worker__first_name', 'worker__last_name', 'exposure_type']
+    search_fields = ['worker__first_name', 'worker__last_name', 'exposure_type', 'area_location']
+    ordering_fields = ['detected_date', 'severity', 'worker__last_name']
     ordering = ['-detected_date']
     
     def get_queryset(self):
-        """Get alerts with related data"""
-        return OverexposureAlert.objects.select_related('worker__enterprise', 'acknowledged_by')
+        """Get alerts with related data, supporting date range and enterprise filters"""
+        qs = OverexposureAlert.objects.select_related('worker__enterprise', 'acknowledged_by')
+        
+        # Date range filter
+        date_from = self.request.query_params.get('date_from')
+        date_to   = self.request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(detected_date__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(detected_date__date__lte=date_to)
+        
+        # Enterprise filter (works for both worker-linked and area alerts)
+        enterprise_id = self.request.query_params.get('enterprise')
+        if enterprise_id:
+            qs = qs.filter(worker__enterprise_id=enterprise_id)
+        
+        return qs
+    
+    @action(detail=True, methods=['patch'])
+    def add_note(self, request, pk=None):
+        """Append or replace internal CAPA notes on an alert"""
+        alert = self.get_object()
+        new_note = request.data.get('notes', '')
+        alert.notes = new_note
+        alert.save(update_fields=['notes'])
+        return Response({'notes': alert.notes})
     
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):

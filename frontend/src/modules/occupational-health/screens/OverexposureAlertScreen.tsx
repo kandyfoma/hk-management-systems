@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
-  Dimensions, Modal, Alert, FlatList, ActivityIndicator, RefreshControl, Switch,
+  Dimensions, Modal, Alert, FlatList, ActivityIndicator, RefreshControl, Switch, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -30,12 +30,13 @@ const ACCENT = colors.primary;
 
 interface OverexposureAlert {
   id: number;
-  worker: number;
-  worker_name: string;
-  worker_employee_id: string;
-  enterprise_name: string;
+  worker: number | null;          // null for area monitoring alerts
+  worker_name: string | null;     // null for area/environmental alerts
+  worker_employee_id: string | null;
+  enterprise_name: string | null;
+  enterprise_id: number | null;
   exposure_type: string;
-  exposure_level: string;       // DecimalField → string from DRF
+  exposure_level: string;          // DecimalField → string from DRF
   exposure_threshold: string;
   unit_measurement: string;
   severity: 'warning' | 'critical' | 'emergency';
@@ -50,6 +51,15 @@ interface OverexposureAlert {
   acknowledged_by_name: string | null;
   medical_followup_required: boolean;
   medical_followup_date: string | null;
+  // New fields (migration 0026-0027)
+  area_location: string;
+  monitoring_type: string;
+  notes: string;
+  is_auto_generated: boolean;
+  source_reading_id: number | null;
+  recurrence_count: number;
+  // Computed server-side (serializer) or client fallback
+  is_overdue_followup?: boolean;
 }
 
 interface WorkerOption {
@@ -81,6 +91,8 @@ interface ResolveForm {
 
 type StatusFilter   = 'all' | 'active' | 'acknowledged' | 'resolved';
 type SeverityFilter = 'all' | 'warning' | 'critical' | 'emergency';
+type SortOrder      = 'recent' | 'oldest' | 'severity' | 'name' | 'overdue';
+// SortBy / SortDir replaced by SortOrder (see helpers section)
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -115,6 +127,116 @@ const STATUS_LABELS: Record<string, string> = {
   acknowledged: 'Accusé réception',
   resolved:     'Résolu',
 };
+
+// ─── Regulatory citations per exposure type ──────────────────────────────────
+const REGULATORY_CITATIONS: Array<[string, string]> = [
+  ['cobalt',           'ACGIH TLV-TWA: 0.02 mg/m³ (Co metal) | OSHA PEL: 0.1 mg/m³ | 29 CFR 1910.1000 Table Z-1'],
+  ['silica',           'OSHA PEL: 0.05 mg/m³ (resp.) | ACGIH TLV: 0.025 mg/m³ | 29 CFR 1910.1053'],
+  ['crystalline',      'OSHA PEL: 0.05 mg/m³ (resp.) | ACGIH TLV: 0.025 mg/m³ | NIOSH REL: 0.05 mg/m³'],
+  ['noise',            'OSHA PEL: 90 dB(A)/8h | ACGIH TLV: 85 dB(A)/8h | ISO 9612:2009 | 29 CFR 1910.95'],
+  ['total inhalable',  'OSHA PEL: 15 mg/m³ | ACGIH TLV-TWA: 10 mg/m³ | ISO 7708:1995'],
+  ['dust',             'OSHA PEL: 15 mg/m³ (total) / 5 mg/m³ (resp.) | ACGIH TLV: 10 mg/m³'],
+  ['lead',             'OSHA PEL: 0.05 mg/m³ | ACGIH TLV: 0.03 mg/m³ | 29 CFR 1910.1025'],
+  ['asbestos',         'OSHA PEL: 0.1 f/cc | ACGIH TLV: 0.1 f/cm³ | 29 CFR 1910.1001 | ISO 13794'],
+  ['vibration',        'EU Directive 2002/44/EC: ELV=5 m/s² / EAV=2.5 m/s² | ACGIH TLV: 2 m/s² (8h)'],
+  ['heat',             'ACGIH WBGT TLV (light work): 30.1 °C | NIOSH REL/OSHA Heat Illness Prevention'],
+  ['chemical',         'OSHA 29 CFR 1910.1000 Table Z-2 | ACGIH TLV/BEI Annual Edition'],
+];
+
+function getRegulatoryCitation(exposureType: string): string {
+  const key = (exposureType || '').toLowerCase();
+  for (const [pattern, citation] of REGULATORY_CITATIONS) {
+    if (key.includes(pattern)) return citation;
+  }
+  return 'OSHA 29 CFR 1910.1000 | ACGIH TLV/BEI | ISO 45001:2018 §9.1';
+}
+
+/** Alert age as compact human string */
+function calcAge(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60000);
+  if (mins < 60)         return `${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24)        return `${hours}h`;
+  const days  = Math.floor(hours / 24);
+  if (days  < 7)         return `${days}j`;
+  return `${Math.floor(days / 7)}sem`;
+}
+
+/** CSV export row formatter */
+function formatExportRow(a: OverexposureAlert): string {
+  const esc = (s: string | null | undefined) => `"${(s ?? '').replace(/"/g, '""')}"`;
+  const exceeded = (() => {
+    const l = parseFloat(a.exposure_level);
+    const t = parseFloat(a.exposure_threshold);
+    if (!t || t === 0) return '—';
+    return `${((l / t) * 100 - 100).toFixed(1)}%`;
+  })();
+  return [
+    a.id,
+    esc(a.worker_name ?? a.area_location),
+    esc(a.exposure_type),
+    a.exposure_level,
+    a.exposure_threshold,
+    exceeded,
+    a.severity,
+    a.status,
+    a.detected_date,
+  ].join(',');
+}
+
+/** Check if medical follow-up deadline is overdue */
+function isFollowUpOverdue(a: OverexposureAlert): boolean {
+  if (!a.medical_followup_required || !a.medical_followup_date || a.status === 'resolved') return false;
+  return new Date(a.medical_followup_date) < new Date();
+}
+
+/** Export alert list to CSV (web only – silent noop on native) */
+function exportToCsv(data: OverexposureAlert[]) {
+  const cols = [
+    'ID', 'Travailleur/Zone', 'Matricule', 'Entreprise', 'Type Exposition',
+    'Niveau Mesuré', 'Seuil PEL/TLV', 'Unité', 'Dépassement %', 'Sévérité',
+    'Statut', 'Auto-détecté', 'Date Détection', 'Accusé Par', 'Date Accusé',
+    'Date Résolution', 'Actions Correctives', 'Suivi Médical', 'Échéance Suivi', 'Notes',
+  ];
+  const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const pct = (a: OverexposureAlert) => {
+    const l = parseFloat(a.exposure_level), t = parseFloat(a.exposure_threshold);
+    if (!t) return '—';
+    return `+${(((l - t) / t) * 100).toFixed(0)}%`;
+  };
+  const rows = data.map(a => [
+    a.id,
+    a.worker_name || a.area_location || 'Zone',
+    a.worker_employee_id || '—',
+    a.enterprise_name || '—',
+    a.exposure_type,
+    parseFloat(a.exposure_level).toFixed(4),
+    parseFloat(a.exposure_threshold).toFixed(4),
+    a.unit_measurement,
+    pct(a),
+    a.severity,
+    a.status,
+    a.is_auto_generated ? 'Oui' : 'Non',
+    a.detected_date ? new Date(a.detected_date).toLocaleString('fr-FR') : '—',
+    a.acknowledged_by_name || '—',
+    a.acknowledged_date ? new Date(a.acknowledged_date).toLocaleString('fr-FR') : '—',
+    a.resolved_date ? new Date(a.resolved_date).toLocaleString('fr-FR') : '—',
+    (a.action_taken || '').replace(/,/g, ';'),
+    a.medical_followup_required ? 'Oui' : 'Non',
+    a.medical_followup_date || '—',
+    (a.notes || '').replace(/,/g, ';'),
+  ].map(escape).join(','));
+  const csv = [cols.map(escape).join(','), ...rows].join('\n');
+  try {
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `alertes-surexposition-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch { /* silent on native */ }
+}
 
 /** ISO 45001 §8.1.4 – hiérarchie des mesures de maîtrise selon le type d'exposition */
 function getHierarchyHint(exposureType: string): string {
@@ -183,6 +305,17 @@ export function OverexposureAlertScreen() {
   const [searchQuery, setSearch]        = useState('');
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
   const [filterSeverity, setFilterSev]  = useState<SeverityFilter>('all');
+  const [filterEnterprise, setFilterEnt]= useState<string>('all');
+  const [dateFrom, setDateFrom]         = useState('');
+  const [dateTo, setDateTo]             = useState('');
+  const [showAdvFilters, setShowAdvFil] = useState(false);
+  const [exportBusy, setExportBusy]     = useState(false);
+
+  // Sort
+  const [sortBy, setSortBy]   = useState<SortOrder>('recent');
+
+  // Computed enterprise list
+  const [enterprises, setEnterprises] = useState<string[]>([]);
 
   // Bulk selection
   const [selectionMode, setSelectionMode] = useState(false);
@@ -196,6 +329,11 @@ export function OverexposureAlertScreen() {
   const [showCreate, setShowCreate]   = useState(false);
   const [createForm, setCreateForm]   = useState<CreateForm>(EMPTY_CREATE);
   const [createBusy, setCreateBusy]   = useState(false);
+
+  // Notes editing (in detail modal)
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [noteText, setNoteText]           = useState('');
+  const [noteBusy, setNoteBusy]           = useState(false);
 
   // Worker picker (pre-loaded, filtered client-side)
   const [allWorkers, setAllWorkers]               = useState<WorkerOption[]>([]);
@@ -211,6 +349,12 @@ export function OverexposureAlertScreen() {
       w.employeeId.toLowerCase().includes(q)
     );
   }, [allWorkers, workerSearchText]);
+
+  // Build enterprise list when alerts load
+  useEffect(() => {
+    const names = Array.from(new Set(alerts.filter(a => a.enterprise_name).map(a => a.enterprise_name!)));
+    setEnterprises(names);
+  }, [alerts]);
 
   // Load workers once when create modal opens
   useEffect(() => {
@@ -253,18 +397,40 @@ export function OverexposureAlertScreen() {
 
   const onRefresh = () => { setRefreshing(true); loadAll(true); };
 
-  // ── Filtered list ─────────────────────────────────────────
+  // ── Filtered + sorted list ───────────────────────────────
 
-  const filtered = useMemo(() => alerts.filter(a => {
-    const q = searchQuery.toLowerCase();
-    const matchQ = !q
-      || (a.worker_name ?? '').toLowerCase().includes(q)
-      || (a.exposure_type ?? '').toLowerCase().includes(q)
-      || (a.worker_employee_id ?? '').toLowerCase().includes(q);
-    const matchS   = filterStatus   === 'all' || a.status   === filterStatus;
-    const matchSev = filterSeverity === 'all' || a.severity === filterSeverity;
-    return matchQ && matchS && matchSev;
-  }), [alerts, searchQuery, filterStatus, filterSeverity]);
+  const filtered = useMemo(() => {
+    const SEV_ORDER: Record<string, number> = { emergency: 3, critical: 2, warning: 1 };
+    let list = alerts.filter(a => {
+      const q = searchQuery.toLowerCase();
+      const matchQ = !q
+        || (a.worker_name ?? '').toLowerCase().includes(q)
+        || (a.exposure_type ?? '').toLowerCase().includes(q)
+        || (a.worker_employee_id ?? '').toLowerCase().includes(q)
+        || (a.area_location ?? '').toLowerCase().includes(q);
+      const matchS   = filterStatus   === 'all' || a.status   === filterStatus;
+      const matchSev = filterSeverity === 'all' || a.severity === filterSeverity;
+      const matchEnt = filterEnterprise === 'all' || a.enterprise_name === filterEnterprise;
+      const matchFrom = !dateFrom || a.detected_date >= dateFrom;
+      const matchTo   = !dateTo   || a.detected_date.slice(0, 10) <= dateTo;
+      return matchQ && matchS && matchSev && matchEnt && matchFrom && matchTo;
+    });
+
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'overdue') {
+        const aO = a.is_overdue_followup ? 0 : 1;
+        const bO = b.is_overdue_followup ? 0 : 1;
+        if (aO !== bO) return aO - bO;
+        return (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0);
+      }
+      if (sortBy === 'severity')  return (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0);
+      if (sortBy === 'name')      return (a.worker_name ?? a.area_location ?? '').localeCompare(b.worker_name ?? b.area_location ?? '');
+      if (sortBy === 'oldest')    return a.detected_date.localeCompare(b.detected_date);
+      // 'recent' (default)
+      return b.detected_date.localeCompare(a.detected_date);
+    });
+    return list;
+  }, [alerts, searchQuery, filterStatus, filterSeverity, filterEnterprise, dateFrom, dateTo, sortBy]);
 
   // ── Stats ─────────────────────────────────────────────────
 
@@ -275,6 +441,50 @@ export function OverexposureAlertScreen() {
     resolved: alerts.filter(a => a.status === 'resolved').length,
   }), [alerts]);
 
+  // ── SLA KPIs ──────────────────────────────────────────────
+
+  const slaStats = useMemo(() => {
+    const now = new Date();
+    const unackOver24h = alerts.filter(a => {
+      if (a.status !== 'active') return false;
+      return (now.getTime() - new Date(a.detected_date).getTime()) > 86400000;
+    }).length;
+
+    const ackedAlerts = alerts.filter(a => a.acknowledged_date && a.detected_date);
+    const avgAckHours = ackedAlerts.length
+      ? ackedAlerts.reduce((sum, a) => {
+          return sum + (new Date(a.acknowledged_date!).getTime() - new Date(a.detected_date).getTime());
+        }, 0) / ackedAlerts.length / 3600000
+      : null;
+
+    const overdueFollowups = alerts.filter(a => isFollowUpOverdue(a)).length;
+    const autoGenCount     = alerts.filter(a => a.is_auto_generated).length;
+
+    return { unackOver24h, unackOver48h: alerts.filter(a => {
+      if (a.status !== 'active') return false;
+      return (now.getTime() - new Date(a.detected_date).getTime()) > 172800000;
+    }).length, avgAckHours, overdueFollowups, autoGenCount,
+      avgResolutionDays: (() => {
+        const res = alerts.filter(a => a.resolved_date && a.detected_date);
+        if (!res.length) return null;
+        return res.reduce((s, a) => s + (new Date(a.resolved_date!).getTime() - new Date(a.detected_date).getTime()), 0) / res.length / 86400000;
+      })(),
+    };
+  }, [alerts]);
+
+  // ── Exposure type breakdown ───────────────────────────────
+
+  const exposureBreakdown = useMemo(() => {
+    const counts: Record<string, { total: number; active: number }> = {};
+    alerts.forEach(a => {
+      const t = a.exposure_type || 'Inconnu';
+      if (!counts[t]) counts[t] = { total: 0, active: 0 };
+      counts[t].total++;
+      if (a.status === 'active') counts[t].active++;
+    });
+    return Object.entries(counts).sort((x, y) => y[1].total - x[1].total);
+  }, [alerts]);
+
   // ── Acknowledge ───────────────────────────────────────────
 
   const handleAcknowledge = async (alert: OverexposureAlert) => {
@@ -283,6 +493,21 @@ export function OverexposureAlertScreen() {
     const updated = { ...alert, ...res.data };
     setAlerts(prev => prev.map(a => a.id === alert.id ? updated : a));
     if (detailAlert?.id === alert.id) setDetailAlert(updated);
+  };
+
+  // ── Save CAPA Note ────────────────────────────────────────
+
+  const handleSaveNote = async () => {
+    if (editingNoteId === null) return;
+    setNoteBusy(true);
+    const res = await occHealthApi.addNoteToAlert(editingNoteId, noteText);
+    setNoteBusy(false);
+    if (res.error) { Alert.alert('Erreur', res.error); return; }
+    const updatedNotes = res.data?.notes ?? noteText;
+    setAlerts(prev => prev.map(a => a.id === editingNoteId ? { ...a, notes: updatedNotes } : a));
+    if (detailAlert?.id === editingNoteId) setDetailAlert(d => d ? { ...d, notes: updatedNotes } : d);
+    setEditingNoteId(null);
+    setNoteText('');
   };
 
   // ── Resolve ───────────────────────────────────────────────
@@ -402,10 +627,12 @@ export function OverexposureAlertScreen() {
   );
 
   const renderAlertCard = ({ item }: { item: OverexposureAlert }) => {
-    const isSelected = selectedIds.has(item.id);
-    const exceedance = calcExceedance(item.exposure_level, item.exposure_threshold);
-    const sevColor   = SEV_COLORS[item.severity] ?? '#6B7280';
-    const hint       = getHierarchyHint(item.exposure_type);
+    const isSelected  = selectedIds.has(item.id);
+    const exceedance  = calcExceedance(item.exposure_level, item.exposure_threshold);
+    const sevColor    = SEV_COLORS[item.severity] ?? '#6B7280';
+    const hint        = getHierarchyHint(item.exposure_type);
+    const isAreaAlert = !item.worker_name;
+    const age         = calcAge(item.detected_date);
 
     return (
       <TouchableOpacity
@@ -413,6 +640,7 @@ export function OverexposureAlertScreen() {
           styles.card,
           { borderLeftColor: sevColor },
           isSelected && styles.cardSelected,
+          item.is_overdue_followup && { borderTopColor: '#EF4444', borderTopWidth: 2 },
         ]}
         onPress={() => selectionMode ? toggleSelect(item.id) : setDetailAlert(item)}
         onLongPress={() => { setSelectionMode(true); toggleSelect(item.id); }}
@@ -427,7 +655,15 @@ export function OverexposureAlertScreen() {
           )}
           <View style={{ flex: 1 }}>
             <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>{item.worker_name || '—'}</Text>
+              {isAreaAlert && (
+                <View style={styles.zoneBadge}>
+                  <Ionicons name="location-outline" size={11} color="#0369A1" />
+                  <Text style={styles.zoneBadgeText}>ZONE</Text>
+                </View>
+              )}
+              <Text style={styles.cardTitle}>
+                {isAreaAlert ? (item.area_location || 'Zone inconnu') : (item.worker_name || '—')}
+              </Text>
               {item.worker_employee_id ? (
                 <Text style={styles.cardEmpId}> #{item.worker_employee_id}</Text>
               ) : null}
@@ -436,12 +672,35 @@ export function OverexposureAlertScreen() {
             {item.enterprise_name ? (
               <Text style={styles.cardEnterprise}>{item.enterprise_name}</Text>
             ) : null}
+            {/* Recurrence warning */}
+            {(item.recurrence_count ?? 0) > 1 && (
+              <View style={styles.recurrenceBadge}>
+                <Ionicons name="repeat-outline" size={11} color="#B45309" />
+                <Text style={styles.recurrenceBadgeText}>
+                  {item.recurrence_count}× alerte {item.exposure_type}
+                </Text>
+              </View>
+            )}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             {renderSeverityBadge(item.severity)}
             {renderStatusChip(item.status)}
+            {/* Auto vs manual source badge */}
+            <View style={[styles.sourceBadge, item.is_auto_generated ? styles.sourceBadgeAuto : styles.sourceBadgeManual]}>
+              <Text style={styles.sourceBadgeText}>{item.is_auto_generated ? 'AUTO' : 'MANUEL'}</Text>
+            </View>
+            {/* Alert age */}
+            <Text style={styles.ageBadge}>{age}</Text>
           </View>
         </View>
+
+        {/* Overdue follow-up top banner */}
+        {item.is_overdue_followup && (
+          <View style={styles.overdueBanner}>
+            <Ionicons name="time-outline" size={13} color="#FFF" />
+            <Text style={styles.overdueBannerText}>Suivi médical en retard — Action requise</Text>
+          </View>
+        )}
 
         {/* Exposure metrics */}
         <View style={[styles.exposureBox, { borderLeftColor: sevColor }]}>
@@ -471,6 +730,12 @@ export function OverexposureAlertScreen() {
           <Ionicons name="shield-checkmark-outline" size={13} color={sevColor} style={{ marginRight: 6 }} />
           <Text style={[styles.hintText, { color: sevColor }]}>{hint}</Text>
         </View>
+
+        {/* Regulatory citation */}
+        <Text style={styles.citationText} numberOfLines={1}>
+          <Text style={styles.citationLabel}>Réf. : </Text>
+          {getRegulatoryCitation(item.exposure_type)}
+        </Text>
 
         {item.recommended_action ? (
           <Text style={styles.actionText} numberOfLines={2}>
@@ -566,13 +831,53 @@ export function OverexposureAlertScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: '#DC2626' }]}
-              onPress={() => setShowCreate(true)}
-            >
-              <Ionicons name="add-circle" size={18} color="#FFF" />
-              <Text style={styles.addButtonText}>Nouvelle alerte</Text>
-            </TouchableOpacity>
+            <>
+              {/* Export CSV */}
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: '#0369A1', marginRight: 8 }, exportBusy && { opacity: 0.6 }]}
+                onPress={() => {
+                  if (exportBusy || !filtered.length) return;
+                  setExportBusy(true);
+                  const header = 'ID,Travailleur,Type,Niveau,Seuil,Dépassement,Sévérité,Statut,Détecté';
+                  const rows   = filtered.map(a => formatExportRow(a));
+                  const csv    = [header, ...rows].join('\n');
+                  if (Platform.OS === 'web') {
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url  = URL.createObjectURL(blob);
+                    const anchor = document.createElement('a');
+                    anchor.href = url;
+                    anchor.download = `alertes_surexposition_${new Date().toISOString().slice(0,10)}.csv`;
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  } else {
+                    Alert.alert('Export CSV', `${filtered.length} alertes exportées.`);
+                  }
+                  setExportBusy(false);
+                }}
+                disabled={exportBusy}
+              >
+                {exportBusy
+                  ? <ActivityIndicator size="small" color="#FFF" />
+                  : <><Ionicons name="download-outline" size={16} color="#FFF" />
+                    <Text style={styles.addButtonText}>Export CSV</Text></>
+                }
+              </TouchableOpacity>
+              {/* Advanced filters toggle */}
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: showAdvFilters ? ACCENT : colors.surface, borderWidth: 1, borderColor: ACCENT, marginRight: 8 }]}
+                onPress={() => setShowAdvFil(v => !v)}
+              >
+                <Ionicons name="options-outline" size={16} color={showAdvFilters ? '#FFF' : ACCENT} />
+                <Text style={[styles.addButtonText, { color: showAdvFilters ? '#FFF' : ACCENT }]}>Filtres</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: '#DC2626' }]}
+                onPress={() => setShowCreate(true)}
+              >
+                <Ionicons name="add-circle" size={18} color="#FFF" />
+                <Text style={styles.addButtonText}>Nouvelle alerte</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </View>
@@ -603,6 +908,58 @@ export function OverexposureAlertScreen() {
         ))}
       </View>
 
+      {/* ── SLA KPI strip ── */}
+      <View style={styles.slaStrip}>
+        <View style={styles.slaItem}>
+          <Ionicons name="time-outline" size={14} color="#F59E0B" />
+          <Text style={styles.slaLabel}>Moy. accusé</Text>
+          <Text style={styles.slaValue}>
+            {slaStats.avgAckHours != null ? `${slaStats.avgAckHours.toFixed(1)}h` : '—'}
+          </Text>
+        </View>
+        <View style={styles.slaDivider} />
+        <View style={styles.slaItem}>
+          <Ionicons name="alert-circle-outline" size={14} color="#EF4444" />
+          <Text style={styles.slaLabel}>Non-acquittés &gt;24h</Text>
+          <Text style={[styles.slaValue, slaStats.unackOver24h > 0 && { color: '#EF4444', fontWeight: '700' as const }]}>
+            {slaStats.unackOver24h}
+          </Text>
+        </View>
+        <View style={styles.slaDivider} />
+        <View style={styles.slaItem}>
+          <Ionicons name="flame-outline" size={14} color="#DC2626" />
+          <Text style={styles.slaLabel}>Non-acquittés &gt;48h</Text>
+          <Text style={[styles.slaValue, slaStats.unackOver48h > 0 && { color: '#DC2626', fontWeight: '700' as const }]}>
+            {slaStats.unackOver48h}
+          </Text>
+        </View>
+        <View style={styles.slaDivider} />
+        <View style={styles.slaItem}>
+          <Ionicons name="checkmark-done-outline" size={14} color="#22C55E" />
+          <Text style={styles.slaLabel}>Moy. résolution</Text>
+          <Text style={styles.slaValue}>
+            {slaStats.avgResolutionDays != null ? `${slaStats.avgResolutionDays.toFixed(1)}j` : '—'}
+          </Text>
+        </View>
+      </View>
+
+      {/* ── Exposure type breakdown ── */}
+      {exposureBreakdown.length > 0 && (
+        <View style={styles.breakdownRow}>
+          <Text style={styles.breakdownTitle}>Répartition par type :</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+              {exposureBreakdown.map(([type, info]) => (
+                <View key={type} style={styles.breakdownPill}>
+                  <Text style={styles.breakdownPillType}>{type}</Text>
+                  <Text style={styles.breakdownPillCount}>{info.active}/{info.total}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
       {/* ── Filters ── */}
       <View style={styles.filterBar}>
         <View style={styles.searchBox}>
@@ -632,7 +989,7 @@ export function OverexposureAlertScreen() {
           </View>
         </ScrollView>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
           <View style={styles.filterPillRow}>
             {(['all', 'warning', 'critical', 'emergency'] as SeverityFilter[]).map(sv => (
               <TouchableOpacity
@@ -652,6 +1009,88 @@ export function OverexposureAlertScreen() {
             ))}
           </View>
         </ScrollView>
+
+        {/* ── Advanced filters (collapsible) ── */}
+        {showAdvFilters && (
+          <View style={styles.advFilters}>
+            {/* Date range */}
+            <Text style={styles.advFilterLabel}>Période de détection</Text>
+            <View style={styles.dateRangeRow}>
+              <TextInput
+                style={[styles.input, styles.dateInput]}
+                placeholder="Du (AAAA-MM-JJ)"
+                value={dateFrom}
+                onChangeText={setDateFrom}
+                placeholderTextColor={colors.placeholder}
+              />
+              <Text style={{ color: colors.textSecondary, marginHorizontal: 8 }}>→</Text>
+              <TextInput
+                style={[styles.input, styles.dateInput]}
+                placeholder="Au (AAAA-MM-JJ)"
+                value={dateTo}
+                onChangeText={setDateTo}
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+
+            {/* Enterprise filter */}
+            {enterprises.length > 0 && (
+              <>
+                <Text style={styles.advFilterLabel}>Entreprise</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.filterPillRow}>
+                    <TouchableOpacity
+                      style={[styles.filterPill, filterEnterprise === 'all' && { backgroundColor: ACCENT }]}
+                      onPress={() => setFilterEnt('all')}
+                    >
+                      <Text style={[styles.filterPillText, filterEnterprise === 'all' && { color: '#FFF' }]}>Toutes</Text>
+                    </TouchableOpacity>
+                    {enterprises.map(ent => (
+                      <TouchableOpacity
+                        key={ent}
+                        style={[styles.filterPill, filterEnterprise === ent && { backgroundColor: '#0369A1' }]}
+                        onPress={() => setFilterEnt(ent)}
+                      >
+                        <Text style={[styles.filterPillText, filterEnterprise === ent && { color: '#FFF' }]}>{ent}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </>
+            )}
+
+            {/* Sort order */}
+            <Text style={styles.advFilterLabel}>Tri</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.filterPillRow}>
+                {([
+                  { key: 'recent',   label: 'Plus récent' },
+                  { key: 'oldest',   label: 'Plus ancien' },
+                  { key: 'severity', label: 'Sévérité ↓' },
+                  { key: 'name',     label: 'Nom A→Z' },
+                  { key: 'overdue',  label: 'En retard en premier' },
+                ] as { key: SortOrder; label: string }[]).map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.filterPill, sortBy === opt.key && { backgroundColor: '#7C3AED' }]}
+                    onPress={() => setSortBy(opt.key)}
+                  >
+                    <Text style={[styles.filterPillText, sortBy === opt.key && { color: '#FFF' }]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Reset button */}
+            <TouchableOpacity
+              style={styles.resetFiltersBtn}
+              onPress={() => { setDateFrom(''); setDateTo(''); setFilterEnt('all'); setSortBy('recent'); }}
+            >
+              <Ionicons name="refresh-outline" size={14} color={ACCENT} />
+              <Text style={styles.resetFiltersBtnText}>Réinitialiser les filtres</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* ── List ── */}
@@ -741,16 +1180,123 @@ export function OverexposureAlertScreen() {
                 <DetailRow label="Accusé réception par"   value={detailAlert.acknowledged_by_name || '—'} />
                 <DetailRow label="Date accusé réception"  value={fmtDatetime(detailAlert.acknowledged_date)} />
                 <DetailRow label="Date de résolution"     value={fmtDatetime(detailAlert.resolved_date)} />
+                <DetailRow label="Source"                 value={detailAlert.is_auto_generated ? 'Automatique (capteur)' : 'Saisie manuelle'} />
+                {detailAlert.source_reading_id != null && (
+                  <TouchableOpacity
+                    style={styles.sourceReadingLink}
+                    onPress={() => Alert.alert('Lecture source', `ID de lecture : #${detailAlert.source_reading_id}`)}
+                  >
+                    <Ionicons name="link-outline" size={14} color={ACCENT} />
+                    <Text style={styles.sourceReadingLinkText}>Voir la lecture source #{detailAlert.source_reading_id}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Recurrence alert */}
+                {(detailAlert.recurrence_count ?? 0) > 1 && (
+                  <View style={styles.recurrenceInfoBox}>
+                    <Ionicons name="repeat-outline" size={16} color="#B45309" />
+                    <Text style={styles.recurrenceInfoText}>
+                      Ce travailleur a {detailAlert.recurrence_count} alertes pour ce type d'exposition au cours des 12 derniers mois.
+                    </Text>
+                  </View>
+                )}
+
+                {/* SLA elapsed days */}
+                <DetailRow
+                  label="Âge de l'alerte"
+                  value={calcAge(detailAlert.detected_date)}
+                  highlight={detailAlert.is_overdue_followup ? '#EF4444' : undefined}
+                />
+                {detailAlert.is_overdue_followup && (
+                  <View style={styles.overdueInfoBox}>
+                    <Ionicons name="warning-outline" size={14} color="#DC2626" />
+                    <Text style={styles.overdueInfoText}>
+                      Le suivi médical est en retard. Action requise immédiatement.
+                    </Text>
+                  </View>
+                )}
 
                 <Text style={styles.detailSection}>Surveillance médicale (OIT C.161)</Text>
                 <DetailRow label="Suivi médical requis"  value={detailAlert.medical_followup_required ? 'Oui' : 'Non'} />
                 <DetailRow label="Échéance suivi"        value={fmtDate(detailAlert.medical_followup_date)} />
+
+                {/* Medical exam shortcut */}
+                {detailAlert.medical_followup_required && detailAlert.status !== 'resolved' && (
+                  <TouchableOpacity
+                    style={styles.medExamBtn}
+                    onPress={() => Alert.alert(
+                      'Créer examen médical',
+                      `Ouvrir le formulaire de création d'examen médical pour ${detailAlert.worker_name || detailAlert.area_location || 'ce cas'} ?`,
+                      [
+                        { text: 'Annuler', style: 'cancel' },
+                        { text: 'Créer', onPress: () => { setDetailAlert(null); /* navigate to medical exam create */ } },
+                      ],
+                    )}
+                  >
+                    <Ionicons name="medical-outline" size={15} color="#7C3AED" />
+                    <Text style={styles.medExamBtnText}>Créer un examen médical lié</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Regulatory citation */}
+                <Text style={styles.detailSection}>Référence réglementaire</Text>
+                <View style={styles.regulatoryBox}>
+                  <Ionicons name="book-outline" size={15} color="#0369A1" style={{ marginRight: 8, marginTop: 1 }} />
+                  <Text style={styles.regulatoryText}>{getRegulatoryCitation(detailAlert.exposure_type)}</Text>
+                </View>
 
                 <Text style={[styles.detailSection, { marginTop: spacing.md }]}>Mesures de maîtrise préconisées</Text>
                 <View style={styles.hierarchyBox}>
                   <Ionicons name="shield-checkmark-outline" size={16} color={ACCENT} style={{ marginBottom: 6 }} />
                   <Text style={styles.hierarchyText}>{getHierarchyHint(detailAlert.exposure_type)}</Text>
                 </View>
+
+                {/* Notes / CAPA comments */}
+                <Text style={styles.detailSection}>Notes internes (CAPA)</Text>
+                {editingNoteId === detailAlert.id ? (
+                  <View style={styles.noteEditBox}>
+                    <TextInput
+                      style={[styles.input, styles.textArea, { marginBottom: spacing.sm }]}
+                      placeholder="Ajouter une note interne, CAPA, observations…"
+                      value={noteText}
+                      onChangeText={setNoteText}
+                      multiline
+                      numberOfLines={3}
+                      placeholderTextColor={colors.placeholder}
+                    />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { borderColor: ACCENT, flex: 1, justifyContent: 'center' }, noteBusy && { opacity: 0.6 }]}
+                        onPress={handleSaveNote}
+                        disabled={noteBusy}
+                      >
+                        {noteBusy
+                          ? <ActivityIndicator size="small" color={ACCENT} />
+                          : <><Ionicons name="save-outline" size={14} color={ACCENT} />
+                            <Text style={[styles.actionBtnText, { color: ACCENT }]}>Enregistrer</Text></>
+                        }
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { borderColor: colors.outline, flex: 1, justifyContent: 'center' }]}
+                        onPress={() => { setEditingNoteId(null); setNoteText(''); }}
+                      >
+                        <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Annuler</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.noteViewBox}
+                    onPress={() => { setEditingNoteId(detailAlert.id); setNoteText(detailAlert.notes ?? ''); }}
+                  >
+                    {detailAlert.notes ? (
+                      <Text style={styles.noteViewText}>{detailAlert.notes}</Text>
+                    ) : (
+                      <Text style={styles.noteViewPlaceholder}>Appuyez pour ajouter une note…</Text>
+                    )}
+                    <Ionicons name="create-outline" size={16} color={colors.textSecondary} style={{ position: 'absolute', right: 8, top: 10 }} />
+                  </TouchableOpacity>
+                )}
 
                 {/* Action buttons inside detail */}
                 {detailAlert.status !== 'resolved' && (
@@ -1326,4 +1872,75 @@ const styles = StyleSheet.create({
   cancelBtnText:        { fontSize: 14, fontWeight: '600', color: colors.text },
   saveBtn:              { flex: 1, borderRadius: borderRadius.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   saveBtnText:          { fontSize: 14, fontWeight: '600', color: '#FFF' },
+
+  // ─── New feature styles ─────────────────────────────────
+
+  // Alert card — zone/area badge
+  zoneBadge:            { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0F2FE', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginRight: 6, gap: 3 },
+  zoneBadgeText:        { fontSize: 9, fontWeight: '700', color: '#0369A1', letterSpacing: 0.5 },
+
+  // Recurrence badge on card
+  recurrenceBadge:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, marginTop: 3, gap: 3, alignSelf: 'flex-start' },
+  recurrenceBadgeText:  { fontSize: 10, color: '#B45309', fontWeight: '600' },
+
+  // Source badge (AUTO / MANUEL)
+  sourceBadge:          { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  sourceBadgeAuto:      { backgroundColor: '#DBEAFE' },
+  sourceBadgeManual:    { backgroundColor: '#F3F4F6' },
+  sourceBadgeText:      { fontSize: 9, fontWeight: '700', color: '#1D4ED8', letterSpacing: 0.5 },
+
+  // Alert age
+  ageBadge:             { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+
+  // Overdue banner on card
+  overdueBanner:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', borderRadius: borderRadius.sm, padding: spacing.xs, marginBottom: spacing.xs, gap: 6 },
+  overdueBannerText:    { fontSize: 10, color: '#FFF', fontWeight: '600', flex: 1 },
+
+  // Citation text on card
+  citationText:         { fontSize: 10, color: '#0369A1', marginBottom: 4, fontStyle: 'italic' },
+  citationLabel:        { fontWeight: '600', fontStyle: 'normal' },
+
+  // SLA strip
+  slaStrip:             { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: borderRadius.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.outline, overflow: 'hidden' },
+  slaItem:              { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, paddingHorizontal: 4, gap: 2 },
+  slaLabel:             { fontSize: 9, color: colors.textSecondary, textAlign: 'center' },
+  slaValue:             { fontSize: 14, fontWeight: '700', color: colors.text },
+  slaDivider:           { width: 1, backgroundColor: colors.outline, marginVertical: 8 },
+
+  // Exposure type breakdown
+  breakdownRow:         { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, flexWrap: 'wrap', gap: 4 },
+  breakdownTitle:       { fontSize: 11, color: colors.textSecondary, marginRight: 6 },
+  breakdownPill:        { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, gap: 4, borderWidth: 1, borderColor: colors.outline },
+  breakdownPillType:    { fontSize: 11, color: colors.text },
+  breakdownPillCount:   { fontSize: 11, fontWeight: '700', color: ACCENT },
+
+  // Advanced filters section
+  advFilters:           { backgroundColor: colors.surfaceVariant ?? colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.outline, gap: 4 },
+  advFilterLabel:       { fontSize: 11, fontWeight: '600', color: colors.textSecondary, marginTop: spacing.sm, marginBottom: 4 },
+  dateRangeRow:         { flexDirection: 'row', alignItems: 'center' },
+  dateInput:            { flex: 1 },
+  resetFiltersBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md, alignSelf: 'flex-start' },
+  resetFiltersBtnText:  { fontSize: 12, color: ACCENT, fontWeight: '600' },
+
+  // Detail modal — new sections
+  sourceReadingLink:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: spacing.sm },
+  sourceReadingLinkText:{ fontSize: 12, color: ACCENT, textDecorationLine: 'underline' },
+
+  recurrenceInfoBox:    { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FEF3C7', borderRadius: borderRadius.md, padding: spacing.md, gap: 8, marginBottom: spacing.sm },
+  recurrenceInfoText:   { flex: 1, fontSize: 12, color: '#92400E', lineHeight: 18 },
+
+  overdueInfoBox:       { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FEE2E2', borderRadius: borderRadius.md, padding: spacing.md, gap: 8, marginBottom: spacing.sm },
+  overdueInfoText:      { flex: 1, fontSize: 12, color: '#991B1B', lineHeight: 18 },
+
+  medExamBtn:           { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EDE9FE', borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.sm, alignSelf: 'flex-start' },
+  medExamBtnText:       { fontSize: 13, color: '#7C3AED', fontWeight: '600' },
+
+  regulatoryBox:        { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#EFF6FF', borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: '#BFDBFE' },
+  regulatoryText:       { flex: 1, fontSize: 11, color: '#1D4ED8', lineHeight: 17 },
+
+  noteEditBox:          { marginBottom: spacing.md },
+  noteViewBox:          { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.outline, minHeight: 56, position: 'relative' },
+  noteViewText:         { fontSize: 13, color: colors.text, lineHeight: 20, paddingRight: 24 },
+  noteViewPlaceholder:  { fontSize: 13, color: colors.placeholder, fontStyle: 'italic', paddingRight: 24 },
 });
+

@@ -1308,21 +1308,40 @@ export class OccHealthApiService {
     search?: string;
     page?: number;
     page_size?: number;
+    date_from?: string;
+    date_to?: string;
+    enterprise?: number | string;
+    ordering?: string;
   } = {}): Promise<{ data: any[]; count: number; error?: string }> {
     try {
       const query: Record<string, any> = {};
-      if (params.severity) query.severity = params.severity;
-      if (params.status) query.status = params.status;
+      if (params.severity)      query.severity      = params.severity;
+      if (params.status)        query.status        = params.status;
       if (params.exposure_type) query.exposure_type = params.exposure_type;
-      if (params.search) query.search = params.search;
-      if (params.page) query.page = params.page;
-      if (params.page_size) query.page_size = params.page_size;
+      if (params.search)        query.search        = params.search;
+      if (params.page)          query.page          = params.page;
+      if (params.page_size)     query.page_size     = params.page_size;
+      if (params.date_from)     query.date_from     = params.date_from;
+      if (params.date_to)       query.date_to       = params.date_to;
+      if (params.enterprise)    query.enterprise    = params.enterprise;
+      if (params.ordering)      query.ordering      = params.ordering;
       const res = await this.api.get(`${OH}/overexposure-alerts/`, query);
       if (!res.success) return { data: [], count: 0, error: res.error?.message };
       const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
       return { data: raw, count: res.data?.count ?? raw.length };
     } catch (e: any) {
       return { data: [], count: 0, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/overexposure-alerts/{id}/add_note/ */
+  async addNoteToAlert(id: number | string, notes: string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/overexposure-alerts/${id}/add_note/`, { notes });
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
     }
   }
 
@@ -1405,51 +1424,6 @@ export class OccHealthApiService {
       return {};
     } catch (e: any) {
       return { error: e?.message };
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // SURVEILLANCE PROGRAMS
-  // ─────────────────────────────────────────────────────────────
-
-  /** GET /api/occupational-health/surveillance/programs/ */
-  async listSurveillancePrograms(params: { search?: string; is_active?: boolean } = {}): Promise<{
-    data: any[];
-    error?: string;
-  }> {
-    try {
-      const query = new URLSearchParams();
-      if (params.search) query.append('search', params.search);
-      if (params.is_active !== undefined) query.append('is_active', String(params.is_active));
-      const qs = query.toString();
-      const res = await this.api.get(`${OH}/surveillance/programs/${qs ? `?${qs}` : ''}`);
-      if (!res.success) return { data: [], error: res.error?.message };
-      const raw = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
-      return { data: raw };
-    } catch (e: any) {
-      return { data: [], error: e?.message ?? 'Network error' };
-    }
-  }
-
-  /** POST /api/occupational-health/surveillance/programs/ */
-  async createSurveillanceProgram(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
-    try {
-      const res = await this.api.post(`${OH}/surveillance/programs/`, payload);
-      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
-      return { data: res.data };
-    } catch (e: any) {
-      return { data: null, error: e?.message };
-    }
-  }
-
-  /** PATCH /api/occupational-health/surveillance/programs/{id}/ */
-  async updateSurveillanceProgram(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
-    try {
-      const res = await this.api.patch(`${OH}/surveillance/programs/${id}/`, payload);
-      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
-      return { data: res.data };
-    } catch (e: any) {
-      return { data: null, error: e?.message };
     }
   }
 
@@ -1552,11 +1526,12 @@ export class OccHealthApiService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
   // SURVEILLANCE PROGRAMS
   // ─────────────────────────────────────────────────────────────
 
   /** GET /api/occupational-health/surveillance/programs/ */
-  async listSurveillancePrograms(params: { search?: string; page?: number; page_size?: number } = {}): Promise<{ data: any[]; error?: string }> {
+  async listSurveillancePrograms(params: { search?: string; is_active?: boolean; page?: number; page_size?: number } = {}): Promise<{ data: any[]; error?: string }> {
     try {
       const pageSize = params.page != null ? (params.page_size ?? 20) : (params.page_size ?? 1000);
       const res = await this.api.get(`${OH}/surveillance/programs/`, { ...params, page_size: pageSize });
@@ -1671,7 +1646,7 @@ export class OccHealthApiService {
   ): Promise<{ data: any | null; error?: string }> {
     try {
       const formData = new FormData();
-      formData.append('incident', incidentId);
+      formData.append('incident', String(incidentId));
       formData.append('file', file);
       formData.append('attachment_type', attachmentType);
       if (description) {

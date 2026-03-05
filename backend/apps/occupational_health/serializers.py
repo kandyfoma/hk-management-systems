@@ -368,7 +368,7 @@ class AudiometryResultSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create AudiometryResult with automatic MedicalExamination lookup/creation"""
-        from occupational_health.models import MedicalExamination, Worker
+        from .models import MedicalExamination, Worker
         from django.utils import timezone
         
         # Get worker_id from either field (frontend may send as worker_id or worker_id_input)
@@ -428,7 +428,7 @@ class SpirometryResultSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create SpirometryResult with automatic MedicalExamination lookup/creation"""
-        from occupational_health.models import MedicalExamination, Worker
+        from .models import MedicalExamination, Worker
         from django.utils import timezone
         
         # Get worker_id from either field (frontend may send as worker_id or worker_id_input)
@@ -486,7 +486,7 @@ class VisionTestResultSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create VisionTestResult with automatic MedicalExamination lookup/creation"""
-        from occupational_health.models import MedicalExamination, Worker
+        from .models import MedicalExamination, Worker
         from django.utils import timezone
         
         # Get worker_id from either field (frontend may send as worker_id or worker_id_input)
@@ -1168,12 +1168,56 @@ class EnterpriseCreateSerializer(serializers.ModelSerializer):
 class OverexposureAlertSerializer(serializers.ModelSerializer):
     """Serializer for overexposure alerts"""
     
-    worker_name = serializers.CharField(source='worker.full_name', read_only=True)
-    worker_employee_id = serializers.CharField(source='worker.employee_id', read_only=True)
-    enterprise_name = serializers.CharField(source='worker.enterprise.name', read_only=True)
+    worker_name = serializers.SerializerMethodField(read_only=True)
+    worker_employee_id = serializers.SerializerMethodField(read_only=True)
+    enterprise_name = serializers.SerializerMethodField(read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    acknowledged_by_name = serializers.CharField(source='acknowledged_by.get_full_name', read_only=True)
+    acknowledged_by_name = serializers.SerializerMethodField(read_only=True)
+    source_reading_id = serializers.SerializerMethodField(read_only=True)
+    recurrence_count = serializers.SerializerMethodField(read_only=True)
+    enterprise_id = serializers.SerializerMethodField(read_only=True)
+    
+    def get_worker_name(self, obj):
+        if obj.worker_id:
+            return obj.worker.full_name
+        return None
+    
+    def get_worker_employee_id(self, obj):
+        if obj.worker_id:
+            return obj.worker.employee_id
+        return None
+    
+    def get_enterprise_name(self, obj):
+        if obj.worker_id and obj.worker.enterprise_id:
+            return obj.worker.enterprise.name
+        return None
+    
+    def get_enterprise_id(self, obj):
+        if obj.worker_id and obj.worker.enterprise_id:
+            return obj.worker.enterprise_id
+        return None
+    
+    def get_acknowledged_by_name(self, obj):
+        if obj.acknowledged_by_id:
+            return obj.acknowledged_by.get_full_name()
+        return None
+    
+    def get_source_reading_id(self, obj):
+        """ID of ExposureReading that triggered this alert (if auto-generated)"""
+        try:
+            return obj.source_reading.id
+        except Exception:
+            return None
+    
+    def get_recurrence_count(self, obj):
+        """Number of previous alerts of same exposure type for this worker"""
+        if not obj.worker_id:
+            return 0
+        return OverexposureAlert.objects.filter(
+            worker_id=obj.worker_id,
+            exposure_type=obj.exposure_type,
+        ).exclude(pk=obj.pk).count()
     
     class Meta:
         model = OverexposureAlert

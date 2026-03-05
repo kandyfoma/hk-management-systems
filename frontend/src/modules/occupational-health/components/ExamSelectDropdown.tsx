@@ -144,7 +144,7 @@ export function ExamSelectDropdown({
           <View style={styles.modal}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Choisir une visite mÃ©dicale</Text>
+              <Text style={styles.modalTitle}>Choisir une visite médicale</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>

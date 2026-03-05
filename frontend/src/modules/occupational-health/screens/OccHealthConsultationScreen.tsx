@@ -999,6 +999,96 @@ export function OccHealthConsultationScreen({
     }
   }, [currentDoctorId]);
 
+  // Get draft creation date
+  const getDraftCreatedAt = async (id: string): Promise<string | null> => {
+    try {
+      const draft = await AsyncStorage.getItem(`consultation_draft_${id}`);
+      if (draft) {
+        const parsed = JSON.parse(draft) as DraftState;
+        return parsed.createdAt;
+      }
+    } catch (error) {
+      console.error('Error getting draft created date:', error);
+    }
+    return null;
+  };
+
+  // Load draft from storage
+  const loadDraft = useCallback(async (id: string) => {
+    try {
+      const draft = await AsyncStorage.getItem(`consultation_draft_${id}`);
+      if (draft) {
+        const parsed = JSON.parse(draft) as DraftState;
+        
+        setSelectedWorker(parsed.selectedWorker);
+        setExamType(parsed.examType);
+        setVisitReason(parsed.visitReason);
+        setReferredBy(parsed.referredBy);
+        setVitals(parsed.vitals);
+        setPhysicalExam(parsed.physicalExam);
+        setOrderedTests(parsed.orderedTests);
+        setTestExecutionMode(parsed.testExecutionMode || 'external');
+        setOnsiteTestResults(parsed.onsiteTestResults || {});
+        setAudiometryDone(parsed.audiometryDone);
+        setSpirometryDone(parsed.spirometryDone);
+        setVisionDone(parsed.visionDone);
+        setDrugScreeningDone(parsed.drugScreeningDone);
+        setBloodWorkDone(parsed.bloodWorkDone);
+        setXrayDone(parsed.xrayDone);
+        setMentalScreening(parsed.mentalScreening);
+        setErgonomicNeeded(parsed.ergonomicNeeded);
+        setErgonomicNotes(parsed.ergonomicNotes);
+        setMskComplaints(parsed.mskComplaints);
+        setSectorAnswers(parsed.sectorAnswers || {});
+        setFitnessDecision(parsed.fitnessDecision);
+        setRestrictions(parsed.restrictions);
+        setRecommendations(parsed.recommendations);
+        setFollowUpNeeded(parsed.followUpNeeded);
+        setFollowUpDate(parsed.followUpDate);
+        setNextAppointmentDate(parsed.nextAppointmentDate || '');
+        setNextAppointmentReason(parsed.nextAppointmentReason || '');
+        setConsultationNotes(parsed.consultationNotes);
+        setCurrentStep(parsed.currentStep);
+        setBackendDraftExaminationId(parsed.backendExaminationId ?? null);
+        setTestStatuses(parsed.testStatuses || {});
+        setAnamnesisNotes(parsed.anamnesisNotes || '');
+        // Occupational history & lifestyle
+        setSmokingStatus(parsed.smokingStatus || '');
+        setPackYears(parsed.packYears || '');
+        setAlcoholAuditCScore(parsed.alcoholAuditCScore || '');
+        setFamilyHistory(parsed.familyHistory || '');
+        setPriorOccupationalHistory(parsed.priorOccupationalHistory || []);
+        setWorkingSchedule(parsed.workingSchedule || '');
+        setFunctionalComplaintsAtWork(parsed.functionalComplaintsAtWork || '');
+        // Structured restrictions
+        setRestrictNoDriving(parsed.restrictNoDriving ?? false);
+        setRestrictNoHeightWork(parsed.restrictNoHeightWork ?? false);
+        setRestrictMaxLiftingKg(parsed.restrictMaxLiftingKg || '');
+        setRestrictNoNightShift(parsed.restrictNoNightShift ?? false);
+        setRestrictAdaptedWorkstation(parsed.restrictAdaptedWorkstation ?? false);
+        setRestrictReducedHours(parsed.restrictReducedHours ?? false);
+        setRestrictNoConfinedSpace(parsed.restrictNoConfinedSpace ?? false);
+        setRestrictNoChemicalExposure(parsed.restrictNoChemicalExposure ?? false);
+        setRestrictCustom(parsed.restrictCustom || '');
+        // Legal compliance
+        setLegalArticleReference(parsed.legalArticleReference || 'Code du Travail RDC, Art. 156 — Décret No. 68/432');
+        setRightOfAppealOffered(parsed.rightOfAppealOffered ?? true);
+        setRightOfAppealDeadlineDays(parsed.rightOfAppealDeadlineDays || '15');
+        setFunctionalImpairmentPercent(parsed.functionalImpairmentPercent || '');
+        
+        setDraftId(id);
+        setIsDraft(true);
+        setLastSaved(new Date(parsed.updatedAt));
+      } else if (id === 'EXAM-DRAFT-001') {
+        // Sample draft ID — no longer used (workers list removed)
+        console.warn('EXAM-DRAFT-001 is a legacy sample ID and is no longer supported.');
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+      showToast('Impossible de charger le brouillon', 'error');
+    }
+  }, []);
+
   useEffect(() => {
     loadPendingQueue();
   }, [loadPendingQueue]);
@@ -1147,6 +1237,19 @@ export function OccHealthConsultationScreen({
     const next = protocolSvc.getProtocolForVisit(selectedWorker.positionCode, examType);
     setProtocolResult(next);
   }, [selectedWorker, examType]);
+
+  // ─── Collapsible sections state ──
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    'worker-details': true,
+    'doctor-details': true,
+  });
+
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  };
 
   // ─── Vital signs ──
   const [vitals, setVitals] = useState<VitalSigns>({});
@@ -1620,96 +1723,6 @@ export function OccHealthConsultationScreen({
     await persistDraft({ silent: false, status: 'in_progress' });
   }, [persistDraft]);
 
-  // Get draft creation date
-  const getDraftCreatedAt = async (id: string): Promise<string | null> => {
-    try {
-      const draft = await AsyncStorage.getItem(`consultation_draft_${id}`);
-      if (draft) {
-        const parsed = JSON.parse(draft) as DraftState;
-        return parsed.createdAt;
-      }
-    } catch (error) {
-      console.error('Error getting draft created date:', error);
-    }
-    return null;
-  };
-
-  // Load draft from storage
-  const loadDraft = useCallback(async (id: string) => {
-    try {
-      const draft = await AsyncStorage.getItem(`consultation_draft_${id}`);
-      if (draft) {
-        const parsed = JSON.parse(draft) as DraftState;
-        
-        setSelectedWorker(parsed.selectedWorker);
-        setExamType(parsed.examType);
-        setVisitReason(parsed.visitReason);
-        setReferredBy(parsed.referredBy);
-        setVitals(parsed.vitals);
-        setPhysicalExam(parsed.physicalExam);
-        setOrderedTests(parsed.orderedTests);
-        setTestExecutionMode(parsed.testExecutionMode || 'external');
-        setOnsiteTestResults(parsed.onsiteTestResults || {});
-        setAudiometryDone(parsed.audiometryDone);
-        setSpirometryDone(parsed.spirometryDone);
-        setVisionDone(parsed.visionDone);
-        setDrugScreeningDone(parsed.drugScreeningDone);
-        setBloodWorkDone(parsed.bloodWorkDone);
-        setXrayDone(parsed.xrayDone);
-        setMentalScreening(parsed.mentalScreening);
-        setErgonomicNeeded(parsed.ergonomicNeeded);
-        setErgonomicNotes(parsed.ergonomicNotes);
-        setMskComplaints(parsed.mskComplaints);
-        setSectorAnswers(parsed.sectorAnswers || {});
-        setFitnessDecision(parsed.fitnessDecision);
-        setRestrictions(parsed.restrictions);
-        setRecommendations(parsed.recommendations);
-        setFollowUpNeeded(parsed.followUpNeeded);
-        setFollowUpDate(parsed.followUpDate);
-        setNextAppointmentDate(parsed.nextAppointmentDate || '');
-        setNextAppointmentReason(parsed.nextAppointmentReason || '');
-        setConsultationNotes(parsed.consultationNotes);
-        setCurrentStep(parsed.currentStep);
-        setBackendDraftExaminationId(parsed.backendExaminationId ?? null);
-        setTestStatuses(parsed.testStatuses || {});
-        setAnamnesisNotes(parsed.anamnesisNotes || '');
-        // Occupational history & lifestyle
-        setSmokingStatus(parsed.smokingStatus || '');
-        setPackYears(parsed.packYears || '');
-        setAlcoholAuditCScore(parsed.alcoholAuditCScore || '');
-        setFamilyHistory(parsed.familyHistory || '');
-        setPriorOccupationalHistory(parsed.priorOccupationalHistory || []);
-        setWorkingSchedule(parsed.workingSchedule || '');
-        setFunctionalComplaintsAtWork(parsed.functionalComplaintsAtWork || '');
-        // Structured restrictions
-        setRestrictNoDriving(parsed.restrictNoDriving ?? false);
-        setRestrictNoHeightWork(parsed.restrictNoHeightWork ?? false);
-        setRestrictMaxLiftingKg(parsed.restrictMaxLiftingKg || '');
-        setRestrictNoNightShift(parsed.restrictNoNightShift ?? false);
-        setRestrictAdaptedWorkstation(parsed.restrictAdaptedWorkstation ?? false);
-        setRestrictReducedHours(parsed.restrictReducedHours ?? false);
-        setRestrictNoConfinedSpace(parsed.restrictNoConfinedSpace ?? false);
-        setRestrictNoChemicalExposure(parsed.restrictNoChemicalExposure ?? false);
-        setRestrictCustom(parsed.restrictCustom || '');
-        // Legal compliance
-        setLegalArticleReference(parsed.legalArticleReference || 'Code du Travail RDC, Art. 156 — Décret No. 68/432');
-        setRightOfAppealOffered(parsed.rightOfAppealOffered ?? true);
-        setRightOfAppealDeadlineDays(parsed.rightOfAppealDeadlineDays || '15');
-        setFunctionalImpairmentPercent(parsed.functionalImpairmentPercent || '');
-        
-        setDraftId(id);
-        setIsDraft(true);
-        setLastSaved(new Date(parsed.updatedAt));
-      } else if (id === 'EXAM-DRAFT-001') {
-        // Sample draft ID — no longer used (workers list removed)
-        console.warn('EXAM-DRAFT-001 is a legacy sample ID and is no longer supported.');
-      }
-    } catch (error) {
-      console.error('Error loading draft:', error);
-      showToast('Impossible de charger le brouillon', 'error');
-    }
-  }, []);
-
   // Delete draft from storage
   const deleteDraft = useCallback(async (id?: string) => {
     try {
@@ -2028,11 +2041,45 @@ export function OccHealthConsultationScreen({
       }
     }
   };
+
+  // ─── Form Validation ──
   const canGoNext = (): boolean => {
+    // Anamnesis: requires worker, exam type, and vitals
+    if (currentStep === 'anamnesis') {
+      return !!(selectedWorker && vitals?.systolic && vitals?.diastolic && vitals?.temperature && vitals?.heartRate);
+    }
+    
+    // Physical exam: requires worker selection
+    if (currentStep === 'physical_exam') {
+      return !!selectedWorker;
+    }
+    
+    // Sector tests: requires at least one test ordered (unless optional)
+    if (currentStep === 'sector_tests') {
+      return orderedTests.length > 0;
+    }
+    
+    // Test results: if tests are ordered, results must be entered or referred
+    if (currentStep === 'test_results') {
+      if (orderedTests.length === 0) return true;
+      // All ordered tests must have either completed results or be referred
+      return orderedTests.every(testId => 
+        onsiteTestResults[testId]?.completed || testStatuses[testId] === 'referred'
+      );
+    }
+    
+    // Fitness decision: requires a decision to be made
+    if (currentStep === 'fitness_decision') {
+      return !!fitnessDecision;
+    }
+    
+    // Next appointment: requires appointment date
     if (currentStep === 'next_appointment') {
       return Boolean((nextAppointmentDate || getSuggestedNextAppointmentDate(fitnessDecision, examType)).trim());
     }
-    return true; // all steps after intake are optional
+    
+    // Other steps are allowed to proceed
+    return true;
   };
 
   // ─── Handlers ──
@@ -2774,19 +2821,25 @@ export function OccHealthConsultationScreen({
 
           <View style={styles.divider} />
 
-          {/* Worker detail grid */}
-          <View style={styles.detailGrid}>
-            <DetailItem label="Secteur" value={sectorProfile?.label || ''} icon="business" color={sectorProfile?.color} />
-            <DetailItem label="Poste" value={selectedWorker.jobTitle} icon="briefcase" />
-            <DetailItem label="Site" value={selectedWorker.site} icon="location" />
-            <DetailItem label="Département" value={selectedWorker.department} icon="layers" />
-            <DetailItem label="Date de Naissance" value={formatDate(selectedWorker.dateOfBirth)} icon="calendar" />
-            <DetailItem label="Âge" value={`${OccHealthUtils.getWorkerAge(selectedWorker)} ans`} icon="time" />
-            <DetailItem label="Contrat" value={getContractLabel(selectedWorker.contractType)} icon="document" />
-            <DetailItem label="Embauché le" value={formatDate(selectedWorker.hireDate)} icon="flag" />
-          </View>
+          {/* Worker Details Section */}
+          <CollapsibleSection
+            title="Détails du Travailleur"
+            isExpanded={expandedSections['worker-details']}
+            onToggle={() => toggleSection('worker-details')}
+          >
+            <View style={styles.detailGrid}>
+              <DetailItem label="Secteur" value={sectorProfile?.label || ''} icon="business" color={sectorProfile?.color} />
+              <DetailItem label="Poste" value={selectedWorker.jobTitle} icon="briefcase" />
+              <DetailItem label="Site" value={selectedWorker.site} icon="location" />
+              <DetailItem label="Département" value={selectedWorker.department} icon="layers" />
+              <DetailItem label="Date de Naissance" value={formatDate(selectedWorker.dateOfBirth)} icon="calendar" />
+              <DetailItem label="Âge" value={`${OccHealthUtils.getWorkerAge(selectedWorker)} ans`} icon="time" />
+              <DetailItem label="Contrat" value={getContractLabel(selectedWorker.contractType)} icon="document" />
+              <DetailItem label="Embauché le" value={formatDate(selectedWorker.hireDate)} icon="flag" />
+            </View>
+          </CollapsibleSection>
 
-          {/* Risk profile */}
+          {/* Risk Profile Section */}
           <View style={styles.riskSection}>
             <Text style={styles.riskTitle}>Profil de Risque</Text>
             <View style={styles.chipRow}>
@@ -2817,7 +2870,7 @@ export function OccHealthConsultationScreen({
             </View>
           </View>
 
-          {/* Allergies & conditions */}
+          {/* Allergies & Conditions Section */}
           {(selectedWorker.allergies.length > 0 || selectedWorker.chronicConditions.length > 0) && (
             <View style={styles.alertBox}>
               <Ionicons name="alert-circle" size={18} color={colors.error} />
@@ -3029,6 +3082,33 @@ export function OccHealthConsultationScreen({
           subtitle="Motif de visite, profil médical et professionnel du travailleur."
           icon="document-text"
         />
+
+        {/* Doctor Details Section */}
+        <CollapsibleSection
+          title="Informations du Médecin"
+          isExpanded={expandedSections['doctor-details']}
+          onToggle={() => toggleSection('doctor-details')}
+        >
+          <View style={{ gap: 8 }}>
+            <DetailItem
+              label="Médecin Évaluateur"
+              value={`${authUser?.firstName || ''} ${authUser?.lastName || ''}`.trim() || 'Dr. Système'}
+              icon="person-circle"
+            />
+            {authUser?.professionalLicense && (
+              <DetailItem
+                label="N° de Licence"
+                value={authUser.professionalLicense}
+                icon="document-text"
+              />
+            )}
+            <DetailItem
+              label="Organisation"
+              value={organizationName || 'Non définie'}
+              icon="business"
+            />
+          </View>
+        </CollapsibleSection>
 
         {/* ── Motif de consultation ── */}
         <View style={styles.sectionCard}>
@@ -5033,6 +5113,36 @@ function StepHeader({ title, subtitle, icon }: { title: string; subtitle: string
   );
 }
 
+function CollapsibleSection({
+  title,
+  isExpanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <View>
+      <TouchableOpacity
+        style={styles.collapsibleHeader}
+        onPress={onToggle}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.collapsibleTitle}>{title}</Text>
+        <Ionicons
+          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={ACCENT}
+        />
+      </TouchableOpacity>
+      {isExpanded && <View style={styles.collapsibleContent}>{children}</View>}
+    </View>
+  );
+}
+
 function DetailItem({ label, value, icon, color }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap; color?: string }) {
   return (
     <View style={styles.detailItem}>
@@ -5133,6 +5243,28 @@ const styles = StyleSheet.create({
   },
   stepHeaderTitle: { fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   stepHeaderSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2, maxWidth: isDesktop ? 500 : '100%', lineHeight: 18 },
+
+  // ── Collapsible Section ──
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outline,
+    marginBottom: 12,
+  },
+  collapsibleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  collapsibleContent: {
+    marginBottom: 16,
+  },
 
   // ── Worker Card ──
   workerCard: {
