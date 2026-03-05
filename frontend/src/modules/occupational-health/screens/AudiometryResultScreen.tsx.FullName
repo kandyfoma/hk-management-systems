@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
   StyleSheet, Dimensions, Modal, Alert, FlatList,
@@ -109,7 +109,7 @@ export function AudiometryResultScreen() {
       loadTests();
       setShowAddModal(false);
       setFormData({ worker_name: '', frequency_hz: '1000', hearing_threshold_db: '20', ear: 'both', status: 'normal', notes: '' });
-      Alert.alert('Succès', 'Test d\'audiométrie créé');
+      Alert.alert('Succès', 'Test d\'audiomÃ©trie créé');
     } catch (error) {
       console.error('Failed to save test:', error);
       Alert.alert('Erreur', 'Impossible de sauvegarder le test');
@@ -175,7 +175,7 @@ export function AudiometryResultScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.screenTitle}>Tests d'Audiométrie</Text>
-          <Text style={styles.screenSubtitle}>Évaluation de l'audition â€” Protection auditive</Text>
+          <Text style={styles.screenSubtitle}>Ã‰valuation de l'audition â€” Protection auditive</Text>
         </View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: '#3B82F6' }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add-circle" size={20} color="#FFF" />

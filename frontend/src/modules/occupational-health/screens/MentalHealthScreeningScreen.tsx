@@ -26,7 +26,7 @@ const SAMPLE_SCREENINGS: MentalHealthScreening[] = [
   {
     id: '1', worker_name: 'Jean-Pierre Kabongo', screening_date: '2025-02-20',
     stress_score: 35, burnout_risk: 'low', depression_screening: 'negative',
-    anxiety_level: 'normal', recommendations: 'Suivi rÃ©gulier', notes: 'Ã‰tat satisfaisant',
+    anxiety_level: 'normal', recommendations: 'Suivi régulier', notes: 'État satisfaisant',
     created_at: '2025-02-20T10:00:00Z'
   },
 ];
@@ -60,7 +60,7 @@ export function MentalHealthScreeningScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <View><Text style={styles.screenTitle}>SantÃ© Mentale</Text><Text style={styles.screenSubtitle}>DÃ©pistage du stress et burnout</Text></View>
+        <View><Text style={styles.screenTitle}>Santé Mentale</Text><Text style={styles.screenSubtitle}>Dépistage du stress et burnout</Text></View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: '#EC4899' }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add-circle" size={20} color="#FFF" /><Text style={styles.addButtonText}>Nouveau</Text>
         </TouchableOpacity>
@@ -76,7 +76,7 @@ export function MentalHealthScreeningScreen() {
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>{item.worker_name}</Text>
             <View style={[styles.burnoutBadge, { backgroundColor: getBurnoutColor(item.burnout_risk) }]}>
-              <Text style={styles.badgeText}>{item.burnout_risk === 'low' ? 'FAIBLE' : item.burnout_risk === 'moderate' ? 'MOYEN' : 'Ã‰LEVÃ‰'}</Text>
+              <Text style={styles.badgeText}>{item.burnout_risk === 'low' ? 'FAIBLE' : item.burnout_risk === 'moderate' ? 'MOYEN' : 'ÉLEVÉ'}</Text>
             </View>
           </View>
           <Text style={styles.cardMeta}>{item.screening_date}</Text>
@@ -89,19 +89,19 @@ export function MentalHealthScreeningScreen() {
               <Text style={styles.scoreVal}>{item.stress_score}/100</Text>
             </View>
             <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>AnxiÃ©tÃ©</Text>
-              <Text style={styles.anxietyBadge}>{item.anxiety_level === 'normal' ? 'Normal' : item.anxiety_level === 'elevated' ? 'Ã‰levÃ©e' : 'Haute'}</Text>
+              <Text style={styles.metricLabel}>Anxiété</Text>
+              <Text style={styles.anxietyBadge}>{item.anxiety_level === 'normal' ? 'Normal' : item.anxiety_level === 'elevated' ? 'Élevée' : 'Haute'}</Text>
             </View>
           </View>
-          <Text style={styles.depr}>DÃ©pression: {item.depression_screening === 'negative' ? 'âœ“ NÃ©gatif' : 'âš  Positif'}</Text>
+          <Text style={styles.depr}>Dépression: {item.depression_screening === 'negative' ? 'âœ“ Négatif' : 'âš  Positif'}</Text>
         </View>
-      )} ListEmptyComponent={<Text style={styles.emptyText}>Aucun dÃ©pistage</Text>} />
+      )} ListEmptyComponent={<Text style={styles.emptyText}>Aucun dépistage</Text>} />
 
       <Modal visible={showAddModal} animationType="slide" transparent onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isDesktop && styles.modalContentDesktop]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau DÃ©pistage</Text>
+              <Text style={styles.modalTitle}>Nouveau Dépistage</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close-circle-outline" size={28} color={ACCENT} />
               </TouchableOpacity>
@@ -115,14 +115,14 @@ export function MentalHealthScreeningScreen() {
               <View style={styles.buttonGroup}>
                 {['low', 'moderate', 'high'].map(risk => (
                   <TouchableOpacity key={risk} style={styles.groupBtn}>
-                    <Text style={styles.groupBtnText}>{risk === 'low' ? 'Faible' : risk === 'moderate' ? 'Moyen' : 'Ã‰levÃ©'}</Text>
+                    <Text style={styles.groupBtnText}>{risk === 'low' ? 'Faible' : risk === 'moderate' ? 'Moyen' : 'Élevé'}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
               <Text style={styles.formLabel}>Recommandations</Text>
               <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Actions..." multiline numberOfLines={4} placeholderTextColor={colors.placeholder} />
             </ScrollView>
-            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#EC4899' }]} onPress={() => { setShowAddModal(false); Alert.alert('SuccÃ¨s', 'DÃ©pistage crÃ©Ã©'); }}>
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#EC4899' }]} onPress={() => { setShowAddModal(false); Alert.alert('Succès', 'Dépistage créé'); }}>
               <Text style={styles.submitBtnText}>Enregistrer</Text>
             </TouchableOpacity>
           </View>

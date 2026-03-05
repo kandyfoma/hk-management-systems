@@ -85,7 +85,7 @@ function CertificateRow({ cert }: { cert: FitnessCertificate }) {
           <Text style={[styles.fitnessBadgeText, { color: decisionColor }]}>{decisionLabel}</Text>
         </View>
         {expired ? (
-          <Text style={styles.expiredText}>ExpirÃ©</Text>
+          <Text style={styles.expiredText}>Expiré</Text>
         ) : expiringSoon ? (
           <Text style={styles.expiringSoonText}>
             Exp. {new Date(cert.valid_until).toLocaleDateString('fr-CD')}
@@ -113,12 +113,12 @@ function SummaryBar({ certs }: { certs: FitnessCertificate[] }) {
     { label: 'Apte', count: fit, color: FITNESS_COLORS.fit },
     { label: 'Restrictions', count: restricted, color: FITNESS_COLORS.fit_with_restrictions },
     { label: 'Inapte Temp.', count: tempUnfit, color: FITNESS_COLORS.temporarily_unfit },
-    { label: 'Inapte DÃ©f.', count: permUnfit, color: FITNESS_COLORS.permanently_unfit },
+    { label: 'Inapte Déf.', count: permUnfit, color: FITNESS_COLORS.permanently_unfit },
   ];
 
   return (
     <View style={styles.summaryBar}>
-      <Text style={styles.summaryTitle}>RÃ©partition Aptitude â€” Certificats Actifs</Text>
+      <Text style={styles.summaryTitle}>Répartition Aptitude â€” Certificats Actifs</Text>
       <View style={styles.barTrack}>
         {bars.map(b => (
           b.count > 0 ? (
@@ -200,8 +200,8 @@ export function FitnessDashboardScreen({ navigation }: any) {
 
   const FILTER_TABS = [
     { id: 'active', label: 'Actifs' },
-    { id: 'expiring', label: 'Expirant bientÃ´t' },
-    { id: 'expired', label: 'ExpirÃ©s' },
+    { id: 'expiring', label: 'Expirant bientà´t' },
+    { id: 'expired', label: 'Expirés' },
     { id: 'all', label: 'Tous' },
   ] as const;
 
@@ -218,7 +218,7 @@ export function FitnessDashboardScreen({ navigation }: any) {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Aptitude au Travail</Text>
-          <Text style={styles.headerSubtitle}>Fitness-for-Duty â€” Certificats en temps rÃ©el</Text>
+          <Text style={styles.headerSubtitle}>Fitness-for-Duty â€” Certificats en temps réel</Text>
         </View>
         <TouchableOpacity
           style={styles.addBtn}
@@ -264,14 +264,14 @@ export function FitnessDashboardScreen({ navigation }: any) {
       <View style={[styles.listCard, shadows.sm]}>
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>Certificats</Text>
-          <Text style={styles.listCount}>{filtered.length} rÃ©sultats</Text>
+          <Text style={styles.listCount}>{filtered.length} résultats</Text>
         </View>
         {loading ? (
           <ActivityIndicator size="large" color={colors.success} style={{ padding: spacing.xl }} />
         ) : filtered.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="shield-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>Aucun certificat trouvÃ©</Text>
+            <Text style={styles.emptyText}>Aucun certificat trouvé</Text>
           </View>
         ) : (
           filtered.map(cert => <CertificateRow key={cert.id} cert={cert} />)

@@ -503,16 +503,19 @@ const dmS = StyleSheet.create({
 
 // ─── Appointment Detail Modal ─────────────────────────────────────────────────
 function AppointmentDetailModal({
-  visible, exam, onClose, onUpdate,
+  visible, exam, onClose, onUpdate, users,
 }: {
   visible: boolean;
   exam: ExamSchedule | null;
   onClose: () => void;
   onUpdate: (exam: ExamSchedule) => void;
+  users: any[];
 }) {
   const slideY = useRef(new Animated.Value(400)).current;
   const [editMode, setEditMode] = useState(false);
   const [editData, setEditData] = useState<ExamSchedule | null>(null);
+  const [showExamPicker, setShowExamPicker] = useState(false);
+  const [showExaminerPicker, setShowExaminerPicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -525,7 +528,7 @@ function AppointmentDetailModal({
   }, [visible, exam]);
 
   if (!exam || !editData) return null;
-  const t          = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
+  const t          = ALL_EXAM_TYPES[editData.examType] || { label: editData.examType, color: colors.primary, icon: 'medical' };
   const statusCfg  = STATUS_CFG[exam.status] || STATUS_CFG.scheduled;
   const initials   = getInitials(exam.workerName);
 
@@ -562,6 +565,44 @@ function AppointmentDetailModal({
             {editMode ? (
               <View>
                 <View style={adS.editFieldGroup}>
+                  <Text style={adS.editLabel}>Type d'examen</Text>
+                  <TouchableOpacity
+                    style={adS.editInput}
+                    onPress={() => setShowExamPicker(true)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={adS.examDisplay}>
+                      <View style={[adS.examIcon, { backgroundColor: t.color + '18' }]}>
+                        <Ionicons name={t.icon as any} size={18} color={t.color} />
+                      </View>
+                      <Text style={[adS.examDisplayTxt, { color: t.color, fontWeight: '600' }]}>{t.label}</Text>
+                      <Ionicons name="chevron-down" size={18} color={colors.textSecondary} style={{ marginLeft: 'auto' }} />
+                    </View>
+                  </TouchableOpacity>
+
+                  <Modal visible={showExamPicker} transparent animationType="slide">
+                    <View style={adS.pickerOverlay}>
+                      <View style={[adS.pickerSheet, { maxHeight: '90%' }]}>
+                        <View style={adS.pickerHeader}>
+                          <Text style={adS.pickerTitle}>Sélectionner type d'examen</Text>
+                          <TouchableOpacity onPress={() => setShowExamPicker(false)}>
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                        <ExamCatalogPicker
+                          selected={[editData.examType]}
+                          onSelect={ids => {
+                            const newId = ids.find(id => id !== editData.examType) ?? (ids.length > 0 ? ids[ids.length - 1] : editData.examType);
+                            setEditData({ ...editData, examType: newId });
+                            setShowExamPicker(false);
+                          }}
+                        />
+                      </View>
+                    </View>
+                  </Modal>
+                </View>
+
+                <View style={adS.editFieldGroup}>
                   <Text style={adS.editLabel}>Date de rendez-vous</Text>
                   <DateInput
                     value={editData.scheduledDate}
@@ -572,13 +613,62 @@ function AppointmentDetailModal({
 
                 <View style={adS.editFieldGroup}>
                   <Text style={adS.editLabel}>Médecin examinateur</Text>
-                  <TextInput
+                  <TouchableOpacity
                     style={adS.editInput}
-                    value={editData.examiner}
-                    onChangeText={v => setEditData({ ...editData, examiner: v })}
-                    placeholder="Nom du médecin"
-                    placeholderTextColor={colors.textSecondary}
-                  />
+                    onPress={() => setShowExaminerPicker(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[adS.editInputTxt, !editData.examiner && { color: colors.textSecondary }]}>
+                      {editData.examiner || 'Sélectionner médecin'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  <Modal visible={showExaminerPicker} transparent animationType="slide">
+                    <View style={adS.pickerOverlay}>
+                      <View style={adS.pickerSheet}>
+                        <View style={adS.pickerHeader}>
+                          <Text style={adS.pickerTitle}>Sélectionner médecin</Text>
+                          <TouchableOpacity onPress={() => setShowExaminerPicker(false)}>
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                        <ScrollView style={{ maxHeight: 400 }}>
+                          <TouchableOpacity
+                            style={adS.pickerOption}
+                            onPress={() => {
+                              setEditData({ ...editData, examiner: '', examinerId: '' });
+                              setShowExaminerPicker(false);
+                            }}
+                          >
+                            <Text style={[adS.pickerOptionTxt, { fontWeight: '600', color: colors.primary }]}>
+                              Aucun médecin
+                            </Text>
+                          </TouchableOpacity>
+                          {users.filter(u => u.first_name || u.last_name).map(u => {
+                            const selected = editData.examinerId === String(u.id);
+                            return (
+                              <TouchableOpacity
+                                key={u.id}
+                                style={[adS.pickerOption, selected && [adS.pickerOptionSelected, { borderColor: colors.primary }]]}
+                                onPress={() => {
+                                  setEditData({ ...editData, examiner: `${u.first_name} ${u.last_name}`, examinerId: String(u.id) });
+                                  setShowExaminerPicker(false);
+                                }}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[adS.pickerOptionTxt, selected && { color: colors.primary, fontWeight: '700' }]}>
+                                    {u.first_name} {u.last_name}
+                                  </Text>
+                                </View>
+                                {selected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </Modal>
                 </View>
 
                 <View style={adS.editFieldGroup}>
@@ -606,6 +696,7 @@ function AppointmentDetailModal({
               </View>
             ) : (
               <View>
+                <DetailItem label="Type d'examen" value={t.label} icon={t.icon} iconColor={t.color} style={adS.detailRow} />
                 <DetailItem label="Date" value={exam.scheduledDate} icon="calendar-outline" style={adS.detailRow} />
                 <DetailItem label="Médecin examinateur" value={exam.examiner || '—'} icon="person-circle-outline" style={adS.detailRow} />
                 <DetailItem label="Lieu" value={exam.location || '—'} icon="location-outline" style={adS.detailRow} />
@@ -651,17 +742,19 @@ function AppointmentDetailModal({
 }
 
 function DetailItem({
-  label, value, icon, style,
+  label, value, icon, style, iconColor,
 }: {
   label: string;
   value: string;
   icon: string;
   style?: any;
+  iconColor?: string;
 }) {
+  const color = iconColor || colors.primary;
   return (
     <View style={style || adS.detailRow}>
-      <View style={[adS.detailIcon, { backgroundColor: colors.primary + '12' }]}>
-        <Ionicons name={icon as any} size={16} color={colors.primary} />
+      <View style={[adS.detailIcon, { backgroundColor: color + '12' }]}>
+        <Ionicons name={icon as any} size={16} color={color} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={adS.detailLabel}>{label}</Text>
@@ -690,11 +783,25 @@ const adS = StyleSheet.create({
   detailValue:       { fontSize: 14, color: colors.text, fontWeight: '500' },
   editFieldGroup:    { marginBottom: spacing.lg },
   editLabel:         { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 8 },
-  editInput:         { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14, color: colors.text, minHeight: 46 },
+  editInput:         { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14, color: colors.text, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  editInputTxt:      { fontSize: 14, color: colors.text, flex: 1 },
+  examDisplay:       { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  examIcon:          { width: 32, height: 32, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
+  examDisplayTxt:    { fontSize: 14, flex: 1 },
   actions:           { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.outline },
   actionBtn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary + '60', backgroundColor: colors.primary + '10' },
   actionTxt:         { fontSize: 13, fontWeight: '600' },
+  pickerOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  pickerSheet:       { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
+  pickerHeader:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerTitle:       { fontSize: 16, fontWeight: '600', color: colors.text },
+  catLabel:          { fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  pickerOption:      { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerOptionSelected: { borderLeftWidth: 3, paddingLeft: spacing.md - 3 },
+  pickerOptionTxt:   { fontSize: 14, color: colors.text, flex: 1 },
+  pickerOptionDesc:  { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
 });
+
 
 // ─── Exam Catalog Picker (Multi-select) ────────────────────────────────────────
 function ExamCatalogPicker({
@@ -1219,8 +1326,8 @@ export function MedicalExamManagementScreen() {
           follow_up_required:    false,
           location:              form.location || '',
         };
-        if (form.examinerId && parseInt(form.examinerId) > 0) {
-          payload.examining_doctor = parseInt(form.examinerId);
+        if (form.examinerId && form.examinerId.trim() !== '') {
+          payload.examining_doctor = form.examinerId;
         }
         return apiService.post('/occupational-health/medical-exams/', payload);
       });
@@ -1365,15 +1472,22 @@ export function MedicalExamManagementScreen() {
       <AppointmentDetailModal
         visible={detailVisible}
         exam={selectedExam}
+        users={users}
         onClose={() => setDetailVisible(false)}
         onUpdate={async (updated) => {
           try {
-            await apiService.patch(`/occupational-health/medical-exams/${updated.id}/`, {
+            const payload: any = {
+              exam_type: mapExamTypeToBackend(updated.examType),
               exam_date: updated.scheduledDate,
               location: updated.location,
-              examining_doctor_name: updated.examiner,
               chief_complaint: updated.notes,
-            });
+            };
+            if (updated.examinerId && updated.examinerId.trim() !== '') {
+              payload.examining_doctor = updated.examinerId;
+            } else {
+              payload.examining_doctor = null;
+            }
+            await apiService.patch(`/occupational-health/medical-exams/${updated.id}/`, payload);
             showToast('Rendez-vous mis à jour', 'success');
             setDetailVisible(false);
             handleRefresh();

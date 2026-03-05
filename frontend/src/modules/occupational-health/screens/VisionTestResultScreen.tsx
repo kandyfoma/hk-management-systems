@@ -114,7 +114,7 @@ export function VisionTestResultScreen() {
                 ))}
               </View>
             </ScrollView>
-            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#8B5CF6' }]} onPress={() => { setShowAddModal(false); Alert.alert('SuccÃ¨s', 'Test crÃ©Ã©'); }}>
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#8B5CF6' }]} onPress={() => { setShowAddModal(false); Alert.alert('Succès', 'Test créé'); }}>
               <Text style={styles.submitBtnText}>Enregistrer</Text>
             </TouchableOpacity>
           </View>

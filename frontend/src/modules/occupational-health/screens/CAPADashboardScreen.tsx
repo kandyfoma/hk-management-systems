@@ -84,7 +84,7 @@ function CAPACard({ item, onPress }: { item: IncidentInvestigation; onPress: () 
         <View style={styles.rcaRow}>
           <Ionicons name="search" size={12} color={colors.primary} />
           <Text style={styles.rcaText}>
-            MÃ©thode: {RCA_LABELS[item.root_cause_method] ?? item.root_cause_method}
+            Méthode: {RCA_LABELS[item.root_cause_method] ?? item.root_cause_method}
           </Text>
         </View>
       )}
@@ -190,8 +190,8 @@ export function CAPADashboardScreen({ navigation }: any) {
   const FILTER_TABS = [
     { id: 'open', label: `Ouverts (${open})` },
     { id: 'in_progress', label: `En cours (${inProgress})` },
-    { id: 'review', label: `RÃ©vision (${review})` },
-    { id: 'closed', label: `ClÃ´turÃ©s (${closed})` },
+    { id: 'review', label: `Révision (${review})` },
+    { id: 'closed', label: `Clà´turés (${closed})` },
     { id: 'all', label: 'Tous' },
   ] as const;
 
@@ -278,7 +278,7 @@ export function CAPADashboardScreen({ navigation }: any) {
           <Ionicons name="construct-outline" size={48} color={colors.textSecondary} />
           <Text style={styles.emptyText}>Aucune action CAPA</Text>
           <Text style={styles.emptyHint}>
-            Les actions sont crÃ©Ã©es Ã  partir des investigations d'incidents
+            Les actions sont créées à  partir des investigations d'incidents
           </Text>
         </View>
       ) : (

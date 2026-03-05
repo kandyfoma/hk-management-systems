@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput,
   ActivityIndicator, Modal,
@@ -18,11 +18,11 @@ export interface Exam {
 }
 
 const EXAM_TYPE_LABELS: Record<string, string> = {
-  pre_employment: 'PrÃ©-emploi',
-  periodic: 'PÃ©riodique',
+  pre_employment: 'PràƒÂ©-emploi',
+  periodic: 'PàƒÂ©riodique',
   return_to_work: 'Reprise',
-  special: 'SpÃ©cial',
-  exit: 'DÃ©part',
+  special: 'SpàƒÂ©cial',
+  exit: 'DàƒÂ©part',
   night_work: 'Travail de Nuit',
   pregnancy_related: 'Grossesse',
   post_incident: 'Post-Incident',
@@ -41,8 +41,8 @@ interface ExamSelectDropdownProps {
 export function ExamSelectDropdown({
   value,
   onChange,
-  placeholder = 'SÃ©lectionnez une visite mÃ©dicale',
-  label = 'Visite MÃ©dicale (Examen)',
+  placeholder = 'SàƒÂ©lectionnez une visite màƒÂ©dicale',
+  label = 'Visite MàƒÂ©dicale (Examen)',
   error,
   disabled = false,
   workerId,
@@ -99,7 +99,7 @@ export function ExamSelectDropdown({
   };
 
   const displayText = value
-    ? `${value.worker_name ? value.worker_name + ' â€” ' : ''}${EXAM_TYPE_LABELS[value.exam_type] ?? value.exam_type} (${new Date(value.exam_date).toLocaleDateString('fr-CD')})`
+    ? `${value.worker_name ? value.worker_name + ' à¢â‚¬â€ ' : ''}${EXAM_TYPE_LABELS[value.exam_type] ?? value.exam_type} (${new Date(value.exam_date).toLocaleDateString('fr-CD')})`
     : null;
 
   return (
@@ -183,9 +183,9 @@ export function ExamSelectDropdown({
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Ionicons name="medkit-outline" size={40} color={colors.textSecondary} />
-                    <Text style={styles.emptyText}>Aucune visite trouvÃ©e</Text>
+                    <Text style={styles.emptyText}>Aucune visite trouvée</Text>
                     <Text style={styles.emptyHint}>
-                      CrÃ©ez d'abord une visite dans "Visite du MÃ©decin"
+                      Créez d'abord une visite dans "Visite du Médecin"
                     </Text>
                   </View>
                 }
@@ -233,7 +233,7 @@ export function ExamSelectDropdown({
   );
 }
 
-// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────── Styles ───────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { marginBottom: spacing.md },
   label: {

@@ -76,8 +76,8 @@ export function PPEComplianceRecordScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.screenTitle}>ConformitÃ© EPI</Text>
-          <Text style={styles.screenSubtitle}>Suivi des Ã©quipements de protection â€” Inspections</Text>
+          <Text style={styles.screenTitle}>Conformité EPI</Text>
+          <Text style={styles.screenSubtitle}>Suivi des équipements de protection â€” Inspections</Text>
         </View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: '#0891B2' }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add-circle" size={20} color="#FFF" /><Text style={styles.addButtonText}>Nouveau</Text>
@@ -93,7 +93,7 @@ export function PPEComplianceRecordScreen() {
           {['all', 'compliant', 'non_compliant', 'pending_inspection'].map(status => (
             <TouchableOpacity key={status} style={[styles.filterBtn, filterCompliance === status && styles.filterBtnActive]} onPress={() => setFilterCompliance(status as any)}>
               <Text style={[styles.filterBtnText, filterCompliance === status && styles.filterBtnTextActive]}>
-                {status === 'all' ? 'Tous' : status === 'compliant' ? 'OK' : status === 'non_compliant' ? 'Non-OK' : 'Ã€ inspecter'}
+                {status === 'all' ? 'Tous' : status === 'compliant' ? 'OK' : status === 'non_compliant' ? 'Non-OK' : 'à€ inspecter'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -113,18 +113,18 @@ export function PPEComplianceRecordScreen() {
           </View>
           <View style={styles.detailsGrid}>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Ã‰tat</Text>
+              <Text style={styles.detailLabel}>État</Text>
               <View style={[styles.conditionBadge, { backgroundColor: getConditionColor(item.condition) }]}>
-                <Text style={styles.conditionText}>{item.condition === 'new' ? 'Neuf' : item.condition === 'good' ? 'Bon' : item.condition === 'worn' ? 'UsÃ©' : item.condition === 'damaged' ? 'EndommagÃ©' : 'ExpirÃ©'}</Text>
+                <Text style={styles.conditionText}>{item.condition === 'new' ? 'Neuf' : item.condition === 'good' ? 'Bon' : item.condition === 'worn' ? 'Usé' : item.condition === 'damaged' ? 'Endommagé' : 'Expiré'}</Text>
               </View>
             </View>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>AttribuÃ© le</Text>
+              <Text style={styles.detailLabel}>Attribué le</Text>
               <Text style={styles.dateText}>{item.assignment_date}</Text>
             </View>
             {item.inspection_date && (
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>InspectÃ© le</Text>
+                <Text style={styles.detailLabel}>Inspecté le</Text>
                 <Text style={styles.dateText}>{item.inspection_date}</Text>
               </View>
             )}
@@ -137,7 +137,7 @@ export function PPEComplianceRecordScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isDesktop && styles.modalContentDesktop]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouvel Enregistrement de ConformitÃ© EPI</Text>
+              <Text style={styles.modalTitle}>Nouvel Enregistrement de Conformité EPI</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close-circle-outline" size={28} color={ACCENT} />
               </TouchableOpacity>
@@ -145,20 +145,20 @@ export function PPEComplianceRecordScreen() {
             <ScrollView style={styles.formContainer}>
               <Text style={styles.formLabel}>Travailleur</Text>
               <TextInput style={styles.input} placeholder="Nom..." placeholderTextColor={colors.placeholder} />
-              <Text style={styles.formLabel}>Ã‰quipement EPI</Text>
+              <Text style={styles.formLabel}>Équipement EPI</Text>
               <TextInput style={styles.input} placeholder="Casque, Gants, etc..." placeholderTextColor={colors.placeholder} />
-              <Text style={styles.formLabel}>Ã‰tat</Text>
+              <Text style={styles.formLabel}>État</Text>
               <View style={styles.buttonGroup}>
                 {['new', 'good', 'worn', 'damaged', 'expired'].map(cond => (
                   <TouchableOpacity key={cond} style={styles.groupBtn}>
-                    <Text style={styles.groupBtnText}>{cond === 'new' ? 'Neuf' : cond === 'good' ? 'Bon' : cond === 'worn' ? 'UsÃ©' : cond === 'damaged' ? 'EndommagÃ©' : 'ExpirÃ©'}</Text>
+                    <Text style={styles.groupBtnText}>{cond === 'new' ? 'Neuf' : cond === 'good' ? 'Bon' : cond === 'worn' ? 'Usé' : cond === 'damaged' ? 'Endommagé' : 'Expiré'}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
               <Text style={styles.formLabel}>Notes</Text>
               <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Observations..." multiline numberOfLines={4} placeholderTextColor={colors.placeholder} />
             </ScrollView>
-            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#0891B2' }]} onPress={() => { setShowAddModal(false); Alert.alert('SuccÃ¨s', 'Enregistrement crÃ©Ã©'); }}>
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#0891B2' }]} onPress={() => { setShowAddModal(false); Alert.alert('Succès', 'Enregistrement créé'); }}>
               <Text style={styles.submitBtnText}>Enregistrer</Text>
             </TouchableOpacity>
           </View>

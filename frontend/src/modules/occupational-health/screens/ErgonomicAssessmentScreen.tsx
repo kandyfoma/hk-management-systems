@@ -63,7 +63,7 @@ export function ErgonomicAssessmentScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <View><Text style={styles.screenTitle}>Ã‰valuations Ergonomiques</Text><Text style={styles.screenSubtitle}>Analyse du poste de travail â€” PrÃ©vention TMS</Text></View>
+        <View><Text style={styles.screenTitle}>Évaluations Ergonomiques</Text><Text style={styles.screenSubtitle}>Analyse du poste de travail â€” Prévention TMS</Text></View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: '#059669' }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add-circle" size={20} color="#FFF" /><Text style={styles.addButtonText}>Nouvelle</Text>
         </TouchableOpacity>
@@ -79,7 +79,7 @@ export function ErgonomicAssessmentScreen() {
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>{item.worker_name}</Text>
             <View style={[styles.riskBadge, { backgroundColor: getRiskColor(item.msk_risk_level) }]}>
-              <Text style={styles.badgeText}>{item.msk_risk_level === 'low' ? 'FAIBLE' : item.msk_risk_level === 'medium' ? 'MOYEN' : 'Ã‰LEVÃ‰'}</Text>
+              <Text style={styles.badgeText}>{item.msk_risk_level === 'low' ? 'FAIBLE' : item.msk_risk_level === 'medium' ? 'MOYEN' : 'ÉLEVÉ'}</Text>
             </View>
           </View>
           <Text style={styles.cardMeta}>{item.assessment_date}</Text>
@@ -94,13 +94,13 @@ export function ErgonomicAssessmentScreen() {
           </View>
           <Text style={styles.recomm}>{item.recommendations}</Text>
         </View>
-      )} ListEmptyComponent={<Text style={styles.emptyText}>Aucune Ã©valuation</Text>} />
+      )} ListEmptyComponent={<Text style={styles.emptyText}>Aucune évaluation</Text>} />
 
       <Modal visible={showAddModal} animationType="slide" transparent onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isDesktop && styles.modalContentDesktop]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouvelle Ã‰valuation Ergonomique</Text>
+              <Text style={styles.modalTitle}>Nouvelle Évaluation Ergonomique</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close-circle-outline" size={28} color={ACCENT} />
               </TouchableOpacity>
@@ -113,7 +113,7 @@ export function ErgonomicAssessmentScreen() {
               <Text style={styles.formLabel}>Score Posture (0-100)</Text>
               <TextInput style={styles.input} placeholder="85" keyboardType="number-pad" placeholderTextColor={colors.placeholder} />
               <Text style={styles.formLabel}>Recommandations</Text>
-              <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Actions Ã  prendre..." multiline numberOfLines={4} placeholderTextColor={colors.placeholder} />
+              <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Actions à  prendre..." multiline numberOfLines={4} placeholderTextColor={colors.placeholder} />
             </ScrollView>
             <TouchableOpacity style={[styles.submitBtn, { backgroundColor: '#059669' }]} onPress={() => { setShowAddModal(false); showToast('Évaluation créée', 'success'); }}>
               <Text style={styles.submitBtnText}>Enregistrer</Text>
