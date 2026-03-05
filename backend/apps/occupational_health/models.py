@@ -2732,30 +2732,94 @@ class DRCRegulatoryReport(models.Model):
 
 
 class PPEComplianceRecord(models.Model):
-    """PPE compliance tracking and audit records"""
-    
-    STATUS_CHOICES = [('in_use', 'In Use'), ('expired', 'Expired'), ('damaged', 'Damaged'), ('lost', 'Lost'), ('replaced', 'Replaced'), ('compliant', 'Compliant'), ('non_compliant', 'Non-Compliant')]
-    
-    ppe_item = models.ForeignKey(PPEItem, on_delete=models.CASCADE, related_name='compliance_records')
-    check_date = models.DateField()
-    check_type = models.CharField(max_length=50, choices=[('routine', 'Routine'), ('pre_use', 'Pre-Use'), ('post_incident', 'Post-Incident'), ('inventory', 'Inventory'), ('expiry_check', 'Expiry Check'), ('damage', 'Damage')])
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES)
-    condition_notes = models.TextField(blank=True)
-    is_compliant = models.BooleanField(default=True)
-    non_compliance_reason = models.TextField(blank=True)
-    corrective_action_required = models.BooleanField(default=False)
-    corrective_action = models.TextField(blank=True)
-    checked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='ppe_compliance_checks')
-    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='ppe_compliance_approvals')
+    """
+    PPE compliance tracking and audit records (ISO 45001 §9.1.1).
+
+    Links directly to a Worker + PPECatalog item so compliance checks can be
+    recorded from the stock screen without needing a separate PPEItem
+    assignment record.  The legacy ``ppe_item`` FK is kept nullable for
+    backward compatibility.
+    """
+
+    STATUS_CHOICES = [
+        ('in_use',        'In Use'),
+        ('expired',       'Expired'),
+        ('damaged',       'Damaged'),
+        ('lost',          'Lost'),
+        ('replaced',      'Replaced'),
+        ('compliant',     'Compliant'),
+        ('non_compliant', 'Non-Compliant'),
+    ]
+
+    CHECK_TYPE_CHOICES = [
+        ('routine',       'Routine'),
+        ('pre_use',       'Pre-Use'),
+        ('post_incident', 'Post-Incident'),
+        ('inventory',     'Inventory'),
+        ('expiry_check',  'Expiry Check'),
+        ('damage',        'Damage'),
+    ]
+
+    # ── Primary references (direct links — no PPEItem needed) ─────────────
+    worker = models.ForeignKey(
+        Worker, on_delete=models.CASCADE,
+        related_name='ppe_compliance_records',
+        null=True, blank=True,
+        verbose_name=_("Travailleur"),
+    )
+    ppe_catalog = models.ForeignKey(
+        PPECatalog, on_delete=models.SET_NULL,
+        related_name='compliance_records',
+        null=True, blank=True,
+        verbose_name=_("Article EPI (Catalogue)"),
+    )
+
+    # ── Legacy FK (kept for backward compat) ──────────────────────────────
+    ppe_item = models.ForeignKey(
+        PPEItem, on_delete=models.CASCADE,
+        related_name='ppe_item_compliance_records',
+        null=True, blank=True,
+    )
+
+    # ── Check details ──────────────────────────────────────────────────────
+    check_date = models.DateField(_("Date Vérification"))
+    check_type = models.CharField(
+        _("Type Vérification"), max_length=50, choices=CHECK_TYPE_CHOICES,
+    )
+    status = models.CharField(
+        _("Statut"), max_length=50, choices=STATUS_CHOICES,
+    )
+    condition_notes = models.TextField(_("Notes État"), blank=True)
+    is_compliant = models.BooleanField(_("Conforme"), default=True)
+    non_compliance_reason = models.TextField(_("Raison Non-Conformité"), blank=True)
+    corrective_action_required = models.BooleanField(_("Action Corrective Requise"), default=False)
+    corrective_action = models.TextField(_("Action Corrective"), blank=True)
+
+    # ── Sign-off ───────────────────────────────────────────────────────────
+    checked_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True,
+        related_name='ppe_compliance_checks',
+    )
+    approved_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ppe_compliance_approvals',
+    )
     approval_date = models.DateField(null=True, blank=True)
-    
+
     class Meta:
         verbose_name = 'PPE Compliance Record'
         verbose_name_plural = 'PPE Compliance Records'
         ordering = ['-check_date']
-    
+
     def __str__(self):
-        return f"PPE Check - {self.ppe_item.worker.full_name} ({self.check_date})"
+        if self.worker:
+            ppe_name = self.ppe_catalog.name if self.ppe_catalog else (
+                self.ppe_item.get_ppe_type_display() if self.ppe_item else '—'
+            )
+            return f"PPE Check — {self.worker.full_name} / {ppe_name} ({self.check_date})"
+        elif self.ppe_item:
+            return f"PPE Check — {self.ppe_item.worker.full_name} ({self.check_date})"
+        return f"PPE Check ({self.check_date})"
 
 
 # ==================== MEDICAL EXAMINATION EXTENDED MODELS ====================
