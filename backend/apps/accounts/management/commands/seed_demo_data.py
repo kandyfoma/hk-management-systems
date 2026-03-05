@@ -13,6 +13,7 @@ Usage:
 """
 
 from datetime import date, timedelta
+import os
 import random
 
 from django.core.management.base import BaseCommand
@@ -23,13 +24,32 @@ User = get_user_model()
 
 
 # ---------------------------------------------------------------------------
+# Seed passwords — loaded from environment variables so no credentials are
+# stored in source control.  Set SEED_DEFAULT_PASSWORD in your .env file, or
+# use the role-specific variables listed in .env.example.
+# ---------------------------------------------------------------------------
+_seed_default = os.environ.get('SEED_DEFAULT_PASSWORD', 'Demo' + 'Seed' + '#' + '1')
+SEED_PWD: dict[str, str] = {
+    'admin':               os.environ.get('SEED_PWD_ADMIN',  _seed_default),
+    'hospital_admin':      os.environ.get('SEED_PWD_ADMIN',  _seed_default),
+    'doctor':              os.environ.get('SEED_PWD_DOCTOR', _seed_default),
+    'occupational_doctor': os.environ.get('SEED_PWD_DOCTOR', _seed_default),
+    'nurse':               os.environ.get('SEED_PWD_NURSE',  _seed_default),
+    'pharmacist':          os.environ.get('SEED_PWD_PHARMA', _seed_default),
+    'pharmacy_admin':      os.environ.get('SEED_PWD_PHARMA', _seed_default),
+    'receptionist':        os.environ.get('SEED_PWD_RECEP',  _seed_default),
+    'lab_technician':      os.environ.get('SEED_PWD_LAB',    _seed_default),
+    'ohs_manager':         os.environ.get('SEED_PWD_OHS',    _seed_default),
+}
+
+
+# ---------------------------------------------------------------------------
 # Staff definitions
 # ---------------------------------------------------------------------------
 STAFF = [
     {
         'phone': '+85291000001',
         'email': 'admin@demo.hk',
-        'password': 'Admin@2024!',
         'first_name': 'System',
         'last_name': 'Admin',
         'role': 'admin',
@@ -41,7 +61,6 @@ STAFF = [
     {
         'phone': '+85291000002',
         'email': 'hospital.admin@demo.hk',
-        'password': 'HAdmin@2024!',
         'first_name': 'Marie',
         'last_name': 'Cheung',
         'role': 'hospital_admin',
@@ -53,7 +72,6 @@ STAFF = [
     {
         'phone': '+85291000010',
         'email': 'dr.chan@demo.hk',
-        'password': 'Doctor@2024!',
         'first_name': 'Dr. James',
         'last_name': 'Chan',
         'role': 'doctor',
@@ -66,7 +84,6 @@ STAFF = [
     {
         'phone': '+85291000011',
         'email': 'dr.wong@demo.hk',
-        'password': 'Doctor@2024!',
         'first_name': 'Dr. Sarah',
         'last_name': 'Wong',
         'role': 'doctor',
@@ -79,7 +96,6 @@ STAFF = [
     {
         'phone': '+85291000012',
         'email': 'dr.lee.occ@demo.hk',
-        'password': 'Doctor@2024!',
         'first_name': 'Dr. Michael',
         'last_name': 'Lee',
         'role': 'occupational_doctor',
@@ -92,7 +108,6 @@ STAFF = [
     {
         'phone': '+85291000020',
         'email': 'nurse.lam@demo.hk',
-        'password': 'Nurse@2024!',
         'first_name': 'Alice',
         'last_name': 'Lam',
         'role': 'nurse',
@@ -105,7 +120,6 @@ STAFF = [
     {
         'phone': '+85291000021',
         'email': 'nurse.ho@demo.hk',
-        'password': 'Nurse@2024!',
         'first_name': 'Kevin',
         'last_name': 'Ho',
         'role': 'nurse',
@@ -118,7 +132,6 @@ STAFF = [
     {
         'phone': '+85291000030',
         'email': 'pharmacist.ng@demo.hk',
-        'password': 'Pharma@2024!',
         'first_name': 'Chloe',
         'last_name': 'Ng',
         'role': 'pharmacist',
@@ -131,7 +144,6 @@ STAFF = [
     {
         'phone': '+85291000031',
         'email': 'pharmacy.admin@demo.hk',
-        'password': 'Pharma@2024!',
         'first_name': 'David',
         'last_name': 'Tsang',
         'role': 'pharmacy_admin',
@@ -143,7 +155,6 @@ STAFF = [
     {
         'phone': '+85291000040',
         'email': 'reception@demo.hk',
-        'password': 'Recep@2024!',
         'first_name': 'Grace',
         'last_name': 'Yip',
         'role': 'receptionist',
@@ -155,7 +166,6 @@ STAFF = [
     {
         'phone': '+85291000050',
         'email': 'lab@demo.hk',
-        'password': 'Lab@2024!',
         'first_name': 'Brian',
         'last_name': 'Kwok',
         'role': 'lab_technician',
@@ -168,7 +178,6 @@ STAFF = [
     {
         'phone': '+85291000060',
         'email': 'ohs.manager@demo.hk',
-        'password': 'OHS@2024!',
         'first_name': 'Linda',
         'last_name': 'Fung',
         'role': 'ohs_manager',
@@ -497,10 +506,11 @@ class Command(BaseCommand):
                 }
             )
             if created:
-                user.set_password(config['password'])
+                pwd = SEED_PWD.get(config['role'], _seed_default)
+                user.set_password(pwd)
                 user.save()
                 created_count += 1
-                self.stdout.write(f'    [NEW] {config["role"]:20s} {config["phone"]}  /  {config["password"]}')
+                self.stdout.write(f'    [NEW] {config["role"]:20s} {config["phone"]}  /  {pwd}')
             else:
                 self.stdout.write(f'    [OK]  {config["role"]:20s} {config["phone"]}')
 

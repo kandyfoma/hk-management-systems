@@ -15,7 +15,7 @@ echo "────────────────────────�
 
 # ── 1. Wait for Postgres to be ready ────────────────────────────────────────
 if [ -n "$DB_HOST" ]; then
-  echo "[1/5] Waiting for database at $DB_HOST:${DB_PORT:-5432}..."
+  echo "[1/6] Waiting for database at $DB_HOST:${DB_PORT:-5432}..."
   until python -c "
 import sys, psycopg2, os
 try:
@@ -33,15 +33,15 @@ except Exception:
     echo "   → Database not ready, retrying in 2s..."
     sleep 2
   done
-  echo "   ✓ Database is ready"
+  echo "   [OK] Database is ready"
 else
-  echo "[1/5] Skipping DB wait (DB_HOST not set)"
+  echo "[1/6] Skipping DB wait (DB_HOST not set)"
 fi
 
 # ── 2. Apply database migrations ────────────────────────────────────────────
-echo "[2/5] Running migrations..."
+echo "[2/6] Running migrations..."
 python manage.py migrate --noinput
-echo "   ✓ Migrations applied"
+echo "   [OK] Migrations applied"
 
 # ── 3. Load / refresh occupational health protocol seed data ────────────────
 #
@@ -51,17 +51,27 @@ echo "   ✓ Migrations applied"
 #     - Add new sectors / departments / positions / protocols
 #     - Leave existing records untouched (no data loss)
 #
-echo "[3/5] Loading occupational health protocol data..."
-python manage.py load_occ_protocols || echo "   ⚠ load_occ_protocols failed (non-fatal, continuing...)"
-echo "   ✓ Protocol step done"
+echo "[3/6] Loading occupational health protocol data..."
+python manage.py load_occ_protocols || echo "   [WARN] load_occ_protocols failed (non-fatal, continuing...)"
+echo "   [OK] Protocol step done"
 
-# ── 4. Collect static files ─────────────────────────────────────────────────
-echo "[4/5] Collecting static files..."
+# ── 4. Seed demo users + patients ───────────────────────────────────────────
+#
+#   seed_demo_data is fully idempotent (uses get_or_create).
+#   It creates the demo organization, staff accounts, and 20 demo patients
+#   only if they do not already exist.  Safe to run on every container start.
+#
+echo "[4/6] Loading demo seed data (users + patients)..."
+python manage.py seed_demo_data || echo "   [WARN] seed_demo_data failed (non-fatal, continuing...)"
+echo "   [OK] Demo seed step done"
+
+# ── 5. Collect static files ─────────────────────────────────────────────────
+echo "[5/6] Collecting static files..."
 python manage.py collectstatic --noinput --clear
-echo "   ✓ Static files collected"
+echo "   [OK] Static files collected"
 
-# ── 5. Start gunicorn ───────────────────────────────────────────────────────
-echo "[5/5] Starting Gunicorn..."
+# ── 6. Start gunicorn ───────────────────────────────────────────────────────
+echo "[6/6] Starting Gunicorn..."
 WORKERS=${GUNICORN_WORKERS:-3}
 TIMEOUT=${GUNICORN_TIMEOUT:-120}
 # Railway injects $PORT; fall back to 8000 for local Docker
