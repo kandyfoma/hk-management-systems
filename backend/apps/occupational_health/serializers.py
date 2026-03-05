@@ -1367,26 +1367,78 @@ class DRCRegulatoryReportSerializer(serializers.ModelSerializer):
 
 
 class PPEComplianceRecordSerializer(serializers.ModelSerializer):
-    """Serializer for PPE compliance records"""
-    
-    worker_name = serializers.CharField(source='ppe_item.worker.full_name', read_only=True)
-    worker_employee_id = serializers.CharField(source='ppe_item.worker.employee_id', read_only=True)
-    ppe_type_display = serializers.CharField(source='ppe_item.get_ppe_type_display', read_only=True)
+    """
+    Serializer for PPE compliance records.
+
+    Supports two creation paths:
+      1. New direct path: supply ``worker`` (id) + ``ppe_catalog`` (id) — no PPEItem needed.
+      2. Legacy path: supply ``ppe_item`` (id) — for backward compatibility.
+    """
+
+    # ── Read-only display fields ───────────────────────────────
+    # New direct path
+    worker_name = serializers.SerializerMethodField(read_only=True)
+    worker_employee_id = serializers.SerializerMethodField(read_only=True)
+    ppe_catalog_name = serializers.SerializerMethodField(read_only=True)
+    ppe_catalog_type = serializers.SerializerMethodField(read_only=True)
+    ppe_type_display = serializers.SerializerMethodField(read_only=True)
+
+    # Common
     check_type_display = serializers.CharField(source='get_check_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     checked_by_name = serializers.CharField(source='checked_by.get_full_name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
     status_computed = serializers.SerializerMethodField(read_only=True)
-    
+
+    def get_worker_name(self, obj):
+        if obj.worker:
+            return obj.worker.full_name
+        if obj.ppe_item:
+            return obj.ppe_item.worker.full_name
+        return None
+
+    def get_worker_employee_id(self, obj):
+        if obj.worker:
+            return obj.worker.employee_id
+        if obj.ppe_item:
+            return obj.ppe_item.worker.employee_id
+        return None
+
+    def get_ppe_catalog_name(self, obj):
+        if obj.ppe_catalog:
+            return obj.ppe_catalog.name
+        if obj.ppe_item:
+            return obj.ppe_item.get_ppe_type_display()
+        return None
+
+    def get_ppe_catalog_type(self, obj):
+        if obj.ppe_catalog:
+            return obj.ppe_catalog.ppe_type
+        if obj.ppe_item:
+            return obj.ppe_item.ppe_type
+        return None
+
+    def get_ppe_type_display(self, obj):
+        if obj.ppe_catalog:
+            return obj.ppe_catalog.name
+        if obj.ppe_item:
+            return obj.ppe_item.get_ppe_type_display()
+        return None
+
     def get_status_computed(self, obj):
-        """Compute status for UI display based on compliance"""
         if obj.status in ('expired', 'damaged', 'lost', 'non_compliant'):
             return 'critical'
         elif obj.status in ('in_use', 'replaced'):
             return 'warning'
-        else:  # 'compliant'
-            return 'normal'
-    
+        return 'normal'
+
+    def create(self, validated_data):
+        """Auto-set checked_by from request user if not provided."""
+        request = self.context.get('request')
+        if request and not validated_data.get('checked_by'):
+            validated_data['checked_by'] = request.user
+        return super().create(validated_data)
+
     class Meta:
         model = PPEComplianceRecord
         fields = '__all__'

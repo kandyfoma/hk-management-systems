@@ -23,7 +23,7 @@ export function PPEComplianceDashboardScreen({ navigation }: any) {
     setLoading(true);
     try {
       const api = ApiService.getInstance();
-      const response = await api.get('/occupational-health/ppe-compliance-results/');
+      const response = await api.get('/occupational-health/ppe-compliance/');
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
         // Sort by assigned_date descending (most recent first) and take top 5

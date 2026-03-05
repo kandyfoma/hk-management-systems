@@ -438,17 +438,29 @@ export function PPEComplianceScreen() {
               {/* Debug validation status */}
               <View style={{ marginTop: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.info + '14', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.info + '40' }}>
                 <Text style={{ fontSize: 11, color: colors.info, fontWeight: '700', marginBottom: 4 }}>État de validation:</Text>
-                <Text style={{ fontSize: 10, color: colors.info }}>
-                  {selectedWorker ? '✓' : '✗'} Travailleur{'\n'}
+                <Text style={{ fontSize: 10, color: colors.info, marginBottom: 8 }}>
+                  {selectedWorker ? '✓' : '✗'} Travailleur: {selectedWorker ? `ID ${selectedWorker.id}` : 'aucun'}{'\n'}
                   {formData.ppe_item ? '✓' : '✗'} EPI sélectionné{'\n'}
                   {formData.check_date ? '✓' : '✗'} Date: {formData.check_date}{'\n'}
                   {formData.check_type ? '✓' : `✗ Type: ${formData.check_type || 'aucun'}`}{'\n'}
                   {formData.status ? '✓' : `✗ Statut: ${formData.status || 'aucun'}`}
                 </Text>
-                {ppeItems.length === 0 && selectedWorker && (
-                  <Text style={{ fontSize: 10, color: colors.warning, marginTop: 8, fontWeight: '600' }}>
-                    ⚠️ Ce travailleur n'a aucun EPI assigné. Ajoutez d'abord des équipements.
-                  </Text>
+                {selectedWorker && (
+                  <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.info + '30' }}>
+                    <Text style={{ fontSize: 10, color: colors.info, fontWeight: '600', marginBottom: 4 }}>API Info:</Text>
+                    <Text style={{ fontSize: 9, color: colors.info, fontFamily: 'monospace' }}>
+                      Worker ID: {selectedWorker.id}{'\n'}
+                      PPE Items trouvés: {ppeItems.length}
+                    </Text>
+                    {ppeItems.length > 0 ? (
+                      <Text style={{ fontSize: 9, color: colors.success, marginTop: 4, fontWeight: '600' }}>✓ API OK - Sélectionnez un EPI</Text>
+                    ) : (
+                      <Text style={{ fontSize: 9, color: colors.warning, marginTop: 4, fontWeight: '600' }}>
+                        ✗ Aucun EPI trouvé pour ce travailleur{'\n'}
+                        → Vérifiez que l'EPI est assigné au travailleur ID {selectedWorker.id} dans 'Gestion EPI'
+                      </Text>
+                    )}
+                  </View>
                 )}
               </View>
 

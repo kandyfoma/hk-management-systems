@@ -2896,75 +2896,97 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
 
 class PPEComplianceRecordViewSet(viewsets.ModelViewSet):
     """
-    PPE compliance tracking and audit records
-    
-    GET /api/ppe-compliance/ - List compliance records
-    POST /api/ppe-compliance/ - Create compliance record
-    GET /api/ppe-compliance/non-compliant/ - Get non-compliant items
-    POST /api/ppe-compliance/bulk-check/ - Bulk compliance check
+    PPE compliance tracking and audit records.
+
+    New path (recommended):
+      POST { worker, ppe_catalog, check_date, check_type, status }
+
+    Legacy path (backward compat):
+      POST { ppe_item, check_date, check_type, status }
+
+    GET /api/ppe-compliance/           - List compliance records
+    POST /api/ppe-compliance/          - Create compliance record
+    GET /api/ppe-compliance/non-compliant/ - Non-compliant items
+    GET /api/ppe-compliance/compliance_rate/ - Overall rate
     """
-    
+
     serializer_class = PPEComplianceRecordSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'is_compliant', 'check_type', 'ppe_item__worker__enterprise']
-    search_fields = ['ppe_item__worker__first_name', 'ppe_item__worker__last_name']
+    filterset_fields = [
+        'status', 'is_compliant', 'check_type',
+        'worker', 'ppe_catalog',
+        'worker__enterprise',
+        # Legacy
+        'ppe_item__worker__enterprise',
+    ]
+    search_fields = [
+        'worker__first_name', 'worker__last_name', 'worker__employee_id',
+        'ppe_catalog__name',
+        # Legacy
+        'ppe_item__worker__first_name', 'ppe_item__worker__last_name',
+    ]
     ordering = ['-check_date']
-    
+
     def get_queryset(self):
-        """Get compliance records with related data"""
         return PPEComplianceRecord.objects.select_related(
-            'ppe_item__worker', 'checked_by', 'approved_by'
+            'worker',
+            'ppe_catalog',
+            'ppe_item__worker',
+            'checked_by',
+            'approved_by',
         )
-    
+
+    def perform_create(self, serializer):
+        """Auto-set checked_by to the current user."""
+        serializer.save(checked_by=self.request.user)
+
     @action(detail=False, methods=['get'])
     def non_compliant(self, request):
-        """Get all non-compliant PPE items"""
         records = self.get_queryset().filter(is_compliant=False, status='non_compliant')
         serializer = self.get_serializer(records, many=True)
         return Response(serializer.data)
-    
+
     @action(detail=False, methods=['get'])
     def compliance_rate(self, request):
-        """Calculate PPE compliance rate"""
         enterprise_id = request.query_params.get('enterprise_id')
-        
+
         queryset = self.get_queryset()
         if enterprise_id:
-            queryset = queryset.filter(ppe_item__worker__enterprise_id=enterprise_id)
-        
+            queryset = queryset.filter(
+                models.Q(worker__enterprise_id=enterprise_id) |
+                models.Q(ppe_item__worker__enterprise_id=enterprise_id)
+            )
+
         total = queryset.count()
         compliant = queryset.filter(is_compliant=True).count()
         rate = (compliant / total * 100) if total > 0 else 0
-        
+
         return Response({
             'total_records': total,
             'compliant': compliant,
             'non_compliant': total - compliant,
             'compliance_rate': round(rate, 2),
         })
-    
+
     @action(detail=False, methods=['post'])
     def bulk_check(self, request):
-        """Perform bulk PPE compliance check"""
+        """Bulk compliance check on legacy PPEItem records."""
         ppe_items = request.data.get('ppe_item_ids', [])
         check_type = request.data.get('check_type', 'routine')
-        
+
         records_created = 0
         for ppe_id in ppe_items:
             ppe = PPEItem.objects.get(id=ppe_id)
-            
-            # Determine compliance
             is_compliant = True
             reason = ""
-            
             if ppe.is_expired:
                 is_compliant = False
                 reason = "PPE expired"
             elif ppe.condition == 'damaged':
                 is_compliant = False
                 reason = "PPE damaged"
-            
+
             PPEComplianceRecord.objects.create(
                 ppe_item=ppe,
                 check_date=date.today(),
@@ -2975,7 +2997,7 @@ class PPEComplianceRecordViewSet(viewsets.ModelViewSet):
                 checked_by=request.user,
             )
             records_created += 1
-        
+
         return Response({
             'message': f'{records_created} compliance records created',
             'records_created': records_created,
