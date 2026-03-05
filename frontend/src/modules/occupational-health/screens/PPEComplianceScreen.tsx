@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
+import DateInput from '../../../components/DateInput';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
 const ACCENT = '#4338CA'; // PPE Compliance Secondary Dark
@@ -70,10 +71,8 @@ export function PPEComplianceScreen() {
       const response = await api.get('/occupational-health/ppe-compliance/');
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
-        // Sort by test_date descending (most recent first) and limit to 5
-        data = data
-          .sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime())
-          .slice(0, 5);
+        // Sort by check_date descending (most recent first)
+        data = data.sort((a: any, b: any) => new Date(b.check_date || b.assigned_date).getTime() - new Date(a.check_date || a.assigned_date).getTime());
         setRecords(data);
       }
     } catch (error) {
@@ -88,6 +87,8 @@ export function PPEComplianceScreen() {
     await loadRecords();
     setRefreshing(false);
   };
+
+  const isFormValid = !!(selectedWorker && formData.ppe_type && formData.assigned_date && formData.expiry_date);
 
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.ppe_type || !formData.expiry_date) {
@@ -289,30 +290,27 @@ export function PPEComplianceScreen() {
               />
 
               <Text style={styles.formLabel}>Date d'assignation</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
+              <DateInput
                 value={formData.assigned_date}
                 onChangeText={(text) => setFormData({ ...formData, assigned_date: text })}
-                placeholderTextColor={colors.textSecondary}
+                placeholder="YYYY-MM-DD"
+                format="iso"
               />
 
               <Text style={styles.formLabel}>Date d'expiration</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
+              <DateInput
                 value={formData.expiry_date}
                 onChangeText={(text) => setFormData({ ...formData, expiry_date: text })}
-                placeholderTextColor={colors.textSecondary}
+                placeholder="YYYY-MM-DD"
+                format="iso"
               />
 
               <Text style={styles.formLabel}>Date d'inspection (optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
+              <DateInput
                 value={formData.inspection_date}
                 onChangeText={(text) => setFormData({ ...formData, inspection_date: text })}
-                placeholderTextColor={colors.textSecondary}
+                placeholder="YYYY-MM-DD"
+                format="iso"
               />
 
               <Text style={styles.formLabel}>Notes</Text>
@@ -325,7 +323,11 @@ export function PPEComplianceScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: ACCENT }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>
