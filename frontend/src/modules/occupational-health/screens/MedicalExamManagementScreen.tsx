@@ -990,50 +990,52 @@ export function MedicalExamManagementScreen() {
       </View>
 
       {/* Content */}
-      {loading ? (
-        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color={ACCENT} />
-          <Text style={styles.loadingText}>Loading exams...</Text>
-        </View>
-      ) : error ? (
-        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.error || '#EF4444'} />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={(activeTab === 'schedule' ? schedules : results) as any[]}
-          keyExtractor={(item: any) => item.id}
-          renderItem={({ item }: { item: any }) =>
-            activeTab === 'schedule' ? (
-              <ScheduleCard
-                schedule={item as ExamSchedule}
-                onPress={() => {
-                  setSelectedSchedule(item as ExamSchedule);
-                  setScheduleModalVisible(true);
-                }}
-              />
-            ) : (
-              <ExamResultCard
-                result={item as MedicalExamResult}
-                onPress={() => {
-                  setSelectedResult(item as MedicalExamResult);
-                  setResultModalVisible(true);
-                }}
-              />
-            )
-          }
-          contentContainerStyle={styles.listContent}
-          scrollEnabled={true}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
-              <Text style={styles.emptyStateText}>No {activeTab === 'schedule' ? 'schedules' : 'results'} found</Text>
-            </View>
-          }
-        />
-      )}
+      <View style={{ flex: 1 }}>
+        {loading ? (
+          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <ActivityIndicator size="large" color={ACCENT} />
+            <Text style={styles.loadingText}>Loading exams...</Text>
+          </View>
+        ) : error ? (
+          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name="alert-circle-outline" size={48} color={colors.error || '#EF4444'} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={(activeTab === 'schedule' ? schedules : results) as any[]}
+            keyExtractor={(item: any) => item.id}
+            renderItem={({ item }: { item: any }) =>
+              activeTab === 'schedule' ? (
+                <ScheduleCard
+                  schedule={item as ExamSchedule}
+                  onPress={() => {
+                    setSelectedSchedule(item as ExamSchedule);
+                    setScheduleModalVisible(true);
+                  }}
+                />
+              ) : (
+                <ExamResultCard
+                  result={item as MedicalExamResult}
+                  onPress={() => {
+                    setSelectedResult(item as MedicalExamResult);
+                    setResultModalVisible(true);
+                  }}
+                />
+              )
+            }
+            contentContainerStyle={styles.listContent}
+            scrollEnabled={true}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
+                <Text style={styles.emptyStateText}>No {activeTab === 'schedule' ? 'schedules' : 'results'} found</Text>
+              </View>
+            }
+          />
+        )}
+      </View>
 
       {/* FAB - Primary CTA */}
       <TouchableOpacity
