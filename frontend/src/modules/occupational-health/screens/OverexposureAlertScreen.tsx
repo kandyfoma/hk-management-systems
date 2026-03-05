@@ -608,6 +608,7 @@ export function OverexposureAlertScreen() {
       return;
     }
     setResolveBusy(true);
+    const auditCtx = getAuditContext();
     try {
       const patch = await occHealthApi.patchOverexposureAlert(resolveForm.alertId, {
         action_taken: resolveForm.action_taken,
@@ -617,10 +618,27 @@ export function OverexposureAlertScreen() {
       if (patch.error) { Alert.alert('Erreur', patch.error); return; }
       const res = await occHealthApi.resolveOverexposureAlert(resolveForm.alertId);
       if (res.error) { Alert.alert('Erreur', res.error); return; }
-      const updated = { ...patch.data, ...res.data };
+      const currentAlert = alerts.find(a => a.id === resolveForm.alertId);
+      const updated = { ...patch.data, ...res.data,
+        change_log: [
+          ...(currentAlert?.change_log ?? []),
+          {
+            timestamp: auditCtx.timestamp,
+            action: 'resolved',
+            changed_by_id: res.data?.resolved_by_id ?? 0,
+            changed_by_name: res.data?.resolved_by_name ?? 'Système',
+            old_value: { status: currentAlert?.status, action_taken: currentAlert?.action_taken },
+            new_value: { status: 'resolved', action_taken: resolveForm.action_taken },
+            field: 'status,action_taken',
+            notes: `Resolved with corrective actions: ${resolveForm.action_taken.substring(0, 50)}...`,
+            user_agent: auditCtx.user_agent,
+          },
+        ],
+      };
       setAlerts(prev => prev.map(a => a.id === resolveForm.alertId ? { ...a, ...updated } : a));
       if (detailAlert?.id === resolveForm.alertId) setDetailAlert(d => d ? { ...d, ...updated } : d);
       setResolveForm(null);
+      console.log(`[AUDIT] Alert #${resolveForm.alertId} resolved by ${res.data?.resolved_by_name ?? 'system'} at ${auditCtx.timestamp}`);
     } finally { setResolveBusy(false); }
   };
 
@@ -637,9 +655,32 @@ export function OverexposureAlertScreen() {
   const submitBulk = async () => {
     if (!selectedIds.size) return;
     setBulkBusy(true);
+    const auditCtx = getAuditContext();
     const res = await occHealthApi.bulkAcknowledgeAlerts(Array.from(selectedIds));
     setBulkBusy(false);
     if (res.error) { Alert.alert('Erreur', res.error); return; }
+    // Log bulk action
+    const bulkLog = `[AUDIT] Bulk acknowledged ${selectedIds.size} alerts by system at ${auditCtx.timestamp}`;
+    console.log(bulkLog);
+    // Update local state with audit info
+    setAlerts(prev => prev.map(a => selectedIds.has(a.id) ? {
+      ...a,
+      status: 'acknowledged',
+      change_log: [
+        ...(a.change_log ?? []),
+        {
+          timestamp: auditCtx.timestamp,
+          action: 'acknowledged',
+          changed_by_id: 0,
+          changed_by_name: 'Système (Bulk)',
+          field: 'status',
+          old_value: { status: a.status },
+          new_value: { status: 'acknowledged' },
+          notes: 'Bulk acknowledgement operation',
+          user_agent: auditCtx.user_agent,
+        },
+      ],
+    } : a));
     setSelectionMode(false);
     setSelectedIds(new Set());
     loadAll(true);
@@ -666,6 +707,7 @@ export function OverexposureAlertScreen() {
       Alert.alert('Champ requis', 'Renseignez le niveau mesuré et le seuil réglementaire.'); return;
     }
     setCreateBusy(true);
+    const auditCtx = getAuditContext();
     const res = await occHealthApi.createOverexposureAlert({
       worker:              createForm.worker,
       exposure_type:       createForm.exposure_type,
@@ -679,6 +721,8 @@ export function OverexposureAlertScreen() {
     });
     setCreateBusy(false);
     if (res.error) { Alert.alert('Erreur', res.error); return; }
+    // Log creation with full context
+    console.log(`[AUDIT] Alert #${res.data?.id} created at ${auditCtx.timestamp} for worker #${createForm.worker} (${createForm.exposure_type})`);
     setShowCreate(false);
     setCreateForm(EMPTY_CREATE);
     setWorkerSearchText('');

@@ -1159,7 +1159,76 @@ export function OccHealthConsultationScreen({
           setDraftId(linkedDraftId);
           setActivePendingId(pendingId);
         } else {
-          // Start new consultation - load pending data and create draft immediately
+          // Start new consultation — write the initial draft to AsyncStorage RIGHT NOW
+          // before any state updates, so it persists even if the user navigates away
+          draftIdToUse = `draft_${pendingId}_${Date.now()}`;
+          const now = new Date().toISOString();
+          const initialDraft = {
+            id: draftIdToUse,
+            selectedWorker: pending.patient,
+            examType: pending.examType,
+            visitReason: pending.visitReason || '',
+            referredBy: pending.referredBy || '',
+            vitals: pending.vitals || {},
+            physicalExam: {
+              generalAppearance: 'normal', cardiovascular: 'normal', respiratory: 'normal',
+              musculoskeletal: 'normal', neurological: 'normal', dermatological: 'normal',
+              ent: 'normal', abdomen: 'normal', mentalHealth: 'normal', ophthalmological: 'normal',
+            },
+            orderedTests: [],
+            testExecutionMode: 'external',
+            onsiteTestResults: {},
+            audiometryDone: false,
+            spirometryDone: false,
+            visionDone: false,
+            drugScreeningDone: false,
+            bloodWorkDone: false,
+            xrayDone: false,
+            mentalScreening: {},
+            ergonomicNeeded: false,
+            ergonomicNotes: '',
+            mskComplaints: [],
+            sectorAnswers: {},
+            fitnessDecision: 'fit',
+            restrictions: [],
+            recommendations: '',
+            followUpNeeded: false,
+            followUpDate: '',
+            nextAppointmentDate: '',
+            nextAppointmentReason: '',
+            consultationNotes: '',
+            currentStep: 'anamnesis',
+            consultationStatus: 'in_progress',
+            syncStatus: 'pending',
+            testStatuses: {},
+            anamnesisNotes: '',
+            smokingStatus: '',
+            packYears: '',
+            alcoholAuditCScore: '',
+            familyHistory: '',
+            priorOccupationalHistory: [],
+            workingSchedule: '',
+            functionalComplaintsAtWork: '',
+            restrictNoDriving: false,
+            restrictNoHeightWork: false,
+            restrictMaxLiftingKg: '',
+            restrictNoNightShift: false,
+            restrictAdaptedWorkstation: false,
+            restrictReducedHours: false,
+            restrictNoConfinedSpace: false,
+            restrictNoChemicalExposure: false,
+            restrictCustom: '',
+            legalArticleReference: 'Code du Travail RDC, Art. 156 — Décret No. 68/432',
+            rightOfAppealOffered: true,
+            rightOfAppealDeadlineDays: '15',
+            functionalImpairmentPercent: '',
+            createdAt: now,
+            updatedAt: now,
+          };
+          // Write draft to storage immediately — no reliance on React state cycle
+          await AsyncStorage.setItem(`consultation_draft_${draftIdToUse}`, JSON.stringify(initialDraft));
+
+          // Now update React state
           setSelectedWorker(pending.patient);
           setExamType(pending.examType);
           setVisitReason(pending.visitReason);
@@ -1167,11 +1236,6 @@ export function OccHealthConsultationScreen({
           setVitals(pending.vitals);
           setCurrentStep('anamnesis');
           setActivePendingId(pendingId);
-
-          // Create initial draft immediately to save progress
-          // We'll trigger the draft creation after state is updated via useEffect
-          // For now, we just mark that we need to create a draft
-          draftIdToUse = `draft_${pendingId}_${Date.now()}`;
           setDraftId(draftIdToUse);
           setIsDraft(true);
         }
@@ -2779,6 +2843,8 @@ export function OccHealthConsultationScreen({
     setTestStatuses({});
     setExistingTestResults({});
     setProtocolResult(null);
+    // Reload queue so the patient (now back as in_consultation or waiting) is visible
+    loadPendingQueue();
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -4865,8 +4931,16 @@ export function OccHealthConsultationScreen({
                         <Text style={qStyles.queuePatientName}>
                           {pending.patient.firstName} {pending.patient.lastName}
                         </Text>
-                        <View style={[qStyles.statusChip, { backgroundColor: colors.success + '14' }]}>
-                          <Text style={[qStyles.statusChipText, { color: colors.success }]}>En attente</Text>
+                        <View style={[qStyles.statusChip, {
+                          backgroundColor: pending.status === 'in_consultation'
+                            ? colors.warning + '20'
+                            : colors.success + '14',
+                        }]}>
+                          <Text style={[qStyles.statusChipText, {
+                            color: pending.status === 'in_consultation' ? colors.warning : colors.success,
+                          }]}>
+                            {pending.status === 'in_consultation' ? 'En consultation' : 'En attente'}
+                          </Text>
                         </View>
                         {!hasInitialNurseScreening(pending) && (
                           <View style={[qStyles.statusChip, { backgroundColor: colors.warning + '20' }]}>
@@ -4926,10 +5000,16 @@ export function OccHealthConsultationScreen({
                         <Text style={qStyles.removeBtnText}>Retirer</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[qStyles.startBtn, { backgroundColor: colors.infoDark }]}
+                        style={[qStyles.startBtn, {
+                          backgroundColor: pending.status === 'in_consultation'
+                            ? colors.warning
+                            : colors.infoDark,
+                        }]}
                         onPress={() => loadPendingConsultation(pending.id)}
                       >
-                        <Text style={qStyles.startBtnText}>Consulter →</Text>
+                        <Text style={qStyles.startBtnText}>
+                          {pending.status === 'in_consultation' ? 'Reprendre →' : 'Consulter →'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -4948,8 +5028,14 @@ export function OccHealthConsultationScreen({
           <View style={styles.draftStatusLeft}>
             <TouchableOpacity
               style={styles.backToQueueBtn}
-              onPress={() => {
+              onPress={async () => {
                 if (selectedWorker) {
+                  // Save draft before going back so progress is not lost
+                  try {
+                    await persistDraft({ silent: true, status: 'in_progress' });
+                  } catch (e) {
+                    console.warn('Could not save draft on back:', e);
+                  }
                   resetForm();
                 } else {
                   onNavigateBack?.();
