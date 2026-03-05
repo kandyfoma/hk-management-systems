@@ -844,6 +844,24 @@ function DesktopApp() {
     if (activeScreen === 'oh-xray-dashboard') return <XrayDashboardScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-drug-alcohol-dashboard') return <DrugAlcoholDashboardScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-ppe-compliance-dashboard') return <PPEComplianceDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-health-screening-dashboard') return <HealthScreeningDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-heavy-metals-dashboard') return <HeavyMetalsDashboardScreen navigation={customNavigation} />;
+    if (activeScreen === 'oh-fitness-dashboard') return <FitnessDashboardScreen />;
+    if (activeScreen === 'oh-capa-dashboard') return <CAPADashboardScreen />;
+    // ── Test Entry Forms ────────────────────────────────────────
+    if (activeScreen === 'oh-audiometry') return <AudiometryScreen />;
+    if (activeScreen === 'oh-spirometry') return <SpirometryScreen />;
+    if (activeScreen === 'oh-xray-imaging') return <XrayImagingScreen />;
+    if (activeScreen === 'oh-drug-alcohol-screening') return <DrugAlcoholScreeningScreen />;
+    if (activeScreen === 'oh-vision') return <VisionTestScreen />;
+    if (activeScreen === 'oh-vision-tests') return <VisionTestScreen />;
+    // ── Test Lists ──────────────────────────────────────────────
+    if (activeScreen === 'oh-audiometry-list') return <AudiometryListScreen />;
+    if (activeScreen === 'oh-spirometry-list') return <SpirometryListScreen />;
+    if (activeScreen === 'oh-vision-list') return <VisionTestListScreen />;
+    if (activeScreen === 'oh-xray-list') return <XrayImagingListScreen />;
+    if (activeScreen === 'oh-drug-alcohol-list') return <DrugAlcoholScreeningListScreen />;
+    if (activeScreen === 'oh-heavy-metals-list') return <HeavyMetalsScreen />;
     if (activeScreen === 'oh-exams-dashboard') return <ExamsDashboardScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-exams-list') return <ExamsListScreen navigation={customNavigation} />;
     if (activeScreen === 'oh-health-screening-list') return <HealthScreeningListScreen navigation={customNavigation} />;
