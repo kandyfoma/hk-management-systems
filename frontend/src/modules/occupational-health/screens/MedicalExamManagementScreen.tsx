@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator,
-  StyleSheet, Dimensions, Modal, Alert, Platform, FlatList, RefreshControl,
+  StyleSheet, Dimensions, Modal, FlatList, RefreshControl, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -10,17 +10,15 @@ import ApiService from '../../../services/ApiService';
 import { useSimpleToast } from '../../../hooks/useSimpleToast';
 import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
-const { width } = Dimensions.get('window');
-const isDesktop = width >= 1024;
-const ACCENT = colors.primary;
+const { width: SCREEN_W } = Dimensions.get('window');
 
-// ─── Types ──────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface ExamSchedule {
   id: string;
   workerId: string;
   workerName: string;
-  examType: 'pre_employment' | 'periodic' | 'return_to_work' | 'exit' | 'follow_up';
-  scheduledDate: string;
+  examType: string;
+  scheduledDate: string; // YYYY-MM-DD
   status: 'scheduled' | 'completed' | 'cancelled' | 'no_show' | 'rescheduled';
   examiner: string;
   examinerId?: string;
@@ -30,469 +28,762 @@ interface ExamSchedule {
   completedDate?: string;
 }
 
-interface MedicalExamResult {
+// ─── Exam Catalog ─────────────────────────────────────────────────────────────
+interface CatalogItem {
   id: string;
-  scheduleId: string;
-  workerId: string;
-  workerName: string;
-  examType: 'pre_employment' | 'periodic' | 'return_to_work' | 'exit' | 'follow_up';
-  examDate: string;
-  fitnessStatus: 'fit' | 'fit_with_restrictions' | 'unfit' | 'unfit_pending_review';
-  restrictions?: string[];
-  clinicalFindings: string[];
-  testResults: {
-    spirometry?: { fev1: number; fvc: number; fev1_fvc: number; interpretation: string; };
-    audiometry?: { left_ear: number; right_ear: number; hearing_loss: string; };
-    vision?: { left: string; right: string; };
-    bloodPressure?: { systolic: number; diastolic: number; };
-    bloodTest?: { hemoglobin: string; glucose: string; [key: string]: any; };
-  };
-  recommendations: string[];
-  followUpRequired: boolean;
-  followUpDate?: string;
-  certificationId?: string;
-  examiner: string;
+  label: string;
+  description: string;
+  icon: string;
+  color: string;
+  duration: string;
+}
+interface CatalogCategory {
+  category: string;
+  icon: string;
+  items: CatalogItem[];
 }
 
-// ─── Status Badge Component ──────────────────────────────────
-function StatusBadge({ status, type }: { status: string; type?: 'schedule' | 'fitness' }) {
-  const scheduleConfig: Record<string, { color: string; icon: string; label: string }> = {
-    scheduled: { color: '#3B82F6', icon: 'calendar-outline', label: 'Scheduled' },
-    completed: { color: '#22C55E', icon: 'checkmark-circle', label: 'Completed' },
-    cancelled: { color: '#EF4444', icon: 'close-circle', label: 'Cancelled' },
-    no_show: { color: '#F59E0B', icon: 'alert-circle', label: 'No Show' },
-    rescheduled: { color: '#8B5CF6', icon: 'refresh', label: 'Rescheduled' },
-  };
+const EXAM_CATALOG: CatalogCategory[] = [
+  {
+    category: 'Statutory & Regulatory',
+    icon: 'shield-checkmark',
+    items: [
+      { id: 'pre_employment',  label: 'Pre-Employment',  description: 'Fitness assessment prior to hiring',       icon: 'person-add',      color: '#3B82F6', duration: '60 min' },
+      { id: 'periodic',        label: 'Periodic',         description: 'Annual/biannual health monitoring',        icon: 'calendar',         color: '#8B5CF6', duration: '45 min' },
+      { id: 'return_to_work',  label: 'Return to Work',   description: 'Post-absence fitness clearance',           icon: 'arrow-redo',       color: '#22C55E', duration: '30 min' },
+      { id: 'exit',            label: 'Exit Exam',        description: 'Final health status on departure',         icon: 'exit',             color: '#F59E0B', duration: '45 min' },
+      { id: 'follow_up',       label: 'Follow-Up',        description: 'Monitoring of a known condition',          icon: 'refresh',          color: '#EC4899', duration: '20 min' },
+    ],
+  },
+  {
+    category: 'Specialized Tests',
+    icon: 'flask',
+    items: [
+      { id: 'audiometry',      label: 'Audiometry',            description: 'Hearing threshold evaluation',            icon: 'volume-high',  color: '#14B8A6', duration: '30 min' },
+      { id: 'spirometry',      label: 'Spirometry',            description: 'Pulmonary function testing',               icon: 'leaf',         color: '#06B6D4', duration: '25 min' },
+      { id: 'vision',          label: 'Vision / Ophthalmology',description: 'Visual acuity and eye health',             icon: 'eye',          color: '#6366F1', duration: '20 min' },
+      { id: 'cardiovascular',  label: 'Cardiovascular',        description: 'ECG & cardiac fitness test',               icon: 'heart',        color: '#EF4444', duration: '40 min' },
+      { id: 'blood_panel',     label: 'Blood Panel',           description: 'Full blood count, glucose, lipids',        icon: 'water',        color: '#DC2626', duration: '15 min' },
+      { id: 'chest_xray',      label: 'Chest X-Ray',           description: 'Pulmonary radiological exam',              icon: 'scan',         color: '#64748B', duration: '15 min' },
+      { id: 'dermatological',  label: 'Dermatology',           description: 'Skin and occupational exposure check',     icon: 'bandage',      color: '#F97316', duration: '20 min' },
+      { id: 'musculoskeletal', label: 'Musculoskeletal',        description: 'Ergonomic and joint assessment',           icon: 'body',         color: '#D97706', duration: '35 min' },
+    ],
+  },
+];
 
-  const fitnessConfig: Record<string, { color: string; icon: string; label: string }> = {
-    fit: { color: '#22C55E', icon: 'checkmark-circle', label: 'Fit' },
-    fit_with_restrictions: { color: '#F59E0B', icon: 'alert-circle', label: 'Fit w/ Restrictions' },
-    unfit: { color: '#EF4444', icon: 'close-circle', label: 'Unfit' },
-    unfit_pending_review: { color: '#DC2626', icon: 'alert', label: 'Unfit - Review Pending' },
-  };
+// Flat lookup map
+const ALL_EXAM_TYPES: Record<string, { label: string; color: string; icon: string }> = {};
+EXAM_CATALOG.forEach(cat =>
+  cat.items.forEach(item => {
+    ALL_EXAM_TYPES[item.id] = { label: item.label, color: item.color, icon: item.icon };
+  })
+);
 
-  const config = type === 'fitness' ? fitnessConfig[status] : scheduleConfig[status];
-  if (!config) return null;
+// ─── Status config ────────────────────────────────────────────────────────────
+const STATUS_CFG: Record<string, { color: string; bg: string; icon: string; label: string }> = {
+  scheduled:   { color: '#3B82F6', bg: '#EFF6FF', icon: 'calendar-outline',  label: 'Scheduled'   },
+  completed:   { color: '#22C55E', bg: '#F0FDF4', icon: 'checkmark-circle',  label: 'Completed'   },
+  cancelled:   { color: '#EF4444', bg: '#FEF2F2', icon: 'close-circle',      label: 'Cancelled'   },
+  no_show:     { color: '#F59E0B', bg: '#FFFBEB', icon: 'alert-circle',      label: 'No Show'     },
+  rescheduled: { color: '#8B5CF6', bg: '#F5F3FF', icon: 'refresh',           label: 'Rescheduled' },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+const DAY_ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function todayKey(): string { return dateKey(new Date()); }
+function isoToDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function getInitials(name: string): string {
+  const parts = name.trim().split(' ').filter(Boolean);
+  return parts.slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?';
+}
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'lg' }) {
+  const cfg = STATUS_CFG[status] || STATUS_CFG.scheduled;
+  return (
+    <View style={[sbS.badge, { backgroundColor: cfg.bg }, size === 'lg' && sbS.lg]}>
+      <Ionicons name={cfg.icon as any} size={size === 'lg' ? 15 : 12} color={cfg.color} />
+      <Text style={[sbS.label, { color: cfg.color }, size === 'lg' && sbS.labelLg]}>{cfg.label}</Text>
+    </View>
+  );
+}
+const sbS = StyleSheet.create({
+  badge:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8,  paddingVertical: 3,  borderRadius: 20 },
+  lg:      { paddingHorizontal: 12, paddingVertical: 6 },
+  label:   { fontSize: 11, fontWeight: '600' },
+  labelLg: { fontSize: 13 },
+});
+
+// ─── Calendar Grid ────────────────────────────────────────────────────────────
+interface CalendarGridProps {
+  year: number;
+  month: number;
+  exams: ExamSchedule[];
+  selectedDay: string | null;
+  onSelectDay: (key: string) => void;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+}
+
+function CalendarGrid({ year, month, exams, selectedDay, onSelectDay, onPrevMonth, onNextMonth }: CalendarGridProps) {
+  const dayMap = useMemo(() => {
+    const map: Record<string, ExamSchedule[]> = {};
+    exams.forEach(e => {
+      if (!e.scheduledDate) return;
+      if (!map[e.scheduledDate]) map[e.scheduledDate] = [];
+      map[e.scheduledDate].push(e);
+    });
+    return map;
+  }, [exams]);
+
+  const cells = useMemo(() => {
+    const firstDay = new Date(year, month, 1);
+    let startOffset = firstDay.getDay() - 1;
+    if (startOffset < 0) startOffset = 6;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrev  = new Date(year, month,     0).getDate();
+    const total = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+    return Array.from({ length: total }, (_, i) => {
+      if (i < startOffset) {
+        const d = new Date(year, month - 1, daysInPrev - startOffset + i + 1);
+        return { date: d, key: dateKey(d), current: false };
+      }
+      const dayNum = i - startOffset + 1;
+      if (dayNum > daysInMonth) {
+        const d = new Date(year, month + 1, dayNum - daysInMonth);
+        return { date: d, key: dateKey(d), current: false };
+      }
+      const d = new Date(year, month, dayNum);
+      return { date: d, key: dateKey(d), current: true };
+    });
+  }, [year, month]);
+
+  const today    = todayKey();
+  const CELL_W   = Math.floor((SCREEN_W - 48) / 7);
 
   return (
-    <View style={[styles.badge, { backgroundColor: config.color + '20' }]}>
-      <Ionicons name={config.icon as any} size={14} color={config.color} />
-      <Text style={[styles.badgeText, { color: config.color }]}>{config.label}</Text>
+    <View style={cgS.container}>
+      {/* Month nav */}
+      <View style={cgS.nav}>
+        <TouchableOpacity onPress={onPrevMonth} style={cgS.navBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={cgS.monthTitle}>{MONTH_NAMES[month]} {year}</Text>
+        <TouchableOpacity onPress={onNextMonth} style={cgS.navBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-forward" size={20} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Day-of-week headers */}
+      <View style={cgS.dayHeaders}>
+        {DAY_ABBR.map(d => (
+          <View key={d} style={[cgS.dayHeader, { width: CELL_W }]}>
+            <Text style={cgS.dayHeaderTxt}>{d}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Grid */}
+      <View style={cgS.grid}>
+        {cells.map((cell, idx) => {
+          const dayExams  = dayMap[cell.key] || [];
+          const isSelected = selectedDay === cell.key;
+          const isToday    = cell.key === today;
+          const dotColors  = [...new Set(dayExams.map(e => ALL_EXAM_TYPES[e.examType]?.color || colors.primary))].slice(0, 3);
+          const overflow   = Math.max(0, dayExams.length - 3);
+
+          return (
+            <TouchableOpacity
+              key={idx}
+              style={[cgS.cell, { width: CELL_W, height: CELL_W + 20 }, isSelected && cgS.cellSel]}
+              onPress={() => cell.current && onSelectDay(cell.key)}
+              activeOpacity={0.7}
+            >
+              <View style={[cgS.dayNum, isToday && cgS.todayCircle, isSelected && cgS.selCircle]}>
+                <Text style={[
+                  cgS.dayNumTxt,
+                  !cell.current && cgS.dayNumOther,
+                  isToday && cgS.todayTxt,
+                  isSelected && cgS.selTxt,
+                ]}>
+                  {cell.date.getDate()}
+                </Text>
+              </View>
+              {dayExams.length > 0 && (
+                <View style={cgS.dotsRow}>
+                  {dotColors.map((col, di) => (
+                    <View key={di} style={[cgS.dot, { backgroundColor: col }]} />
+                  ))}
+                  {overflow > 0 && <Text style={cgS.overflow}>+{overflow}</Text>}
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
-// ─── Exam Type Card ───────────────────────────────────────────
-const EXAM_TYPE_COLORS: Record<string, string> = {
-  pre_employment: '#3B82F6',
-  periodic: ACCENT,
-  return_to_work: '#22C55E',
-  exit: '#F59E0B',
-  follow_up: '#8B5CF6',
-};
+const cgS = StyleSheet.create({
+  container:    { backgroundColor: colors.surface, borderRadius: borderRadius.xl, marginHorizontal: spacing.md, padding: spacing.md, ...shadows.sm },
+  nav:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  navBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  monthTitle:   { fontSize: 17, fontWeight: '700', color: colors.text },
+  dayHeaders:   { flexDirection: 'row', marginBottom: 4 },
+  dayHeader:    { alignItems: 'center', paddingVertical: 4 },
+  dayHeaderTxt: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  grid:         { flexDirection: 'row', flexWrap: 'wrap' },
+  cell:         { alignItems: 'center', paddingTop: 5, paddingBottom: 3 },
+  cellSel:      { backgroundColor: colors.primary + '10', borderRadius: borderRadius.md },
+  dayNum:       { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  todayCircle:  { backgroundColor: colors.primary + '22' },
+  selCircle:    { backgroundColor: colors.primary },
+  dayNumTxt:    { fontSize: 13, fontWeight: '500', color: colors.text },
+  dayNumOther:  { color: colors.outline },
+  todayTxt:     { color: colors.primary, fontWeight: '700' },
+  selTxt:       { color: '#FFFFFF', fontWeight: '700' },
+  dotsRow:      { flexDirection: 'row', gap: 2, marginTop: 3, alignItems: 'center' },
+  dot:          { width: 5, height: 5, borderRadius: 3 },
+  overflow:     { fontSize: 8, color: colors.textSecondary, fontWeight: '700' },
+});
 
-function ExamTypeCard({
-  type,
-  label,
-  description,
-  icon,
-  scheduleCount,
-  completedCount,
-  onPress,
+// ─── Day Appointments Panel ───────────────────────────────────────────────────
+function DayPanel({
+  day, exams, onSelect,
 }: {
-  type: string;
-  label: string;
-  description: string;
-  icon: string;
-  scheduleCount: number;
-  completedCount: number;
-  onPress: () => void;
+  day: string | null;
+  exams: ExamSchedule[];
+  onSelect: (e: ExamSchedule) => void;
 }) {
-  const typeColor = EXAM_TYPE_COLORS[type] || ACCENT;
-  const totalCount = scheduleCount + completedCount;
-  return (
-    <TouchableOpacity
-      style={[styles.typeCard, styles.cardShadow]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      {/* Top border accent */}
-      <View style={[styles.typeCardTopBorder, { backgroundColor: typeColor }]} />
-      
-      {/* Content */}
-      <View style={styles.typeCardContent}>
-        {/* Header with Icon and Title */}
-        <View style={styles.typeCardHeader}>
-          <View style={[styles.typeCardIcon, { backgroundColor: typeColor + '18' }]}>
-            <Ionicons name={icon as any} size={24} color={typeColor} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.typeCardLabel}>{label}</Text>
-            <Text style={styles.typeCardDesc} numberOfLines={1}>{description}</Text>
-          </View>
-        </View>
-
-        {/* Counters */}
-        <View style={styles.typeCardFooter}>
-          <View style={styles.typeCounterBox}>
-            <Text style={[styles.typeCounterLabel]}>Scheduled</Text>
-            <Text style={[styles.typeCounterValue, { color: typeColor }]}>{scheduleCount}</Text>
-          </View>
-          <View style={[styles.typeCounterBox, { borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.md }]}>
-            <Text style={[styles.typeCounterLabel]}>Completed</Text>
-            <Text style={[styles.typeCounterValue, { color: colors.success }]}>{completedCount}</Text>
-          </View>
-          <View style={[styles.typeCounterBox, { borderLeftWidth: 1, borderLeftColor: colors.outline, paddingLeft: spacing.md }]}>
-            <Text style={[styles.typeCounterLabel]}>Total</Text>
-            <Text style={[styles.typeCounterValue, { color: colors.primary }]}>{totalCount}</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Schedule Card ───────────────────────────────────────────
-function ScheduleCard({
-  schedule,
-  onPress,
-}: {
-  schedule: ExamSchedule;
-  onPress: () => void;
-}) {
-  const examTypeLabel: Record<string, string> = {
-    pre_employment: 'Pre-Employment',
-    periodic: 'Periodic',
-    return_to_work: 'Return to Work',
-    exit: 'Exit',
-    follow_up: 'Follow-up',
-  };
-
-  const days = Math.ceil((new Date(schedule.scheduledDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-  const isDue = days <= 0;
-  const isUpcoming = days > 0 && days <= 7;
-  const typeColor = EXAM_TYPE_COLORS[schedule.examType] || ACCENT;
+  if (!day) return null;
+  const d     = isoToDate(day);
+  const label = `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
 
   return (
-    <TouchableOpacity style={[styles.scheduleCard, styles.cardShadow, { borderLeftColor: typeColor }]} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.scheduleCardHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.scheduleWorker}>{schedule.workerName}</Text>
-          <Text style={styles.scheduleType}>{examTypeLabel[schedule.examType]}</Text>
-        </View>
-        <StatusBadge status={schedule.status} type="schedule" />
-      </View>
-
-      <View style={styles.scheduleDetails}>
-        <View style={styles.detailRow}>
-          <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.detailText}>{schedule.scheduledDate}</Text>
-          {isDue && <View style={styles.dueBadge}><Text style={styles.dueBadgeText}>DUE</Text></View>}
-          {isUpcoming && <View style={styles.upcomingBadge}><Text style={styles.upcomingBadgeText}>Soon</Text></View>}
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="person-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.detailText}>{schedule.examiner}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.detailText}>{schedule.location}</Text>
+    <View style={dpS.container}>
+      <View style={dpS.header}>
+        <Text style={dpS.dateLabel}>{label}</Text>
+        <View style={dpS.countPill}>
+          <Text style={dpS.countTxt}>{exams.length} RDV</Text>
         </View>
       </View>
 
-      <View style={styles.scheduleFooter}>
-        <TouchableOpacity style={styles.scheduleAction}>
-          <Ionicons name="create-outline" size={16} color={ACCENT} />
-          <Text style={[styles.actionText, { color: ACCENT }]}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.scheduleAction}>
-          <Ionicons name="mail-outline" size={16} color={ACCENT} />
-          <Text style={[styles.actionText, { color: ACCENT }]}>Notify</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Exam Result Card ────────────────────────────────────────
-function ExamResultCard({
-  result,
-  onPress,
-}: {
-  result: MedicalExamResult;
-  onPress: () => void;
-}) {
-  const examTypeLabel: Record<string, string> = {
-    pre_employment: 'Pre-Employment',
-    periodic: 'Periodic',
-    return_to_work: 'Return to Work',
-    exit: 'Exit',
-    follow_up: 'Follow-up',
-  };
-
-  const fitnessColors: Record<string, string> = {
-    fit: '#22C55E',
-    fit_with_restrictions: '#F59E0B',
-    unfit: '#EF4444',
-    unfit_pending_review: '#DC2626',
-  };
-  const fitnessColor = fitnessColors[result.fitnessStatus] || colors.primary;
-
-  return (
-    <TouchableOpacity style={[styles.resultCard, styles.cardShadow, { borderLeftColor: fitnessColor }]} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.resultCardHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.resultWorker}>{result.workerName}</Text>
-          <Text style={styles.resultType}>{examTypeLabel[result.examType]} • {result.examDate}</Text>
+      {exams.length === 0 ? (
+        <View style={dpS.empty}>
+          <Ionicons name="calendar-clear-outline" size={36} color={colors.outline} />
+          <Text style={dpS.emptyTxt}>No appointments on this day</Text>
         </View>
-        <StatusBadge status={result.fitnessStatus} type="fitness" />
-      </View>
-
-      {result.restrictions && result.restrictions.length > 0 && (
-        <View style={styles.restrictionsBox}>
-          <Ionicons name="warning" size={16} color="#F59E0B" />
-          <Text style={styles.restrictionsText}>
-            {result.restrictions[0]}
-            {result.restrictions.length > 1 && ` +${result.restrictions.length - 1} more`}
-          </Text>
-        </View>
+      ) : (
+        exams.map(exam => {
+          const t = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
+          return (
+            <TouchableOpacity key={exam.id} style={dpS.card} onPress={() => onSelect(exam)} activeOpacity={0.75}>
+              <View style={[dpS.colorBar, { backgroundColor: t.color }]} />
+              <View style={[dpS.iconBox, { backgroundColor: t.color + '18' }]}>
+                <Ionicons name={t.icon as any} size={18} color={t.color} />
+              </View>
+              <View style={dpS.cardBody}>
+                <Text style={dpS.workerName} numberOfLines={1}>{exam.workerName}</Text>
+                <Text style={dpS.examType}>{t.label}</Text>
+                {exam.examiner ? (
+                  <Text style={dpS.examiner} numberOfLines={1}>Dr. {exam.examiner}</Text>
+                ) : null}
+              </View>
+              <StatusBadge status={exam.status} />
+              <Ionicons name="chevron-forward" size={15} color={colors.outline} />
+            </TouchableOpacity>
+          );
+        })
       )}
-
-      <View style={styles.testResultsSummary}>
-        {result.testResults.spirometry && (
-          <View style={styles.testResult}>
-            <Text style={styles.testLabel}>Spirometry</Text>
-            <Text style={styles.testValue}>{result.testResults.spirometry.interpretation}</Text>
-          </View>
-        )}
-        {result.testResults.audiometry && (
-          <View style={styles.testResult}>
-            <Text style={styles.testLabel}>Audiometry</Text>
-            <Text style={styles.testValue}>{result.testResults.audiometry.hearing_loss}</Text>
-          </View>
-        )}
-        {result.testResults.vision && (
-          <View style={styles.testResult}>
-            <Text style={styles.testLabel}>Vision</Text>
-            <Text style={styles.testValue}>{result.testResults.vision.left}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.resultFooter}>
-        <TouchableOpacity style={styles.resultAction}>
-          <Ionicons name="eye-outline" size={16} color={ACCENT} />
-          <Text style={[styles.actionText, { color: ACCENT }]}>View Details</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.resultAction}>
-          <Ionicons name="document-outline" size={16} color={ACCENT} />
-          <Text style={[styles.actionText, { color: ACCENT }]}>Certificate</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
-// ─── Schedule Modal ──────────────────────────────────────────
-function ScheduleModal({
-  visible,
-  schedule,
-  workers,
-  users,
-  onClose,
-  onSave,
+const dpS = StyleSheet.create({
+  container:  { marginHorizontal: spacing.md, marginTop: spacing.md },
+  header:     { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  dateLabel:  { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
+  countPill:  { backgroundColor: colors.primary + '18', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  countTxt:   { fontSize: 11, fontWeight: '700', color: colors.primary },
+  empty:      { alignItems: 'center', paddingVertical: 36, gap: spacing.sm },
+  emptyTxt:   { fontSize: 13, color: colors.textSecondary },
+  card:       { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: borderRadius.lg, marginBottom: spacing.sm, overflow: 'hidden', ...shadows.sm, minHeight: 64 },
+  colorBar:   { width: 4, alignSelf: 'stretch' },
+  iconBox:    { width: 38, height: 38, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center', marginLeft: 4 },
+  cardBody:   { flex: 1, paddingVertical: spacing.sm },
+  workerName: { fontSize: 13, fontWeight: '700', color: colors.text },
+  examType:   { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  examiner:   { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+});
+
+// ─── Appointment Detail Modal ─────────────────────────────────────────────────
+function AppointmentDetailModal({
+  visible, exam, onClose, onEdit,
 }: {
   visible: boolean;
-  schedule: ExamSchedule | null;
+  exam: ExamSchedule | null;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  const slideY = useRef(new Animated.Value(400)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+    } else {
+      slideY.setValue(400);
+    }
+  }, [visible]);
+
+  if (!exam) return null;
+  const t          = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
+  const statusCfg  = STATUS_CFG[exam.status] || STATUS_CFG.scheduled;
+  const initials   = getInitials(exam.workerName);
+
+  const detailRows = [
+    { icon: 'calendar-outline',      label: 'Date',     value: exam.scheduledDate     },
+    { icon: 'person-circle-outline', label: 'Examiner', value: exam.examiner || '—'   },
+    { icon: 'location-outline',      label: 'Location', value: exam.location  || '—'  },
+    ...(exam.notes ? [{ icon: 'document-text-outline', label: 'Notes', value: exam.notes }] : []),
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <View style={adS.overlay}>
+        <TouchableOpacity style={adS.backdrop} onPress={onClose} activeOpacity={1} />
+        <Animated.View style={[adS.sheet, { transform: [{ translateY: slideY }] }]}>
+          <View style={adS.handle} />
+          <View style={[adS.stripe, { backgroundColor: t.color }]} />
+
+          <View style={adS.body}>
+            {/* Worker row */}
+            <View style={adS.workerRow}>
+              <View style={[adS.avatar, { backgroundColor: t.color + '22' }]}>
+                <Text style={[adS.avatarTxt, { color: t.color }]}>{initials}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={adS.workerName}>{exam.workerName}</Text>
+                <View style={adS.typeChip}>
+                  <Ionicons name={t.icon as any} size={12} color={t.color} />
+                  <Text style={[adS.typeTxt, { color: t.color }]}>{t.label}</Text>
+                </View>
+              </View>
+              <StatusBadge status={exam.status} size="lg" />
+            </View>
+
+            {/* Details */}
+            {detailRows.map((row, i) => (
+              <View key={i} style={adS.detailRow}>
+                <View style={[adS.detailIcon, { backgroundColor: t.color + '12' }]}>
+                  <Ionicons name={row.icon as any} size={16} color={t.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={adS.detailLabel}>{row.label}</Text>
+                  <Text style={adS.detailValue}>{row.value}</Text>
+                </View>
+              </View>
+            ))}
+
+            {/* Actions */}
+            <View style={adS.actions}>
+              <TouchableOpacity style={adS.actionBtn} onPress={onEdit} activeOpacity={0.8}>
+                <Ionicons name="create-outline" size={17} color={colors.primary} />
+                <Text style={[adS.actionTxt, { color: colors.primary }]}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[adS.actionBtn, { backgroundColor: '#F0FDF4', borderColor: '#22C55E60' }]} activeOpacity={0.8}>
+                <Ionicons name="mail-outline" size={17} color="#22C55E" />
+                <Text style={[adS.actionTxt, { color: '#22C55E' }]}>Notify</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[adS.actionBtn, { backgroundColor: '#FEF2F2', borderColor: '#EF444460' }]} activeOpacity={0.8}>
+                <Ionicons name="close-circle-outline" size={17} color="#EF4444" />
+                <Text style={[adS.actionTxt, { color: '#EF4444' }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+const adS = StyleSheet.create({
+  overlay:     { flex: 1, justifyContent: 'flex-end' },
+  backdrop:    { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet:       { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 32, overflow: 'hidden', ...shadows.lg },
+  handle:      { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.outline, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  stripe:      { height: 4, width: '100%' },
+  body:        { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  workerRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  avatar:      { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
+  avatarTxt:   { fontSize: 20, fontWeight: '800' },
+  workerName:  { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  typeChip:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  typeTxt:     { fontSize: 12, fontWeight: '600' },
+  detailRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
+  detailIcon:  { width: 36, height: 36, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center' },
+  detailLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500', marginBottom: 2 },
+  detailValue: { fontSize: 14, color: colors.text, fontWeight: '500' },
+  actions:     { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.outline },
+  actionBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary + '60', backgroundColor: colors.primary + '10' },
+  actionTxt:   { fontSize: 13, fontWeight: '600' },
+});
+
+// ─── Exam Catalog Picker ──────────────────────────────────────────────────────
+function ExamCatalogPicker({
+  selected, onSelect,
+}: { selected: string | null; onSelect: (id: string) => void }) {
+  const CARD_W = (SCREEN_W - 32 - 16 - spacing.sm) / 2;
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false}>
+      {EXAM_CATALOG.map(cat => (
+        <View key={cat.category} style={ecS.section}>
+          <View style={ecS.catHeader}>
+            <Ionicons name={cat.icon as any} size={14} color={colors.textSecondary} />
+            <Text style={ecS.catTitle}>{cat.category}</Text>
+          </View>
+          <View style={ecS.grid}>
+            {cat.items.map(item => {
+              const isSel = selected === item.id;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[ecS.card, { width: CARD_W }, isSel && { borderColor: item.color, borderWidth: 2, backgroundColor: item.color + '0D' }]}
+                  onPress={() => onSelect(item.id)}
+                  activeOpacity={0.8}
+                >
+                  {isSel && (
+                    <View style={[ecS.check, { backgroundColor: item.color }]}>
+                      <Ionicons name="checkmark" size={11} color="#FFF" />
+                    </View>
+                  )}
+                  <View style={[ecS.iconBox, { backgroundColor: item.color + '18' }]}>
+                    <Ionicons name={item.icon as any} size={22} color={item.color} />
+                  </View>
+                  <Text style={[ecS.cardLabel, isSel && { color: item.color }]} numberOfLines={2}>{item.label}</Text>
+                  <Text style={ecS.cardDesc} numberOfLines={2}>{item.description}</Text>
+                  <View style={[ecS.duration, { backgroundColor: item.color + '12' }]}>
+                    <Ionicons name="time-outline" size={10} color={item.color} />
+                    <Text style={[ecS.durationTxt, { color: item.color }]}>{item.duration}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+const ecS = StyleSheet.create({
+  section:     { marginBottom: spacing.lg },
+  catHeader:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm },
+  catTitle:    { fontSize: 11, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
+  grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  card:        { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.outline, position: 'relative', ...shadows.sm },
+  check:       { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  iconBox:     { width: 44, height: 44, borderRadius: borderRadius.lg, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.sm },
+  cardLabel:   { fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 3 },
+  cardDesc:    { fontSize: 11, color: colors.textSecondary, lineHeight: 15, marginBottom: spacing.sm },
+  duration:    { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20 },
+  durationTxt: { fontSize: 10, fontWeight: '600' },
+});
+
+// ─── Schedule Form Modal (3-step wizard) ──────────────────────────────────────
+interface ScheduleFormData {
+  workerId: string;
+  workerName: string;
+  examType: string;
+  scheduledDate: string;
+  examiner: string;
+  examinerId: string;
+  location: string;
+  notes: string;
+}
+
+const BLANK_FORM: ScheduleFormData = {
+  workerId: '', workerName: '', examType: '', scheduledDate: '',
+  examiner: '', examinerId: '', location: '', notes: '',
+};
+
+function ScheduleFormModal({
+  visible, workers, users, onClose, onSave,
+}: {
+  visible: boolean;
   workers: any[];
   users: any[];
   onClose: () => void;
-  onSave: (data: ExamSchedule) => void;
+  onSave: (data: ScheduleFormData) => void;
 }) {
-  const [formData, setFormData] = useState<ExamSchedule | null>(schedule);
-  const [showWorkerPicker, setShowWorkerPicker] = useState(false);
+  const [step, setStep]             = useState(0);
+  const [form, setForm]             = useState<ScheduleFormData>(BLANK_FORM);
+  const [workerSearch, setWorkerSearch] = useState('');
   const [showExaminerPicker, setShowExaminerPicker] = useState(false);
+  const slideX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    setFormData(schedule);
-  }, [schedule, visible]);
-
-  if (!formData) return null;
-
-  const handleSave = () => {
-    if (!formData.workerId || !formData.scheduledDate || !formData.examiner) {
-      showToast('Please fill all required fields', 'error');
-      return;
+    if (visible) {
+      setStep(0);
+      setForm(BLANK_FORM);
+      setWorkerSearch('');
     }
-    onSave(formData);
-    onClose();
-  };
+  }, [visible]);
+
+  const animeTo = useCallback((next: number) => {
+    Animated.timing(slideX, { toValue: -SCREEN_W, duration: 180, useNativeDriver: true }).start(() => {
+      setStep(next);
+      slideX.setValue(SCREEN_W);
+      Animated.spring(slideX, { toValue: 0, tension: 100, friction: 14, useNativeDriver: true }).start();
+    });
+  }, [slideX]);
+
+  const filteredWorkers = useMemo(() =>
+    workers.filter(w => !workerSearch ||
+      `${w.first_name} ${w.last_name}`.toLowerCase().includes(workerSearch.toLowerCase())
+    ), [workers, workerSearch]);
+
+  const canAdvance = [
+    form.workerId !== '',
+    form.examType !== '',
+    form.scheduledDate !== '' && form.examiner !== '',
+  ];
+
+  const STEP_TITLES = ['Select Worker', 'Choose Exam Type', 'Schedule Details'];
+  const STEP_ICONS  = ['person-outline', 'flask-outline', 'calendar-outline'] as const;
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Schedule Medical Exam</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.text} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={sfS.overlay}>
+        <View style={sfS.sheet}>
+          {/* Header */}
+          <View style={sfS.header}>
+            {step > 0 ? (
+              <TouchableOpacity onPress={() => animeTo(step - 1)} style={sfS.iconBtn}>
+                <Ionicons name="arrow-back" size={20} color={colors.text} />
+              </TouchableOpacity>
+            ) : <View style={{ width: 38 }} />}
+            <Text style={sfS.title}>{STEP_TITLES[step]}</Text>
+            <TouchableOpacity onPress={onClose} style={sfS.iconBtn}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            {/* Worker Selection */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Select Worker *</Text>
-              <TouchableOpacity
-                style={styles.dropdownButton}
-                onPress={() => setShowWorkerPicker(true)}
-              >
-                <Text style={[styles.dropdownButtonText, !formData.workerId && styles.dropdownPlaceholder]}>
-                  {formData.workerName || 'Select a worker'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-
-              {showWorkerPicker && (
-                <Modal visible={showWorkerPicker} transparent animationType="fade">
-                  <View style={styles.pickerOverlay}>
-                    <View style={styles.pickerCard}>
-                      <View style={styles.pickerHeader}>
-                        <Text style={styles.pickerTitle}>Select Worker</Text>
-                        <TouchableOpacity onPress={() => setShowWorkerPicker(false)}>
-                          <Ionicons name="close" size={20} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                      </View>
-                      <ScrollView style={styles.pickerList}>
-                        {workers.map((worker) => (
-                          <TouchableOpacity
-                            key={worker.id}
-                            style={styles.pickerOption}
-                            onPress={() => {
-                              setFormData({
-                                ...formData,
-                                workerId: String(worker.id),
-                                workerName: `${worker.first_name} ${worker.last_name}`,
-                              });
-                              setShowWorkerPicker(false);
-                            }}
-                          >
-                            <Text style={styles.pickerOptionText}>
-                              {worker.first_name} {worker.last_name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
+          {/* Step indicator */}
+          <View style={sfS.stepRow}>
+            {STEP_TITLES.map((t, i) => (
+              <React.Fragment key={i}>
+                <View style={sfS.stepItem}>
+                  <View style={[sfS.stepCircle, i < step && sfS.stepDone, i === step && sfS.stepActive]}>
+                    {i < step
+                      ? <Ionicons name="checkmark" size={14} color="#FFF" />
+                      : <Ionicons name={STEP_ICONS[i]} size={14} color={i === step ? '#FFF' : colors.textSecondary} />
+                    }
                   </View>
-                </Modal>
-              )}
-            </View>
-
-            {/* Exam Details */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Exam Details</Text>
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Examination Type</Text>
-                <View style={styles.selectBox}>
-                  <Text style={styles.selectText}>
-                    {formData.examType === 'pre_employment' ? 'Pre-Employment' :
-                     formData.examType === 'periodic' ? 'Periodic' :
-                     formData.examType === 'return_to_work' ? 'Return to Work' :
-                     formData.examType === 'exit' ? 'Exit' : 'Follow-up'}
-                  </Text>
+                  <Text style={[sfS.stepLabel, i === step && sfS.stepLabelActive]} numberOfLines={2}>{t}</Text>
                 </View>
-              </View>
+                {i < 2 && <View style={[sfS.stepLine, i < step && sfS.stepLineDone]} />}
+              </React.Fragment>
+            ))}
+          </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Scheduled Date *</Text>
-                <DateInput
-                  value={formData.scheduledDate}
-                  onChangeText={(date) => setFormData({ ...formData, scheduledDate: date })}
-                  minimumDate={new Date()}
+          {/* Step content */}
+          <Animated.View style={[{ flex: 1, overflow: 'hidden' }, { transform: [{ translateX: slideX }] }]}>
+            {/* STEP 0 – Worker */}
+            {step === 0 && (
+              <View style={{ flex: 1, paddingHorizontal: spacing.md }}>
+                <View style={sfS.searchBox}>
+                  <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+                  <TextInput
+                    style={sfS.searchInput}
+                    placeholder="Search workers…"
+                    value={workerSearch}
+                    onChangeText={setWorkerSearch}
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+                <FlatList
+                  data={filteredWorkers}
+                  keyExtractor={w => String(w.id)}
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item: w }) => {
+                    const selected = form.workerId === String(w.id);
+                    const name     = `${w.first_name} ${w.last_name}`;
+                    return (
+                      <TouchableOpacity
+                        style={[sfS.workerRow, selected && sfS.workerRowSel]}
+                        onPress={() => setForm(f => ({ ...f, workerId: String(w.id), workerName: name }))}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[sfS.workerAvatar, selected && { backgroundColor: colors.primary }]}>
+                          <Text style={[sfS.workerAvatarTxt, selected && { color: '#FFF' }]}>
+                            {getInitials(name)}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[sfS.workerName, selected && { color: colors.primary }]}>{name}</Text>
+                          {w.employee_id && <Text style={sfS.workerMeta}>ID: {w.employee_id}</Text>}
+                          {w.department   && <Text style={sfS.workerMeta}>{w.department}</Text>}
+                        </View>
+                        {selected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+                      </TouchableOpacity>
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View style={{ alignItems: 'center', paddingVertical: 40, gap: 8 }}>
+                      <Ionicons name="people-outline" size={40} color={colors.outline} />
+                      <Text style={{ color: colors.textSecondary }}>No workers found</Text>
+                    </View>
+                  }
                 />
               </View>
+            )}
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Examiner *</Text>
-                <TouchableOpacity
-                  style={styles.dropdownButton}
-                  onPress={() => setShowExaminerPicker(true)}
-                >
-                  <Text style={[styles.dropdownButtonText, !formData.examiner && styles.dropdownPlaceholder]}>
-                    {formData.examiner || 'Select examiner'}
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
+            {/* STEP 1 – Exam catalog */}
+            {step === 1 && (
+              <View style={{ flex: 1, paddingHorizontal: spacing.md }}>
+                <ExamCatalogPicker
+                  selected={form.examType || null}
+                  onSelect={id => setForm(f => ({ ...f, examType: id }))}
+                />
+              </View>
+            )}
 
-                {showExaminerPicker && (
-                  <Modal visible={showExaminerPicker} transparent animationType="fade">
-                    <View style={styles.pickerOverlay}>
-                      <View style={styles.pickerCard}>
-                        <View style={styles.pickerHeader}>
-                          <Text style={styles.pickerTitle}>Select Examiner</Text>
+            {/* STEP 2 – Details */}
+            {step === 2 && (
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Summary pills */}
+                <View style={sfS.summaryRow}>
+                  {form.workerName ? (
+                    <View style={sfS.summaryChip}>
+                      <Ionicons name="person" size={12} color={colors.primary} />
+                      <Text style={sfS.summaryChipTxt} numberOfLines={1}>{form.workerName}</Text>
+                    </View>
+                  ) : null}
+                  {form.examType ? (() => {
+                    const t = ALL_EXAM_TYPES[form.examType];
+                    return t ? (
+                      <View style={[sfS.summaryChip, { backgroundColor: t.color + '14', borderColor: t.color + '40' }]}>
+                        <Ionicons name={t.icon as any} size={12} color={t.color} />
+                        <Text style={[sfS.summaryChipTxt, { color: t.color }]} numberOfLines={1}>{t.label}</Text>
+                      </View>
+                    ) : null;
+                  })() : null}
+                </View>
+
+                <View style={sfS.formGroup}>
+                  <Text style={sfS.label}>Scheduled Date *</Text>
+                  <DateInput
+                    value={form.scheduledDate}
+                    onChangeText={d => setForm(f => ({ ...f, scheduledDate: d }))}
+                    minimumDate={new Date()}
+                  />
+                </View>
+
+                <View style={sfS.formGroup}>
+                  <Text style={sfS.label}>Examiner *</Text>
+                  <TouchableOpacity
+                    style={sfS.dropdownBtn}
+                    onPress={() => setShowExaminerPicker(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[sfS.dropdownTxt, !form.examiner && { color: colors.textSecondary }]}>
+                      {form.examiner || 'Select examiner'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  <Modal visible={showExaminerPicker} transparent animationType="slide">
+                    <View style={sfS.pickerOverlay}>
+                      <View style={sfS.pickerSheet}>
+                        <View style={sfS.pickerHeader}>
+                          <Text style={sfS.pickerTitle}>Select Examiner</Text>
                           <TouchableOpacity onPress={() => setShowExaminerPicker(false)}>
-                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
                           </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.pickerList}>
-                          {users.map((user) => (
+                        <ScrollView style={{ maxHeight: 400 }}>
+                          {users.filter(u => u.first_name || u.last_name).map(u => (
                             <TouchableOpacity
-                              key={user.id}
-                              style={styles.pickerOption}
+                              key={u.id}
+                              style={sfS.pickerOption}
                               onPress={() => {
-                                setFormData({
-                                  ...formData,
-                                  examiner: `${user.first_name} ${user.last_name}`,
-                                  examinerId: String(user.id),
-                                });
+                                setForm(f => ({ ...f, examiner: `${u.first_name} ${u.last_name}`, examinerId: String(u.id) }));
                                 setShowExaminerPicker(false);
                               }}
                             >
-                              <Text style={styles.pickerOptionText}>
-                                {user.first_name} {user.last_name}
-                              </Text>
+                              <Text style={sfS.pickerOptionTxt}>{u.first_name} {u.last_name}</Text>
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
                       </View>
                     </View>
                   </Modal>
-                )}
-              </View>
+                </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Location</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.location}
-                  onChangeText={(text) => setFormData({ ...formData, location: text })}
-                  placeholder="Examination location"
-                />
-              </View>
+                <View style={sfS.formGroup}>
+                  <Text style={sfS.label}>Location</Text>
+                  <TextInput
+                    style={sfS.input}
+                    value={form.location}
+                    onChangeText={v => setForm(f => ({ ...f, location: v }))}
+                    placeholder="Exam room / clinic"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Notes</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={formData.notes || ''}
-                  onChangeText={(text) => setFormData({ ...formData, notes: text })}
-                  placeholder="Additional notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </View>
-          </ScrollView>
+                <View style={sfS.formGroup}>
+                  <Text style={sfS.label}>Notes</Text>
+                  <TextInput
+                    style={[sfS.input, { minHeight: 90, textAlignVertical: 'top' }]}
+                    value={form.notes}
+                    onChangeText={v => setForm(f => ({ ...f, notes: v }))}
+                    placeholder="Additional instructions…"
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                  />
+                </View>
+              </ScrollView>
+            )}
+          </Animated.View>
 
-          <View style={styles.modalFooter}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Ionicons name="checkmark" size={18} color="#FFF" />
-              <Text style={styles.saveBtnText}>Save Schedule</Text>
-            </TouchableOpacity>
+          {/* Footer */}
+          <View style={sfS.footer}>
+            {step < 2 ? (
+              <TouchableOpacity
+                style={[sfS.primaryBtn, !canAdvance[step] && sfS.primaryBtnDisabled]}
+                onPress={() => canAdvance[step] && animeTo(step + 1)}
+                activeOpacity={0.85}
+              >
+                <Text style={sfS.primaryBtnTxt}>Continue</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[sfS.primaryBtn, !canAdvance[2] && sfS.primaryBtnDisabled]}
+                onPress={() => canAdvance[2] && onSave(form)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                <Text style={sfS.primaryBtnTxt}>Schedule Exam</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -500,797 +791,299 @@ function ScheduleModal({
   );
 }
 
-// ─── Result Detail Modal ────────────────────────────────────
-function ResultDetailModal({
-  visible,
-  result,
-  onClose,
-}: {
-  visible: boolean;
-  result: MedicalExamResult | null;
-  onClose: () => void;
-}) {
-  if (!result) return null;
+const sfS = StyleSheet.create({
+  overlay:          { flex: 1, justifyContent: 'flex-end' },
+  sheet:            { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%', overflow: 'hidden', ...shadows.lg },
+  header:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  iconBtn:          { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  title:            { fontSize: 17, fontWeight: '700', color: colors.text },
+  stepRow:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  stepItem:         { alignItems: 'center', gap: 4 },
+  stepCircle:       { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  stepDone:         { backgroundColor: '#22C55E' },
+  stepActive:       { backgroundColor: colors.primary },
+  stepLabel:        { fontSize: 10, color: colors.textSecondary, fontWeight: '500', textAlign: 'center', maxWidth: 68 },
+  stepLabelActive:  { color: colors.primary, fontWeight: '700' },
+  stepLine:         { flex: 1, height: 1, backgroundColor: colors.outline, marginBottom: 18 },
+  stepLineDone:     { backgroundColor: '#22C55E' },
+  searchBox:        { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.md },
+  searchInput:      { flex: 1, fontSize: 14, color: colors.text },
+  workerRow:        { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: 6, borderWidth: 1, borderColor: colors.outline },
+  workerRowSel:     { borderColor: colors.primary, backgroundColor: colors.primary + '08' },
+  workerAvatar:     { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center' },
+  workerAvatarTxt:  { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
+  workerName:       { fontSize: 13, fontWeight: '600', color: colors.text },
+  workerMeta:       { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  summaryRow:       { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
+  summaryChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.primary + '12', borderWidth: 1, borderColor: colors.primary + '30' },
+  summaryChipTxt:   { fontSize: 12, fontWeight: '600', color: colors.primary },
+  formGroup:        { marginBottom: spacing.lg },
+  label:            { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 7 },
+  dropdownBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, minHeight: 46 },
+  dropdownTxt:      { fontSize: 14, color: colors.text, flex: 1 },
+  input:            { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14, color: colors.text, minHeight: 46 },
+  pickerOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  pickerSheet:      { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  pickerHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerTitle:      { fontSize: 16, fontWeight: '600', color: colors.text },
+  pickerOption:     { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  pickerOptionTxt:  { fontSize: 14, color: colors.text },
+  footer:           { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  primaryBtn:       { backgroundColor: colors.primary, borderRadius: borderRadius.lg, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  primaryBtnDisabled:{ backgroundColor: colors.outline },
+  primaryBtnTxt:    { fontSize: 15, fontWeight: '700', color: '#FFF' },
+});
 
-  return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Exam Results</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            {/* Header */}
-            <View style={styles.resultDetailHeader}>
-              <View>
-                <Text style={styles.resultName}>{result.workerName}</Text>
-                <Text style={styles.resultDate}>{result.examDate}</Text>
-              </View>
-              <StatusBadge status={result.fitnessStatus} type="fitness" />
-            </View>
-
-            {/* Restrictions */}
-            {result.restrictions && result.restrictions.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Work Restrictions</Text>
-                <View style={styles.restrictionsList}>
-                  {result.restrictions.map((restriction, idx) => (
-                    <View key={idx} style={styles.restrictionItem}>
-                      <Ionicons name="alert-circle" size={16} color="#F59E0B" />
-                      <Text style={styles.restrictionText}>{restriction}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Test Results */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Test Results</Text>
-
-              {result.testResults.spirometry && (
-                <View style={styles.testResultBox}>
-                  <View style={styles.testHeader}>
-                    <Ionicons name="arrow-forward" size={18} color={ACCENT} />
-                    <Text style={styles.testTitle}>Spirometry</Text>
-                  </View>
-                  <View style={styles.testParams}>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>FEV1</Text>
-                      <Text style={styles.paramValue}>{result.testResults.spirometry.fev1}%</Text>
-                    </View>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>FVC</Text>
-                      <Text style={styles.paramValue}>{result.testResults.spirometry.fvc}%</Text>
-                    </View>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>FEV1/FVC</Text>
-                      <Text style={styles.paramValue}>{result.testResults.spirometry.fev1_fvc}%</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.testInterpretation}>
-                    {result.testResults.spirometry.interpretation}
-                  </Text>
-                </View>
-              )}
-
-              {result.testResults.audiometry && (
-                <View style={styles.testResultBox}>
-                  <View style={styles.testHeader}>
-                    <Ionicons name="volume-high" size={18} color={ACCENT} />
-                    <Text style={styles.testTitle}>Audiometry</Text>
-                  </View>
-                  <View style={styles.testParams}>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>Left Ear</Text>
-                      <Text style={styles.paramValue}>{result.testResults.audiometry.left_ear} dB</Text>
-                    </View>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>Right Ear</Text>
-                      <Text style={styles.paramValue}>{result.testResults.audiometry.right_ear} dB</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.testInterpretation}>
-                    {result.testResults.audiometry.hearing_loss}
-                  </Text>
-                </View>
-              )}
-
-              {result.testResults.vision && (
-                <View style={styles.testResultBox}>
-                  <View style={styles.testHeader}>
-                    <Ionicons name="eye" size={18} color={ACCENT} />
-                    <Text style={styles.testTitle}>Vision</Text>
-                  </View>
-                  <View style={styles.testParams}>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>Left Eye</Text>
-                      <Text style={styles.paramValue}>{result.testResults.vision.left}</Text>
-                    </View>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>Right Eye</Text>
-                      <Text style={styles.paramValue}>{result.testResults.vision.right}</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {result.testResults.bloodPressure && (
-                <View style={styles.testResultBox}>
-                  <View style={styles.testHeader}>
-                    <Ionicons name="heart" size={18} color={ACCENT} />
-                    <Text style={styles.testTitle}>Blood Pressure</Text>
-                  </View>
-                  <View style={styles.testParams}>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>Systolic</Text>
-                      <Text style={styles.paramValue}>{result.testResults.bloodPressure.systolic} mmHg</Text>
-                    </View>
-                    <View style={styles.param}>
-                      <Text style={styles.paramLabel}>Diastolic</Text>
-                      <Text style={styles.paramValue}>{result.testResults.bloodPressure.diastolic} mmHg</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* Recommendations */}
-            {result.recommendations && result.recommendations.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Recommendations</Text>
-                <View style={styles.recommendationsList}>
-                  {result.recommendations.map((rec, idx) => (
-                    <View key={idx} style={styles.recommendationItem}>
-                      <View style={styles.recommendationDot} />
-                      <Text style={styles.recommendationText}>{rec}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Follow-up */}
-            {result.followUpRequired && (
-              <View style={[styles.section, { backgroundColor: '#FEF3C7', borderRadius: borderRadius.md, padding: spacing.md }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
-                  <Ionicons name="alert" size={18} color="#F59E0B" />
-                  <Text style={styles.sectionLabel} numberOfLines={1}>Follow-up Required</Text>
-                </View>
-                <Text style={styles.followUpText}>Scheduled: {result.followUpDate}</Text>
-              </View>
-            )}
-          </ScrollView>
-
-          <View style={styles.modalFooter}>
-            <TouchableOpacity style={[styles.actionBtn, { flex: 1 }]}>
-              <Ionicons name="document-outline" size={18} color={ACCENT} />
-              <Text style={[styles.btnText, { color: ACCENT }]}>Generate Report</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: ACCENT }]}>
-              <Ionicons name="download-outline" size={18} color="#FFF" />
-              <Text style={[styles.btnText, { color: '#FFF' }]}>Export PDF</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Main Screen ─────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export function MedicalExamManagementScreen() {
   const { toastMsg, showToast } = useSimpleToast();
-  const [activeTab, setActiveTab] = useState<'schedule' | 'results'>('schedule');
-  const [selectedSchedule, setSelectedSchedule] = useState<ExamSchedule | null>(null);
-  const [selectedResult, setSelectedResult] = useState<MedicalExamResult | null>(null);
-  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
+
+  // Calendar navigation
+  const [calYear, setCalYear]   = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayKey());
+
+  // Data
   const [schedules, setSchedules] = useState<ExamSchedule[]>([]);
-  const [results, setResults] = useState<MedicalExamResult[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [workers, setWorkers] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [workers, setWorkers]     = useState<any[]>([]);
+  const [users, setUsers]         = useState<any[]>([]);
+
+  // UI modals
+  const [selectedExam, setSelectedExam]     = useState<ExamSchedule | null>(null);
+  const [detailVisible, setDetailVisible]   = useState(false);
+  const [formVisible, setFormVisible]       = useState(false);
 
   const apiService = useMemo(() => ApiService.getInstance(), []);
 
-  // Load exam data, workers, and users
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [examsRes, workersRes, usersRes] = await Promise.all([
-          apiService.get('/occupational-health/medical-exams/', {
-            ordering: '-exam_date',
-            page_size: 100,
-          }),
-          apiService.get('/occupational-health/workers/', {
-            page_size: 1000,
-          }),
-          apiService.get('/auth/users/', {
-            page_size: 1000,
-          }),
-        ]);
-        
-        const exams = examsRes?.data?.results || examsRes?.data || [];
-        
-        // Map API data to frontend ExamSchedule interface
-        const mappedExams = exams.map((exam: any) => ({
-          id: String(exam.id),
-          workerId: String(exam.worker),
-          workerName: exam.worker_name || '',
-          examType: exam.exam_type || 'periodic',
-          scheduledDate: exam.exam_date || '',
-          status: exam.examination_completed ? 'completed' : 'scheduled',
-          examiner: exam.examining_doctor_name || '',
-          examinerId: String(exam.examining_doctor || ''),
-          location: 'KCC Health Center',
-          sector: '',
-          notes: exam.results_summary || '',
-        }));
-        
-        const scheduledExams = mappedExams.filter((e: ExamSchedule) => e.status !== 'completed');
-        const completedExams = mappedExams.filter((e: ExamSchedule) => e.status === 'completed');
-        
-        console.log('Loaded exams:', { total: exams.length, scheduled: scheduledExams.length, completed: completedExams.length, exams: mappedExams });
-        
-        setSchedules(scheduledExams);
-        setResults(completedExams);
-        setWorkers(workersRes?.data?.results || workersRes?.data || []);
-        setUsers(usersRes?.data?.results || usersRes?.data || []);
-      } catch (err: any) {
-        console.error('Failed to load data:', err);
-        setError(err?.message || 'Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadData = useCallback(async () => {
+    setError(null);
+    try {
+      const [examsRes, workersRes, usersRes] = await Promise.all([
+        apiService.get('/occupational-health/medical-exams/', { ordering: '-exam_date', page_size: 200 }),
+        apiService.get('/occupational-health/workers/', { page_size: 1000 }),
+        apiService.get('/auth/users/', { page_size: 1000 }),
+      ]);
 
-    loadData();
+      const exams = examsRes?.data?.results || examsRes?.data || [];
+      const mapped: ExamSchedule[] = exams.map((e: any) => ({
+        id:            String(e.id),
+        workerId:      String(e.worker),
+        workerName:    e.worker_name || '',
+        examType:      e.exam_type || 'periodic',
+        scheduledDate: e.exam_date || '',
+        status:        e.examination_completed ? 'completed' : 'scheduled',
+        examiner:      e.examining_doctor_name || '',
+        examinerId:    String(e.examining_doctor || ''),
+        location:      e.location || 'KCC Health Center',
+        sector:        '',
+        notes:         e.results_summary || e.chief_complaint || '',
+      }));
+
+      setSchedules(mapped);
+      setWorkers(workersRes?.data?.results || workersRes?.data || []);
+      setUsers(usersRes?.data?.results   || usersRes?.data   || []);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load data');
+    }
   }, [apiService]);
 
-  const examStats = useMemo(() => {
-    const allExams = [...schedules, ...results];
-    return {
-      scheduled: schedules.filter(s => s.status === 'scheduled').length,
-      completed: schedules.filter(s => s.status === 'completed').length,
-      results: results.length,
-      // Exam type breakdown
-      examTypeStats: {
-        pre_employment: {
-          scheduled: schedules.filter(s => s.examType === 'pre_employment').length,
-          completed: results.filter(r => r.examType === 'pre_employment').length,
-        },
-        periodic: {
-          scheduled: schedules.filter(s => s.examType === 'periodic').length,
-          completed: results.filter(r => r.examType === 'periodic').length,
-        },
-        return_to_work: {
-          scheduled: schedules.filter(s => s.examType === 'return_to_work').length,
-          completed: results.filter(r => r.examType === 'return_to_work').length,
-        },
-        exit: {
-          scheduled: schedules.filter(s => s.examType === 'exit').length,
-          completed: results.filter(r => r.examType === 'exit').length,
-        },
-        follow_up: {
-          scheduled: schedules.filter(s => s.examType === 'follow_up').length,
-          completed: results.filter(r => r.examType === 'follow_up').length,
-        },
-      },
-    };
-  }, [schedules, results]);
+  useEffect(() => {
+    setLoading(true);
+    loadData().finally(() => setLoading(false));
+  }, [loadData]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    const loadData = async () => {
-      try {
-        const [examsRes, workersRes, usersRes] = await Promise.all([
-          apiService.get('/occupational-health/medical-exams/', {
-            ordering: '-exam_date',
-            page_size: 100,
-          }),
-          apiService.get('/occupational-health/workers/', {
-            page_size: 1000,
-          }),
-          apiService.get('/auth/users/', {
-            page_size: 1000,
-          }),
-        ]);
-        
-        const exams = examsRes?.data?.results || examsRes?.data || [];
-        
-        // Map API data to frontend ExamSchedule interface
-        const mappedExams = exams.map((exam: any) => ({
-          id: String(exam.id),
-          workerId: String(exam.worker),
-          workerName: exam.worker_name || '',
-          examType: exam.exam_type || 'periodic',
-          scheduledDate: exam.exam_date || '',
-          status: exam.examination_completed ? 'completed' : 'scheduled',
-          examiner: exam.examining_doctor_name || '',
-          examinerId: String(exam.examining_doctor || ''),
-          location: 'KCC Health Center',
-          sector: '',
-          notes: exam.results_summary || '',
-        }));
-        
-        const scheduledExams = mappedExams.filter((e: ExamSchedule) => e.status !== 'completed');
-        const completedExams = mappedExams.filter((e: ExamSchedule) => e.status === 'completed');
-        
-        setSchedules(scheduledExams);
-        setResults(completedExams);
-        setWorkers(workersRes?.data?.results || workersRes?.data || []);
-        setUsers(usersRes?.data?.results || usersRes?.data || []);
-      } catch (err: any) {
-        console.error('Refresh failed:', err);
-      } finally {
-        setRefreshing(false);
-      }
-    };
-    loadData();
-  }, [apiService]);
+    loadData().finally(() => setRefreshing(false));
+  }, [loadData]);
 
-  const handleSaveSchedule = async (data: ExamSchedule) => {
+  const handleSave = useCallback(async (form: ScheduleFormData) => {
     try {
-      if (!data.workerId || !data.examinerId || !data.scheduledDate) {
-        showToast('Missing required fields', 'error');
+      if (!form.workerId || !form.examType || !form.scheduledDate) {
+        showToast('Please fill all required fields', 'error');
         return;
       }
-
-      // Create the exam payload
-      const examPayload = {
-        worker: parseInt(data.workerId),
-        exam_type: data.examType,
-        exam_date: data.scheduledDate,
-        examining_doctor: parseInt(data.examinerId),
-        chief_complaint: data.notes || '',
-        results_summary: '',
-        recommendations: '',
+      const payload = {
+        worker:                parseInt(form.workerId),
+        exam_type:             form.examType,
+        exam_date:             form.scheduledDate,
+        examining_doctor:      form.examinerId ? parseInt(form.examinerId) : undefined,
+        chief_complaint:       form.notes || '',
+        results_summary:       '',
+        recommendations:       '',
         examination_completed: false,
-        follow_up_required: false,
+        follow_up_required:    false,
       };
-
-      // Post to backend
-      const response = await apiService.post('/occupational-health/medical-exams/', examPayload);
-      
-      if (response) {
-        showToast('Exam scheduled successfully', 'success');
-        setScheduleModalVisible(false);
-        // Refresh the list
-        handleRefresh();
-      }
+      await apiService.post('/occupational-health/medical-exams/', payload);
+      showToast('Exam scheduled successfully', 'success');
+      setFormVisible(false);
+      handleRefresh();
     } catch (err: any) {
-      console.error('Failed to save schedule:', err);
-      showToast(
-        err?.response?.data?.detail || 
-        err?.message || 
-        'Failed to schedule exam',
-        'error'
-      );
+      showToast(err?.response?.data?.detail || err?.message || 'Failed to schedule exam', 'error');
     }
+  }, [apiService, handleRefresh, showToast]);
+
+  // KPI counts
+  const stats = useMemo(() => ({
+    total:     schedules.length,
+    upcoming:  schedules.filter(s => s.status === 'scheduled').length,
+    completed: schedules.filter(s => s.status === 'completed').length,
+  }), [schedules]);
+
+  // Appointments for selected day
+  const dayExams = useMemo(
+    () => (selectedDay ? schedules.filter(s => s.scheduledDate === selectedDay) : []),
+    [selectedDay, schedules]
+  );
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
   };
 
+  if (loading) {
+    return (
+      <View style={ms.loadingWrap}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={ms.loadingTxt}>Loading schedule…</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Medical Exams</Text>
-        <Text style={styles.headerSubtitle}>Schedule and manage occupational health examinations</Text>
-      </View>
+    <View style={ms.container}>
+      {toastMsg && <SimpleToastNotification message={toastMsg} />}
 
-      {/* KPI Stats Section */}
-      <View style={styles.kpiSection}>
-        <View style={[styles.statCard, styles.scheduledCard, styles.cardShadow]}>
-          <View style={[styles.statCardIcon, { backgroundColor: colors.secondary + '18' }]}>
-            <Ionicons name="calendar-outline" size={24} color={colors.secondary} />
-          </View>
-          <View style={styles.statContent}>
-            <Text style={[styles.statValue, { color: colors.secondary }]}>{examStats.scheduled}</Text>
-            <Text style={styles.statLabel}>Scheduled</Text>
-            <Text style={styles.statSubtext}>Pending exams</Text>
-          </View>
+      {/* ─── Header with compact KPI strip ─── */}
+      <View style={ms.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={ms.headerTitle}>Medical Exams</Text>
+          <Text style={ms.headerSub}>Occupational health scheduling</Text>
         </View>
-        <View style={[styles.statCard, styles.completedCard, styles.cardShadow]}>
-          <View style={[styles.statCardIcon, { backgroundColor: colors.success + '18' }]}>
-            <Ionicons name="checkmark-circle-outline" size={24} color={colors.success} />
+        <View style={ms.kpiStrip}>
+          <View style={ms.kpiItem}>
+            <Text style={[ms.kpiNum, { color: '#3B82F6' }]}>{stats.upcoming}</Text>
+            <Text style={ms.kpiLbl}>Upcoming</Text>
           </View>
-          <View style={styles.statContent}>
-            <Text style={[styles.statValue, { color: colors.success }]}>{examStats.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-            <Text style={styles.statSubtext}>This month</Text>
+          <View style={ms.kpiDivider} />
+          <View style={ms.kpiItem}>
+            <Text style={[ms.kpiNum, { color: '#22C55E' }]}>{stats.completed}</Text>
+            <Text style={ms.kpiLbl}>Done</Text>
           </View>
-        </View>
-        <View style={[styles.statCard, styles.resultsCard, styles.cardShadow]}>
-          <View style={[styles.statCardIcon, { backgroundColor: colors.info + '18' }]}>
-            <Ionicons name="document-text-outline" size={24} color={colors.info} />
-          </View>
-          <View style={styles.statContent}>
-            <Text style={[styles.statValue, { color: colors.info }]}>{examStats.results}</Text>
-            <Text style={styles.statLabel}>Results</Text>
-            <Text style={styles.statSubtext}>Processed</Text>
+          <View style={ms.kpiDivider} />
+          <View style={ms.kpiItem}>
+            <Text style={[ms.kpiNum, { color: colors.primary }]}>{stats.total}</Text>
+            <Text style={ms.kpiLbl}>Total</Text>
           </View>
         </View>
       </View>
 
-      {/* Exam Type Cards */}
-      <View style={styles.typeCardsSection}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          contentContainerStyle={styles.typeCardsContent}
-        >
-          <ExamTypeCard
-            type="pre_employment"
-            label="Pre-Employment"
-            description="Initial fitness assessment before hire"
-            icon="person-add"
-            scheduleCount={examStats.examTypeStats.pre_employment.scheduled}
-            completedCount={examStats.examTypeStats.pre_employment.completed}
-            onPress={() => setActiveTab('schedule')}
-          />
-          <ExamTypeCard
-            type="periodic"
-            label="Periodic"
-            description="Regular health monitoring"
-            icon="calendar-repeat"
-            scheduleCount={examStats.examTypeStats.periodic.scheduled}
-            completedCount={examStats.examTypeStats.periodic.completed}
-            onPress={() => setActiveTab('schedule')}
-          />
-          <ExamTypeCard
-            type="return_to_work"
-            label="Return to Work"
-            description="Post-absence fitness confirmation"
-            icon="arrow-redo"
-            scheduleCount={examStats.examTypeStats.return_to_work.scheduled}
-            completedCount={examStats.examTypeStats.return_to_work.completed}
-            onPress={() => setActiveTab('schedule')}
-          />
-          <ExamTypeCard
-            type="exit"
-            label="Exit"
-            description="Final assessment on departure"
-            icon="exit-outline"
-            scheduleCount={examStats.examTypeStats.exit.scheduled}
-            completedCount={examStats.examTypeStats.exit.completed}
-            onPress={() => setActiveTab('schedule')}
-          />
-        </ScrollView>
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'schedule' && styles.tabActive]}
-          onPress={() => setActiveTab('schedule')}
-        >
-          <Ionicons name="calendar" size={18} color={activeTab === 'schedule' ? ACCENT : colors.textSecondary} />
-          <Text style={[styles.tabText, activeTab === 'schedule' && { color: ACCENT }]}>
-            Schedules ({examStats.scheduled})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'results' && styles.tabActive]}
-          onPress={() => setActiveTab('results')}
-        >
-          <Ionicons name="checkmark-done" size={18} color={activeTab === 'results' ? ACCENT : colors.textSecondary} />
-          <Text style={[styles.tabText, activeTab === 'results' && { color: ACCENT }]}>
-            Results ({examStats.results})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      <View style={{ flex: 1 }}>
-        {loading ? (
-          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-            <ActivityIndicator size="large" color={ACCENT} />
-            <Text style={styles.loadingText}>Loading exams...</Text>
-          </View>
-        ) : error ? (
-          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-            <Ionicons name="alert-circle-outline" size={48} color={colors.error || '#EF4444'} />
-            <Text style={styles.errorText}>{error}</Text>
+      {/* ─── Scrollable body ─── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {error ? (
+          <View style={ms.errorBox}>
+            <Ionicons name="alert-circle-outline" size={36} color={colors.error || '#EF4444'} />
+            <Text style={ms.errorTxt}>{error}</Text>
+            <TouchableOpacity style={ms.retryBtn} onPress={handleRefresh}>
+              <Text style={ms.retryTxt}>Retry</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          <FlatList
-            data={(activeTab === 'schedule' ? schedules : results) as any[]}
-            keyExtractor={(item: any) => item.id}
-            renderItem={({ item }: { item: any }) =>
-              activeTab === 'schedule' ? (
-                <ScheduleCard
-                  schedule={item as ExamSchedule}
-                  onPress={() => {
-                    setSelectedSchedule(item as ExamSchedule);
-                    setScheduleModalVisible(true);
-                  }}
-                />
-              ) : (
-                <ExamResultCard
-                  result={item as MedicalExamResult}
-                  onPress={() => {
-                    setSelectedResult(item as MedicalExamResult);
-                    setResultModalVisible(true);
-                  }}
-                />
-              )
-            }
-            contentContainerStyle={styles.listContent}
-            scrollEnabled={true}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
-                <Text style={styles.emptyStateText}>No {activeTab === 'schedule' ? 'schedules' : 'results'} found</Text>
-              </View>
-            }
-          />
+          <>
+            {/* Calendar */}
+            <View style={{ marginTop: spacing.md }}>
+              <CalendarGrid
+                year={calYear}
+                month={calMonth}
+                exams={schedules}
+                selectedDay={selectedDay}
+                onSelectDay={setSelectedDay}
+                onPrevMonth={prevMonth}
+                onNextMonth={nextMonth}
+              />
+            </View>
+
+            {/* Exam type legend */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: spacing.sm }}
+              contentContainerStyle={ms.legendContent}
+            >
+              {Object.entries(ALL_EXAM_TYPES).map(([id, t]) => (
+                <View key={id} style={ms.legendItem}>
+                  <View style={[ms.legendDot, { backgroundColor: t.color }]} />
+                  <Text style={ms.legendTxt}>{t.label}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Day appointments */}
+            <DayPanel
+              day={selectedDay}
+              exams={dayExams}
+              onSelect={exam => { setSelectedExam(exam); setDetailVisible(true); }}
+            />
+          </>
         )}
-      </View>
+      </ScrollView>
 
-      {/* FAB - Primary CTA */}
-      <TouchableOpacity
-        style={[styles.fab, styles.cardShadow]}
-        onPress={() => {
-          const newSchedule: ExamSchedule = {
-            id: `s${Date.now()}`,
-            workerId: '',
-            workerName: '',
-            examType: 'periodic',
-            scheduledDate: new Date().toISOString().split('T')[0],
-            status: 'scheduled',
-            examiner: '',
-            examinerId: '',
-            location: 'KCC Health Center',
-            sector: '',
-          };
-          setSelectedSchedule(newSchedule);
-          setScheduleModalVisible(true);
-        }}
-        activeOpacity={0.85}
-      >
-        <View style={styles.fabContent}>
-          <Ionicons name="add" size={28} color="#FFF" />
-        </View>
+      {/* ─── FAB ─── */}
+      <TouchableOpacity style={ms.fab} onPress={() => setFormVisible(true)} activeOpacity={0.85}>
+        <Ionicons name="add" size={30} color="#FFF" />
       </TouchableOpacity>
-      <View style={styles.fabLabel}>
-        <Text style={styles.fabLabelText}>Schedule Exam</Text>
-      </View>
 
-      {/* Modals */}
-      <ScheduleModal
-        visible={scheduleModalVisible}
-        schedule={selectedSchedule}
+      {/* ─── Modals ─── */}
+      <AppointmentDetailModal
+        visible={detailVisible}
+        exam={selectedExam}
+        onClose={() => setDetailVisible(false)}
+        onEdit={() => { setDetailVisible(false); setFormVisible(true); }}
+      />
+
+      <ScheduleFormModal
+        visible={formVisible}
         workers={workers}
         users={users}
-        onClose={() => setScheduleModalVisible(false)}
-        onSave={handleSaveSchedule}
+        onClose={() => setFormVisible(false)}
+        onSave={handleSave}
       />
-      <ResultDetailModal
-        visible={resultModalVisible}
-        result={selectedResult}
-        onClose={() => setResultModalVisible(false)}
-      />
-      <SimpleToastNotification message={toastMsg} />
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  headerTitle: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  headerSubtitle: { fontSize: 13, color: colors.textSecondary },
-  // KPI Stats Section
-  kpiSection: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.outline,
-  },
-  scheduledCard: { borderTopWidth: 3, borderTopColor: colors.secondary },
-  completedCard: { borderTopWidth: 3, borderTopColor: colors.success },
-  resultsCard: { borderTopWidth: 3, borderTopColor: colors.info },
-  statCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: borderRadius.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 48,
-  },
-  statContent: { flex: 1 },
-  statValue: { fontSize: 24, fontWeight: '800', color: colors.primary, marginBottom: 2 },
-  statLabel: { fontSize: 12, fontWeight: '600', color: colors.text, marginBottom: 2 },
-  statSubtext: { fontSize: 10, color: colors.textSecondary, fontStyle: 'italic' },
-  // Badges
-  badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, gap: 4 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  // Exam Type Cards
-  typeCardsSection: { paddingHorizontal: spacing.md, marginBottom: spacing.lg },
-  typeCardsContent: { paddingRight: spacing.lg },
-  typeCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    marginRight: spacing.md,
-    width: 280,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.outline,
-  },
-  typeCardTopBorder: { height: 4, width: '100%' },
-  typeCardContent: { padding: spacing.md },
-  typeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.lg },
-  typeCardIcon: { width: 44, height: 44, borderRadius: borderRadius.lg, justifyContent: 'center', alignItems: 'center' },
-  typeCardLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
-  typeCardDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 4, lineHeight: 15 },
-  typeCardFooter: { flexDirection: 'row', gap: 0 },
-  typeCounterBox: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.sm },
-  typeCounterValue: { fontSize: 18, fontWeight: '800', color: colors.primary, marginTop: 6 },
-  typeCounterLabel: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  // kept for compatibility
-  statBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, alignItems: 'center' },
-  statNumber: { fontSize: 14, fontWeight: '700', color: colors.primary },
-  // Tab Bar
-  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.outline },
-  tab: { flex: 1, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  tabActive: { borderBottomWidth: 3, borderBottomColor: colors.primary },
-  tabText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
-  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg },
-  // Schedule Card
-  scheduleCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    borderLeftWidth: 4,
-  },
-  scheduleCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
-  scheduleWorker: { fontSize: 14, fontWeight: '600', color: colors.text },
-  scheduleType: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
-  scheduleDetails: { gap: 4, marginBottom: spacing.sm },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  detailText: { fontSize: 12, color: colors.text, flex: 1 },
-  dueBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  dueBadgeText: { fontSize: 10, fontWeight: '700', color: '#DC2626' },
-  upcomingBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  upcomingBadgeText: { fontSize: 10, fontWeight: '700', color: '#F59E0B' },
-  scheduleFooter: { flexDirection: 'row', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: spacing.sm },
-  scheduleAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
-  actionText: { fontSize: 11, fontWeight: '600' },
-  // Result Card
-  resultCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    borderLeftWidth: 4,
-  },
-  resultCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
-  resultWorker: { fontSize: 14, fontWeight: '600', color: colors.text },
-  resultType: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
-  restrictionsBox: { backgroundColor: '#FEF3C7', borderRadius: borderRadius.md, paddingHorizontal: spacing.sm, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  restrictionsText: { fontSize: 11, color: '#92400E', flex: 1 },
-  testResultsSummary: { flexDirection: 'row', gap: 4, marginBottom: spacing.sm },
-  testResult: { flex: 1, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, padding: 6, alignItems: 'center' },
-  testLabel: { fontSize: 10, color: colors.textSecondary, fontWeight: '500' },
-  testValue: { fontSize: 11, fontWeight: '600', color: colors.text, marginTop: 2 },
-  resultFooter: { flexDirection: 'row', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outline, paddingTop: spacing.sm },
-  resultAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
-  // Empty State
-  emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
-  emptyStateText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
-  loadingText: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.md },
-  errorText: { fontSize: 14, color: colors.error || '#EF4444', marginTop: spacing.md, textAlign: 'center' },
-  // FAB - Primary CTA
-  fab: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    right: spacing.lg,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    shadowColor: colors.secondary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-  },
-  fabContent: { justifyContent: 'center', alignItems: 'center' },
-  fabLabel: {
-    position: 'absolute',
-    bottom: spacing.lg + 80,
-    right: spacing.lg,
-    backgroundColor: colors.secondary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.lg,
-    elevation: 4,
-    shadowColor: colors.secondary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  fabLabelText: { fontSize: 12, fontWeight: '600', color: '#FFF', letterSpacing: 0.3 },
-  cardShadow: { ...shadows.md },
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, maxHeight: '90%', ...shadows.lg },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
-  modalBody: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, maxHeight: 500 },
-  modalFooter: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
-  section: { marginBottom: spacing.lg },
-  sectionLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
-  infoBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
-  infoLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
-  infoValue: { fontSize: 13, color: colors.text, fontWeight: '600', marginTop: 2 },
-  formGroup: { marginBottom: spacing.lg },
-  label: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
-  selectBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 44, justifyContent: 'center' },
-  selectText: { fontSize: 14, color: colors.text },
-  input: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 14, color: colors.text, minHeight: 44 },
-  textArea: { minHeight: 100, textAlignVertical: 'top' },
-  // Dropdown Selector Styles
-  dropdownButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 44 },
-  dropdownButtonText: { fontSize: 14, color: colors.text, flex: 1 },
-  dropdownPlaceholder: { color: colors.textSecondary },
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-  pickerCard: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, maxHeight: '70%' },
-  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  pickerTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
-  pickerList: { maxHeight: 400 },
-  pickerOption: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  pickerOptionText: { fontSize: 14, color: colors.text, fontWeight: '500' },
-  cancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center' },
-  cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.text },
-  saveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
-  saveBtnText: { fontSize: 14, fontWeight: '600', color: '#FFF' },
-  // Result Detail Modal
-  resultDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.outline },
-  resultName: { fontSize: 18, fontWeight: '700', color: colors.text },
-  resultDate: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
-  restrictionsList: { gap: spacing.md },
-  restrictionItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
-  restrictionText: { fontSize: 13, color: '#92400E', flex: 1 },
-  testResultBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md },
-  testHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  testTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
-  testParams: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-  param: { flex: 1, alignItems: 'center' },
-  paramLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
-  paramValue: { fontSize: 16, fontWeight: '700', color: colors.primary, marginTop: 4 },
-  testInterpretation: { fontSize: 12, color: colors.text, fontStyle: 'italic', paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
-  recommendationsList: { gap: spacing.md },
-  recommendationItem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  recommendationDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary, marginTop: 7 },
-  recommendationText: { fontSize: 13, color: colors.text, flex: 1 },
-  followUpText: { fontSize: 13, color: '#92400E', fontWeight: '500' },
-  actionBtn: { borderWidth: 1, borderColor: colors.outline, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
-  btnText: { fontSize: 13, fontWeight: '600' },
+// ─── Main Styles ──────────────────────────────────────────────────────────────
+const ms = StyleSheet.create({
+  container:    { flex: 1, backgroundColor: colors.background },
+  loadingWrap:  { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md, backgroundColor: colors.background },
+  loadingTxt:   { fontSize: 14, color: colors.textSecondary },
+  header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  headerTitle:  { fontSize: 20, fontWeight: '800', color: colors.text },
+  headerSub:    { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  kpiStrip:     { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.xl, padding: 8 },
+  kpiItem:      { alignItems: 'center', paddingHorizontal: 10 },
+  kpiNum:       { fontSize: 18, fontWeight: '800' },
+  kpiLbl:       { fontSize: 10, color: colors.textSecondary, fontWeight: '500', marginTop: 1 },
+  kpiDivider:   { width: 1, height: 28, backgroundColor: colors.outline },
+  legendContent:{ paddingHorizontal: spacing.md, paddingVertical: 6, gap: spacing.md },
+  legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot:    { width: 8, height: 8, borderRadius: 4 },
+  legendTxt:    { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  errorBox:     { alignItems: 'center', paddingVertical: 60, gap: spacing.md },
+  errorTxt:     { fontSize: 14, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 40 },
+  retryBtn:     { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.lg },
+  retryTxt:     { fontSize: 14, fontWeight: '600', color: '#FFF' },
+  fab:          { position: 'absolute', bottom: spacing.lg, right: spacing.lg, width: 60, height: 60, borderRadius: 30, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', ...shadows.lg },
 });
