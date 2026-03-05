@@ -1441,7 +1441,17 @@ class PPEComplianceRecordSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PPEComplianceRecord
-        fields = '__all__'
+        fields = [
+            'id', 'worker', 'worker_name', 'worker_employee_id',
+            'ppe_catalog', 'ppe_catalog_name', 'ppe_catalog_type', 'ppe_type_display',
+            'ppe_item',
+            'check_date', 'check_type', 'check_type_display',
+            'status', 'status_display', 'status_computed',
+            'condition_notes', 'is_compliant', 'non_compliance_reason',
+            'corrective_action_required', 'corrective_action',
+            'checked_by', 'checked_by_name',
+            'approved_by', 'approved_by_name', 'approval_date',
+        ]
 
 
 class WorkerRiskProfileSerializer(serializers.ModelSerializer):

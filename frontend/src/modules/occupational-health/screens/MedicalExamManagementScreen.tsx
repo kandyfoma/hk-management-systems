@@ -323,6 +323,19 @@ function DayModal({
   const [currentPage, setCurrentPage] = useState(0);
   const ITEMS_PER_PAGE = 5;
 
+  // Group exams by worker — MUST be before early return to preserve hook order
+  const workerGroups = useMemo(() => {
+    if (!day) return [];
+    const map = new Map<string, { workerId: string; workerName: string; exams: ExamSchedule[] }>();
+    exams.forEach(e => {
+      if (!map.has(e.workerId)) {
+        map.set(e.workerId, { workerId: e.workerId, workerName: e.workerName, exams: [] });
+      }
+      map.get(e.workerId)!.exams.push(e);
+    });
+    return Array.from(map.values());
+  }, [exams, day]);
+
   useEffect(() => {
     if (visible) {
       Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 72, friction: 11 }).start();
@@ -338,18 +351,6 @@ function DayModal({
   const dayName   = DAY_NAMES[d.getDay()];
   const dateLabel = `${dayName}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
   const isToday   = day === todayKey();
-
-  // Group exams by worker
-  const workerGroups = useMemo(() => {
-    const map = new Map<string, { workerId: string; workerName: string; exams: ExamSchedule[] }>();
-    exams.forEach(e => {
-      if (!map.has(e.workerId)) {
-        map.set(e.workerId, { workerId: e.workerId, workerName: e.workerName, exams: [] });
-      }
-      map.get(e.workerId)!.exams.push(e);
-    });
-    return Array.from(map.values());
-  }, [exams]);
 
   // Pagination
   const totalPages = Math.ceil(workerGroups.length / ITEMS_PER_PAGE);
