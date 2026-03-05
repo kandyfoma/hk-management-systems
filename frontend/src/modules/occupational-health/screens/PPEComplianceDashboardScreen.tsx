@@ -71,8 +71,8 @@ export function PPEComplianceDashboardScreen({ navigation }: any) {
       lastResults={results}
       groupByField="check_type"
       groupLabels={CHECK_TYPE_LABELS}
-      onAddNew={() => navigation.navigate('oh-ppe')}
-      onSeeMore={() => navigation.navigate('oh-ppe-list')}
+      onAddNew={() => navigation.navigate('oh-ppe-compliance')}
+      onSeeMore={() => navigation.navigate('oh-ppe-compliance')}
       loading={loading}
       onRefresh={loadResults}
     />

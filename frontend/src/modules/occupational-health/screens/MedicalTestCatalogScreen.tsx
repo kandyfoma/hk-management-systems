@@ -91,7 +91,7 @@ const TEST_CONFIGS: TestConfig[] = [
     name: 'Conformité EPI',
     description: 'Suivi port et conformité des équipements de protection',
     icon: 'shield-outline',
-    screenId: 'oh-ppe-compliance-new',
+    screenId: 'oh-ppe-compliance',
     color: '#4338CA', // Secondary Purple-Blue Dark
     apiEndpoint: '/occupational-health/ppe-compliance/',
     features: ['EPI actif', 'Formation requise', 'Conformité'],
@@ -127,7 +127,7 @@ const DASHBOARD_MAP: Record<string, string> = {
   'oh-vision-tests': 'oh-vision-dashboard',
   'oh-xray-imaging': 'oh-xray-dashboard',
   'oh-drug-alcohol-screening': 'oh-drug-alcohol-dashboard',
-  'oh-ppe-compliance-new': 'oh-ppe-compliance-dashboard',
+  'oh-ppe-compliance': 'oh-ppe-compliance-dashboard', // Unified PPE compliance route
   'oh-health-screening': 'oh-health-screening-dashboard',
   'oh-heavy-metals': 'oh-heavy-metals-dashboard',
 };

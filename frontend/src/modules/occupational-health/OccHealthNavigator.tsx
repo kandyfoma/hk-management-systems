@@ -413,8 +413,8 @@ export function OccHealthNavigator() {
     if (activeScreen === 'oh-spirometry') return <SpirometryScreen />;
     if (activeScreen === 'oh-xray-imaging') return <XrayImagingScreen />;
     if (activeScreen === 'oh-drug-alcohol-screening') return <DrugAlcoholScreeningScreen />;
-    if (activeScreen === 'oh-ppe') return <PPEComplianceScreen />;
-    if (activeScreen === 'oh-ppe-compliance-new') return <PPEComplianceScreen />;
+    // Unified PPE Compliance view (consolidated from oh-ppe-compliance-new and oh-ppe-list)
+    if (activeScreen === 'oh-ppe-compliance') return <PPEComplianceScreen />;
     if (activeScreen === 'oh-vision') return <VisionTestScreen />;
     if (activeScreen === 'oh-vision-tests') return <VisionTestScreen />;
     if (activeScreen === 'oh-heavy-metals') return <HeavyMetalsScreen />;
@@ -426,7 +426,7 @@ export function OccHealthNavigator() {
     if (activeScreen === 'oh-vision-list') return <VisionTestListScreen />;
     if (activeScreen === 'oh-xray-list') return <XrayImagingListScreen />;
     if (activeScreen === 'oh-drug-alcohol-list') return <DrugAlcoholScreeningListScreen />;
-    if (activeScreen === 'oh-ppe-list') return <PPEComplianceListScreen />;
+    // PPE list functionality consolidated into unified oh-ppe-compliance view
     if (activeScreen === 'oh-health-screening-list') return <HealthScreeningListScreen />;
     if (activeScreen === 'oh-heavy-metals-list') return <HeavyMetalsScreen />;
     if (activeScreen === 'oh-medical-test-catalog') return <MedicalTestCatalogScreen navigation={{ navigate: setActiveScreen }} />;
