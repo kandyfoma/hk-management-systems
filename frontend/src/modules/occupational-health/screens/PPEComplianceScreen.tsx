@@ -45,6 +45,7 @@ const SAMPLE_RECORDS: PPEComplianceRecord[] = [
 export function PPEComplianceScreen() {
   const [records, setRecords] = useState<PPEComplianceRecord[]>(SAMPLE_RECORDS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [ppeItems, setPpeItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,11 +54,15 @@ export function PPEComplianceScreen() {
   const [selectedRecord, setSelectedRecord] = useState<PPEComplianceRecord | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [formData, setFormData] = useState({
-    ppe_type: '',
-    assigned_date: new Date().toISOString().split('T')[0],
-    expiry_date: '',
-    inspection_date: '',
-    notes: '',
+    ppe_item: '',
+    check_date: new Date().toISOString().split('T')[0],
+    check_type: '',
+    status: '',
+    condition_notes: '',
+    is_compliant: true,
+    non_compliance_reason: '',
+    corrective_action_required: false,
+    corrective_action: '',
   });
 
   useEffect(() => {
@@ -88,11 +93,25 @@ export function PPEComplianceScreen() {
     setRefreshing(false);
   };
 
-  const isFormValid = !!(selectedWorker && formData.ppe_type && formData.assigned_date && formData.expiry_date);
+  const loadPpeItems = async (workerId: string) => {
+    try {
+      const api = ApiService.getInstance();
+      const response = await api.get(`/occupational-health/ppe-items/?worker_id=${workerId}`);
+      if (response.success && response.data) {
+        const items = Array.isArray(response.data) ? response.data : response.data.results || [];
+        setPpeItems(items);
+      }
+    } catch (error) {
+      console.error('Error loading PPE items:', error);
+      setPpeItems([]);
+    }
+  };
+
+  const isFormValid = !!(selectedWorker && formData.ppe_item && formData.check_date && formData.check_type && formData.status);
 
   const handleSubmit = async () => {
-    if (!selectedWorker || !formData.ppe_type || !formData.expiry_date) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+    if (!selectedWorker || !formData.ppe_item || !formData.check_date || !formData.check_type || !formData.status) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs requis');
       return;
     }
 
@@ -100,12 +119,15 @@ export function PPEComplianceScreen() {
       const api = ApiService.getInstance();
 
       const newRecord = {
-        worker_id_input: selectedWorker.id,
-        ppe_type: formData.ppe_type,
-        assigned_date: formData.assigned_date,
-        expiry_date: formData.expiry_date,
-        inspection_date: formData.inspection_date || null,
-        notes: formData.notes,
+        ppe_item: parseInt(formData.ppe_item, 10),
+        check_date: formData.check_date,
+        check_type: formData.check_type,
+        status: formData.status,
+        condition_notes: formData.condition_notes,
+        is_compliant: formData.is_compliant,
+        non_compliance_reason: formData.non_compliance_reason,
+        corrective_action_required: formData.corrective_action_required,
+        corrective_action: formData.corrective_action,
       };
 
       const response = await api.post('/occupational-health/ppe-compliance/', newRecord);
@@ -113,14 +135,19 @@ export function PPEComplianceScreen() {
         setRecords([...records, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
+        setPpeItems([]);
         setFormData({
-          ppe_type: '',
-          assigned_date: new Date().toISOString().split('T')[0],
-          expiry_date: '',
-          inspection_date: '',
-          notes: '',
+          ppe_item: '',
+          check_date: new Date().toISOString().split('T')[0],
+          check_type: '',
+          status: '',
+          condition_notes: '',
+          is_compliant: true,
+          non_compliance_reason: '',
+          corrective_action_required: false,
+          corrective_action: '',
         });
-        Alert.alert('Succès', 'Enregistrement EPI ajouté');
+        Alert.alert('Succès', 'Enregistrement de conformité EPI ajouté');
         loadRecords();
       }
     } catch (error) {
@@ -274,52 +301,108 @@ export function PPEComplianceScreen() {
             <ScrollView style={styles.formSection}>
               <WorkerSelectDropdown
                 value={selectedWorker}
-                onChange={setSelectedWorker}
+                onChange={(worker) => {
+                  setSelectedWorker(worker);
+                  if (worker?.id) loadPpeItems(worker.id);
+                }}
                 label="Travailleur"
                 placeholder="Sélectionnez un travailleur"
                 error={selectedWorker === null ? 'Travailleur requis' : undefined}
               />
 
-              <Text style={styles.formLabel}>Type d'EPI</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ex: Casque, Gants, Gilet..."
-                value={formData.ppe_type}
-                onChangeText={(text) => setFormData({ ...formData, ppe_type: text })}
-                placeholderTextColor={colors.textSecondary}
-              />
+              <Text style={styles.formLabel}>EPI à vérifier</Text>
+              {ppeItems.length > 0 ? (
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={{ margin: -spacing.md, paddingHorizontal: spacing.md, marginVertical: spacing.md }}
+                >
+                  {ppeItems.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => setFormData({ ...formData, ppe_item: String(item.id) })}
+                      style={[
+                        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5 },
+                        formData.ppe_item === String(item.id)
+                          ? { backgroundColor: ACCENT, borderColor: ACCENT }
+                          : { backgroundColor: colors.surface, borderColor: colors.outline }
+                      ]}
+                    >
+                      <Text style={[
+                        { fontSize: 12, fontWeight: formData.ppe_item === String(item.id) ? '600' : '500' },
+                        formData.ppe_item === String(item.id) ? { color: '#FFF' } : { color: colors.text }
+                      ]}>
+                        {item.ppe_type}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : selectedWorker ? (
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginVertical: spacing.md }}>Aucun EPI assigné</Text>
+              ) : (
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginVertical: spacing.md }}>Sélectionnez d'abord un travailleur</Text>
+              )}
 
-              <Text style={styles.formLabel}>Date d'assignation</Text>
+              <Text style={styles.formLabel}>Date d'inspection</Text>
               <DateInput
-                value={formData.assigned_date}
-                onChangeText={(text) => setFormData({ ...formData, assigned_date: text })}
+                value={formData.check_date}
+                onChangeText={(text) => setFormData({ ...formData, check_date: text })}
                 placeholder="YYYY-MM-DD"
                 format="iso"
               />
 
-              <Text style={styles.formLabel}>Date d'expiration</Text>
-              <DateInput
-                value={formData.expiry_date}
-                onChangeText={(text) => setFormData({ ...formData, expiry_date: text })}
-                placeholder="YYYY-MM-DD"
-                format="iso"
-              />
+              <Text style={styles.formLabel}>Type d'inspection</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {['routine', 'pre_use', 'post_incident', 'inventory', 'expiry', 'damage'].map(type => (
+                  <TouchableOpacity
+                    key={type}
+                    onPress={() => setFormData({ ...formData, check_type: type })}
+                    style={[
+                      styles.input,
+                      { paddingVertical: 6, paddingHorizontal: 10, minWidth: 80, alignItems: 'center', flex: 1, minHeight: 40 },
+                      formData.check_type === type && { backgroundColor: ACCENT, borderColor: ACCENT },
+                    ]}
+                  >
+                    <Text style={[
+                      { fontSize: 11, color: colors.text },
+                      formData.check_type === type && { color: 'white', fontWeight: '600' },
+                    ]}>
+                      {type === 'routine' ? 'Classique' : type === 'pre_use' ? 'Avant usage' : type === 'post_incident' ? 'Post-incident' : type === 'inventory' ? 'Inventaire' : type === 'expiry' ? 'Expiration' : 'Dommage'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-              <Text style={styles.formLabel}>Date d'inspection (optionnel)</Text>
-              <DateInput
-                value={formData.inspection_date}
-                onChangeText={(text) => setFormData({ ...formData, inspection_date: text })}
-                placeholder="YYYY-MM-DD"
-                format="iso"
-              />
+              <Text style={styles.formLabel}>Statut</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                {['in_use', 'expired', 'damaged', 'lost', 'replaced', 'compliant', 'non_compliant'].map(status => (
+                  <TouchableOpacity
+                    key={status}
+                    onPress={() => setFormData({ ...formData, status })}
+                    style={[
+                      { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5 },
+                      formData.status === status
+                        ? { backgroundColor: ACCENT, borderColor: ACCENT }
+                        : { backgroundColor: colors.surface, borderColor: colors.outline }
+                    ]}
+                  >
+                    <Text style={[
+                      { fontSize: 12, fontWeight: formData.status === status ? '600' : '500' },
+                      formData.status === status ? { color: '#FFF' } : { color: colors.text }
+                    ]}>
+                      {status === 'in_use' ? 'En usage' : status === 'expired' ? 'Expiré' : status === 'damaged' ? 'Endommagé' : status === 'lost' ? 'Perdu' : status === 'replaced' ? 'Remplacé' : status === 'compliant' ? 'Conforme' : 'Non-Conforme'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
-              <Text style={styles.formLabel}>Notes</Text>
+              <Text style={styles.formLabel}>Notes d'état</Text>
               <TextInput
                 style={[styles.input, { minHeight: 80 }]}
-                placeholder="Remarques..."
+                placeholder="Observations sur l'état..."
                 multiline
-                value={formData.notes}
-                onChangeText={(text) => setFormData({ ...formData, notes: text })}
+                value={formData.condition_notes}
+                onChangeText={(text) => setFormData({ ...formData, condition_notes: text })}
                 placeholderTextColor={colors.textSecondary}
               />
 
