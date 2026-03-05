@@ -156,6 +156,9 @@ export function AudiometryScreen() {
     }
   };
 
+  // Validation: check if required fields are filled
+  const isFormValid = !!(selectedWorker && formData.left_ear_db && formData.right_ear_db);
+
   const filtered = useMemo(() => results.filter(r => {
     const q = searchQuery.toLowerCase();
     const matchQ = !q || r.worker_name.toLowerCase().includes(q);
@@ -373,7 +376,11 @@ export function AudiometryScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: ACCENT }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>

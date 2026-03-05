@@ -108,6 +108,24 @@ function getInitials(name: string): string {
   return parts.slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?';
 }
 
+// Helper to extract actual exam type from chief_complaint when exam_type is 'special'
+function extractExamTypeFromSpecial(examType: string, chiefComplaint: string): string {
+  if (examType !== 'special') return examType;
+  
+  // Try to extract from chief_complaint by matching against known specialized tests
+  const specializedTests = ['audiometry', 'spirometry', 'vision', 'cardiovascular', 'blood_panel', 'chest_xray', 'dermatological', 'musculoskeletal'];
+  const specializedLabels = ['Audiometry', 'Spirometry', 'Vision', 'Cardiovascular', 'Blood Panel', 'Chest X-Ray', 'Dermatology', 'Musculoskeletal'];
+  
+  for (let i = 0; i < specializedLabels.length; i++) {
+    if (chiefComplaint.includes(specializedLabels[i])) {
+      return specializedTests[i];
+    }
+  }
+  
+  // Fallback to original type if we can't extract
+  return examType;
+}
+
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'lg' }) {
   const cfg = STATUS_CFG[status] || STATUS_CFG.scheduled;
@@ -301,10 +319,15 @@ function DayModal({
   onAddAppointment: () => void;
 }) {
   const slideY = useRef(new Animated.Value(600)).current;
+  const [expandedWorkers, setExpandedWorkers] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(0);
+  const ITEMS_PER_PAGE = 5;
 
   useEffect(() => {
     if (visible) {
       Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 72, friction: 11 }).start();
+      setCurrentPage(0);
+      setExpandedWorkers(new Set());
     } else {
       Animated.timing(slideY, { toValue: 600, duration: 220, useNativeDriver: true }).start();
     }
@@ -316,17 +339,48 @@ function DayModal({
   const dateLabel = `${dayName}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
   const isToday   = day === todayKey();
 
-  // Group exams by status for the summary strip
-  const scheduled  = exams.filter(e => e.status === 'scheduled').length;
-  const completed  = exams.filter(e => e.status === 'completed').length;
-  const others     = exams.length - scheduled - completed;
+  // Group exams by worker
+  const workerGroups = useMemo(() => {
+    const map = new Map<string, { workerId: string; workerName: string; exams: ExamSchedule[] }>();
+    exams.forEach(e => {
+      if (!map.has(e.workerId)) {
+        map.set(e.workerId, { workerId: e.workerId, workerName: e.workerName, exams: [] });
+      }
+      map.get(e.workerId)!.exams.push(e);
+    });
+    return Array.from(map.values());
+  }, [exams]);
+
+  // Pagination
+  const totalPages = Math.ceil(workerGroups.length / ITEMS_PER_PAGE);
+  const paginatedGroups = workerGroups.slice(
+    currentPage * ITEMS_PER_PAGE,
+    (currentPage + 1) * ITEMS_PER_PAGE
+  );
+  const canPrevPage = currentPage > 0;
+  const canNextPage = currentPage < totalPages - 1;
+
+  const toggleWorker = (workerId: string) => {
+    setExpandedWorkers(prev => {
+      const next = new Set(prev);
+      if (next.has(workerId)) {
+        next.delete(workerId);
+      } else {
+        next.add(workerId);
+      }
+      return next;
+    });
+  };
+
+  const scheduled = exams.filter(e => e.status === 'scheduled').length;
+  const completed = exams.filter(e => e.status === 'completed').length;
+  const others    = exams.length - scheduled - completed;
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={dmS.overlay}>
         <TouchableOpacity style={dmS.backdrop} onPress={onClose} activeOpacity={1} />
         <Animated.View style={[dmS.sheet, { transform: [{ translateY: slideY }] }]}>
-          {/* Handle */}
           <View style={dmS.handle} />
 
           {/* Header */}
@@ -342,33 +396,35 @@ function DayModal({
               </View>
               {exams.length > 0 && (
                 <View style={dmS.summaryStrip}>
+                  <View style={dmS.workerCount}>
+                    <Ionicons name="people" size={12} color={colors.primary} />
+                    <Text style={dmS.workerCountTxt}>{workerGroups.length} travailleur{workerGroups.length > 1 ? 's' : ''}</Text>
+                  </View>
                   {scheduled > 0 && (
                     <View style={[dmS.sumChip, { backgroundColor: '#EFF6FF' }]}>
                       <View style={[dmS.sumDot, { backgroundColor: '#3B82F6' }]} />
-                      <Text style={[dmS.sumTxt, { color: '#3B82F6' }]}>{scheduled} prévu(s)</Text>
+                      <Text style={[dmS.sumTxt, { color: '#3B82F6' }]}>{scheduled} prévu{scheduled > 1 ? 's' : ''}</Text>
                     </View>
                   )}
                   {completed > 0 && (
                     <View style={[dmS.sumChip, { backgroundColor: '#F0FDF4' }]}>
                       <View style={[dmS.sumDot, { backgroundColor: '#22C55E' }]} />
-                      <Text style={[dmS.sumTxt, { color: '#22C55E' }]}>{completed} complétés</Text>
+                      <Text style={[dmS.sumTxt, { color: '#22C55E' }]}>{completed} complété{completed > 1 ? 's' : ''}</Text>
                     </View>
                   )}
                   {others > 0 && (
                     <View style={[dmS.sumChip, { backgroundColor: colors.surfaceVariant }]}>
                       <View style={[dmS.sumDot, { backgroundColor: colors.textSecondary }]} />
-                      <Text style={[dmS.sumTxt, { color: colors.textSecondary }]}>{others} autre(s)</Text>
+                      <Text style={[dmS.sumTxt, { color: colors.textSecondary }]}>{others} autre{others > 1 ? 's' : ''}</Text>
                     </View>
                   )}
                 </View>
               )}
             </View>
             <View style={dmS.headerActions}>
-              {exams.length > 0 && (
-                <TouchableOpacity style={dmS.addBtn} onPress={onAddAppointment} activeOpacity={0.8}>
-                  <Ionicons name="add" size={18} color={colors.primary} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity style={dmS.addBtn} onPress={onAddAppointment} activeOpacity={0.8}>
+                <Ionicons name="add" size={18} color={colors.primary} />
+              </TouchableOpacity>
               <TouchableOpacity style={dmS.closeBtn} onPress={onClose} activeOpacity={0.8}>
                 <Ionicons name="close" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -387,70 +443,130 @@ function DayModal({
                   <Ionicons name="calendar-clear-outline" size={40} color={colors.outline} />
                 </View>
                 <Text style={dmS.emptyTitle}>Aucun rendez-vous</Text>
-                <Text style={dmS.emptyHint}>Aucun examen prévu pour d'autres jours.</Text>
+                <Text style={dmS.emptyHint}>Aucun examen prévu pour ce jour.</Text>
                 <TouchableOpacity style={dmS.addAppointmentBtn} onPress={onAddAppointment}>
                   <Ionicons name="add" size={16} color="#FFF" />
                   <Text style={dmS.addAppointmentTxt}>Ajouter rendez-vous</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              exams.map(exam => {
-                const t   = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
-                const cfg = STATUS_CFG[exam.status]        || STATUS_CFG.scheduled;
-                const initials = getInitials(exam.workerName);
+              paginatedGroups.map((group, gIdx) => {
+                const initials   = getInitials(group.workerName);
+                const firstExam  = group.exams[0];
+                const firstT     = ALL_EXAM_TYPES[firstExam.examType] || { label: firstExam.examType, color: colors.primary, icon: 'medical' };
+                const isExpanded = expandedWorkers.has(group.workerId);
                 return (
-                  <TouchableOpacity
-                    key={exam.id}
-                    style={dmS.card}
-                    onPress={() => { onClose(); setTimeout(() => onSelect(exam), 260); }}
-                    activeOpacity={0.8}
-                  >
-                    {/* Left accent */}
-                    <View style={[dmS.cardAccent, { backgroundColor: t.color }]} />
-
-                    {/* Worker avatar */}
-                    <View style={[dmS.avatar, { backgroundColor: t.color + '20' }]}>
-                      <Text style={[dmS.avatarTxt, { color: t.color }]}>{initials}</Text>
-                    </View>
-
-                    {/* Main info */}
-                    <View style={dmS.cardBody}>
-                      <Text style={dmS.workerName} numberOfLines={1}>{exam.workerName}</Text>
-
-                      {/* Exam type chip */}
-                      <View style={[dmS.examChip, { backgroundColor: t.color + '14' }]}>
-                        <Ionicons name={t.icon as any} size={11} color={t.color} />
-                        <Text style={[dmS.examChipTxt, { color: t.color }]}>{t.label}</Text>
+                  <View key={group.workerId + gIdx} style={dmS.workerCard}>
+                    {/* Worker header row with toggle */}
+                    <TouchableOpacity
+                      style={dmS.workerCardHeader}
+                      onPress={() => toggleWorker(group.workerId)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[dmS.workerAvatar, { backgroundColor: firstT.color + '20' }]}>
+                        <Text style={[dmS.workerAvatarTxt, { color: firstT.color }]}>{initials}</Text>
                       </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={dmS.workerCardName}>{group.workerName}</Text>
+                        <Text style={dmS.workerCardSub}>
+                          {group.exams.length} examen{group.exams.length > 1 ? 's' : ''} prévu{group.exams.length > 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                      <Ionicons 
+                        name={isExpanded ? "chevron-up" : "chevron-down"} 
+                        size={20} 
+                        color={colors.textSecondary} 
+                        style={{ marginRight: spacing.sm }}
+                      />
+                    </TouchableOpacity>
 
-                      {/* Meta row */}
-                      <View style={dmS.metaRow}>
-                        {exam.examiner ? (
-                          <View style={dmS.metaItem}>
-                            <Ionicons name="person-outline" size={11} color={colors.textSecondary} />
-                            <Text style={dmS.metaTxt} numberOfLines={1}>Dr. {exam.examiner}</Text>
+                    {/* Exam rows - conditionally rendered */}
+                    {isExpanded && group.exams.map((exam, eIdx) => {
+                      const t   = ALL_EXAM_TYPES[exam.examType] || { label: exam.examType, color: colors.primary, icon: 'medical' };
+                      const cfg = STATUS_CFG[exam.status] || STATUS_CFG.scheduled;
+                      const isLast = eIdx === group.exams.length - 1;
+                      return (
+                        <TouchableOpacity
+                          key={exam.id}
+                          style={[dmS.examRow, !isLast && dmS.examRowBorder]}
+                          onPress={() => { onClose(); setTimeout(() => onSelect(exam), 260); }}
+                          activeOpacity={0.75}
+                        >
+                          {/* Colored left bar */}
+                          <View style={[dmS.examRowBar, { backgroundColor: t.color }]} />
+
+                          <View style={dmS.examRowIcon}>
+                            <Ionicons name={t.icon as any} size={18} color={t.color} />
                           </View>
-                        ) : null}
-                        {exam.location ? (
-                          <View style={dmS.metaItem}>
-                            <Ionicons name="location-outline" size={11} color={colors.textSecondary} />
-                            <Text style={dmS.metaTxt} numberOfLines={1}>{exam.location}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
 
-                    {/* Right: status + chevron */}
-                    <View style={dmS.cardRight}>
-                      <View style={[dmS.statusBadge, { backgroundColor: cfg.bg }]}>
-                        <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />
-                        <Text style={[dmS.statusTxt, { color: cfg.color }]}>{cfg.label}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={14} color={colors.outline} style={{ marginTop: 4 }} />
-                    </View>
-                  </TouchableOpacity>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[dmS.examRowType, { color: t.color }]}>{t.label}</Text>
+                            <View style={dmS.examRowMeta}>
+                              {exam.examiner ? (
+                                <View style={dmS.metaItem}>
+                                  <Ionicons name="person-outline" size={10} color={colors.textSecondary} />
+                                  <Text style={dmS.metaTxt} numberOfLines={1}>Dr. {exam.examiner}</Text>
+                                </View>
+                              ) : null}
+                              {exam.location ? (
+                                <View style={dmS.metaItem}>
+                                  <Ionicons name="location-outline" size={10} color={colors.textSecondary} />
+                                  <Text style={dmS.metaTxt} numberOfLines={1}>{exam.location}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          </View>
+
+                          <View style={dmS.examRowRight}>
+                            <View style={[dmS.statusBadge, { backgroundColor: cfg.bg }]}>
+                              <Ionicons name={cfg.icon as any} size={11} color={cfg.color} />
+                              <Text style={[dmS.statusTxt, { color: cfg.color }]}>{cfg.label}</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={13} color={colors.outline} style={{ marginTop: 4 }} />
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 );
               })
+            )}
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <View style={dmS.paginationRow}>
+                <TouchableOpacity
+                  style={[dmS.paginationBtn, !canPrevPage && dmS.paginationBtnDisabled]}
+                  onPress={() => setCurrentPage(p => p - 1)}
+                  disabled={!canPrevPage}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-back" size={16} color={canPrevPage ? colors.primary : colors.textSecondary} />
+                  <Text style={[dmS.paginationBtnTxt, !canPrevPage && { color: colors.textSecondary }]}>Back</Text>
+                </TouchableOpacity>
+                
+                <Text style={dmS.paginationTxt}>
+                  {currentPage + 1} / {totalPages}
+                </Text>
+                
+                <TouchableOpacity
+                  style={[dmS.paginationBtn, !canNextPage && dmS.paginationBtnDisabled]}
+                  onPress={() => setCurrentPage(p => p + 1)}
+                  disabled={!canNextPage}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[dmS.paginationBtnTxt, !canNextPage && { color: colors.textSecondary }]}>Next</Text>
+                  <Ionicons name="chevron-forward" size={16} color={canNextPage ? colors.primary : colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Bottom add button when list is non-empty */}
+            {exams.length > 0 && (
+              <TouchableOpacity style={dmS.bottomAddBtn} onPress={onAddAppointment} activeOpacity={0.8}>
+                <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                <Text style={dmS.bottomAddTxt}>Ajouter un rendez-vous</Text>
+              </TouchableOpacity>
             )}
           </ScrollView>
         </Animated.View>
@@ -462,21 +578,23 @@ function DayModal({
 const dmS = StyleSheet.create({
   overlay:            { flex: 1, justifyContent: 'flex-end' },
   backdrop:           { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet:              { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '80%', ...shadows.lg },
+  sheet:              { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', maxWidth: '100%', marginHorizontal: 0, ...shadows.lg },
   handle:             { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.outline, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
   header:             { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: spacing.lg, paddingTop: 4, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline, gap: spacing.sm },
   headerTop:          { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 },
-  dateLabel:          { fontSize: 16, fontWeight: '800', color: colors.text },
+  dateLabel:          { fontSize: 17, fontWeight: '800', color: colors.text },
   todayChip:          { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
   todayChipTxt:       { fontSize: 10, fontWeight: '800', color: '#FFF', letterSpacing: 0.4 },
-  summaryStrip:       { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  summaryStrip:       { flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' },
+  workerCount:        { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '12', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  workerCountTxt:     { fontSize: 11, fontWeight: '700', color: colors.primary },
   sumChip:            { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   sumDot:             { width: 6, height: 6, borderRadius: 3 },
   sumTxt:             { fontSize: 11, fontWeight: '600' },
   headerActions:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
   addBtn:             { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary + '12', justifyContent: 'center', alignItems: 'center' },
   closeBtn:           { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginTop: 2 },
-  scrollContent:      { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: 32 },
+  scrollContent:      { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: 80 },
   // Empty state
   empty:              { alignItems: 'center', paddingVertical: 48, gap: spacing.sm },
   emptyIcon:          { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
@@ -484,21 +602,34 @@ const dmS = StyleSheet.create({
   emptyHint:          { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 8 },
   addAppointmentBtn:  { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: borderRadius.lg },
   addAppointmentTxt:  { fontSize: 13, fontWeight: '600', color: '#FFF' },
-  // Appointment card
-  card:          { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.xl, marginBottom: spacing.sm, overflow: 'hidden', borderWidth: 1, borderColor: colors.outline, ...shadows.sm, minHeight: 76 },
-  cardAccent:    { width: 5, alignSelf: 'stretch' },
-  avatar:        { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginHorizontal: 10 },
-  avatarTxt:     { fontSize: 16, fontWeight: '800' },
-  cardBody:      { flex: 1, paddingVertical: 10 },
-  workerName:    { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  examChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, marginBottom: 4 },
-  examChipTxt:   { fontSize: 11, fontWeight: '700' },
-  metaRow:       { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  metaItem:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaTxt:       { fontSize: 11, color: colors.textSecondary, maxWidth: 130 },
-  cardRight:     { alignItems: 'center', paddingRight: 10, gap: 2 },
-  statusBadge:        { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 16 },
-  statusTxt:          { fontSize: 10, fontWeight: '700' },
+  // Worker card
+  workerCard:        { backgroundColor: colors.surface, borderRadius: borderRadius.xl, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.outline, overflow: 'hidden', ...shadows.sm },
+  workerCardHeader:  { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 12, backgroundColor: colors.surfaceVariant },
+  workerAvatar:      { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  workerAvatarTxt:   { fontSize: 15, fontWeight: '800' },
+  workerCardName:    { fontSize: 14, fontWeight: '700', color: colors.text },
+  workerCardSub:     { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  // Exam row inside worker card
+  examRow:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingRight: spacing.md, minHeight: 56 },
+  examRowBorder:     { borderBottomWidth: 1, borderBottomColor: colors.outline },
+  examRowBar:        { width: 4, alignSelf: 'stretch' },
+  examRowIcon:       { width: 36, height: 36, borderRadius: borderRadius.md, justifyContent: 'center', alignItems: 'center', marginHorizontal: 10 },
+  examRowType:       { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  examRowMeta:       { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  examRowRight:      { alignItems: 'flex-end', gap: 2 },
+  metaItem:          { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metaTxt:           { fontSize: 11, color: colors.textSecondary, maxWidth: 120 },
+  statusBadge:       { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 16 },
+  statusTxt:         { fontSize: 10, fontWeight: '700' },
+  // Bottom add
+  bottomAddBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary + '40', backgroundColor: colors.primary + '08', marginTop: 4 },
+  bottomAddTxt:      { fontSize: 13, fontWeight: '600', color: colors.primary },
+  // Pagination
+  paginationRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  paginationBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primary + '40', backgroundColor: colors.primary + '08' },
+  paginationBtnDisabled: { backgroundColor: colors.surfaceVariant, borderColor: colors.outline },
+  paginationBtnTxt:  { fontSize: 12, fontWeight: '600', color: colors.primary },
+  paginationTxt:     { fontSize: 12, fontWeight: '600', color: colors.text, minWidth: 50, textAlign: 'center' },
 });
 
 // ─── Appointment Detail Modal ─────────────────────────────────────────────────
@@ -877,7 +1008,7 @@ const ecS = StyleSheet.create({
 interface ScheduleFormData {
   workerId: string;
   workerName: string;
-  examTypes: string[];
+  examType: string;
   scheduledDate: string;
   examiner: string;
   examinerId: string;
@@ -886,7 +1017,7 @@ interface ScheduleFormData {
 }
 
 const BLANK_FORM: ScheduleFormData = {
-  workerId: '', workerName: '', examTypes: [], scheduledDate: '',
+  workerId: '', workerName: '', examType: '', scheduledDate: '',
   examiner: '', examinerId: '', location: '', notes: '',
 };
 
@@ -904,6 +1035,7 @@ function ScheduleFormModal({
   const [form, setForm]             = useState<ScheduleFormData>(BLANK_FORM);
   const [workerSearch, setWorkerSearch] = useState('');
   const [showExaminerPicker, setShowExaminerPicker] = useState(false);
+  const [isSaving, setIsSaving]     = useState(false);
   const slideX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -915,6 +1047,7 @@ function ScheduleFormModal({
       }
       setForm(initialForm);
       setWorkerSearch('');
+      setIsSaving(false);
     }
   }, [visible, prefilledDate]);
 
@@ -933,7 +1066,7 @@ function ScheduleFormModal({
 
   const canAdvance = [
     form.workerId !== '',
-    form.examTypes.length > 0,
+    form.examType !== '',
     form.scheduledDate !== '',
   ];
 
@@ -1027,16 +1160,20 @@ function ScheduleFormModal({
               </View>
             )}
 
-            {/* STEP 1 – Exam catalog */}
+            {/* STEP 1 – Exam catalog (single-select, auto-advances) */}
             {step === 1 && (
               <View style={{ flex: 1, paddingHorizontal: spacing.md }}>
                 <View style={sfS.multiSelectHint}>
                   <Ionicons name="information-circle" size={14} color={colors.primary} />
-                  <Text style={sfS.multiSelectHintTxt}>Sélectionnez un ou plusieurs types d'examen</Text>
+                  <Text style={sfS.multiSelectHintTxt}>Sélectionnez le type d'examen</Text>
                 </View>
                 <ExamCatalogPicker
-                  selected={form.examTypes || []}
-                  onSelect={ids => setForm(f => ({ ...f, examTypes: ids }))}
+                  selected={form.examType ? [form.examType] : []}
+                  onSelect={ids => {
+                    const chosen = ids.find(id => id !== form.examType) ?? (ids[0] || '');
+                    setForm(f => ({ ...f, examType: chosen }));
+                    if (chosen) animeTo(2);
+                  }}
                 />
               </View>
             )}
@@ -1056,15 +1193,15 @@ function ScheduleFormModal({
                       <Text style={sfS.summaryChipTxt} numberOfLines={1}>{form.workerName}</Text>
                     </View>
                   ) : null}
-                  {form.examTypes.map(examTypeId => {
-                    const t = ALL_EXAM_TYPES[examTypeId];
+                  {(() => {
+                    const t = ALL_EXAM_TYPES[form.examType];
                     return t ? (
-                      <View key={examTypeId} style={[sfS.summaryChip, { backgroundColor: t.color + '14', borderColor: t.color + '40' }]}>
+                      <View style={[sfS.summaryChip, { backgroundColor: t.color + '14', borderColor: t.color + '40' }]}>
                         <Ionicons name={t.icon as any} size={12} color={t.color} />
                         <Text style={[sfS.summaryChipTxt, { color: t.color }]} numberOfLines={1}>{t.label}</Text>
                       </View>
                     ) : null;
-                  })}
+                  })()}
                 </View>
 
                 <View style={sfS.formGroup}>
@@ -1147,21 +1284,32 @@ function ScheduleFormModal({
           <View style={sfS.footer}>
             {step < 2 ? (
               <TouchableOpacity
-                style={[sfS.primaryBtn, !canAdvance[step] && sfS.primaryBtnDisabled]}
-                onPress={() => canAdvance[step] && animeTo(step + 1)}
+                style={[sfS.primaryBtn, (!canAdvance[step] || isSaving) && sfS.primaryBtnDisabled]}
+                onPress={() => canAdvance[step] && !isSaving && animeTo(step + 1)}
                 activeOpacity={0.85}
+                disabled={isSaving || !canAdvance[step]}
               >
                 <Text style={sfS.primaryBtnTxt}>Continuer</Text>
                 <Ionicons name="arrow-forward" size={18} color="#FFF" />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[sfS.primaryBtn, !canAdvance[2] && sfS.primaryBtnDisabled]}
-                onPress={() => canAdvance[2] && onSave(form)}
+                style={[sfS.primaryBtn, (!canAdvance[2] || isSaving) && sfS.primaryBtnDisabled]}
+                onPress={() => {
+                  if (canAdvance[2] && !isSaving) {
+                    setIsSaving(true);
+                    Promise.resolve(onSave(form)).finally(() => setIsSaving(false));
+                  }
+                }}
                 activeOpacity={0.85}
+                disabled={isSaving || !canAdvance[2]}
               >
-                <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-                <Text style={sfS.primaryBtnTxt}>Planifier examen</Text>
+                {isSaving ? (
+                  <ActivityIndicator size={18} color="#FFF" />
+                ) : (
+                  <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                )}
+                <Text style={sfS.primaryBtnTxt}>{isSaving ? 'Planification...' : 'Planifier examen'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1239,6 +1387,14 @@ export function MedicalExamManagementScreen() {
   const [dayModalVisible, setDayModalVisible] = useState(false);
   const [formVisible, setFormVisible]       = useState(false);
 
+  // Search, Filter & Sort
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<Set<string>>(new Set());
+  const [selectedExamTypeFilters, setSelectedExamTypeFilters] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<'date' | 'status' | 'worker' | 'examType'>('date');
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showSortModal, setShowSortModal] = useState(false);
+
   const apiService = useMemo(() => ApiService.getInstance(), []);
 
   const loadData = useCallback(async () => {
@@ -1251,19 +1407,22 @@ export function MedicalExamManagementScreen() {
       ]);
 
       const exams = examsRes?.data?.results || examsRes?.data || [];
-      const mapped: ExamSchedule[] = exams.map((e: any) => ({
-        id:            String(e.id),
-        workerId:      String(e.worker),
-        workerName:    e.worker_name || '',
-        examType:      e.exam_type || 'periodic',
-        scheduledDate: e.exam_date || '',
-        status:        e.examination_completed ? 'completed' : 'scheduled',
-        examiner:      e.examining_doctor_name || '',
-        examinerId:    String(e.examining_doctor || ''),
-        location:      e.location || 'KCC Health Center',
-        sector:        '',
-        notes:         e.results_summary || e.chief_complaint || '',
-      }));
+      const mapped: ExamSchedule[] = exams.map((e: any) => {
+        const actualExamType = extractExamTypeFromSpecial(e.exam_type || 'periodic', e.chief_complaint || '');
+        return {
+          id:            String(e.id),
+          workerId:      String(e.worker),
+          workerName:    e.worker_name || '',
+          examType:      actualExamType,
+          scheduledDate: e.exam_date || '',
+          status:        e.examination_completed ? 'completed' : 'scheduled',
+          examiner:      e.examining_doctor_name || '',
+          examinerId:    String(e.examining_doctor || ''),
+          location:      e.location || 'KCC Health Center',
+          sector:        '',
+          notes:         e.results_summary || e.chief_complaint || '',
+        };
+      });
 
       setSchedules(mapped);
       setWorkers(workersRes?.data?.results || workersRes?.data || []);
@@ -1307,39 +1466,75 @@ export function MedicalExamManagementScreen() {
 
   const handleSave = useCallback(async (form: ScheduleFormData) => {
     try {
-      if (!form.workerId || form.examTypes.length === 0 || !form.scheduledDate) {
+      if (!form.workerId || !form.examType || !form.scheduledDate) {
         showToast('Veuillez remplir tous les champs requis', 'error');
         return;
       }
       
-      const promises = form.examTypes.map(examTypeId => {
-        const backendExamType = mapExamTypeToBackend(examTypeId);
-        const t = ALL_EXAM_TYPES[examTypeId] || { label: examTypeId };
-        const payload: any = {
-          worker:                parseInt(form.workerId),
-          exam_type:             backendExamType,
-          exam_date:             form.scheduledDate,
-          chief_complaint:       `${t.label}${form.notes ? ' - ' + form.notes : ''}`,
-          results_summary:       '',
-          recommendations:       '',
-          examination_completed: false,
-          follow_up_required:    false,
-          location:              form.location || '',
-        };
-        if (form.examinerId && form.examinerId.trim() !== '') {
-          payload.examining_doctor = form.examinerId;
-        }
-        return apiService.post('/occupational-health/medical-exams/', payload);
-      });
+      const t = ALL_EXAM_TYPES[form.examType] || { label: form.examType };
+      const payload: any = {
+        worker:                parseInt(form.workerId),
+        exam_type:             mapExamTypeToBackend(form.examType),
+        exam_date:             form.scheduledDate,
+        chief_complaint:       `${t.label}${form.notes ? ' - ' + form.notes : ''}`,
+        results_summary:       '',
+        recommendations:       '',
+        examination_completed: false,
+        follow_up_required:    false,
+        location:              form.location || '',
+      };
+      if (form.examinerId && form.examinerId.trim() !== '') {
+        payload.examining_doctor = form.examinerId;
+      }
       
-      await Promise.all(promises);
-      showToast(`${form.examTypes.length} examen(s) planifié(s) avec succès`, 'success');
+      await apiService.post('/occupational-health/medical-exams/', payload);
+      showToast('Examen planifié avec succès', 'success');
       setFormVisible(false);
       await handleRefresh();
     } catch (err: any) {
       showToast(err?.response?.data?.detail || err?.message || 'Échec de la planification', 'error');
     }
   }, [apiService, handleRefresh, showToast]);
+
+  // Filter and Sort schedules
+  const filteredAndSortedSchedules = useMemo(() => {
+    let filtered = schedules.filter(s => {
+      // Search filter
+      const matchesSearch = !searchQuery || 
+        s.workerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.examiner.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ALL_EXAM_TYPES[s.examType]?.label.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Status filter
+      const matchesStatus = selectedStatusFilters.size === 0 || selectedStatusFilters.has(s.status);
+      
+      // Exam type filter
+      const matchesExamType = selectedExamTypeFilters.size === 0 || selectedExamTypeFilters.has(s.examType);
+      
+      return matchesSearch && matchesStatus && matchesExamType;
+    });
+
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'date':
+          return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime();
+        case 'worker':
+          return a.workerName.localeCompare(b.workerName);
+        case 'examType':
+          return (ALL_EXAM_TYPES[a.examType]?.label || a.examType).localeCompare(
+            ALL_EXAM_TYPES[b.examType]?.label || b.examType
+          );
+        case 'status':
+          const statusOrder = { scheduled: 0, completed: 1, no_show: 2, cancelled: 3, rescheduled: 4 };
+          return (statusOrder[a.status as keyof typeof statusOrder] ?? 5) - (statusOrder[b.status as keyof typeof statusOrder] ?? 5);
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [schedules, searchQuery, selectedStatusFilters, selectedExamTypeFilters, sortBy]);
 
   // KPI counts
   const stats = useMemo(() => ({
@@ -1397,6 +1592,37 @@ export function MedicalExamManagementScreen() {
             <Text style={[ms.kpiNum, { color: colors.primary }]}>{stats.total}</Text>
             <Text style={ms.kpiLbl}>Total</Text>
           </View>
+        </View>
+      </View>
+
+      {/* ─── Search & Filter Bar ─── */}
+      <View style={ms.controlBar}>
+        <View style={ms.searchContainer}>
+          <Ionicons name="search" size={18} color={colors.textSecondary} style={ms.searchIcon} />
+          <TextInput
+            style={ms.searchInput}
+            placeholder="Chercher travailleur, médecin, type..."
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <View style={ms.actionButtons}>
+          <TouchableOpacity
+            style={[ms.filterBtn, selectedStatusFilters.size > 0 || selectedExamTypeFilters.size > 0 ? ms.filterBtnActive : null]}
+            onPress={() => setShowFilterModal(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="funnel" size={18} color={selectedStatusFilters.size > 0 || selectedExamTypeFilters.size > 0 ? colors.primary : colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={ms.sortBtn} onPress={() => setShowSortModal(true)} activeOpacity={0.7}>
+            <Ionicons name="swap-vertical" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1505,6 +1731,127 @@ export function MedicalExamManagementScreen() {
         onSave={handleSave}
         prefilledDate={selectedDay || undefined}
       />
+
+      {/* ─── Filter Modal ─── */}
+      <Modal visible={showFilterModal} transparent animationType="fade" onRequestClose={() => setShowFilterModal(false)}>
+        <View style={ms.modalOverlay}>
+          <TouchableOpacity style={ms.modalBackdrop} activeOpacity={1} onPress={() => setShowFilterModal(false)} />
+          <View style={ms.filterModal}>
+            <View style={ms.modalHeader}>
+              <Text style={ms.modalTitle}>Filtrer</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={ms.modalContent} showsVerticalScrollIndicator={false}>
+              {/* Status filters */}
+              <View style={ms.filterSection}>
+                <Text style={ms.filterSectionTitle}>Statut</Text>
+                {Object.entries(STATUS_CFG).map(([key, cfg]) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={ms.filterOption}
+                    onPress={() => {
+                      setSelectedStatusFilters(prev => {
+                        const next = new Set(prev);
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[ms.checkbox, selectedStatusFilters.has(key) && ms.checkboxChecked]}>
+                      {selectedStatusFilters.has(key) && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                    </View>
+                    <Text style={ms.filterOptionLabel}>{cfg.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Exam type filters */}
+              <View style={ms.filterSection}>
+                <Text style={ms.filterSectionTitle}>Type d'examen</Text>
+                {Object.entries(ALL_EXAM_TYPES).map(([id, t]) => (
+                  <TouchableOpacity
+                    key={id}
+                    style={ms.filterOption}
+                    onPress={() => {
+                      setSelectedExamTypeFilters(prev => {
+                        const next = new Set(prev);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[ms.checkbox, selectedExamTypeFilters.has(id) && ms.checkboxChecked]}>
+                      {selectedExamTypeFilters.has(id) && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                    </View>
+                    <View style={[ms.examTypeDot, { backgroundColor: t.color }]} />
+                    <Text style={ms.filterOptionLabel}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={ms.modalActions}>
+              <TouchableOpacity style={ms.modalBtn} onPress={() => {
+                setSelectedStatusFilters(new Set());
+                setSelectedExamTypeFilters(new Set());
+              }} activeOpacity={0.7}>
+                <Text style={[ms.modalBtnText, { color: colors.primary }]}>Réinitialiser</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[ms.modalBtn, { backgroundColor: colors.primary }]} onPress={() => setShowFilterModal(false)} activeOpacity={0.7}>
+                <Text style={[ms.modalBtnText, { color: '#FFF' }]}>Appliquer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Sort Modal ─── */}
+      <Modal visible={showSortModal} transparent animationType="fade" onRequestClose={() => setShowSortModal(false)}>
+        <View style={ms.modalOverlay}>
+          <TouchableOpacity style={ms.modalBackdrop} activeOpacity={1} onPress={() => setShowSortModal(false)} />
+          <View style={ms.sortModal}>
+            <View style={ms.modalHeader}>
+              <Text style={ms.modalTitle}>Trier par</Text>
+              <TouchableOpacity onPress={() => setShowSortModal(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={ms.modalContent}>
+              {[
+                { value: 'date' as const, label: 'Date d\'examen' },
+                { value: 'worker' as const, label: 'Travailleur' },
+                { value: 'examType' as const, label: 'Type d\'examen' },
+                { value: 'status' as const, label: 'Statut' },
+              ].map(option => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={ms.sortOption}
+                  onPress={() => {
+                    setSortBy(option.value);
+                    setShowSortModal(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[ms.radioBtn, sortBy === option.value && ms.radioBtnChecked]}>
+                    {sortBy === option.value && <View style={ms.radioBtnDot} />}
+                  </View>
+                  <Text style={[ms.sortOptionLabel, sortBy === option.value && { fontWeight: '600', color: colors.text }]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1533,4 +1880,36 @@ const ms = StyleSheet.create({
   retryBtn:     { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.lg },
   retryTxt:     { fontSize: 14, fontWeight: '600', color: '#FFF' },
   fab:          { position: 'absolute', bottom: spacing.lg, right: spacing.lg, width: 60, height: 60, borderRadius: 30, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', ...shadows.lg },
+  // Search & Filter bar
+  controlBar:   { flexDirection: 'column', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, height: 40 },
+  searchIcon:   { opacity: 0.5 },
+  searchInput:  { flex: 1, fontSize: 14, color: colors.text, padding: 0 },
+  actionButtons: { flexDirection: 'row', gap: spacing.sm },
+  filterBtn:    { flex: 1, height: 40, borderRadius: borderRadius.lg, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.outline },
+  filterBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
+  sortBtn:      { flex: 1, height: 40, borderRadius: borderRadius.lg, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.outline },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject },
+  filterModal:  { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, marginTop: 'auto', maxHeight: '85%', ...shadows.lg },
+  sortModal:    { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, marginTop: 'auto', maxHeight: '60%', ...shadows.lg },
+  modalHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.outline },
+  modalTitle:   { fontSize: 16, fontWeight: '700', color: colors.text },
+  modalContent: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  filterSection: { marginBottom: spacing.lg },
+  filterSectionTitle: { fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
+  filterOption: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md },
+  checkbox:     { width: 20, height: 20, borderWidth: 2, borderColor: colors.outline, borderRadius: borderRadius.sm, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surfaceVariant },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
+  examTypeDot:  { width: 8, height: 8, borderRadius: 4 },
+  filterOptionLabel: { fontSize: 14, color: colors.text, flex: 1 },
+  sortOption:   { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md },
+  radioBtn:     { width: 20, height: 20, borderWidth: 2, borderColor: colors.outline, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  radioBtnChecked: { borderColor: colors.primary },
+  radioBtnDot:  { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
+  sortOptionLabel: { fontSize: 14, color: colors.textSecondary, flex: 1 },
+  modalActions: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.outline },
+  modalBtn:     { flex: 1, height: 44, borderRadius: borderRadius.lg, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
+  modalBtnText: { fontSize: 14, fontWeight: '600' },
 });

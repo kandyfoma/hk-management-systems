@@ -64,7 +64,7 @@ export function VisionTestListScreen() {
       const response = await api.get('/occupational-health/vision-test-results/');
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
-        data = data.sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime()).slice(0, 5);
+        data = data.sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime());
         setResults(data);
       }
     } catch (error) {

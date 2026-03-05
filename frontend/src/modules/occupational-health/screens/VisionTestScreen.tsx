@@ -96,6 +96,8 @@ export function VisionTestScreen() {
     setRefreshing(false);
   };
 
+  const isFormValid = !!(selectedWorker && formData.visual_acuity_os && formData.visual_acuity_od);
+
   const handleSubmit = async () => {
     if (!selectedWorker) {
       showToast('Veuillez remplir tous les champs', 'error');
@@ -332,7 +334,11 @@ export function VisionTestScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: ACCENT }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>

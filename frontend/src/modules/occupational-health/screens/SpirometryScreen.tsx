@@ -98,6 +98,8 @@ export function SpirometryScreen() {
     setRefreshing(false);
   };
 
+  const isFormValid = !!(selectedWorker && formData.fev1 && formData.fvc);
+
   const calculateRatio = (fev1: number, fvc: number) => {
     return fvc > 0 ? ((fev1 / fvc) * 100).toFixed(1) : 0;
   };
@@ -342,7 +344,11 @@ export function SpirometryScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: ACCENT }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>

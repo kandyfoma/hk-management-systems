@@ -63,8 +63,7 @@ export function ExamsListScreen() {
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
         data = data
-          .sort((a: any, b: any) => new Date(b.exam_date).getTime() - new Date(a.exam_date).getTime())
-          .slice(0, 5);
+          .sort((a: any, b: any) => new Date(b.exam_date).getTime() - new Date(a.exam_date).getTime());
         setResults(data);
       }
     } catch (error) {

@@ -92,6 +92,12 @@ export function AudiometryListScreen() {
     setRefreshing(false);
   };
 
+  // Form validation for add modal
+  const isAddFormValid = !!(selectedWorker && formData.test_date && formData.left_ear_db && formData.right_ear_db);
+
+  // Form validation for edit modal
+  const isEditFormValid = !!(editFormData.test_date && editFormData.left_ear_db && editFormData.right_ear_db);
+
   const handleSubmit = async () => {
     if (!selectedWorker) {
       Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
@@ -739,7 +745,11 @@ export function AudiometryListScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.primary }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: colors.primary, opacity: isAddFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isAddFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -824,8 +834,9 @@ export function AudiometryListScreen() {
                   <Text style={[styles.buttonText, styles.cancelButtonText]}>Annuler</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.button, styles.saveButton]}
+                  style={[styles.button, styles.saveButton, { opacity: isEditFormValid ? 1 : 0.5 }]}
                   onPress={handleSaveEdit}
+                  disabled={!isEditFormValid}
                 >
                   <Text style={[styles.buttonText, styles.saveButtonText]}>Enregistrer</Text>
                 </TouchableOpacity>

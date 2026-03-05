@@ -107,6 +107,8 @@ export function DrugAlcoholScreeningScreen() {
     setRefreshing(false);
   };
 
+  const isFormValid = !!(selectedWorker && formData.screening_date && (formData.alcohol_level || formData.drug_result));
+
   const handleSubmit = async () => {
     if (!selectedWorker || (!formData.alcohol_test && !formData.drug_test)) {
       showToast('Veuillez sélectionner un travailleur et au moins un test', 'error');
@@ -383,9 +385,9 @@ export function DrugAlcoholScreeningScreen() {
               />
 
               <TouchableOpacity
-                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: submitting ? 0.7 : 1 }]}
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: (submitting || !isFormValid) ? 0.5 : 1 }]}
                 onPress={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || !isFormValid}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color="white" />

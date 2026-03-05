@@ -105,8 +105,7 @@ export function DrugAlcoholScreeningListScreen() {
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
         data = data
-          .sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime())
-          .slice(0, 5);
+          .sort((a: any, b: any) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime());
         setResults(data);
       }
     } catch (error) {
@@ -121,6 +120,10 @@ export function DrugAlcoholScreeningListScreen() {
     await loadResults();
     setRefreshing(false);
   };
+
+  // Form validation
+  const isAddFormValid = !!(selectedWorker && formData.test_date && formData.test_type && formData.alcohol_result && formData.drug_result);
+  const isEditFormValid = !!(editFormData.test_date && editFormData.test_type && editFormData.alcohol_result && editFormData.drug_result);
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
@@ -687,7 +690,11 @@ export function DrugAlcoholScreeningListScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: '#122056' }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: '#122056', opacity: isAddFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isAddFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>

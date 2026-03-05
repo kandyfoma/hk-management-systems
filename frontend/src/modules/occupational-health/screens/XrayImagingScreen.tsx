@@ -91,6 +91,8 @@ export function XrayImagingScreen() {
     setRefreshing(false);
   };
 
+  const isFormValid = !!(selectedWorker && formData.exam_type && formData.imaging_findings);
+
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.exam_type || !formData.imaging_findings) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
@@ -317,7 +319,11 @@ export function XrayImagingScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <TouchableOpacity style={[styles.submitButton, { backgroundColor: ACCENT }]} onPress={handleSubmit}>
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
+                onPress={handleSubmit}
+                disabled={!isFormValid}
+              >
                 <Text style={styles.submitButtonText}>Enregistrer</Text>
               </TouchableOpacity>
             </ScrollView>
