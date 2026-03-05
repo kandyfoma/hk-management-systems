@@ -2954,8 +2954,8 @@ class PPEComplianceRecordViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset()
         if enterprise_id:
             queryset = queryset.filter(
-                models.Q(worker__enterprise_id=enterprise_id) |
-                models.Q(ppe_item__worker__enterprise_id=enterprise_id)
+                Q(worker__enterprise_id=enterprise_id) |
+                Q(ppe_item__worker__enterprise_id=enterprise_id)
             )
 
         total = queryset.count()

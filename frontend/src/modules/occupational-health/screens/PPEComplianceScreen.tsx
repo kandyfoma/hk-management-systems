@@ -45,7 +45,7 @@ const SAMPLE_RECORDS: PPEComplianceRecord[] = [
 export function PPEComplianceScreen() {
   const [records, setRecords] = useState<PPEComplianceRecord[]>(SAMPLE_RECORDS);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
-  const [ppeItems, setPpeItems] = useState<any[]>([]);
+  const [ppeCatalog, setPpeCatalog] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,7 +54,7 @@ export function PPEComplianceScreen() {
   const [selectedRecord, setSelectedRecord] = useState<PPEComplianceRecord | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [formData, setFormData] = useState({
-    ppe_item: '',
+    ppe_catalog: '',   // ID of catalog item being checked
     check_date: new Date().toISOString().split('T')[0],
     check_type: '',
     status: '',
@@ -67,6 +67,7 @@ export function PPEComplianceScreen() {
 
   useEffect(() => {
     loadRecords();
+    loadPpeCatalog();
   }, []);
 
   const loadRecords = async () => {
@@ -93,28 +94,25 @@ export function PPEComplianceScreen() {
     setRefreshing(false);
   };
 
-  const loadPpeItems = async (workerId: string | number) => {
-    setPpeItems([]);
+  /**
+   * Load the PPE stock catalog once on mount.
+   * #oh-ppe is the stock screen (PPECatalog, no worker assignment).
+   * Compliance checks record: worker + catalog item + check details.
+   */
+  const loadPpeCatalog = async () => {
     try {
       const api = ApiService.getInstance();
-      // ?worker= is the DRF filterset param; ?worker_id= also handled by backend as fallback
-      console.log(`[PPECompliance] Loading PPE items for worker ${workerId}...`);
-      const response = await api.get('/occupational-health/ppe-items/', { worker: Number(workerId), page_size: 100 });
-      console.log(`[PPECompliance] API Response:`, response);
+      const response = await api.get('/occupational-health/ppe-catalog/', { page_size: 200, is_active: true });
       if (response.data) {
         const items = Array.isArray(response.data) ? response.data : response.data.results || [];
-        console.log(`[PPECompliance] Found ${items.length} PPE items for worker ${workerId}:`, items);
-        setPpeItems(items);
-      } else {
-        console.warn(`[PPECompliance] No data in response for worker ${workerId}`);
+        setPpeCatalog(items);
       }
     } catch (error) {
-      console.error(`[PPECompliance] Error loading PPE items for worker ${workerId}:`, error);
-      setPpeItems([]);
+      console.error('[PPECompliance] Error loading PPE catalog:', error);
     }
   };
 
-  const isFormValid = !!(selectedWorker && formData.ppe_item && formData.check_date && formData.check_type && formData.status);
+  const isFormValid = !!(selectedWorker && formData.ppe_catalog && formData.check_date && formData.check_type && formData.status);
 
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.ppe_item || !formData.check_date || !formData.check_type || !formData.status) {
@@ -126,7 +124,8 @@ export function PPEComplianceScreen() {
       const api = ApiService.getInstance();
 
       const newRecord = {
-        ppe_item: parseInt(formData.ppe_item, 10),
+        worker: selectedWorker!.id,
+        ppe_catalog: parseInt(formData.ppe_catalog, 10),
         check_date: formData.check_date,
         check_type: formData.check_type,
         status: formData.status,
@@ -142,9 +141,8 @@ export function PPEComplianceScreen() {
         setRecords([...records, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
-        setPpeItems([]);
         setFormData({
-          ppe_item: '',
+          ppe_catalog: '',
           check_date: new Date().toISOString().split('T')[0],
           check_type: '',
           status: '',
@@ -308,68 +306,62 @@ export function PPEComplianceScreen() {
             <ScrollView style={styles.formSection}>
               <WorkerSelectDropdown
                 value={selectedWorker}
-                onChange={(worker) => {
-                  setSelectedWorker(worker);
-                  if (worker?.id) loadPpeItems(worker.id);
-                }}
+                onChange={setSelectedWorker}
                 label="Travailleur"
                 placeholder="Sélectionnez un travailleur"
                 error={selectedWorker === null ? 'Travailleur requis' : undefined}
               />
 
-              <Text style={styles.formLabel}>EPI à vérifier</Text>
-              {ppeItems.length > 0 ? (
-                <ScrollView 
-                  horizontal 
+              <Text style={styles.formLabel}>Article EPI (Catalogue stock)</Text>
+              {ppeCatalog.length > 0 ? (
+                <ScrollView
+                  horizontal
                   showsHorizontalScrollIndicator={false}
                   style={{ margin: -spacing.md, paddingHorizontal: spacing.md, marginVertical: spacing.md }}
                 >
-                  {ppeItems.map((item) => (
+                  {ppeCatalog.map((item) => (
                     <TouchableOpacity
                       key={item.id}
-                      onPress={() => setFormData({ ...formData, ppe_item: String(item.id) })}
+                      onPress={() => setFormData({ ...formData, ppe_catalog: String(item.id) })}
                       style={[
-                        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5, minWidth: 100 },
-                        formData.ppe_item === String(item.id)
+                        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5, minWidth: 110 },
+                        formData.ppe_catalog === String(item.id)
                           ? { backgroundColor: ACCENT, borderColor: ACCENT }
-                          : { backgroundColor: colors.surface, borderColor: colors.outline }
+                          : { backgroundColor: colors.surface, borderColor: colors.outline },
                       ]}
                     >
                       <Text style={[
-                        { fontSize: 12, fontWeight: formData.ppe_item === String(item.id) ? '600' : '500' },
-                        formData.ppe_item === String(item.id) ? { color: '#FFF' } : { color: colors.text }
+                        { fontSize: 12, fontWeight: formData.ppe_catalog === String(item.id) ? '600' : '500' },
+                        formData.ppe_catalog === String(item.id) ? { color: '#FFF' } : { color: colors.text },
                       ]}>
-                        {item.ppe_type_display || item.ppe_type}
+                        {item.name || item.ppe_type_display || item.ppe_type}
                       </Text>
-                      {item.brand_model ? (
-                        <Text style={[{ fontSize: 10, marginTop: 2 }, formData.ppe_item === String(item.id) ? { color: '#FFF', opacity: 0.8 } : { color: colors.textSecondary }]}>
-                          {item.brand_model}
+                      {item.brand ? (
+                        <Text style={[{ fontSize: 10, marginTop: 2 }, formData.ppe_catalog === String(item.id) ? { color: '#FFF', opacity: 0.8 } : { color: colors.textSecondary }]}>
+                          {item.brand}{item.model_number ? ` — ${item.model_number}` : ''}
                         </Text>
                       ) : null}
-                      {item.standard_ref ? (
-                        <Text style={[{ fontSize: 9, marginTop: 1 }, formData.ppe_item === String(item.id) ? { color: '#FFF', opacity: 0.7 } : { color: colors.textSecondary }]}>
-                          {item.standard_ref}
+                      {item.certification_standard ? (
+                        <Text style={[{ fontSize: 9, marginTop: 1 }, formData.ppe_catalog === String(item.id) ? { color: '#FFF', opacity: 0.7 } : { color: colors.textSecondary }]}>
+                          {item.certification_standard}
                         </Text>
                       ) : null}
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-              ) : selectedWorker ? (
+              ) : (
                 <View style={{ paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.warning + '12', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.warning + '30' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                     <Ionicons name="alert-circle" size={20} color={colors.warning} style={{ marginTop: 2 }} />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warning, marginBottom: 4 }}>Aucun EPI assigné</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warning, marginBottom: 4 }}>Aucun article EPI dans le catalogue</Text>
                       <Text style={{ fontSize: 11, color: colors.warning, lineHeight: 16 }}>
-                        Ce travailleur n'a aucun équipement EPI enregistré. Vous devez d'abord{'\n'}
-                        <Text style={{ fontWeight: '600' }}>créer et assigner des articles EPI</Text> via l'écran{'\n'}
-                        <Text style={{ fontStyle: 'italic' }}>Gestion EPI</Text> (catalogue d'équipements).
+                        Ajoutez d'abord des équipements via l'écran{' '}
+                        <Text style={{ fontWeight: '600' }}>Gestion EPI</Text> (stock catalogue).
                       </Text>
                     </View>
                   </View>
                 </View>
-              ) : (
-                <Text style={{ fontSize: 12, color: colors.textSecondary, marginVertical: spacing.md }}>Sélectionnez d'abord un travailleur</Text>
               )}
 
               <Text style={styles.formLabel}>Date d'inspection</Text>
@@ -435,33 +427,19 @@ export function PPEComplianceScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              {/* Debug validation status */}
-              <View style={{ marginTop: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.info + '14', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.info + '40' }}>
-                <Text style={{ fontSize: 11, color: colors.info, fontWeight: '700', marginBottom: 4 }}>État de validation:</Text>
-                <Text style={{ fontSize: 10, color: colors.info, marginBottom: 8 }}>
-                  {selectedWorker ? '✓' : '✗'} Travailleur: {selectedWorker ? `ID ${selectedWorker.id}` : 'aucun'}{'\n'}
-                  {formData.ppe_item ? '✓' : '✗'} EPI sélectionné{'\n'}
-                  {formData.check_date ? '✓' : '✗'} Date: {formData.check_date}{'\n'}
-                  {formData.check_type ? '✓' : `✗ Type: ${formData.check_type || 'aucun'}`}{'\n'}
-                  {formData.status ? '✓' : `✗ Statut: ${formData.status || 'aucun'}`}
-                </Text>
-                {selectedWorker && (
-                  <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.info + '30' }}>
-                    <Text style={{ fontSize: 10, color: colors.info, fontWeight: '600', marginBottom: 4 }}>API Info:</Text>
-                    <Text style={{ fontSize: 9, color: colors.info, fontFamily: 'monospace' }}>
-                      Worker ID: {selectedWorker.id}{'\n'}
-                      PPE Items trouvés: {ppeItems.length}
-                    </Text>
-                    {ppeItems.length > 0 ? (
-                      <Text style={{ fontSize: 9, color: colors.success, marginTop: 4, fontWeight: '600' }}>✓ API OK - Sélectionnez un EPI</Text>
-                    ) : (
-                      <Text style={{ fontSize: 9, color: colors.warning, marginTop: 4, fontWeight: '600' }}>
-                        ✗ Aucun EPI trouvé pour ce travailleur{'\n'}
-                        → Vérifiez que l'EPI est assigné au travailleur ID {selectedWorker.id} dans 'Gestion EPI'
-                      </Text>
-                    )}
-                  </View>
-                )}
+              {/* Validation checklist */}
+              <View style={{ marginTop: spacing.md, padding: spacing.sm, backgroundColor: colors.info + '12', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.info + '30' }}>
+                {[
+                  [!!selectedWorker,      'Travailleur'],
+                  [!!formData.ppe_catalog,'Article EPI sélectionné'],
+                  [!!formData.check_date, 'Date'],
+                  [!!formData.check_type, 'Type d\'inspection'],
+                  [!!formData.status,     'Statut'],
+                ].map(([ok, label]) => (
+                  <Text key={label as string} style={{ fontSize: 11, color: ok ? colors.success : colors.warning, marginBottom: 2 }}>
+                    {ok ? '✓' : '✗'} {label as string}
+                  </Text>
+                ))}
               </View>
 
               <TouchableOpacity 

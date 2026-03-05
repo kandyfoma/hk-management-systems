@@ -1099,14 +1099,19 @@ class PPEComplianceRecordAdmin(admin.ModelAdmin):
         'status', 'is_compliant', 'check_type', 'check_date'
     ]
     search_fields = [
-        'ppe_item__worker__first_name',
-        'ppe_item__worker__last_name',
-        'ppe_item__worker__employee_id'
+        'worker__first_name', 'worker__last_name', 'worker__employee_id',
+        'ppe_catalog__name',
+        # Legacy
+        'ppe_item__worker__first_name', 'ppe_item__worker__last_name',
     ]
     readonly_fields = ['check_date', 'approval_date']
     fieldsets = (
-        (_('PPE Item'), {
-            'fields': ('ppe_item',)
+        (_('Travailleur & EPI'), {
+            'fields': ('worker', 'ppe_catalog')
+        }),
+        (_('EPI Item (legacy)'), {
+            'fields': ('ppe_item',),
+            'classes': ('collapse',),
         }),
         (_('Compliance Check'), {
             'fields': (
@@ -1126,13 +1131,21 @@ class PPEComplianceRecordAdmin(admin.ModelAdmin):
         }),
     )
     actions = ['mark_compliant', 'mark_non_compliant']
-    
+
     def worker_name(self, obj):
-        return f"{obj.ppe_item.worker.first_name} {obj.ppe_item.worker.last_name}"
+        if obj.worker:
+            return f"{obj.worker.first_name} {obj.worker.last_name}"
+        if obj.ppe_item and obj.ppe_item.worker:
+            return f"{obj.ppe_item.worker.first_name} {obj.ppe_item.worker.last_name}"
+        return '—'
     worker_name.short_description = _('Worker')
-    
+
     def ppe_description(self, obj):
-        return obj.ppe_item.ppe_type
+        if obj.ppe_catalog:
+            return obj.ppe_catalog.name
+        if obj.ppe_item:
+            return obj.ppe_item.get_ppe_type_display()
+        return '—'
     ppe_description.short_description = _('PPE Item')
     
     def mark_compliant(self, request, queryset):

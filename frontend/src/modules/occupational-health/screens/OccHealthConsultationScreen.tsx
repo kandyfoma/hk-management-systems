@@ -1367,7 +1367,9 @@ export function OccHealthConsultationScreen({
   // ─── Sector-specific questionnaire answers ──
   const [sectorAnswers, setSectorAnswers] = useState<Record<string, any>>({});
 
-  // ─── Worker PPE snapshot (read-only summary shown in sector questions, ISO 45001 §8.1.2) ──
+  // ─── Worker PPE compliance snapshot (ISO 45001 §8.1.2 / §9.1.2) ──
+  // Loads the worker's latest PPE compliance check records for review during consultation.
+  // Source: /ppe-compliance/?worker=X  (worker FK added in migration 0032)
   const [workerPPEItems, setWorkerPPEItems] = useState<any[]>([]);
 
   // ─── Test catalog (dynamic from backend) ──
@@ -1388,11 +1390,11 @@ export function OccHealthConsultationScreen({
     initCatalog();
   }, []);
 
-  // Load worker's PPE items for read-only compliance summary in sector questions step
+  // Load worker's PPE compliance records for read-only summary in sector questions step
   useEffect(() => {
     if (!selectedWorker?.id) { setWorkerPPEItems([]); return; }
     const api = ApiService.getInstance();
-    api.get('/occupational-health/ppe-items/', { worker: Number(selectedWorker.id), page_size: 50 })
+    api.get('/occupational-health/ppe-compliance/', { worker: Number(selectedWorker.id), page_size: 50, ordering: '-check_date' })
       .then(res => {
         const items = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
         setWorkerPPEItems(items);
@@ -3841,7 +3843,7 @@ export function OccHealthConsultationScreen({
 
           {/* Behavioral vs equipment contradiction alert (ISO 45001 §9.1.2 behavioral monitoring) */}
           {(sectorAnswers['ppe_compliance'] === 'Parfois' || sectorAnswers['ppe_compliance'] === 'Jamais') &&
-            workerPPEItems.some(i => i.compliance_checked) && (
+            workerPPEItems.some(i => i.is_compliant) && (
             <View style={[styles.alertBox, { backgroundColor: colors.warning + '12', borderColor: colors.warning + '40', marginBottom: 12 }]}>
               <Ionicons name="warning" size={16} color={colors.warning} />
               <Text style={[styles.alertText, { marginLeft: 8, color: colors.warning }]}>
@@ -3853,44 +3855,45 @@ export function OccHealthConsultationScreen({
           {workerPPEItems.length === 0 ? (
             <View style={{ alignItems: 'center', paddingVertical: 16 }}>
               <Ionicons name="shield-outline" size={28} color={colors.textSecondary} />
-              <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8, textAlign: 'center' }}>Aucun EPI enregistré pour ce travailleur.</Text>
-              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' }}>Ajoutez des équipements dans le module Conformité EPI.</Text>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8, textAlign: 'center' }}>Aucune vérification EPI enregistrée pour ce travailleur.</Text>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2, textAlign: 'center' }}>Enregistrez des vérifications dans le module Conformité EPI.</Text>
             </View>
           ) : (
             workerPPEItems.map((item) => {
-              const conditionColor = (item.condition === 'new' || item.condition === 'good') ? colors.success : item.condition === 'worn' ? colors.warning : colors.error;
-              const conditionLabel = item.condition === 'new' ? 'Neuf' : item.condition === 'good' ? 'Bon état' : item.condition === 'worn' ? 'Usé' : item.condition === 'damaged' ? 'Endommagé' : 'Expiré';
+              const isCompliant = item.is_compliant;
+              const statusColor = isCompliant ? colors.success :
+                ['expired', 'damaged', 'lost', 'non_compliant'].includes(item.status) ? colors.error : colors.warning;
+              const statusLabel = item.status_display || item.status;
               return (
                 <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 }}>
-                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: (item.compliance_checked ? colors.success : colors.warning) + '18', alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={item.compliance_checked ? 'shield-checkmark' : 'shield-outline'} size={18} color={item.compliance_checked ? colors.success : colors.warning} />
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: statusColor + '18', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={isCompliant ? 'shield-checkmark' : 'shield-outline'} size={18} color={statusColor} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{item.ppe_type_display || item.ppe_type}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
+                      {item.ppe_type_display || item.ppe_catalog_name || 'EPI'}
+                    </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                      <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: conditionColor + '18' }}>
-                        <Text style={{ fontSize: 10, fontWeight: '600', color: conditionColor }}>{conditionLabel}</Text>
+                      <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: statusColor + '18' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: statusColor }}>{statusLabel}</Text>
                       </View>
-                      {item.last_compliance_check ? (
-                        <Text style={{ fontSize: 10, color: colors.textSecondary }}>Vérifié: {item.last_compliance_check}</Text>
+                      {item.check_date ? (
+                        <Text style={{ fontSize: 10, color: colors.textSecondary }}>Vérifié: {item.check_date}</Text>
                       ) : null}
-                      {item.standard_ref ? (
+                      {item.check_type_display ? (
                         <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.surface }}>
-                          <Text style={{ fontSize: 10, color: colors.textSecondary }}>{item.standard_ref}</Text>
+                          <Text style={{ fontSize: 10, color: colors.textSecondary }}>{item.check_type_display}</Text>
                         </View>
                       ) : null}
-                      {item.expiry_date ? (
-                        <Text style={{ fontSize: 10, color: item.is_expired ? colors.error : colors.textSecondary }}>
-                          {item.is_expired ? '⚠ Expiré' : `Exp: ${item.expiry_date}`}
-                        </Text>
-                      ) : null}
                     </View>
-                    {item.document_ref ? (
-                      <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>📄 {item.document_ref}</Text>
+                    {item.condition_notes ? (
+                      <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>
+                        {item.condition_notes}
+                      </Text>
                     ) : null}
                   </View>
-                  {!item.compliance_checked && (
-                    <Text style={{ fontSize: 10, color: colors.warning, fontWeight: '700' }}>Non vérifié</Text>
+                  {!isCompliant && (
+                    <Text style={{ fontSize: 10, color: colors.warning, fontWeight: '700' }}>Non conforme</Text>
                   )}
                 </View>
               );

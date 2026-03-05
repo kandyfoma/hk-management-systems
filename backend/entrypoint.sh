@@ -64,9 +64,11 @@ echo "   ✓ Static files collected"
 echo "[5/5] Starting Gunicorn..."
 WORKERS=${GUNICORN_WORKERS:-3}
 TIMEOUT=${GUNICORN_TIMEOUT:-120}
+# Railway injects $PORT; fall back to 8000 for local Docker
+BIND_PORT=${PORT:-8000}
 
 exec gunicorn config.wsgi:application \
-  --bind 0.0.0.0:8000 \
+  --bind 0.0.0.0:${BIND_PORT} \
   --workers "$WORKERS" \
   --timeout "$TIMEOUT" \
   --log-level "${GUNICORN_LOG_LEVEL:-info}" \
