@@ -288,7 +288,7 @@ function PPECard({ item, onPress }: { item: PPECatalogItem; onPress: () => void 
           { label: 'Stock',       value: item.stock_quantity,       color: colors.text  },
           { label: 'Attribues',   value: item.assigned_quantity,    color: ACCENT       },
           { label: 'Disponibles', value: avail,                     color: lowSt ? '#EF4444' : '#22C55E' },
-          { label: `${item.currency}/u`, value: item.unit_price.toFixed(2), color: '#059669' },
+          { label: `${item.currency}/u`, value: (item.unit_price != null ? Number(item.unit_price).toFixed(2) : 'N/A'), color: '#059669' },
         ].map(st => (
           <View key={st.label} style={{ alignItems: 'center', flex: 1 }}>
             <Text style={[s.stockVal, { color: st.color }]}>{st.value}</Text>
@@ -419,7 +419,7 @@ function PPEDetailModal({ visible, item, onClose, onEdit, onDelete, onAdjustStoc
               <DetailRow label="Fournisseur"    value={item.supplier || '—'} />
               <DetailRow label="Contact"        value={item.supplier_contact || '—'} />
               <DetailRow label="Ref. fourn."    value={item.supplier_reference || '—'} />
-              <DetailRow label="Prix unitaire"  value={`${item.currency} ${item.unit_price.toFixed(2)}`} />
+              <DetailRow label="Prix unitaire"  value={`${item.currency} ${item.unit_price != null ? Number(item.unit_price).toFixed(2) : 'N/A'}`} />
             </View>
 
             {/* Audit trail */}

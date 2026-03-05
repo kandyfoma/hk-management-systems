@@ -1514,12 +1514,12 @@ class PPEItemViewSet(viewsets.ModelViewSet):
     filterset_fields = [
         'worker', 'ppe_type', 'condition', 'training_provided', 'replaced', 'compliance_checked'
     ]
-    search_fields = ['serial_number', 'brand_model', 'worker__user__first_name', 'worker__user__last_name']
+    search_fields = ['serial_number', 'brand_model', 'worker__first_name', 'worker__last_name', 'worker__employee_id']
     ordering = ['-created_at']
     serializer_class = PPEItemSerializer
     
     def get_queryset(self):
-        qs = PPEItem.objects.select_related('assigned_by', 'worker', 'worker__user')
+        qs = PPEItem.objects.select_related('assigned_by', 'worker')
         # Support legacy ?worker_id= param in addition to django-filter ?worker=
         worker_id = self.request.query_params.get('worker_id')
         if worker_id:
