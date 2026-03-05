@@ -71,8 +71,8 @@ echo "   [OK] Demo seed step done"
 
 # ── 5. Collect static files ─────────────────────────────────────────────────
 echo "[5/6] Collecting static files..."
-python manage.py collectstatic --noinput --clear
-echo "   [OK] Static files collected"
+python manage.py collectstatic --noinput --clear || echo "   [WARN] collectstatic failed (non-fatal, continuing...)"
+echo "   [OK] Static files step done"
 
 # ── 6. Start gunicorn ───────────────────────────────────────────────────────
 echo "[6/6] Starting Gunicorn..."

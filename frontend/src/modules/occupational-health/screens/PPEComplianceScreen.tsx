@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Modal, Alert, ActivityIndicator, RefreshControl, FlatList,
@@ -13,32 +13,75 @@ const themeColors = { border: '#E2E8F0' };
 
 
 interface PPEComplianceRecord {
-  id: string;
-  worker_id: string;
+  id: number;
+  worker: number;
   worker_name: string;
-  ppe_type: string;
-  assigned_date: string;
-  expiry_date: string;
-  inspection_date?: string;
-  compliance_status: 'compliant' | 'non_compliant' | 'due_inspection';
-  notes?: string;
-  created_at: string;
+  worker_employee_id: string;
+  ppe_catalog: number;
+  ppe_catalog_name: string;
+  ppe_type_display: string;
+  check_date: string;
+  check_type: string;
+  check_type_display: string;
+  status: string;
+  status_display: string;
+  status_computed: 'normal' | 'warning' | 'critical';
+  condition_notes: string;
+  is_compliant: boolean;
+  non_compliance_reason: string;
+  corrective_action_required: boolean;
+  corrective_action: string;
+  checked_by_name: string;
+  approved_by_name: string;
+  approval_date: string | null;
 }
 
 const SAMPLE_RECORDS: PPEComplianceRecord[] = [
   {
-    id: '1', worker_id: 'w1', worker_name: 'Jean-Pierre Kabongo',
-    ppe_type: 'Casque de sécurité', assigned_date: '2024-01-15',
-    expiry_date: '2027-01-15', inspection_date: '2025-02-20',
-    compliance_status: 'compliant', notes: 'En bon état',
-    created_at: '2024-01-15T10:00:00Z',
+    id: 1,
+    worker: 1,
+    worker_name: 'Jean-Pierre Kabongo',
+    worker_employee_id: 'EMP001',
+    ppe_catalog: 1,
+    ppe_catalog_name: 'Casque de sécurité',
+    ppe_type_display: 'Casque de sécurité',
+    check_date: '2025-02-20',
+    check_type: 'routine',
+    check_type_display: 'Routine',
+    status: 'compliant',
+    status_display: 'Conforme',
+    status_computed: 'normal',
+    condition_notes: 'En bon état',
+    is_compliant: true,
+    non_compliance_reason: '',
+    corrective_action_required: false,
+    corrective_action: '',
+    checked_by_name: 'Admin User',
+    approved_by_name: 'Manager',
+    approval_date: '2025-02-21',
   },
   {
-    id: '2', worker_id: 'w2', worker_name: 'Patrick Lukusa',
-    ppe_type: 'Gants de protection', assigned_date: '2024-08-01',
-    expiry_date: '2025-08-01', inspection_date: undefined,
-    compliance_status: 'due_inspection', notes: 'Inspection attendue',
-    created_at: '2024-08-01T14:00:00Z',
+    id: 2,
+    worker: 2,
+    worker_name: 'Patrick Lukusa',
+    worker_employee_id: 'EMP002',
+    ppe_catalog: 2,
+    ppe_catalog_name: 'Gants de protection',
+    ppe_type_display: 'Gants de protection',
+    check_date: '2025-03-01',
+    check_type: 'pre_use',
+    check_type_display: 'Pre-Use',
+    status: 'non_compliant',
+    status_display: 'Non-Conforme',
+    status_computed: 'warning',
+    condition_notes: 'Usure visible',
+    is_compliant: false,
+    non_compliance_reason: 'Dommage observé',
+    corrective_action_required: true,
+    corrective_action: 'Remplacer les gants',
+    checked_by_name: 'Admin User',
+    approved_by_name: 'Manager',
+    approval_date: null,
   },
 ];
 
@@ -48,14 +91,21 @@ export function PPEComplianceScreen() {
   const [ppeCatalog, setPpeCatalog] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'compliant' | 'non_compliant' | 'due_inspection'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'compliant' | 'non_compliant' | 'in_use' | 'expired' | 'damaged'>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'worker' | 'status'>('recent');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<PPEComplianceRecord | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showPpePicker, setShowPpePicker] = useState(false);
   const [ppeCatalogSearch, setPpeCatalogSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [formData, setFormData] = useState({
     ppe_catalog: '',   // ID of catalog item being checked
     check_date: new Date().toISOString().split('T')[0],
@@ -69,31 +119,87 @@ export function PPEComplianceScreen() {
   });
 
   useEffect(() => {
-    loadRecords();
+    loadRecords(1, true);
     loadPpeCatalog();
   }, []);
 
-  const loadRecords = async () => {
-    setLoading(true);
+  /**
+   * Optimized API call with pagination, search, filtering, and sorting.
+   * Backend handles the heavy lifting; frontend just displays results.
+   */
+  const loadRecords = async (page: number = 1, isRefresh: boolean = false) => {
+    if (page === 1) setLoading(true);
+    else setLoadingMore(true);
+
     try {
       const api = ApiService.getInstance();
-      const response = await api.get('/occupational-health/ppe-compliance/');
+      
+      // Build query params for API optimization
+      const params: any = {
+        page,
+        page_size: pageSize,
+      };
+
+      // Only add search if not empty
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
+
+      // Only add status filter if not 'all'
+      if (filterStatus !== 'all') {
+        params.status = filterStatus;
+      }
+
+      // Add ordering based on sortBy
+      switch(sortBy) {
+        case 'recent':
+          params.ordering = '-check_date';
+          break;
+        case 'oldest':
+          params.ordering = 'check_date';
+          break;
+        case 'worker':
+          params.ordering = 'worker_name';
+          break;
+        case 'status':
+          params.ordering = 'status';
+          break;
+      }
+
+      const response = await api.get('/occupational-health/ppe-compliance/', params);
+      
       if (response.success && response.data) {
         let data = Array.isArray(response.data) ? response.data : response.data.results || [];
-        // Sort by check_date descending (most recent first)
-        data = data.sort((a: any, b: any) => new Date(b.check_date || b.assigned_date).getTime() - new Date(a.check_date || a.assigned_date).getTime());
-        setRecords(data);
+        const total = response.data.count || data.length;
+        const next = response.data.next || null;
+
+        if (page === 1 || isRefresh) {
+          setRecords(data);
+        } else {
+          setRecords([...records, ...data]);
+        }
+
+        setTotalCount(total);
+        setHasNextPage(!!next);
+        setCurrentPage(page);
       }
     } catch (error) {
       console.error('Error loading PPE compliance records:', error);
     } finally {
-      setLoading(false);
+      if (page === 1) setLoading(false);
+      else setLoadingMore(false);
     }
   };
 
+  // Reload when search, filter, or sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+    loadRecords(1, false);
+  }, [searchQuery, filterStatus, sortBy]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadRecords();
+    await loadRecords(1, true);
     setRefreshing(false);
   };
 
@@ -118,17 +224,6 @@ export function PPEComplianceScreen() {
   const isFormValid = !!(selectedWorker && formData.ppe_catalog && formData.check_date && formData.check_type && formData.status);
 
   const handleSubmit = async () => {
-    console.log('[PPE Compliance] ✅ Button clicked - handleSubmit called');
-    Alert.alert('Debug', 'handleSubmit exécuté');
-    
-    console.log('[PPE Compliance] Validation check:', {
-      selectedWorker: !!selectedWorker,
-      ppe_catalog: !!formData.ppe_catalog,
-      check_date: !!formData.check_date,
-      check_type: !!formData.check_type,
-      status: !!formData.status,
-    });
-
     if (!selectedWorker) {
       Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
       return;
@@ -150,7 +245,6 @@ export function PPEComplianceScreen() {
       return;
     }
 
-    Alert.alert('Info', 'Validation réussie - Envoi au serveur...');
     setSubmitting(true);
     
     try {
@@ -168,12 +262,9 @@ export function PPEComplianceScreen() {
         corrective_action: formData.corrective_action,
       };
 
-      console.log('[PPE Compliance] 📡 Posting payload:', JSON.stringify(payload, null, 2));
       const response = await api.post('/occupational-health/ppe-compliance/', payload);
-      console.log('[PPE Compliance] 📥 API response received:', JSON.stringify(response, null, 2));
       
       if (response.success && response.data) {
-        console.log('[PPE Compliance] ✅ Success! Adding record and closing modal');
         setRecords([...records, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
@@ -191,41 +282,44 @@ export function PPEComplianceScreen() {
         Alert.alert('✅ Succès', 'Enregistrement ajouté avec succès');
         await loadRecords();
       } else {
-        console.error('[PPE Compliance] ❌ API returned success=false:', response.error);
         Alert.alert('❌ Erreur', response.error?.message || 'Erreur API: réponse invalide');
       }
     } catch (error: any) {
-      console.error('[PPE Compliance] ❌ Exception caught:', error);
+      console.error('[PPE Compliance] Error:', error);
       Alert.alert('❌ Erreur', `${error?.message || 'Impossible d\'enregistrer'}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const filtered = useMemo(() => records.filter(r => {
-    const q = searchQuery.toLowerCase();
-    const matchQ = !q || r.worker_name.toLowerCase().includes(q) || r.ppe_type.toLowerCase().includes(q);
-    const matchS = filterStatus === 'all' || r.compliance_status === filterStatus;
-    return matchQ && matchS;
-  }), [records, searchQuery, filterStatus]);
+  /**
+   * No longer needed - filtering, sorting done on backend
+   */
 
   const getStatusColor = (status: string) => {
-    return status === 'compliant' ? '#22C55E' : status === 'due_inspection' ? '#F59E0B' : '#EF4444';
+    switch(status) {
+      case 'compliant': return '#22C55E';
+      case 'non_compliant': return '#EF4444';
+      case 'in_use': return '#3B82F6';
+      case 'expired': return '#F59E0B';
+      case 'damaged': return '#DC2626';
+      case 'lost': return '#7C3AED';
+      case 'replaced': return '#10B981';
+      default: return '#6B7280';
+    }
   };
 
   const getStatusLabel = (status: string) => {
-    return status === 'compliant' ? 'Conforme' : status === 'due_inspection' ? 'Inspection requise' : 'Non conforme';
-  };
-
-  const isExpiring = (expiryDate: string) => {
-    const exp = new Date(expiryDate);
-    const today = new Date();
-    const daysUntilExpiry = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
-  };
-
-  const isExpired = (expiryDate: string) => {
-    return new Date(expiryDate) < new Date();
+    switch(status) {
+      case 'compliant': return 'Conforme';
+      case 'non_compliant': return 'Non conforme';
+      case 'in_use': return 'En usage';
+      case 'expired': return 'Expiré';
+      case 'damaged': return 'Endommagé';
+      case 'lost': return 'Perdu';
+      case 'replaced': return 'Remplacé';
+      default: return status;
+    }
   };
 
   return (
@@ -261,8 +355,9 @@ export function PPEComplianceScreen() {
             />
           </View>
 
+          {/* Status Filter Chips */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.md }}>
-            {['all', 'compliant', 'due_inspection', 'non_compliant'].map(status => (
+            {['all', 'compliant', 'non_compliant', 'in_use', 'expired', 'damaged'].map(status => (
               <TouchableOpacity
                 key={status}
                 onPress={() => setFilterStatus(status as any)}
@@ -282,48 +377,105 @@ export function PPEComplianceScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* Sorting Options */}
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.sm }}>Trier par</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {[
+                { key: 'recent', label: 'Plus récent' },
+                { key: 'oldest', label: 'Plus ancien' },
+                { key: 'worker', label: 'Travailleur' },
+                { key: 'status', label: 'Statut' },
+              ].map(sort => (
+                <TouchableOpacity
+                  key={sort.key}
+                  onPress={() => setSortBy(sort.key as any)}
+                  style={[
+                    styles.sortChip,
+                    sortBy === sort.key && { backgroundColor: ACCENT, borderColor: ACCENT },
+                  ]}
+                >
+                  <Ionicons name="arrow-down" size={12} color={sortBy === sort.key ? 'white' : colors.textSecondary} style={{ marginRight: 4 }} />
+                  <Text
+                    style={[
+                      { fontSize: 11, fontWeight: '500', color: colors.textSecondary },
+                      sortBy === sort.key && { color: 'white', fontWeight: '600' },
+                    ]}
+                  >
+                    {sort.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Results Info */}
+        <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '500' }}>
+            {records.length > 0 ? `${records.length} de ${totalCount} résultats` : 'Aucun résultat'}
+          </Text>
         </View>
 
         {/* Content */}
         <View style={styles.contentSection}>
           {loading ? (
             <ActivityIndicator size="large" color={ACCENT} style={{ marginVertical: 40 }} />
-          ) : filtered.length > 0 ? (
-            filtered.map(record => (
-              <TouchableOpacity
-                key={record.id}
-                style={[styles.recordCard, shadows.sm, isExpired(record.expiry_date) && { borderLeftWidth: 4, borderLeftColor: '#EF4444' }]}
-                onPress={() => {
-                  setSelectedRecord(record);
-                  setShowDetail(true);
-                }}
-              >
-                <View style={styles.recordCardLeft}>
-                  <View style={[styles.statusIcon, { backgroundColor: getStatusColor(record.compliance_status) + '20' }]}>
-                    <Ionicons name="shield" size={24} color={getStatusColor(record.compliance_status)} />
+          ) : records.length > 0 ? (
+            <>
+              {records.map(record => (
+                <TouchableOpacity
+                  key={record.id}
+                  style={[styles.recordCard, shadows.sm]}
+                  onPress={() => {
+                    setSelectedRecord(record);
+                    setShowDetail(true);
+                  }}
+                >
+                  <View style={styles.recordCardLeft}>
+                    <View style={[styles.statusIcon, { backgroundColor: getStatusColor(record.status) + '20' }]}>
+                      <Ionicons name="shield" size={24} color={getStatusColor(record.status)} />
+                    </View>
                   </View>
-                </View>
 
-                <View style={styles.recordCardCenter}>
-                  <Text style={styles.recordWorkerName}>{record.worker_name}</Text>
-                  <Text style={styles.recordType}>{record.ppe_type}</Text>
-                  <View style={styles.datesBox}>
-                    <Text style={styles.dateText}>Expiration: {new Date(record.expiry_date).toLocaleDateString('fr-FR')}</Text>
-                    {isExpiring(record.expiry_date) && <Ionicons name="alert-circle" size={12} color="#F59E0B" style={{ marginLeft: 4 }} />}
-                    {isExpired(record.expiry_date) && <Ionicons name="alert-circle" size={12} color="#EF4444" style={{ marginLeft: 4 }} />}
+                  <View style={styles.recordCardCenter}>
+                    <Text style={styles.recordWorkerName}>{record.worker_name}</Text>
+                    <Text style={styles.recordType}>{record.ppe_type_display}</Text>
+                    <View style={styles.datesBox}>
+                      <Text style={styles.dateText}>Vérification: {new Date(record.check_date).toLocaleDateString('fr-FR')}</Text>
+                    </View>
                   </View>
-                </View>
 
-                <View style={styles.recordCardRight}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(record.compliance_status) + '20' }]}>
-                    <Text style={[styles.statusBadgeText, { color: getStatusColor(record.compliance_status) }]}>
-                      {getStatusLabel(record.compliance_status)}
-                    </Text>
+                  <View style={styles.recordCardRight}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(record.status) + '20' }]}>
+                      <Text style={[styles.statusBadgeText, { color: getStatusColor(record.status) }]}>
+                        {getStatusLabel(record.status)}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              ))}
+
+              {/* Load More Button */}
+              {hasNextPage && (
+                <TouchableOpacity
+                  style={[styles.loadMoreButton, { backgroundColor: ACCENT + '12', borderColor: ACCENT }]}
+                  onPress={() => loadRecords(currentPage + 1)}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <ActivityIndicator color={ACCENT} size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="arrow-down" size={16} color={ACCENT} style={{ marginRight: 8 }} />
+                      <Text style={{ color: ACCENT, fontWeight: '600', fontSize: 14 }}>Charger plus</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </>
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="shield-outline" size={48} color={colors.textSecondary + '40'} />
@@ -600,53 +752,73 @@ export function PPEComplianceScreen() {
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Type d'EPI</Text>
-                  <Text style={styles.detailValue}>{selectedRecord.ppe_type}</Text>
+                  <Text style={styles.detailLabel}>Article EPI</Text>
+                  <Text style={styles.detailValue}>{selectedRecord.ppe_type_display}</Text>
                 </View>
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Assigné le</Text>
-                  <Text style={styles.detailValue}>{new Date(selectedRecord.assigned_date).toLocaleDateString('fr-FR')}</Text>
+                  <Text style={styles.detailLabel}>Date de vérification</Text>
+                  <Text style={styles.detailValue}>{new Date(selectedRecord.check_date).toLocaleDateString('fr-FR')}</Text>
                 </View>
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Expire le</Text>
-                  <Text style={[styles.detailValue, isExpired(selectedRecord.expiry_date) && { color: '#EF4444' }]}>
-                    {new Date(selectedRecord.expiry_date).toLocaleDateString('fr-FR')}
-                  </Text>
+                  <Text style={styles.detailLabel}>Type de vérification</Text>
+                  <Text style={styles.detailValue}>{selectedRecord.check_type_display}</Text>
                 </View>
                 <View style={styles.divider} />
 
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Statut</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedRecord.compliance_status) + '20' }]}>
-                    <Text style={[styles.statusBadgeText, { color: getStatusColor(selectedRecord.compliance_status) }]}>
-                      {getStatusLabel(selectedRecord.compliance_status)}
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedRecord.status) + '20' }]}>
+                    <Text style={[styles.statusBadgeText, { color: getStatusColor(selectedRecord.status) }]}>
+                      {getStatusLabel(selectedRecord.status)}
                     </Text>
                   </View>
                 </View>
+                <View style={styles.divider} />
 
-                {selectedRecord.inspection_date && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Conforme</Text>
+                  <Text style={styles.detailValue}>{selectedRecord.is_compliant ? '✓ Oui' : '✗ Non'}</Text>
+                </View>
+
+                {selectedRecord.condition_notes && (
                   <>
                     <View style={styles.divider} />
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Dernière inspection</Text>
-                      <Text style={styles.detailValue}>{new Date(selectedRecord.inspection_date).toLocaleDateString('fr-FR')}</Text>
+                      <Text style={styles.detailLabel}>Notes d'état</Text>
+                      <Text style={styles.detailValue}>{selectedRecord.condition_notes}</Text>
                     </View>
                   </>
                 )}
 
-                {selectedRecord.notes && (
+                {selectedRecord.non_compliance_reason && (
                   <>
                     <View style={styles.divider} />
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Notes</Text>
-                      <Text style={styles.detailValue}>{selectedRecord.notes}</Text>
+                      <Text style={styles.detailLabel}>Raison de non-conformité</Text>
+                      <Text style={styles.detailValue}>{selectedRecord.non_compliance_reason}</Text>
                     </View>
                   </>
                 )}
+
+                {selectedRecord.corrective_action && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Action corrective</Text>
+                      <Text style={styles.detailValue}>{selectedRecord.corrective_action}</Text>
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.divider} />
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Vérifié par</Text>
+                  <Text style={styles.detailValue}>{selectedRecord.checked_by_name || '—'}</Text>
+                </View>
               </ScrollView>
 
               <TouchableOpacity style={[styles.closeButton, { backgroundColor: colors.surfaceVariant }]} onPress={() => setShowDetail(false)}>
@@ -725,9 +897,30 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
   },
+  sortChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    marginRight: spacing.sm,
+  },
   contentSection: {
     paddingHorizontal: spacing.md,
     paddingBottom: 40,
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    marginTop: spacing.md,
   },
   recordCard: {
     flexDirection: 'row',
