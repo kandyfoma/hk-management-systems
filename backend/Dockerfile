@@ -6,6 +6,9 @@ FROM python:3.11-slim
 # Prevents .pyc files and enables stdout/stderr flush
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# Ensure UTF-8 locale so Unicode chars in management commands don't crash stdout
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 WORKDIR /app
 

@@ -52,8 +52,8 @@ echo "   ✓ Migrations applied"
 #     - Leave existing records untouched (no data loss)
 #
 echo "[3/5] Loading occupational health protocol data..."
-python manage.py load_occ_protocols
-echo "   ✓ Protocol data loaded"
+python manage.py load_occ_protocols || echo "   ⚠ load_occ_protocols failed (non-fatal, continuing...)"
+echo "   ✓ Protocol step done"
 
 # ── 4. Collect static files ─────────────────────────────────────────────────
 echo "[4/5] Collecting static files..."

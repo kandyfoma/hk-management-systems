@@ -282,7 +282,7 @@ class Command(BaseCommand):
                 obj.category = entry["category"]
                 obj.save(update_fields=["label", "category"])
             exam_map[obj.code] = obj
-        self.stdout.write(self.style.SUCCESS(f"  ✓ {len(exam_map)} exam types loaded"))
+        self.stdout.write(self.style.SUCCESS(f"  [OK] {len(exam_map)} exam types loaded"))
 
         # ── 2. Sectors → Departments → Positions → Protocols ────────────
         for s_data in SECTORS_DATA:
@@ -340,7 +340,7 @@ class Command(BaseCommand):
                                     )
                                 else:
                                     self.stdout.write(
-                                        self.style.WARNING(f"      ⚠ Unknown exam code: {code}")
+                                        self.style.WARNING(f"      [WARN] Unknown exam code: {code}")
                                     )
                             # Recommended exams
                             rec_exams = [
@@ -356,7 +356,7 @@ class Command(BaseCommand):
                                 f"{len(proto_data.get('recommended', []))} recommended"
                             )
 
-        self.stdout.write(self.style.SUCCESS("\n✅ Protocol data loaded successfully."))
+        self.stdout.write(self.style.SUCCESS("\n[OK] Protocol data loaded successfully."))
         self.stdout.write("   Sectors:   " + str(OccSector.objects.count()))
         self.stdout.write("   Depts:     " + str(OccDepartment.objects.count()))
         self.stdout.write("   Positions: " + str(OccPosition.objects.count()))
