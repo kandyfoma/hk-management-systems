@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
-  Modal, Alert, ActivityIndicator, RefreshControl,
+  Modal, Alert, ActivityIndicator, RefreshControl, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
@@ -53,6 +53,9 @@ export function PPEComplianceScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<PPEComplianceRecord | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [showPpePicker, setShowPpePicker] = useState(false);
+  const [ppeCatalogSearch, setPpeCatalogSearch] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     ppe_catalog: '',   // ID of catalog item being checked
     check_date: new Date().toISOString().split('T')[0],
@@ -115,16 +118,45 @@ export function PPEComplianceScreen() {
   const isFormValid = !!(selectedWorker && formData.ppe_catalog && formData.check_date && formData.check_type && formData.status);
 
   const handleSubmit = async () => {
-    if (!selectedWorker || !formData.ppe_item || !formData.check_date || !formData.check_type || !formData.status) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs requis');
+    console.log('[PPE Compliance] ✅ Button clicked - handleSubmit called');
+    Alert.alert('Debug', 'handleSubmit exécuté');
+    
+    console.log('[PPE Compliance] Validation check:', {
+      selectedWorker: !!selectedWorker,
+      ppe_catalog: !!formData.ppe_catalog,
+      check_date: !!formData.check_date,
+      check_type: !!formData.check_type,
+      status: !!formData.status,
+    });
+
+    if (!selectedWorker) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      return;
+    }
+    if (!formData.ppe_catalog) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un article EPI');
+      return;
+    }
+    if (!formData.check_date) {
+      Alert.alert('Erreur', 'Veuillez entrer une date');
+      return;
+    }
+    if (!formData.check_type) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un type d\'inspection');
+      return;
+    }
+    if (!formData.status) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un statut');
       return;
     }
 
+    Alert.alert('Info', 'Validation réussie - Envoi au serveur...');
+    setSubmitting(true);
+    
     try {
       const api = ApiService.getInstance();
-
-      const newRecord = {
-        worker: selectedWorker!.id,
+      const payload = {
+        worker: selectedWorker.id,
         ppe_catalog: parseInt(formData.ppe_catalog, 10),
         check_date: formData.check_date,
         check_type: formData.check_type,
@@ -136,8 +168,12 @@ export function PPEComplianceScreen() {
         corrective_action: formData.corrective_action,
       };
 
-      const response = await api.post('/occupational-health/ppe-compliance/', newRecord);
-      if (response.success) {
+      console.log('[PPE Compliance] 📡 Posting payload:', JSON.stringify(payload, null, 2));
+      const response = await api.post('/occupational-health/ppe-compliance/', payload);
+      console.log('[PPE Compliance] 📥 API response received:', JSON.stringify(response, null, 2));
+      
+      if (response.success && response.data) {
+        console.log('[PPE Compliance] ✅ Success! Adding record and closing modal');
         setRecords([...records, response.data]);
         setShowAddModal(false);
         setSelectedWorker(null);
@@ -152,12 +188,17 @@ export function PPEComplianceScreen() {
           corrective_action_required: false,
           corrective_action: '',
         });
-        Alert.alert('Succès', 'Enregistrement de conformité EPI ajouté');
-        loadRecords();
+        Alert.alert('✅ Succès', 'Enregistrement ajouté avec succès');
+        await loadRecords();
+      } else {
+        console.error('[PPE Compliance] ❌ API returned success=false:', response.error);
+        Alert.alert('❌ Erreur', response.error?.message || 'Erreur API: réponse invalide');
       }
-    } catch (error) {
-      console.error('Error creating PPE compliance record:', error);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer le dossier');
+    } catch (error: any) {
+      console.error('[PPE Compliance] ❌ Exception caught:', error);
+      Alert.alert('❌ Erreur', `${error?.message || 'Impossible d\'enregistrer'}`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -313,55 +354,43 @@ export function PPEComplianceScreen() {
               />
 
               <Text style={styles.formLabel}>Article EPI (Catalogue stock)</Text>
-              {ppeCatalog.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={{ margin: -spacing.md, paddingHorizontal: spacing.md, marginVertical: spacing.md }}
-                >
-                  {ppeCatalog.map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      onPress={() => setFormData({ ...formData, ppe_catalog: String(item.id) })}
-                      style={[
-                        { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, marginRight: spacing.md, borderWidth: 1.5, minWidth: 110 },
-                        formData.ppe_catalog === String(item.id)
-                          ? { backgroundColor: ACCENT, borderColor: ACCENT }
-                          : { backgroundColor: colors.surface, borderColor: colors.outline },
-                      ]}
-                    >
-                      <Text style={[
-                        { fontSize: 12, fontWeight: formData.ppe_catalog === String(item.id) ? '600' : '500' },
-                        formData.ppe_catalog === String(item.id) ? { color: '#FFF' } : { color: colors.text },
-                      ]}>
-                        {item.name || item.ppe_type_display || item.ppe_type}
-                      </Text>
-                      {item.brand ? (
-                        <Text style={[{ fontSize: 10, marginTop: 2 }, formData.ppe_catalog === String(item.id) ? { color: '#FFF', opacity: 0.8 } : { color: colors.textSecondary }]}>
-                          {item.brand}{item.model_number ? ` — ${item.model_number}` : ''}
-                        </Text>
-                      ) : null}
-                      {item.certification_standard ? (
-                        <Text style={[{ fontSize: 9, marginTop: 1 }, formData.ppe_catalog === String(item.id) ? { color: '#FFF', opacity: 0.7 } : { color: colors.textSecondary }]}>
-                          {item.certification_standard}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              ) : (
-                <View style={{ paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.warning + '12', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.warning + '30' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                    <Ionicons name="alert-circle" size={20} color={colors.warning} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warning, marginBottom: 4 }}>Aucun article EPI dans le catalogue</Text>
-                      <Text style={{ fontSize: 11, color: colors.warning, lineHeight: 16 }}>
-                        Ajoutez d'abord des équipements via l'écran{' '}
-                        <Text style={{ fontWeight: '600' }}>Gestion EPI</Text> (stock catalogue).
-                      </Text>
-                    </View>
+              {ppeCatalog.length === 0 ? (
+                <View style={styles.catalogWarning}>
+                  <Ionicons name="alert-circle" size={20} color={colors.warning} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.catalogWarningTitle}>Aucun article EPI dans le catalogue</Text>
+                    <Text style={styles.catalogWarningBody}>
+                      Ajoutez d'abord des équipements via l'écran <Text style={{ fontWeight: '600' }}>Gestion EPI</Text>.
+                    </Text>
                   </View>
                 </View>
+              ) : formData.ppe_catalog ? (
+                // Selected item card
+                (() => {
+                  const sel = ppeCatalog.find(i => String(i.id) === formData.ppe_catalog);
+                  return (
+                    <View style={styles.selectedPpeCard}>
+                      <View style={styles.selectedPpeIcon}>
+                        <Ionicons name="shield-checkmark" size={20} color={ACCENT} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.selectedPpeName}>{sel?.name || sel?.ppe_type_display || sel?.ppe_type || 'Article EPI'}</Text>
+                        {sel?.brand ? <Text style={styles.selectedPpeSub}>{sel.brand}{sel.model_number ? ` — ${sel.model_number}` : ''}</Text> : null}
+                        {sel?.certification_standard ? <Text style={styles.selectedPpeCert}>{sel.certification_standard}</Text> : null}
+                      </View>
+                      <TouchableOpacity onPress={() => setShowPpePicker(true)} style={styles.changePpeBtn}>
+                        <Text style={styles.changeText}>Changer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()
+              ) : (
+                // Picker trigger
+                <TouchableOpacity style={styles.ppePickerTrigger} onPress={() => setShowPpePicker(true)} activeOpacity={0.75}>
+                  <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
+                  <Text style={styles.ppePickerPlaceholder}>Rechercher un article EPI… ({ppeCatalog.length} disponibles)</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
               )}
 
               <Text style={styles.formLabel}>Date d'inspection</Text>
@@ -443,13 +472,106 @@ export function PPEComplianceScreen() {
               </View>
 
               <TouchableOpacity 
-                style={[styles.submitButton, { backgroundColor: ACCENT, opacity: isFormValid ? 1 : 0.5 }]} 
+                style={[
+                  styles.submitButton,
+                  {
+                    backgroundColor: !isFormValid ? '#ccc' : ACCENT,
+                    opacity: submitting ? 0.6 : 1,
+                  }
+                ]}
                 onPress={handleSubmit}
-                disabled={!isFormValid}
+                disabled={submitting}
               >
-                <Text style={styles.submitButtonText}>Enregistrer</Text>
+                {submitting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Enregistrer</Text>
+                )}
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* PPE Catalogue Picker Modal */}
+      <Modal visible={showPpePicker} transparent animationType="slide" onRequestClose={() => setShowPpePicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choisir un article EPI</Text>
+              <TouchableOpacity onPress={() => { setShowPpePicker(false); setPpeCatalogSearch(''); }}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            {/* Search */}
+            <View style={styles.pickerSearch}>
+              <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
+              <TextInput
+                style={styles.pickerSearchInput}
+                placeholder="Nom, marque, norme…"
+                placeholderTextColor={colors.textSecondary}
+                value={ppeCatalogSearch}
+                onChangeText={setPpeCatalogSearch}
+                autoFocus
+              />
+              {ppeCatalogSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setPpeCatalogSearch('')}>
+                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <FlatList
+              data={ppeCatalog.filter(item => {
+                const q = ppeCatalogSearch.toLowerCase();
+                if (!q) return true;
+                return (
+                  (item.name || '').toLowerCase().includes(q) ||
+                  (item.ppe_type_display || item.ppe_type || '').toLowerCase().includes(q) ||
+                  (item.brand || '').toLowerCase().includes(q) ||
+                  (item.model_number || '').toLowerCase().includes(q) ||
+                  (item.certification_standard || '').toLowerCase().includes(q)
+                );
+              })}
+              keyExtractor={item => String(item.id)}
+              renderItem={({ item }) => {
+                const selected = formData.ppe_catalog === String(item.id);
+                return (
+                  <TouchableOpacity
+                    style={[styles.pickerRow, selected && styles.pickerRowSelected]}
+                    onPress={() => {
+                      setFormData({ ...formData, ppe_catalog: String(item.id) });
+                      setShowPpePicker(false);
+                      setPpeCatalogSearch('');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.pickerRowIcon, { backgroundColor: selected ? ACCENT + '18' : colors.background }]}>
+                      <Ionicons name="shield-outline" size={18} color={selected ? ACCENT : colors.textSecondary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pickerRowName, selected && { color: ACCENT }]}>
+                        {item.name || item.ppe_type_display || item.ppe_type}
+                      </Text>
+                      {item.brand ? (
+                        <Text style={styles.pickerRowSub}>{item.brand}{item.model_number ? ` — ${item.model_number}` : ''}</Text>
+                      ) : null}
+                      {item.certification_standard ? (
+                        <Text style={styles.pickerRowCert}>{item.certification_standard}</Text>
+                      ) : null}
+                    </View>
+                    {selected && <Ionicons name="checkmark-circle" size={20} color={ACCENT} />}
+                  </TouchableOpacity>
+                );
+              }}
+              ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: colors.outline, marginLeft: 56 }} />}
+              ListEmptyComponent={
+                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                  <Ionicons name="search-outline" size={36} color={colors.outline} />
+                  <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 13 }}>Aucun résultat pour "{ppeCatalogSearch}"</Text>
+                </View>
+              }
+              contentContainerStyle={{ paddingBottom: 20 }}
+            />
           </View>
         </View>
       </Modal>
@@ -765,4 +887,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  // PPE Picker styles
+  catalogWarning: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    padding: spacing.md, backgroundColor: colors.warning + '12',
+    borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.warning + '30',
+  },
+  catalogWarningTitle: { fontSize: 12, fontWeight: '700', color: colors.warning, marginBottom: 4 },
+  catalogWarningBody:  { fontSize: 11, color: colors.warning, lineHeight: 16 },
+  selectedPpeCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    padding: spacing.md, backgroundColor: ACCENT + '08',
+    borderRadius: borderRadius.md, borderWidth: 1.5, borderColor: ACCENT + '40',
+  },
+  selectedPpeIcon: {
+    width: 40, height: 40, borderRadius: borderRadius.md,
+    backgroundColor: ACCENT + '18', justifyContent: 'center', alignItems: 'center',
+  },
+  selectedPpeName: { fontSize: 13, fontWeight: '700', color: colors.text },
+  selectedPpeSub:  { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  selectedPpeCert: { fontSize: 10, color: ACCENT, marginTop: 2, fontWeight: '500' },
+  changePpeBtn: {
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: borderRadius.sm, backgroundColor: ACCENT + '18',
+  },
+  changeText: { fontSize: 11, color: ACCENT, fontWeight: '700' },
+  ppePickerTrigger: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    borderWidth: 1.5, borderColor: colors.outline, borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md, paddingVertical: 12,
+    backgroundColor: colors.background,
+  },
+  ppePickerPlaceholder: { flex: 1, fontSize: 13, color: colors.textSecondary },
+  pickerSearch: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginHorizontal: spacing.md, marginVertical: spacing.sm,
+    paddingHorizontal: spacing.md, height: 42,
+    backgroundColor: colors.background, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: colors.outline,
+  },
+  pickerSearchInput: { flex: 1, fontSize: 14, color: colors.text },
+  pickerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingHorizontal: spacing.md, paddingVertical: 12,
+  },
+  pickerRowSelected: { backgroundColor: ACCENT + '06' },
+  pickerRowIcon: {
+    width: 36, height: 36, borderRadius: borderRadius.md,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  pickerRowName: { fontSize: 13, fontWeight: '600', color: colors.text },
+  pickerRowSub:  { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  pickerRowCert: { fontSize: 10, color: ACCENT, marginTop: 2, fontWeight: '500' },
 });

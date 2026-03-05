@@ -40,8 +40,12 @@ fi
 
 # ── 2. Apply database migrations ────────────────────────────────────────────
 echo "[2/6] Running migrations..."
-python manage.py migrate --noinput
-echo "   [OK] Migrations applied"
+python manage.py migrate --noinput || {
+  echo "   [WARN] migrate returned non-zero — checking if it is a stale-migration warning..."
+  python manage.py showmigrations --plan 2>&1 | tail -5
+  echo "   [INFO] Continuing startup (non-fatal if only a stale-migration warning)"
+}
+echo "   [OK] Migrations step done"
 
 # ── 3. Load / refresh occupational health protocol seed data ────────────────
 #

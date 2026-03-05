@@ -48,140 +48,140 @@ SEED_PWD: dict[str, str] = {
 # ---------------------------------------------------------------------------
 STAFF = [
     {
-        'phone': '+85291000001',
-        'email': 'admin@demo.hk',
-        'first_name': 'System',
-        'last_name': 'Admin',
+        'phone': '+243971111101',
+        'email': 'admin@demo.cd',
+        'first_name': 'Patrick',
+        'last_name': 'Ilunga',
         'role': 'admin',
-        'employee_id': 'EMP-ADMIN-001',
+        'employee_id': 'EMP-CD-ADMIN-001',
         'department': 'Direction',
         'is_staff': True,
         'is_superuser': True,
     },
     {
-        'phone': '+85291000002',
-        'email': 'hospital.admin@demo.hk',
-        'first_name': 'Marie',
-        'last_name': 'Cheung',
+        'phone': '+243971111102',
+        'email': 'hospital.admin@demo.cd',
+        'first_name': 'Mireille',
+        'last_name': 'Mukendi',
         'role': 'hospital_admin',
-        'employee_id': 'EMP-HADM-001',
+        'employee_id': 'EMP-CD-HADM-001',
         'department': 'Administration',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000010',
-        'email': 'dr.chan@demo.hk',
-        'first_name': 'Dr. James',
-        'last_name': 'Chan',
+        'phone': '+243971111103',
+        'email': 'dr.kabasele@demo.cd',
+        'first_name': 'Dr. Fabrice',
+        'last_name': 'Kabasele',
         'role': 'doctor',
-        'employee_id': 'EMP-DOC-001',
+        'employee_id': 'EMP-CD-DOC-001',
         'department': 'Médecine Générale',
-        'professional_license': 'HK-MED-10001',
+        'professional_license': 'CD-MED-10001',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000011',
-        'email': 'dr.wong@demo.hk',
-        'first_name': 'Dr. Sarah',
-        'last_name': 'Wong',
+        'phone': '+243971111104',
+        'email': 'dr.mbayo@demo.cd',
+        'first_name': 'Dr. Sandrine',
+        'last_name': 'Mbayo',
         'role': 'doctor',
-        'employee_id': 'EMP-DOC-002',
+        'employee_id': 'EMP-CD-DOC-002',
         'department': 'Cardiologie',
-        'professional_license': 'HK-MED-10002',
+        'professional_license': 'CD-MED-10002',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000012',
-        'email': 'dr.lee.occ@demo.hk',
-        'first_name': 'Dr. Michael',
-        'last_name': 'Lee',
+        'phone': '+243971111105',
+        'email': 'dr.mbuyi.occ@demo.cd',
+        'first_name': 'Dr. Joel',
+        'last_name': 'Mbuyi',
         'role': 'occupational_doctor',
-        'employee_id': 'EMP-ODOC-001',
+        'employee_id': 'EMP-CD-ODOC-001',
         'department': 'Medecine du Travail',
-        'professional_license': 'HK-OCC-20001',
+        'professional_license': 'CD-OCC-20001',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000020',
-        'email': 'nurse.lam@demo.hk',
-        'first_name': 'Alice',
-        'last_name': 'Lam',
+        'phone': '+243971111106',
+        'email': 'nurse.tshibanda@demo.cd',
+        'first_name': 'Clarisse',
+        'last_name': 'Tshibanda',
         'role': 'nurse',
-        'employee_id': 'EMP-NUR-001',
+        'employee_id': 'EMP-CD-NUR-001',
         'department': 'Soins',
-        'professional_license': 'HK-NUR-30001',
+        'professional_license': 'CD-NUR-30001',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000021',
-        'email': 'nurse.ho@demo.hk',
-        'first_name': 'Kevin',
-        'last_name': 'Ho',
+        'phone': '+243971111107',
+        'email': 'nurse.kasongo@demo.cd',
+        'first_name': 'Jonathan',
+        'last_name': 'Kasongo',
         'role': 'nurse',
-        'employee_id': 'EMP-NUR-002',
+        'employee_id': 'EMP-CD-NUR-002',
         'department': 'Urgences',
-        'professional_license': 'HK-NUR-30002',
+        'professional_license': 'CD-NUR-30002',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000030',
-        'email': 'pharmacist.ng@demo.hk',
-        'first_name': 'Chloe',
-        'last_name': 'Ng',
+        'phone': '+243971111108',
+        'email': 'pharmacist.kanku@demo.cd',
+        'first_name': 'Nadine',
+        'last_name': 'Kanku',
         'role': 'pharmacist',
-        'employee_id': 'EMP-PHR-001',
+        'employee_id': 'EMP-CD-PHR-001',
         'department': 'Pharmacie',
-        'professional_license': 'HK-PHR-40001',
+        'professional_license': 'CD-PHR-40001',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000031',
-        'email': 'pharmacy.admin@demo.hk',
-        'first_name': 'David',
-        'last_name': 'Tsang',
+        'phone': '+243971111109',
+        'email': 'pharmacy.admin@demo.cd',
+        'first_name': 'Serge',
+        'last_name': 'Kitoko',
         'role': 'pharmacy_admin',
-        'employee_id': 'EMP-PADM-001',
+        'employee_id': 'EMP-CD-PADM-001',
         'department': 'Pharmacie',
         'is_staff': True,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000040',
-        'email': 'reception@demo.hk',
-        'first_name': 'Grace',
-        'last_name': 'Yip',
+        'phone': '+243971111110',
+        'email': 'reception@demo.cd',
+        'first_name': 'Ruth',
+        'last_name': 'Kabeya',
         'role': 'receptionist',
-        'employee_id': 'EMP-REC-001',
+        'employee_id': 'EMP-CD-REC-001',
         'department': 'Accueil',
         'is_staff': False,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000050',
-        'email': 'lab@demo.hk',
-        'first_name': 'Brian',
-        'last_name': 'Kwok',
+        'phone': '+243971111111',
+        'email': 'lab@demo.cd',
+        'first_name': 'Bienvenu',
+        'last_name': 'Lumbala',
         'role': 'lab_technician',
-        'employee_id': 'EMP-LAB-001',
+        'employee_id': 'EMP-CD-LAB-001',
         'department': 'Laboratoire',
-        'professional_license': 'HK-LAB-50001',
+        'professional_license': 'CD-LAB-50001',
         'is_staff': False,
         'is_superuser': False,
     },
     {
-        'phone': '+85291000060',
-        'email': 'ohs.manager@demo.hk',
-        'first_name': 'Linda',
-        'last_name': 'Fung',
+        'phone': '+243971111112',
+        'email': 'ohs.manager@demo.cd',
+        'first_name': 'Chantal',
+        'last_name': 'Mutombo',
         'role': 'ohs_manager',
-        'employee_id': 'EMP-OHS-001',
+        'employee_id': 'EMP-CD-OHS-001',
         'department': 'Securite au Travail',
         'is_staff': True,
         'is_superuser': False,
@@ -488,10 +488,40 @@ class Command(BaseCommand):
     def _seed_users(self, org):
         self.stdout.write('\n  Staff Users:')
         created_count = 0
+        updated_count = 0
         for config in STAFF:
-            user, created = User.objects.get_or_create(
-                email=config['email'],
-                defaults={
+            user = User.objects.filter(email=config['email']).first()
+            if not user:
+                user = User.objects.filter(phone=config['phone']).first()
+
+            created = False
+            if not user:
+                user = User.objects.create(
+                    email=config['email'],
+                    phone=config['phone'],
+                    first_name=config['first_name'],
+                    last_name=config['last_name'],
+                    primary_role=config['role'],
+                    employee_id=config.get('employee_id', ''),
+                    department=config.get('department', ''),
+                    professional_license=config.get('professional_license', ''),
+                    organization=org,
+                    is_staff=config.get('is_staff', False),
+                    is_superuser=config.get('is_superuser', False),
+                    is_active=True,
+                )
+                created = True
+
+            if created:
+                pwd = SEED_PWD.get(config['role'], _seed_default)
+                user.set_password(pwd)
+                user.save()
+                created_count += 1
+                self.stdout.write(f'    [NEW] {config["role"]:20s} {config["phone"]}  /  {pwd}')
+            else:
+                changed_fields = []
+                synced_fields = {
+                    'email': config['email'],
                     'phone': config['phone'],
                     'first_name': config['first_name'],
                     'last_name': config['last_name'],
@@ -504,17 +534,29 @@ class Command(BaseCommand):
                     'is_superuser': config.get('is_superuser', False),
                     'is_active': True,
                 }
-            )
-            if created:
-                pwd = SEED_PWD.get(config['role'], _seed_default)
-                user.set_password(pwd)
-                user.save()
-                created_count += 1
-                self.stdout.write(f'    [NEW] {config["role"]:20s} {config["phone"]}  /  {pwd}')
-            else:
-                self.stdout.write(f'    [OK]  {config["role"]:20s} {config["phone"]}')
 
-        self.stdout.write(f'\n  => {created_count} new staff user(s) created out of {len(STAFF)} total')
+                phone_conflict = User.objects.filter(phone=config['phone']).exclude(pk=user.pk).exists()
+                if phone_conflict:
+                    synced_fields.pop('phone', None)
+                    self.stdout.write(
+                        f'    [WARN] {config["role"]:20s} {config["phone"]} already used by another account; kept existing phone'
+                    )
+
+                for field_name, expected_value in synced_fields.items():
+                    if getattr(user, field_name) != expected_value:
+                        setattr(user, field_name, expected_value)
+                        changed_fields.append(field_name)
+
+                if changed_fields:
+                    user.save(update_fields=changed_fields)
+                    updated_count += 1
+                    self.stdout.write(f'    [UPD] {config["role"]:20s} {config["phone"]}')
+                else:
+                    self.stdout.write(f'    [OK]  {config["role"]:20s} {config["phone"]}')
+
+        self.stdout.write(
+            f'\n  => {created_count} new / {updated_count} updated staff user(s) out of {len(STAFF)} total'
+        )
 
     # ------------------------------------------------------------------
     def _clear_demo_patients(self):
