@@ -349,10 +349,10 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
               {!isDesktop && (
                 <View style={A.mobileHeader}>
                   <View style={A.mobileLogoBox}>
-                    <Ionicons name="medical" size={22} color="#FFF" />
+                    <Image source={require('../../assets/icon.png')} style={A.mobileLogoImg} resizeMode="contain" />
                   </View>
                   <View>
-                    <Text style={A.mobileBrandName}>KAT Santé</Text>
+                    <Text style={A.mobileBrandName}>KAT Management</Text>
                     <Text style={A.mobileTagline}>Système de Gestion de Santé</Text>
                   </View>
                 </View>
@@ -588,12 +588,13 @@ const A = StyleSheet.create({
     marginBottom: 28, marginTop: 4,
   },
   mobileLogoBox: {
-    width: 44, height: 44, borderRadius: 13,
+    width: 50, height: 50, borderRadius: 14,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
+    ...shadows.sm,
   },
-  mobileLogoImg: { width: 38, height: 38 },
+  mobileLogoImg: { width: 42, height: 42 },
   mobileBrandName: { fontSize: isTablet ? 17 : 15, fontWeight: '700', color: colors.text },
   mobileTagline: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
 
@@ -833,9 +834,9 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
                     <Ionicons name="arrow-back" size={18} color={colors.text} />
                   </TouchableOpacity>
                   <View style={L.mobileLogoBox}>
-                    <Ionicons name="medical" size={20} color="#FFF" />
+                    <Image source={require('../../assets/icon.png')} style={L.mobileLogoImg} resizeMode="contain" />
                   </View>
-                  <Text style={L.mobileBrandName}>KAT Santé</Text>
+                  <Text style={L.mobileBrandName}>KAT Management</Text>
                 </View>
               )}
 
@@ -1090,18 +1091,19 @@ const L = StyleSheet.create({
     marginBottom: 24, marginTop: 4,
   },
   mobileBackBtn: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 38, height: 38, borderRadius: 11,
     backgroundColor: colors.surfaceVariant,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 4,
   },
   mobileLogoBox: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 38, height: 38, borderRadius: 11,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
+    ...shadows.sm,
   },
-  mobileLogoImg: { width: 30, height: 30 },
+  mobileLogoImg: { width: 32, height: 32 },
   mobileBrandName: { fontSize: isTablet ? 16 : 14, fontWeight: '700', color: colors.text },
 
   // Desktop back link

@@ -472,16 +472,26 @@ body.login {
 .login-logo,
 .login-logo a {
   color: #FFF !important;
-  font-size: 1.2rem !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.02em;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  text-align: center;
 }
 
-.login-logo img {
-  max-height: 40px !important;
+/* Target every way Jazzmin/AdminLTE can render the login logo */
+.login-logo img,
+.login-logo a img,
+.brand-image-xl,
+.login-logo .brand-image-xl,
+#login-logo img,
+#login-logo a img {
+  max-height: 36px !important;
+  max-width: 120px !important;
+  height: auto !important;
   width: auto !important;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  border-radius: 6px !important;
+  display: block !important;
+  margin: 0 auto 6px auto !important;
 }
 
 .login-box,
