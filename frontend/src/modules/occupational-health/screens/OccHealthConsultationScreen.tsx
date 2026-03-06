@@ -60,6 +60,20 @@ const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 
 const ACCENT = colors.primary;
+const SCHEDULED_APPOINTMENTS_KEY = 'ohs_scheduled_appointments';
+
+type ScheduledAppointment = {
+  id: string;
+  workerId: string;
+  workerName: string;
+  employeeId: string;
+  company: string;
+  date: string;          // YYYY-MM-DD
+  reason: string;
+  examType: string;
+  certificateNumber: string;
+  createdAt: string;
+};
 
 type DraftConsultationStatus = 'in_progress' | 'tests_ordered' | 'awaiting_results';
 
@@ -971,6 +985,38 @@ export function OccHealthConsultationScreen({
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [activePendingId, setActivePendingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [scheduledAppointments, setScheduledAppointments] = useState<ScheduledAppointment[]>([]);
+
+  // Load scheduled appointments set during consultations
+  const loadSchedule = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(SCHEDULED_APPOINTMENTS_KEY);
+      if (stored) {
+        const list: ScheduledAppointment[] = JSON.parse(stored);
+        // Keep only future + today appointments
+        const today = new Date().toISOString().split('T')[0];
+        setScheduledAppointments(list.filter(a => a.date >= today));
+      } else {
+        setScheduledAppointments([]);
+      }
+    } catch (e) {
+      console.error('Failed to load schedule:', e);
+    }
+  }, []);
+
+  const removeScheduledAppointment = useCallback(async (id: string) => {
+    try {
+      const stored = await AsyncStorage.getItem(SCHEDULED_APPOINTMENTS_KEY);
+      if (stored) {
+        const list: ScheduledAppointment[] = JSON.parse(stored);
+        const updated = list.filter(a => a.id !== id);
+        await AsyncStorage.setItem(SCHEDULED_APPOINTMENTS_KEY, JSON.stringify(updated));
+        setScheduledAppointments(prev => prev.filter(a => a.id !== id));
+      }
+    } catch (e) {
+      console.error('Failed to remove scheduled appointment:', e);
+    }
+  }, []);
 
   // Load pending consultations queue - filtered by assigned doctor
   const loadPendingQueue = useCallback(async () => {
@@ -1093,13 +1139,15 @@ export function OccHealthConsultationScreen({
 
   useEffect(() => {
     loadPendingQueue();
-  }, [loadPendingQueue]);
+    loadSchedule();
+  }, [loadPendingQueue, loadSchedule]);
 
   // Reload queue every time the screen comes into focus (e.g. returning from intake screen)
   useFocusEffect(
     useCallback(() => {
       loadPendingQueue();
-    }, [loadPendingQueue])
+      loadSchedule();
+    }, [loadPendingQueue, loadSchedule])
   );
 
   // Restore active consultation draft when returning to screen
@@ -2762,33 +2810,54 @@ export function OccHealthConsultationScreen({
       certificatesList.push(certificate);
       await AsyncStorage.setItem('certificates_list', JSON.stringify(certificatesList));
 
-      Alert.alert(
-        'Consultation Enregistrée',
-        `Visite médicale pour ${selectedWorker.firstName} ${selectedWorker.lastName} enregistrée avec succès.\n\nDécision: ${OccHealthUtils.getFitnessStatusLabel(fitnessDecision)}\nCertificat N°: ${certificateNumber}\nValidité: ${expiryDate.toLocaleDateString('fr-CD')}`,
-        [{ 
-          text: 'OK', 
-          onPress: async () => {
-            // Delete draft since consultation is completed
-            if (draftId) {
-              await deleteDraft(draftId);
-            }
-            // Mark pending consultation as completed and remove from queue
-            if (activePendingId) {
-              try {
-                const storedQueue = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
-                if (storedQueue) {
-                  const queueList: PendingConsultation[] = JSON.parse(storedQueue);
-                  const updatedQueue = queueList.filter(c => c.id !== activePendingId);
-                  await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updatedQueue));
-                }
-              } catch (e) { console.error('Failed to remove from pending queue:', e); }
-            }
-            // Reload queue and reset form
-            loadPendingQueue();
-            resetForm();
+      // Save next appointment to local schedule so it shows in the waiting room
+      if (scheduledNextAppointment) {
+        try {
+          const existingSchedule = await AsyncStorage.getItem(SCHEDULED_APPOINTMENTS_KEY);
+          const scheduleList: ScheduledAppointment[] = existingSchedule ? JSON.parse(existingSchedule) : [];
+          scheduleList.push({
+            id: `APPT-${Date.now()}`,
+            workerId: String(workerId),
+            workerName: `${selectedWorker.firstName} ${selectedWorker.lastName}`,
+            employeeId: selectedWorker.employeeId,
+            company: selectedWorker.company,
+            date: scheduledNextAppointment,
+            reason: nextAppointmentReason || 'Suivi périodique',
+            examType: apiExamType,
+            certificateNumber,
+            createdAt: currentDate,
+          });
+          await AsyncStorage.setItem(SCHEDULED_APPOINTMENTS_KEY, JSON.stringify(scheduleList));
+        } catch (e) { console.error('Failed to save scheduled appointment:', e); }
+      }
+
+      // Clean up: remove draft + remove from pending queue immediately
+      if (draftId) {
+        await deleteDraft(draftId);
+      }
+      if (activePendingId) {
+        try {
+          const storedQueue = await AsyncStorage.getItem(PENDING_CONSULTATIONS_KEY);
+          if (storedQueue) {
+            const queueList: PendingConsultation[] = JSON.parse(storedQueue);
+            const updatedQueue = queueList.filter(c => c.id !== activePendingId);
+            await AsyncStorage.setItem(PENDING_CONSULTATIONS_KEY, JSON.stringify(updatedQueue));
           }
-        }]
+        } catch (e) { console.error('Failed to remove from pending queue:', e); }
+      }
+
+      // Show success toast with certificate details
+      showToast(
+        `Certificat ${certificateNumber} créé · ${OccHealthUtils.getFitnessStatusLabel(fitnessDecision)} · Valide jusqu'au ${expiryDate.toLocaleDateString('fr-CD')}`,
+        'success',
       );
+
+      // Auto-redirect to waiting room after the toast is readable
+      setTimeout(async () => {
+        await loadPendingQueue();
+        await loadSchedule();
+        resetForm();
+      }, 2200);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       showToast(`Impossible de sauvegarder la consultation: ${errMsg}`, 'error');
@@ -5123,6 +5192,76 @@ export function OccHealthConsultationScreen({
             </View>
           )}
 
+          {/* ── SCHEDULE: Next appointments set during consultations ── */}
+          {scheduledAppointments.length > 0 && (
+            <View style={{ marginTop: 20 }}>
+              <View style={qStyles.scheduleHeader}>
+                <View style={qStyles.scheduleHeaderLeft}>
+                  <Ionicons name="calendar" size={17} color={colors.infoDark} />
+                  <Text style={qStyles.scheduleHeaderTitle}>Rendez-vous Planifiés</Text>
+                  <View style={qStyles.scheduleBadge}>
+                    <Text style={qStyles.scheduleBadgeText}>{scheduledAppointments.length}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={{ gap: 8, marginTop: 8 }}>
+                {scheduledAppointments
+                  .slice()
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((appt) => {
+                    const today = new Date().toISOString().split('T')[0];
+                    const isToday = appt.date === today;
+                    const apptDate = new Date(appt.date + 'T00:00:00');
+                    return (
+                      <View key={appt.id} style={[
+                        qStyles.scheduleCard,
+                        isToday && { borderLeftColor: colors.warning, borderLeftWidth: 3 },
+                      ]}>
+                        <View style={[qStyles.scheduleDateBadge, {
+                          backgroundColor: isToday ? colors.warning + '18' : colors.infoDark + '10',
+                        }]}>
+                          <Text style={[qStyles.scheduleDateDay, {
+                            color: isToday ? colors.warning : colors.infoDark,
+                          }]}>
+                            {apptDate.toLocaleDateString('fr-CD', { day: '2-digit' })}
+                          </Text>
+                          <Text style={[qStyles.scheduleDateMonth, {
+                            color: isToday ? colors.warning : colors.infoDark,
+                          }]}>
+                            {apptDate.toLocaleDateString('fr-CD', { month: 'short' }).toUpperCase()}
+                          </Text>
+                          <Text style={[qStyles.scheduleDateYear, {
+                            color: isToday ? colors.warning : colors.textSecondary,
+                          }]}>
+                            {apptDate.getFullYear()}
+                          </Text>
+                        </View>
+                        <View style={qStyles.scheduleInfo}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={qStyles.scheduleWorkerName}>{appt.workerName}</Text>
+                            {isToday && (
+                              <View style={[qStyles.statusChip, { backgroundColor: colors.warning + '20' }]}>
+                                <Text style={[qStyles.statusChipText, { color: colors.warning }]}>Aujourd'hui</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={qStyles.scheduleMeta}>{appt.employeeId} · {appt.company}</Text>
+                          <Text style={qStyles.scheduleReason} numberOfLines={1}>{appt.reason}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={qStyles.scheduleRemoveBtn}
+                          onPress={() => removeScheduledAppointment(appt.id)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+              </View>
+            </View>
+          )}
+
         </ScrollView>
       ) : (
         /* ── ACTIVE CONSULTATION VIEW ── */
@@ -6021,4 +6160,36 @@ const qStyles = StyleSheet.create({
     borderColor: colors.error + '35',
   },
   removeBtnText: { fontSize: 11, fontWeight: '700', color: colors.errorDark },
+
+  // ── Scheduled appointments ──
+  scheduleHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant,
+  },
+  scheduleHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scheduleHeaderTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  scheduleBadge: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20,
+    backgroundColor: colors.infoDark + '18',
+  },
+  scheduleBadgeText: { fontSize: 12, fontWeight: '700', color: colors.infoDark },
+  scheduleCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12,
+    backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.outlineVariant,
+    borderLeftWidth: 1, borderLeftColor: colors.outlineVariant,
+    ...shadows.sm,
+  },
+  scheduleDateBadge: {
+    width: 52, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 6, borderRadius: 10, flexShrink: 0,
+  },
+  scheduleDateDay: { fontSize: 20, fontWeight: '800', lineHeight: 22 },
+  scheduleDateMonth: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  scheduleDateYear: { fontSize: 10, fontWeight: '500', marginTop: 1 },
+  scheduleInfo: { flex: 1, gap: 2 },
+  scheduleWorkerName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  scheduleMeta: { fontSize: 11, color: colors.textSecondary },
+  scheduleReason: { fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' },
+  scheduleRemoveBtn: { padding: 4 },
 });
