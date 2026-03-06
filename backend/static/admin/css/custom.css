@@ -472,15 +472,15 @@ body.login {
 .login-logo,
 .login-logo a {
   color: #FFF !important;
-  font-size: 1.6rem !important;
+  font-size: 1.2rem !important;
   font-weight: 800 !important;
   letter-spacing: -0.02em;
 }
 
 .login-logo img {
-  max-height: 64px !important;
+  max-height: 40px !important;
   width: auto !important;
-  border-radius: 14px;
+  border-radius: 8px;
   margin-bottom: 8px;
 }
 
