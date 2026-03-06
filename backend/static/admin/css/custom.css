@@ -464,34 +464,45 @@ fieldset .card-header,
 }
 
 /* ── Login page ─────────────────────────────────────────────── */
-body.login-page,
-body.login {
+/* Body class Jazzmin actually applies is 'jazzmin-login-page' */
+body.jazzmin-login-page {
   background: linear-gradient(135deg, var(--kat-primary) 0%, #1E3A8A 60%, #2D3A9A 100%) !important;
 }
 
-.login-logo,
-.login-logo a {
-  color: #FFF !important;
-  font-size: 1rem !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.01em;
-  text-align: center;
+/* Logo lives in: .login-logo > h1 > picture > img — reset the h1 first */
+.login-logo {
+  text-align: center !important;
+  margin-bottom: 12px !important;
 }
 
-/* Target every way Jazzmin/AdminLTE can render the login logo */
-.login-logo img,
-.login-logo a img,
-.brand-image-xl,
-.login-logo .brand-image-xl,
-#login-logo img,
-#login-logo a img {
-  max-height: 36px !important;
-  max-width: 120px !important;
-  height: auto !important;
+.login-logo h1 {
+  font-size: 0 !important;       /* collapse the h1's own text sizing */
+  line-height: 1 !important;
+  margin: 0 0 6px 0 !important;
+  padding: 0 !important;
+}
+
+.login-logo h1 img,
+.login-logo picture img,
+.login-logo img {
+  max-height: 40px !important;
+  max-width: 140px !important;
   width: auto !important;
-  border-radius: 6px !important;
-  display: block !important;
-  margin: 0 auto 6px auto !important;
+  height: auto !important;
+  border-radius: 8px !important;
+  display: inline-block !important;
+  vertical-align: middle;
+}
+
+/* Site header text shown below the logo */
+.login-logo h1 a,
+.login-logo a {
+  display: block;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: #FFF !important;
+  margin-top: 8px;
+  letter-spacing: -0.01em;
 }
 
 .login-box,
