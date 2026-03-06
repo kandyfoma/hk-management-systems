@@ -538,8 +538,9 @@ export function CAPADashboardScreen({ navigation }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const res = await ApiService.get('/ohs/incident-investigations/');
-      const data = Array.isArray(res.data) ? res.data : (res.data.results ?? []);
+      const api = ApiService.getInstance();
+      const res = await api.get('/ohs/incident-investigations/');
+      const data = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
       setInvestigations(data);
     } catch (e: any) {
       showToast(e?.response?.data?.detail ?? 'Erreur de chargement', 'error');
@@ -553,7 +554,8 @@ export function CAPADashboardScreen({ navigation }: any) {
 
   const handleStatusChange = useCallback(async (id: number, newStatus: BackendStatus) => {
     try {
-      await ApiService.patch(`/ohs/incident-investigations/${id}/`, { status: newStatus });
+      const api = ApiService.getInstance();
+      await api.patch(`/ohs/incident-investigations/${id}/`, { status: newStatus });
       setInvestigations(prev =>
         prev.map(i => i.id === id ? { ...i, status: newStatus, status_display: STATUS_MAP[newStatus]?.label ?? newStatus } : i)
       );
