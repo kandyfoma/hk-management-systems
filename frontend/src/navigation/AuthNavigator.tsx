@@ -482,8 +482,8 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
 // ── Auth screens shared style token ────────────────────────────────────────
 const A = StyleSheet.create({
   // Layout
-  safe: { flex: 1, backgroundColor: colors.background },
-  root: { flex: 1, flexDirection: isDesktop ? 'row' : 'column' },
+  safe: { flex: 1, backgroundColor: colors.background, ...Platform.select({ web: { height: SCREEN_H } as any, default: {} }) },
+  root: { flex: 1, flexDirection: isDesktop ? 'row' : 'column', ...Platform.select({ web: { overflow: 'hidden' } as any, default: {} }) },
 
   // Loading screen
   loadingScreen: {
@@ -523,49 +523,49 @@ const A = StyleSheet.create({
     backgroundColor: 'rgba(91,101,220,0.22)',
   },
   brandContent: {
-    flex: 1, padding: 48, justifyContent: 'center', zIndex: 1,
+    flex: 1, padding: isDesktop ? 36 : 28, justifyContent: 'center', zIndex: 1,
   },
   brandLogo: {
-    width: 68, height: 68, borderRadius: 18,
+    width: 60, height: 60, borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
     overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
-  brandLogoImg: { width: 56, height: 56 },
+  brandLogoImg: { width: 50, height: 50 },
   brandName: {
-    fontSize: isDesktop ? 26 : 22, fontWeight: '800', color: '#FFF',
-    letterSpacing: -0.3, marginBottom: 10,
+    fontSize: isDesktop ? 22 : 20, fontWeight: '800', color: '#FFF',
+    letterSpacing: -0.3, marginBottom: 8,
   },
   brandTagline: {
-    fontSize: 15, color: 'rgba(255,255,255,0.65)',
-    lineHeight: 23, marginBottom: 36,
+    fontSize: 14, color: 'rgba(255,255,255,0.65)',
+    lineHeight: 22, marginBottom: 22,
   },
   brandDivider: {
     width: 44, height: 3,
     backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2, marginBottom: 32,
+    borderRadius: 2, marginBottom: 20,
   },
-  brandFeatures: { gap: 18 },
-  brandFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  brandFeatures: { gap: 14 },
+  brandFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   brandFeatureIcon: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 30, height: 30, borderRadius: 9,
     backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center', justifyContent: 'center',
   },
-  brandFeatureText: { fontSize: 14, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
+  brandFeatureText: { fontSize: 13, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
   brandStepPill: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginTop: 44,
+    marginTop: 28,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7,
     alignSelf: 'flex-start',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
   brandStepLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
   brandFooter: {
-    position: 'absolute', bottom: 24, left: 48,
+    position: 'absolute', bottom: 18, left: 40,
     fontSize: 11, color: 'rgba(255,255,255,0.35)',
   },
 
@@ -574,9 +574,9 @@ const A = StyleSheet.create({
   formSideInner: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: isDesktop ? 56 : (isTablet ? 36 : 20),
-    paddingTop: isDesktop ? 56 : 24,
-    paddingBottom: 40,
+    paddingHorizontal: isDesktop ? 48 : (isTablet ? 36 : 20),
+    paddingTop: isDesktop ? 36 : 24,
+    paddingBottom: isDesktop ? 24 : 40,
     maxWidth: isDesktop ? 520 : undefined,
     width: '100%',
     alignSelf: isDesktop ? 'center' : undefined,
@@ -585,7 +585,7 @@ const A = StyleSheet.create({
   // Mobile header
   mobileHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginBottom: 28, marginTop: 4,
+    marginBottom: 20, marginTop: 4,
   },
   mobileLogoBox: {
     width: 50, height: 50, borderRadius: 14,
@@ -615,13 +615,13 @@ const A = StyleSheet.create({
 
   // Page heading
   pageTitle: {
-    fontSize: isDesktop ? 28 : 22,
+    fontSize: isDesktop ? 24 : 22,
     fontWeight: '800', color: colors.text,
-    letterSpacing: -0.5, marginBottom: 8,
+    letterSpacing: -0.5, marginBottom: 6,
   },
   pageDesc: {
     fontSize: 14, color: colors.textSecondary,
-    lineHeight: 21, marginBottom: 28,
+    lineHeight: 21, marginBottom: isDesktop ? 14 : 24,
   },
 
   // Status banner
@@ -641,31 +641,31 @@ const A = StyleSheet.create({
 
   // License type cards
   licenseGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 28,
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: isDesktop ? 14 : 24,
   },
   licenseCard: {
-    flex: 1, minWidth: isDesktop ? 140 : 120,
+    flex: 1, minWidth: isDesktop ? 100 : 120,
     backgroundColor: colors.surface,
-    borderRadius: 12, padding: 14,
+    borderRadius: 10, padding: isDesktop ? 10 : 14,
     borderWidth: 1, borderColor: colors.outline,
     ...shadows.sm,
   },
   licenseIconBox: {
-    width: 36, height: 36, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+    width: 30, height: 30, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
   },
-  licenseCardTitle: { fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 2 },
-  licenseCardDesc: { fontSize: 11, color: colors.textSecondary, lineHeight: 15 },
+  licenseCardTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 2 },
+  licenseCardDesc: { fontSize: 10, color: colors.textSecondary, lineHeight: 14 },
 
   // Key input
   keyInputRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 12, borderWidth: 1.5, borderColor: colors.outline,
-    paddingHorizontal: 14, marginBottom: 20, minHeight: 56,
+    paddingHorizontal: 14, marginBottom: 16, minHeight: isDesktop ? 48 : 56,
     ...shadows.sm,
   },
-  keyInput: { flex: 1, backgroundColor: 'transparent', height: 56, fontSize: 15 },
+  keyInput: { flex: 1, backgroundColor: 'transparent', height: isDesktop ? 48 : 56, fontSize: 15 },
   keyInputContent: {
     backgroundColor: 'transparent', paddingHorizontal: 0,
     fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', letterSpacing: 2,
@@ -675,15 +675,15 @@ const A = StyleSheet.create({
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
     backgroundColor: colors.primary,
-    borderRadius: 12, paddingVertical: 16, paddingHorizontal: 20,
-    marginBottom: 24,
+    borderRadius: 12, paddingVertical: isDesktop ? 13 : 16, paddingHorizontal: 20,
+    marginBottom: isDesktop ? 14 : 22,
     ...shadows.md,
   },
   primaryBtnDisabled: { opacity: 0.42 },
   primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#FFF' },
 
   // Trust chips
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 28 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: isDesktop ? 10 : 22 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: colors.primary + '0D',
@@ -1004,8 +1004,8 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
 // ── Login screen style tokens ───────────────────────────────────────────────
 const L = StyleSheet.create({
   // Layout
-  safe: { flex: 1, backgroundColor: colors.background },
-  root: { flex: 1, flexDirection: isDesktop ? 'row' : 'column' },
+  safe: { flex: 1, backgroundColor: colors.background, ...Platform.select({ web: { height: SCREEN_H } as any, default: {} }) },
+  root: { flex: 1, flexDirection: isDesktop ? 'row' : 'column', ...Platform.select({ web: { overflow: 'hidden' } as any, default: {} }) },
 
   // Brand panel (shared with activation, step 2 variant)
   brandPanel: {
@@ -1024,62 +1024,55 @@ const L = StyleSheet.create({
     width: 260, height: 260, borderRadius: 130,
     backgroundColor: 'rgba(91,101,220,0.22)',
   },
-  brandContent: { flex: 1, padding: 48, justifyContent: 'center', zIndex: 1 },
+  brandContent: { flex: 1, padding: isDesktop ? 36 : 28, justifyContent: 'center', zIndex: 1 },
   brandLogo: {
-    width: 68, height: 68, borderRadius: 18,
+    width: 60, height: 60, borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
     overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
-  brandLogoImg: { width: 56, height: 56 },
-  brandName: { fontSize: isDesktop ? 26 : 22, fontWeight: '800', color: '#FFF', letterSpacing: -0.3, marginBottom: 10 },
-  brandTagline: { fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 23, marginBottom: 36 },
-  brandDivider: {
-    width: 44, height: 3,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2, marginBottom: 32,
-  },
-  brandFeatures: { gap: 18 },
-  brandFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  brandLogoImg: { width: 50, height: 50 },
+  brandName: { fontSize: isDesktop ? 22 : 20, fontWeight: '800', color: '#FFF', letterSpacing: -0.3, marginBottom: 8 },
+  brandTagline: { fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 20, marginBottom: 20 },
+  brandDivider: { width: 44, height: 3, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, marginBottom: 18 },
+  brandFeatures: { gap: 12 },
+  brandFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   brandFeatureIcon: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 30, height: 30, borderRadius: 9,
     backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center', justifyContent: 'center',
   },
-  brandFeatureText: { fontSize: 14, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
+  brandFeatureText: { fontSize: 13, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
   orgBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginTop: 28,
+    marginTop: 18,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7,
     alignSelf: 'flex-start',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
-  orgBadgeText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+  orgBadgeText: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
   brandStepPill: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginTop: 24,
+    marginTop: 16,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7,
     alignSelf: 'flex-start',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
   brandStepLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
-  brandFooter: {
-    position: 'absolute', bottom: 24, left: 48,
-    fontSize: 11, color: 'rgba(255,255,255,0.35)',
-  },
+  brandFooter: { position: 'absolute', bottom: 16, left: 36, fontSize: 11, color: 'rgba(255,255,255,0.35)' },
 
   // Form side
   formSide: { flex: 1, backgroundColor: colors.background },
   formSideInner: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: isDesktop ? 56 : (isTablet ? 36 : 20),
-    paddingTop: isDesktop ? 52 : 20,
-    paddingBottom: 40,
+    paddingHorizontal: isDesktop ? 48 : (isTablet ? 36 : 20),
+    paddingTop: isDesktop ? 36 : 20,
+    paddingBottom: isDesktop ? 24 : 40,
     maxWidth: isDesktop ? 520 : undefined,
     width: '100%',
     alignSelf: isDesktop ? 'center' : undefined,
@@ -1088,7 +1081,7 @@ const L = StyleSheet.create({
   // Mobile header
   mobileHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginBottom: 24, marginTop: 4,
+    marginBottom: 16, marginTop: 4,
   },
   mobileBackBtn: {
     width: 38, height: 38, borderRadius: 11,
@@ -1109,13 +1102,13 @@ const L = StyleSheet.create({
   // Desktop back link
   desktopBackBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginBottom: 32, alignSelf: 'flex-start',
+    marginBottom: 20, alignSelf: 'flex-start',
     paddingVertical: 4,
   },
   desktopBackText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
 
   // Step indicator
-  stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 36 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: isDesktop ? 18 : 28 },
   stepItem: { alignItems: 'center', gap: 5 },
   stepBubble: {
     width: 32, height: 32, borderRadius: 16,
@@ -1144,11 +1137,11 @@ const L = StyleSheet.create({
 
   // Page heading
   pageTitle: {
-    fontSize: isDesktop ? 28 : 22,
+    fontSize: isDesktop ? 24 : 22,
     fontWeight: '800', color: colors.text,
-    letterSpacing: -0.5, marginBottom: 8,
+    letterSpacing: -0.5, marginBottom: 6,
   },
-  pageDesc: { fontSize: 14, color: colors.textSecondary, lineHeight: 21, marginBottom: 28 },
+  pageDesc: { fontSize: 14, color: colors.textSecondary, lineHeight: 21, marginBottom: isDesktop ? 14 : 22 },
 
   // Alert
   alert: {
@@ -1160,20 +1153,20 @@ const L = StyleSheet.create({
   alertText: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 18 },
 
   // Input fields
-  fieldGroup: { marginBottom: 18 },
+  fieldGroup: { marginBottom: isDesktop ? 12 : 18 },
   fieldLabel: {
     fontSize: 11, fontWeight: '700', color: colors.textTertiary,
-    letterSpacing: 1.1, marginBottom: 8, textTransform: 'uppercase',
+    letterSpacing: 1.1, marginBottom: 6, textTransform: 'uppercase',
   },
   inputBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 12, borderWidth: 1.5, borderColor: colors.outline,
-    paddingHorizontal: 14, minHeight: 52,
+    paddingHorizontal: 14, minHeight: isDesktop ? 46 : 52,
     ...shadows.sm,
   },
   fieldIcon: { marginRight: 10 },
-  input: { flex: 1, backgroundColor: 'transparent', height: 52, fontSize: 15, color: colors.text },
+  input: { flex: 1, backgroundColor: 'transparent', height: isDesktop ? 46 : 52, fontSize: 15, color: colors.text },
   inputContent: { backgroundColor: 'transparent', paddingHorizontal: 0 },
   eyeBtn: { paddingLeft: 10, paddingVertical: 6 },
 
@@ -1181,8 +1174,8 @@ const L = StyleSheet.create({
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
     backgroundColor: colors.primary,
-    borderRadius: 12, paddingVertical: 16, paddingHorizontal: 20,
-    marginTop: 4, marginBottom: 20,
+    borderRadius: 12, paddingVertical: isDesktop ? 13 : 16, paddingHorizontal: 20,
+    marginTop: 4, marginBottom: isDesktop ? 12 : 18,
     ...shadows.md,
   },
   primaryBtnDisabled: { opacity: 0.42 },
@@ -1191,9 +1184,9 @@ const L = StyleSheet.create({
   // Demo credentials box
   demoBox: {
     backgroundColor: colors.secondary + '0A',
-    borderRadius: 12, padding: 14,
+    borderRadius: 10, padding: 12,
     borderWidth: 1, borderColor: colors.secondary + '20',
-    marginBottom: 20,
+    marginBottom: isDesktop ? 10 : 16,
   },
   demoHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
   demoTitle: { fontSize: 12, fontWeight: '700', color: colors.secondary },
