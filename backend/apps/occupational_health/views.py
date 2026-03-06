@@ -1043,230 +1043,539 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='download-pdf')
     def download_pdf(self, request, pk=None):
-        """Generate and return a PDF for a fitness certificate."""
+        """Generate a professional, modern fitness certificate PDF."""
         try:
             from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
+            from reportlab.pdfgen import canvas as rl_canvas
             from reportlab.lib import colors
-            from reportlab.lib.utils import ImageReader
+            from reportlab.lib.colors import HexColor
+            from io import BytesIO
         except Exception:
             return Response(
-                {
-                    'detail': 'PDF generation backend dependency is missing. Install reportlab in the backend environment.'
-                },
+                {'detail': 'reportlab not installed in the backend environment.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         certificate = self.get_object()
-        worker = certificate.examination.worker
+        worker      = certificate.examination.worker
+        enterprise  = worker.enterprise
+        exam        = certificate.examination
 
-        response = HttpResponse(content_type='application/pdf')
-        filename = f"{certificate.certificate_number}.pdf"
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        # ── Colour palette ────────────────────────────────────────────────────
+        NAVY        = HexColor('#0D1F3C')
+        MID_BLUE    = HexColor('#1A3D7C')
+        LIGHT_BLUE  = HexColor('#EBF2FF')
+        GOLD        = HexColor('#C9A435')
+        WHITE       = colors.white
+        GREY_900    = HexColor('#111827')
+        GREY_700    = HexColor('#374151')
+        GREY_500    = HexColor('#6B7280')
+        GREY_300    = HexColor('#D1D5DB')
+        PANEL_BG    = HexColor('#F8FAFF')
 
-        pdf = canvas.Canvas(response, pagesize=A4)
-        width, height = A4
-        y = height - 40
+        decision = certificate.fitness_decision
+        _DECISION_MAP = {
+            'fit':                    ('#DCFCE7', '#14532D', '#16A34A', 'APTE AU TRAVAIL',                   'FIT FOR DUTY'),
+            'fit_with_restrictions':  ('#FEF3C7', '#78350F', '#D97706', 'APTE AVEC RESTRICTIONS',            'FIT WITH RESTRICTIONS'),
+            'fit_enhanced_surveillance': ('#DBEAFE', '#1E3A5F', '#2563EB', 'APTE — SURVEILLANCE RENFORCÉE', 'ENHANCED SURVEILLANCE'),
+            'temporarily_unfit':      ('#FEE2E2', '#7F1D1D', '#DC2626', 'INAPTE TEMPORAIRE',                 'TEMPORARILY UNFIT'),
+            'permanently_unfit':      ('#F3E8FF', '#4A1D96', '#7C3AED', 'INAPTE DÉFINITIF',                  'PERMANENTLY UNFIT'),
+        }
+        _dec = _DECISION_MAP.get(decision, _DECISION_MAP['fit'])
+        DEC_BG     = HexColor(_dec[0])
+        DEC_TEXT   = HexColor(_dec[1])
+        DEC_BORDER = HexColor(_dec[2])
+        DEC_FR     = _dec[3]
+        DEC_EN     = _dec[4]
 
-        pdf.setTitle(f"Certificat {certificate.certificate_number}")
+        # ── Page setup ────────────────────────────────────────────────────────
+        buf = BytesIO()
+        pdf = rl_canvas.Canvas(buf, pagesize=A4)
+        W, H = A4          # 595.28 × 841.89 pt
+        ML   = 36          # left margin
+        MR   = W - 36      # right margin
+        CW   = MR - ML     # content width ≈ 523 pt
 
-        # ═══════════════════════════════════════════════════════════════
-        # HELPER FUNCTIONS
-        # ═══════════════════════════════════════════════════════════════
-        def ensure_space(lines_needed=1):
-            nonlocal y
-            if y - (lines_needed * 14) < 60:
-                pdf.showPage()
-                y = height - 40
+        pdf.setTitle(f"Certificat d'Aptitude — {certificate.certificate_number}")
+        pdf.setAuthor("KAT Management Systems")
+        pdf.setSubject("Certificat Médical d'Aptitude au Travail — ISO 45001")
 
-        def draw_wrapped(text, font_name="Helvetica", font_size=10, leading=14, max_width=500):
-            nonlocal y
-            pdf.setFont(font_name, font_size)
+        # ── Diagonal watermark ────────────────────────────────────────────────
+        pdf.saveState()
+        pdf.setFillColor(NAVY)
+        pdf.setFillAlpha(0.035)
+        pdf.setFont("Helvetica-Bold", 56)
+        pdf.translate(W / 2, H / 2)
+        pdf.rotate(35)
+        for dy in (-80, 0, 80, 160):
+            pdf.drawCentredString(0, dy, "OFFICIAL DOCUMENT")
+        pdf.restoreState()
+
+        # ─────────────────────────────────────────────────────────────────────
+        # SECTION HELPERS
+        # ─────────────────────────────────────────────────────────────────────
+        def sec_header(label, top_y, right_x=None, left_x=None):
+            """Dark blue bar with gold left accent; returns y below bar."""
+            lx = left_x if left_x is not None else ML
+            rx = right_x if right_x is not None else MR
+            bar_w = rx - lx
+            pdf.setFillColor(MID_BLUE)
+            pdf.rect(lx, top_y - 20, bar_w, 20, fill=True, stroke=False)
+            pdf.setFillColor(GOLD)
+            pdf.rect(lx, top_y - 20, 4, 20, fill=True, stroke=False)
+            pdf.setFillColor(WHITE)
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.drawString(lx + 10, top_y - 14, label)
+            return top_y - 24
+
+        def card(lx, top_y, w, h, bg=PANEL_BG):
+            """Rounded card panel."""
+            pdf.setFillColor(bg)
+            pdf.roundRect(lx, top_y - h, w, h, 3, fill=True, stroke=False)
+            pdf.setStrokeColor(GREY_300)
+            pdf.setLineWidth(0.5)
+            pdf.roundRect(lx, top_y - h, w, h, 3, fill=False, stroke=True)
+
+        def kv(key, val, lx, cy, kw=90, fs=8.8):
+            """Key-value row; returns next y."""
+            pdf.setFont("Helvetica-Bold", fs - 0.5)
+            pdf.setFillColor(GREY_500)
+            pdf.drawString(lx, cy, key)
+            pdf.setFont("Helvetica", fs)
+            pdf.setFillColor(GREY_900)
+            max_ch = max(10, int((CW / 2 - kw - 24) / (fs * 0.52)))
+            v = str(val or '—')[:max_ch]
+            pdf.drawString(lx + kw, cy, v)
+            return cy - 13
+
+        def wrap(text, lx, cy, max_w, fs=8.5, leading=12, color=GREY_700):
+            """Word-wrap text; returns next y."""
+            pdf.setFont("Helvetica", fs)
+            pdf.setFillColor(color)
             words = (text or '').split()
             if not words:
-                y -= leading
-                return
+                return cy - leading
             line = words[0]
-            for word in words[1:]:
-                candidate = f"{line} {word}"
-                if pdf.stringWidth(candidate, font_name, font_size) <= max_width:
-                    line = candidate
+            for w_word in words[1:]:
+                cand = f"{line} {w_word}"
+                if pdf.stringWidth(cand, "Helvetica", fs) <= max_w:
+                    line = cand
                 else:
-                    ensure_space(1)
-                    pdf.drawString(40, y, line)
-                    y -= leading
-                    line = word
-            ensure_space(1)
-            pdf.drawString(40, y, line)
-            y -= leading
+                    pdf.drawString(lx, cy, line)
+                    cy -= leading
+                    line = w_word
+            pdf.drawString(lx, cy, line)
+            return cy - leading
 
-        def draw_section_box(title, items, color_hex='#122056'):
-            nonlocal y
-            ensure_space(2)
-            # Title bar
-            color_rgb = tuple(int(color_hex.lstrip('#')[i:i+2], 16)/255.0 for i in (0, 2, 4))
-            pdf.setFillColorRGB(*color_rgb)
-            pdf.rect(40, y - 22, width - 80, 22, fill=True)
-            pdf.setFillColorRGB(1, 1, 1)
-            pdf.setFont("Helvetica-Bold", 11)
-            pdf.drawString(50, y - 16, title)
-            y -= 30
-            # Content
-            pdf.setFillColorRGB(0.97, 0.97, 0.98)
-            pdf.rect(40, y - (len(items) * 16 + 8), width - 80, len(items) * 16 + 8, fill=True)
-            pdf.setFillColorRGB(0, 0, 0)
-            for item_text in items:
-                pdf.setFont("Helvetica", 9.5)
-                draw_wrapped(item_text, font_size=9.5, leading=14, max_width=500)
-            y -= 4
+        def check_row(lx, cy, label, ticked, col_w_half):
+            """Checkbox row; returns next y."""
+            if ticked:
+                pdf.setFillColor(DEC_BORDER)
+                pdf.setFont("Helvetica-Bold", 9.5)
+                pdf.drawString(lx + 4, cy, "✓")
+                pdf.setFillColor(GREY_900)
+            else:
+                pdf.setFillColor(GREY_300)
+                pdf.setFont("Helvetica", 9)
+                pdf.drawString(lx + 4, cy, "○")
+                pdf.setFillColor(GREY_500)
+            pdf.setFont("Helvetica", 8.2)
+            max_ch = max(12, int((col_w_half - 22) / (8.2 * 0.52)))
+            pdf.drawString(lx + 16, cy, label[:max_ch])
+            return cy - 13
 
-        # ═══════════════════════════════════════════════════════════════
-        # HEADER - COLORED TOP BAR
-        # ═══════════════════════════════════════════════════════════════
-        pdf.setFillColorRGB(0.07, 0.13, 0.33)  # Hospital blue #122056
-        pdf.rect(0, height - 40, width, 40, fill=True)
-        pdf.setFillColorRGB(1, 1, 1)
-        pdf.setFont("Helvetica-Bold", 14)
-        pdf.drawString(40, height - 22, "CERTIFICAT DE SANTÉ AU TRAVAIL")
-        y = height - 50
+        # ─────────────────────────────────────────────────────────────────────
+        # 1.  HEADER BANNER
+        # ─────────────────────────────────────────────────────────────────────
+        HDR_H = 86
+        # Main navy block
+        pdf.setFillColor(NAVY)
+        pdf.rect(0, H - HDR_H, W, HDR_H, fill=True, stroke=False)
+        # Gold left pillar
+        pdf.setFillColor(GOLD)
+        pdf.rect(0, H - HDR_H, 7, HDR_H, fill=True, stroke=False)
+        # Gold bottom stripe
+        pdf.setFillColor(GOLD)
+        pdf.rect(0, H - HDR_H - 3, W, 3, fill=True, stroke=False)
 
-        # ═══════════════════════════════════════════════════════════════
-        # ORGANIZATION INFO
-        # ═══════════════════════════════════════════════════════════════
-        enterprise_name = getattr(worker.enterprise, 'name', '-')
-        enterprise_address = getattr(worker.enterprise, 'address', '') or ''
-        enterprise_phone = getattr(worker.enterprise, 'phone', '') or ''
-        enterprise_email = getattr(worker.enterprise, 'email', '') or ''
+        # Top caption
+        pdf.setFillColor(HexColor('#94A3B8'))
+        pdf.setFont("Helvetica", 7.5)
+        pdf.drawString(ML + 8, H - 15, "KAT MANAGEMENT SYSTEMS  ·  MÉDECINE DU TRAVAIL  ·  ISO 45001")
 
-        org_items = [f"Organisation: {enterprise_name}"]
-        if enterprise_address:
-            org_items.append(f"Adresse: {enterprise_address}")
-        if enterprise_phone or enterprise_email:
-            contact = f"Contact: {enterprise_phone or 'N/A'} | {enterprise_email or 'N/A'}"
-            org_items.append(contact)
+        # Main title
+        pdf.setFillColor(WHITE)
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawCentredString(W / 2, H - 38, "CERTIFICAT MÉDICAL D'APTITUDE AU TRAVAIL")
 
-        draw_section_box("ÉTABLISSEMENT", org_items, '#122056')
+        # Subtitle
+        pdf.setFont("Helvetica", 8.5)
+        pdf.setFillColor(HexColor('#93C5FD'))
+        pdf.drawCentredString(W / 2, H - 53, "Occupational Health Fitness Certificate  |  Medical Surveillance Program")
 
-        # ═════════════════════════════════════════════════════════════════
-        # DOCUMENT REFERENCES (2-column layout)
-        # ═════════════════════════════════════════════════════════════════
-        ensure_space(2)
-        pdf.setFillColorRGB(0.35, 0.40, 0.85)  # Hospital secondary purple
-        pdf.rect(40, y - 22, (width - 80) / 2 - 5, 22, fill=True)
-        pdf.rect(40 + (width - 80) / 2 + 5, y - 22, (width - 80) / 2 - 5, 22, fill=True)
-        pdf.setFillColorRGB(1, 1, 1)
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(50, y - 16, "RÉFÉRENCES")
-        pdf.drawString(50 + (width - 80) / 2 + 5, y - 16, "VALIDITÉ")
-        y -= 30
+        # Top-right: certificate number
+        pdf.setFillColor(GOLD)
+        pdf.setFont("Helvetica-Bold", 7)
+        pdf.drawRightString(MR, H - 15, "CERTIFICATE NO.")
+        pdf.setFillColor(WHITE)
+        pdf.setFont("Helvetica-Bold", 10.5)
+        pdf.drawRightString(MR, H - 28, certificate.certificate_number)
+        pdf.setFillColor(HexColor('#94A3B8'))
+        pdf.setFont("Helvetica", 7.5)
+        pdf.drawRightString(MR, H - 40, f"Issued : {certificate.issue_date.strftime('%d %b %Y')}")
+        pdf.drawRightString(MR, H - 51, f"Valid until : {certificate.valid_until.strftime('%d %b %Y')}")
 
-        pdf.setFillColorRGB(0.97, 0.97, 0.98)
-        pdf.rect(40, y - 38, (width - 80) / 2 - 5, 38, fill=True)
-        pdf.rect(40 + (width - 80) / 2 + 5, y - 38, (width - 80) / 2 - 5, 38, fill=True)
+        y = H - HDR_H - 3  # current writing Y (below gold stripe)
 
-        pdf.setFillColorRGB(0, 0, 0)
-        pdf.setFont("Helvetica", 9)
-        pdf.drawString(50, y - 14, f"N° Certificat: {certificate.certificate_number}")
-        pdf.drawString(50, y - 28, f"Émis le: {certificate.issue_date.strftime('%d/%m/%Y')}")
+        # ─────────────────────────────────────────────────────────────────────
+        # 2.  FITNESS DECISION BAR
+        # ─────────────────────────────────────────────────────────────────────
+        DEC_H = 54
+        y -= DEC_H
+        pdf.setFillColor(DEC_BG)
+        pdf.rect(ML, y, CW, DEC_H, fill=True, stroke=False)
+        # Coloured left accent
+        pdf.setFillColor(DEC_BORDER)
+        pdf.rect(ML, y, 5, DEC_H, fill=True, stroke=False)
+        # Border
+        pdf.setStrokeColor(DEC_BORDER)
+        pdf.setLineWidth(1.2)
+        pdf.rect(ML, y, CW, DEC_H, fill=False, stroke=True)
+        # Text
+        pdf.setFillColor(DEC_TEXT)
+        pdf.setFont("Helvetica-Bold", 17)
+        pdf.drawCentredString(W / 2, y + 32, DEC_FR)
+        pdf.setFont("Helvetica", 8.5)
+        pdf.drawCentredString(W / 2, y + 14, DEC_EN)
+        # Decorative diamonds
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.setFillColor(DEC_BORDER)
+        for dx in (-130, 0, 130):
+            pdf.drawCentredString(W / 2 + dx, y + 5, "◆")
 
-        pdf.drawString(50 + (width - 80) / 2 + 5, y - 14, f"Valide jusqu'au: {certificate.valid_until.strftime('%d/%m/%Y')}")
-        validity_days = (certificate.valid_until - certificate.issue_date).days
-        pdf.drawString(50 + (width - 80) / 2 + 5, y - 28, f"Durée: {validity_days} jours")
-        y -= 42
+        y -= 12  # breathing room below decision bar
 
-        # ═════════════════════════════════════════════════════════════════
-        # WORKER INFORMATION
-        # ═════════════════════════════════════════════════════════════════
-        worker_items = [
-            f"Nom: {worker.full_name}",
-            f"Matricule: {worker.employee_id or 'Non renseigné'}",
-            f"Entreprise: {enterprise_name}",
-            f"Poste: {worker.job_title or 'Non renseigné'}",
-            f"Type de visite: {certificate.examination.get_exam_type_display()} — Date: {certificate.examination.exam_date.strftime('%d/%m/%Y')}",
-        ]
-        draw_section_box("TRAVAILLEUR", worker_items, '#5B65DC')
+        # ─────────────────────────────────────────────────────────────────────
+        # 3.  ROW 1 — two-column card: Organisation  |  Certificate info
+        # ─────────────────────────────────────────────────────────────────────
+        COL_GAP = 8
+        col_w   = (CW - COL_GAP) / 2
+        ROW1_H  = 96
 
-        # ═════════════════════════════════════════════════════════════════
-        # FITNESS DECISION (PROMINENT BOX WITH COLOR)
-        # ═════════════════════════════════════════════════════════════════
-        decision = certificate.fitness_decision
-        if decision == 'fit':
-            status_text = "APTE AU TRAVAIL"
-            status_color = '#22C55E'
-            status_rgb = (0.13, 0.77, 0.37)
-        elif decision == 'fit_with_restrictions':
-            status_text = "APTE AVEC RESTRICTIONS"
-            status_color = '#F59E0B'
-            status_rgb = (0.96, 0.62, 0.04)
-        else:
-            status_text = "INAPTE"
-            status_color = '#EF4444'
-            status_rgb = (0.94, 0.27, 0.27)
+        card(ML,              y, col_w, ROW1_H)
+        card(ML + col_w + COL_GAP, y, col_w, ROW1_H)
 
-        ensure_space(3)
-        # Large colored box for fitness status
-        pdf.setFillColorRGB(*status_rgb)
-        pdf.rect(40, y - 50, width - 80, 50, fill=True)
-        pdf.setFillColorRGB(1, 1, 1)
-        pdf.setFont("Helvetica-Bold", 20)
-        text_width = pdf.stringWidth(status_text, "Helvetica-Bold", 20)
-        pdf.drawString((width - text_width) / 2, y - 32, status_text)
-        y -= 58
+        # — Left: Organisation —
+        cy_l = sec_header("ÉTABLISSEMENT / ORGANISATION", y, right_x=ML + col_w)
+        cy_l -= 3
+        ent_name  = (getattr(enterprise, 'name',    None) or '—')
+        ent_addr  = (getattr(enterprise, 'address', None) or '').strip()
+        ent_phone = (getattr(enterprise, 'phone',   None) or '').strip()
+        ent_email = (getattr(enterprise, 'email',   None) or '').strip()
 
-        # ═════════════════════════════════════════════════════════════════
-        # MEDICAL DECISION DETAILS
-        # ═════════════════════════════════════════════════════════════════
-        medical_items = []
-        if certificate.decision_rationale:
-            medical_items.append(f"Justification: {certificate.decision_rationale.strip()}")
-        if certificate.restrictions:
-            medical_items.append(f"Restrictions: {certificate.restrictions.strip()}")
-        if certificate.work_limitations:
-            medical_items.append(f"Limitations de travail: {certificate.work_limitations.strip()}")
-        if certificate.requires_follow_up:
-            follow_up_text = certificate.follow_up_instructions or "Suivi médical selon prescription"
-            medical_items.append(f"Suivi requis: Oui — {follow_up_text.strip()}")
-
-        if medical_items:
-            draw_section_box("DÉCISION MÉDICALE", medical_items, status_color)
-
-        # ═════════════════════════════════════════════════════════════════
-        # EXAMINER INFO
-        # ═════════════════════════════════════════════════════════════════
-        doctor_name = certificate.issued_by.get_full_name() if certificate.issued_by else 'Médecin non renseigné'
-        doctor_license = getattr(certificate.issued_by, 'professional_license', '') if certificate.issued_by else ''
-
-        examiner_items = [
-            f"Médecin: {doctor_name}",
-            f"Licence: {doctor_license or 'Non renseignée'}",
-        ]
-        draw_section_box("MÉDECIN ÉVALUATEUR", examiner_items, '#122056')
-
-        # ═════════════════════════════════════════════════════════════════
-        # LEGAL FOOTER
-        # ═════════════════════════════════════════════════════════════════
-        ensure_space(8)
-        pdf.setFont("Helvetica-Bold", 9)
-        pdf.setFillColorRGB(0.3, 0.3, 0.3)
-        pdf.drawString(40, y, "MENTIONS LÉGALES")
-        y -= 12
+        pdf.setFillColor(NAVY)
+        pdf.setFont("Helvetica-Bold", 9.5)
+        pdf.drawString(ML + 8, cy_l, ent_name[:48])
+        cy_l -= 12
+        if ent_addr:
+            cy_l = wrap(ent_addr, ML + 8, cy_l, col_w - 18, fs=8, leading=11)
         pdf.setFont("Helvetica", 8)
-        draw_wrapped(
-            "Ce certificat est établi conformément aux dispositions de la médecine du travail. La décision s'applique au poste évalué "
-            "à la date d'examen, sous réserve de l'exactitude des informations déclarées.",
-            font_size=8, leading=11, max_width=500
-        )
-        draw_wrapped(
-            "L'employeur doit respecter les restrictions et aménagements prescrits. Tout changement de poste ou d'exposition requiert une réévaluation.",
-            font_size=8, leading=11, max_width=500
-        )
-        draw_wrapped(
-            f"Document généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')} — Certificat n° {certificate.certificate_number}",
-            font_size=7, leading=10, max_width=500
-        )
+        if ent_phone:
+            pdf.setFillColor(GREY_500)
+            pdf.drawString(ML + 8, cy_l, f"Tél: {ent_phone}")
+            cy_l -= 11
+        if ent_email:
+            pdf.setFillColor(HexColor('#2563EB'))
+            pdf.drawString(ML + 8, cy_l, ent_email[:40])
 
+        # — Right: Certificate details —
+        rx = ML + col_w + COL_GAP
+        cy_r = sec_header("INFORMATIONS DU CERTIFICAT", y, left_x=rx, right_x=MR)
+        cy_r -= 3
+        validity_days = (certificate.valid_until - certificate.issue_date).days
+        cy_r = kv("Numéro :",        certificate.certificate_number,             rx + 6, cy_r)
+        cy_r = kv("Émis le :",       certificate.issue_date.strftime('%d %b %Y'), rx + 6, cy_r)
+        cy_r = kv("Valide jusqu'au :", certificate.valid_until.strftime('%d %b %Y'), rx + 6, cy_r, kw=105)
+        cy_r = kv("Durée :",         f"{validity_days} jours",                   rx + 6, cy_r)
+        cy_r = kv("Statut :",        "ACTIF ✓" if certificate.is_active else "RÉVOQUÉ ✗", rx + 6, cy_r)
+
+        y -= ROW1_H + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 4.  ROW 2 — two-column card: Worker profile  |  Examination info
+        # ─────────────────────────────────────────────────────────────────────
+        ROW2_H = 108
+        card(ML,              y, col_w, ROW2_H)
+        card(ML + col_w + COL_GAP, y, col_w, ROW2_H)
+
+        # — Left: Worker —
+        cy_l = sec_header("TRAVAILLEUR (WORKER PROFILE)", y, right_x=ML + col_w)
+        cy_l -= 3
+        cy_l = kv("Nom complet :", worker.full_name,                               ML + 6, cy_l)
+        cy_l = kv("Matricule :",   worker.employee_id or '—',                      ML + 6, cy_l)
+        dob_str = worker.date_of_birth.strftime('%d/%m/%Y') if worker.date_of_birth else '—'
+        cy_l = kv("Né(e) le :",    f"{dob_str}  (âge {worker.age} ans)",           ML + 6, cy_l, kw=68)
+        gender_disp = worker.get_gender_display() if hasattr(worker, 'get_gender_display') else worker.gender.capitalize()
+        cy_l = kv("Sexe :",        gender_disp,                                     ML + 6, cy_l)
+        cy_l = kv("Poste :",       (worker.job_title or '—')[:34],                 ML + 6, cy_l)
+        cat_disp = worker.get_job_category_display() if hasattr(worker, 'get_job_category_display') else worker.job_category
+        cy_l = kv("Catégorie :",   cat_disp,                                        ML + 6, cy_l)
+        if worker.work_site:
+            cy_l = kv("Site :",    str(worker.work_site)[:30],                     ML + 6, cy_l)
+
+        # — Right: Examination —
+        cy_r = sec_header("EXAMEN MÉDICAL DE RÉFÉRENCE", y, left_x=rx, right_x=MR)
+        cy_r -= 3
+        cy_r = kv("Type d'examen :", exam.get_exam_type_display(),             rx + 6, cy_r, kw=95)
+        cy_r = kv("Date :",          exam.exam_date.strftime('%d %b %Y'),      rx + 6, cy_r)
+        if exam.location:
+            cy_r = kv("Lieu :",      exam.location[:28],                        rx + 6, cy_r)
+        if exam.examining_doctor:
+            cy_r = kv("Médecin :",   exam.examining_doctor.get_full_name()[:28], rx + 6, cy_r)
+        cy_r = kv("Réf. examen :",   exam.exam_number,                         rx + 6, cy_r, kw=95)
+        if worker.next_exam_due:
+            cy_r = kv("Prochain examen :", worker.next_exam_due.strftime('%d %b %Y'), rx + 6, cy_r, kw=105)
+
+        y -= ROW2_H + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 5.  MEDICAL DECISION RATIONALE
+        # ─────────────────────────────────────────────────────────────────────
+        if certificate.decision_rationale:
+            words_n  = len((certificate.decision_rationale or '').split())
+            est_lines = max(2, words_n // 9 + 1)
+            rat_h    = max(46, est_lines * 12 + 28)
+            card(ML, y, CW, rat_h, LIGHT_BLUE)
+            cy_rat = sec_header("JUSTIFICATION DE LA DÉCISION MÉDICALE", y)
+            cy_rat -= 5
+            cy_rat  = wrap(certificate.decision_rationale.strip(), ML + 8, cy_rat, CW - 20, fs=9, color=GREY_900)
+            y -= max(rat_h, y - cy_rat + 4) + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 6.  RESTRICTIONS (structured boolean checklist)
+        # ─────────────────────────────────────────────────────────────────────
+        RESTRICTION_ITEMS = [
+            ("Interdit de conduire",             certificate.restrict_no_driving),
+            ("Interdit travail en hauteur",       certificate.restrict_no_height_work),
+            (f"Port de charge ≤ {certificate.restrict_max_lifting_kg} kg"
+             if certificate.restrict_max_lifting_kg else "Limite port de charge",
+             bool(certificate.restrict_max_lifting_kg)),
+            ("Interdit travail de nuit",          certificate.restrict_no_night_shift),
+            ("Poste aménagé requis",              certificate.restrict_adapted_workstation),
+            ("Horaires aménagés requis",          certificate.restrict_reduced_hours),
+            ("Interdit espaces confinés",         certificate.restrict_no_confined_space),
+            ("Interdit exposition chimique",      certificate.restrict_no_chemical_exposure),
+        ]
+        has_text = bool(certificate.restrictions or certificate.work_limitations or certificate.restrict_custom)
+
+        if any(r[1] for r in RESTRICTION_ITEMS) or has_text:
+            n_col  = 2
+            rows   = (len(RESTRICTION_ITEMS) + n_col - 1) // n_col
+            rest_h = max(52, rows * 14 + 34 + (30 if has_text else 0))
+            card(ML, y, CW, rest_h, HexColor('#FFFBEB'))
+            # amber left border
+            pdf.setFillColor(HexColor('#D97706'))
+            pdf.rect(ML, y - rest_h, 4, rest_h, fill=True, stroke=False)
+            pdf.setStrokeColor(HexColor('#D97706'))
+            pdf.setLineWidth(0.6)
+            pdf.roundRect(ML, y - rest_h, CW, rest_h, 3, fill=False, stroke=True)
+
+            cy_rest = sec_header("RESTRICTIONS & LIMITATIONS AU TRAVAIL", y)
+            cy_rest -= 2
+            half = (CW - 8) / 2
+            left_items  = RESTRICTION_ITEMS[:rows]
+            right_items = RESTRICTION_ITEMS[rows:]
+            row_y = cy_rest
+            for i in range(max(len(left_items), len(right_items))):
+                if i < len(left_items):
+                    check_row(ML + 4,          row_y, left_items[i][0],  left_items[i][1],  half)
+                if i < len(right_items):
+                    check_row(ML + 4 + half,   row_y, right_items[i][0], right_items[i][1], half)
+                row_y -= 13
+
+            if certificate.restrict_custom:
+                row_y -= 2
+                row_y = wrap(f"Restriction personnalisée: {certificate.restrict_custom.strip()}",
+                             ML + 8, row_y, CW - 20, fs=8.5, color=GREY_900)
+            if certificate.restrictions:
+                row_y = wrap(f"Restrictions libres: {certificate.restrictions.strip()}",
+                             ML + 8, row_y, CW - 20, fs=8.5, color=GREY_900)
+            if certificate.work_limitations:
+                row_y = wrap(f"Limitations de travail: {certificate.work_limitations.strip()}",
+                             ML + 8, row_y, CW - 20, fs=8.5, color=GREY_900)
+
+            y -= max(rest_h, y - row_y + 4) + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 7.  FOLLOW-UP PLAN (if required)
+        # ─────────────────────────────────────────────────────────────────────
+        if certificate.requires_follow_up:
+            words_n  = len((certificate.follow_up_instructions or '').split())
+            fu_h     = max(52, words_n // 10 * 12 + 40)
+            card(ML, y, CW, fu_h, HexColor('#EFF6FF'))
+            cy_fu = sec_header("PLAN DE SUIVI MÉDICAL", y)
+            cy_fu -= 4
+            if certificate.follow_up_frequency_months:
+                cy_fu = kv("Fréquence :", f"Tous les {certificate.follow_up_frequency_months} mois", ML + 8, cy_fu, kw=75)
+            if certificate.follow_up_instructions:
+                cy_fu = wrap(certificate.follow_up_instructions.strip(), ML + 8, cy_fu, CW - 20, fs=9, color=GREY_900)
+            y -= max(fu_h, y - cy_fu + 4) + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 8.  LEGAL COMPLIANCE
+        # ─────────────────────────────────────────────────────────────────────
+        legal_lines = []
+        if certificate.legal_article_reference:
+            legal_lines.append(f"Base légale : {certificate.legal_article_reference}")
+        if certificate.right_of_appeal_offered:
+            legal_lines.append(
+                f"Droit de recours notifié au travailleur — délai : "
+                f"{certificate.right_of_appeal_deadline_days} jours à compter de la date d'émission."
+            )
+        if certificate.functional_impairment_percent is not None:
+            legal_lines.append(
+                f"Taux d'incapacité fonctionnelle : {certificate.functional_impairment_percent}%  "
+                f"(déclaration CNSS/IPM)."
+            )
+        if legal_lines:
+            leg_h = len(legal_lines) * 14 + 30
+            card(ML, y, CW, leg_h, PANEL_BG)
+            cy_leg = sec_header("CONFORMITÉ LÉGALE & RÉGLEMENTAIRE", y)
+            cy_leg -= 4
+            for ll in legal_lines:
+                cy_leg = wrap(ll, ML + 8, cy_leg, CW - 20, fs=8, leading=12, color=GREY_700)
+            y -= max(leg_h, y - cy_leg + 4) + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 9.  SIGNATURE BLOCK
+        # ─────────────────────────────────────────────────────────────────────
+        SIG_H = 86
+        if y - SIG_H < 50:
+            pdf.showPage()
+            # Re-draw watermark on new page
+            pdf.saveState()
+            pdf.setFillColor(NAVY)
+            pdf.setFillAlpha(0.035)
+            pdf.setFont("Helvetica-Bold", 56)
+            pdf.translate(W / 2, H / 2)
+            pdf.rotate(35)
+            for dy in (-80, 0, 80, 160):
+                pdf.drawCentredString(0, dy, "OFFICIAL DOCUMENT")
+            pdf.restoreState()
+            y = H - 60
+
+        sig_top = y
+        card(ML, sig_top, CW, SIG_H, PANEL_BG)
+
+        doctor_name    = certificate.issued_by.get_full_name() if certificate.issued_by else 'Médecin du Travail'
+        doctor_license = (getattr(certificate.issued_by, 'professional_license', None) or '') if certificate.issued_by else ''
+
+        # ── Left half: Doctor / Signature ────────────────────────────────────
+        sig_col_w = col_w
+        cy_sig = sec_header("MÉDECIN ÉVALUATEUR & SIGNATURE", sig_top, right_x=ML + sig_col_w)
+        cy_sig -= 3
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.setFillColor(NAVY)
+        pdf.drawString(ML + 8, cy_sig, doctor_name)
+        cy_sig -= 12
+        if doctor_license:
+            pdf.setFont("Helvetica", 8.5)
+            pdf.setFillColor(GREY_700)
+            pdf.drawString(ML + 8, cy_sig, f"N° Licence : {doctor_license}")
+            cy_sig -= 11
+        pdf.setFont("Helvetica", 8.5)
+        pdf.setFillColor(GREY_500)
+        pdf.drawString(ML + 8, cy_sig, f"Date : {certificate.issue_date.strftime('%d %B %Y')}")
+        cy_sig -= 22
+        # Signature line
+        pdf.setStrokeColor(GREY_700)
+        pdf.setLineWidth(0.8)
+        pdf.line(ML + 8, cy_sig, ML + sig_col_w - 12, cy_sig)
+        pdf.setFont("Helvetica", 7.5)
+        pdf.setFillColor(GREY_500)
+        pdf.drawCentredString(ML + sig_col_w / 2, cy_sig - 10, "Signature et cachet du Médecin du Travail")
+
+        # ── Right half: Authentication stamp ─────────────────────────────────
+        stamp_lx = ML + sig_col_w + COL_GAP
+        cy_stamp = sec_header("CACHET / AUTHENTICATION", sig_top, left_x=stamp_lx, right_x=MR)
+
+        # Circular certification badge
+        cx = stamp_lx + (col_w - 52) + 26
+        cy = cy_stamp  - 26
+        pdf.setFillColor(DEC_BG)
+        pdf.setStrokeColor(DEC_BORDER)
+        pdf.setLineWidth(2.5)
+        pdf.circle(cx, cy, 24, fill=True, stroke=True)
+        pdf.setFillColor(DEC_TEXT)
+        pdf.setFont("Helvetica-Bold", 6.5)
+        pdf.drawCentredString(cx, cy + 8,  "CERTIFIED")
+        pdf.setFont("Helvetica-Bold", 4.8)
+        pdf.drawCentredString(cx, cy + 1,   certificate.certificate_number[:14])
+        pdf.setFont("Helvetica-Bold", 7)
+        pdf.drawCentredString(cx, cy - 8,  certificate.issue_date.strftime('%Y'))
+
+        # Text left of stamp
+        info_x = stamp_lx + 8
+        info_y = cy_stamp - 8
+        pdf.setFont("Helvetica", 8)
+        pdf.setFillColor(GREY_700)
+        pdf.drawString(info_x, info_y, "Document authentifié par le système")
+        info_y -= 11
+        pdf.setFont("Helvetica", 7.5)
+        pdf.setFillColor(GREY_500)
+        pdf.drawString(info_x, info_y, f"Généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')}")
+        info_y -= 10
+        pdf.drawString(info_x, info_y, f"Réf : {certificate.certificate_number}")
+
+        y = sig_top - SIG_H - 8
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 10. LEGAL DISCLAIMER (small text strip)
+        # ─────────────────────────────────────────────────────────────────────
+        if y > 58:
+            pdf.setFillColor(HexColor('#F1F5F9'))
+            pdf.rect(ML, y - 32, CW, 32, fill=True, stroke=False)
+            pdf.setStrokeColor(GREY_300)
+            pdf.setLineWidth(0.4)
+            pdf.rect(ML, y - 32, CW, 32, fill=False, stroke=True)
+            disc_y = y - 12
+            disc_y = wrap(
+                "Ce certificat est établi conformément aux dispositions légales de la médecine du travail. "
+                "La décision d'aptitude s'applique au poste évalué à la date d'examen.",
+                ML + 8, disc_y, CW - 18, fs=7.2, leading=10, color=GREY_500,
+            )
+            wrap(
+                "L'employeur est tenu de respecter les restrictions et aménagements prescrits. "
+                "Tout changement de poste ou d'exposition nécessite une réévaluation médicale.",
+                ML + 8, disc_y, CW - 18, fs=7.2, leading=10, color=GREY_500,
+            )
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 11. FOOTER BAR
+        # ─────────────────────────────────────────────────────────────────────
+        pdf.setFillColor(NAVY)
+        pdf.rect(0, 0, W, 30, fill=True, stroke=False)
+        pdf.setFillColor(GOLD)
+        pdf.rect(0, 30, W, 2, fill=True, stroke=False)
+        pdf.setFillColor(HexColor('#94A3B8'))
+        pdf.setFont("Helvetica", 7)
+        pdf.drawString(ML, 18, "KAT Management Systems  ·  Médecine du Travail  ·  ISO 45001:2018")
+        pdf.drawRightString(MR, 18, f"Certificat {certificate.certificate_number}  ·  Page 1")
+        pdf.setFillColor(HexColor('#64748B'))
+        pdf.setFont("Helvetica", 6.2)
+        pdf.drawCentredString(W / 2, 8, "Document confidentiel — Reproduction non autorisée interdite")
+
+        # ─────────────────────────────────────────────────────────────────────
+        # FINALIZE
+        # ─────────────────────────────────────────────────────────────────────
         pdf.showPage()
         pdf.save()
+        buf.seek(0)
+
+        response = HttpResponse(buf.read(), content_type='application/pdf')
+        filename = f"{certificate.certificate_number}.pdf"
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
         return response
 
     @action(detail=True, methods=['post'], url_path='revoke')
