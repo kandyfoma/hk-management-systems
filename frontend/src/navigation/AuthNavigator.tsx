@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   SafeAreaView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
@@ -280,9 +281,9 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
     return (
       <View style={A.loadingScreen}>
         <View style={A.loadingLogo}>
-          <Ionicons name="medical" size={36} color="#FFF" />
+          <Image source={require('../../assets/icon.png')} style={A.loadingLogoImg} resizeMode="contain" />
         </View>
-        <Text style={A.loadingTitle}>KAT Santé</Text>
+        <Text style={A.loadingTitle}>KAT Management Systems</Text>
         <Text style={A.loadingSubtitle}>Vérification de l'activation...</Text>
         <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 24 }} />
       </View>
@@ -299,9 +300,9 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
             <View style={A.brandCircle2} />
             <View style={A.brandContent}>
               <View style={A.brandLogo}>
-                <Ionicons name="medical" size={34} color="#FFF" />
+                <Image source={require('../../assets/icon.png')} style={A.brandLogoImg} resizeMode="contain" />
               </View>
-              <Text style={A.brandName}>KAT Santé</Text>
+              <Text style={A.brandName}>KAT Management Systems</Text>
               <Text style={A.brandTagline}>
                 Système de Gestion de Santé{'\n'}pour les établissements médicaux
               </Text>
@@ -327,6 +328,7 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
               </View>
             </View>
             <Text style={A.brandFooter}>© 2025 KAT Management Systems · RDC</Text>
+
           </View>
         )}
 
@@ -467,7 +469,7 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
               </View>
 
               {!isDesktop && (
-                <Text style={A.footerText}>© 2025 KAT Management Systems · RDC</Text>
+                <Text style={A.footerText}>© 2025 KAT Management Systems · République Démocratique du Congo</Text>
               )}
             </ScrollView>
           </Animated.View>
@@ -496,8 +498,10 @@ const A = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 20,
+    overflow: 'hidden',
     ...shadows.lg,
   },
+  loadingLogoImg: { width: 60, height: 60 },
   loadingTitle: { fontSize: 22, fontWeight: '700', color: colors.text, marginBottom: 6 },
   loadingSubtitle: { fontSize: 14, color: colors.textSecondary },
 
@@ -526,11 +530,13 @@ const A = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 24,
+    overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
+  brandLogoImg: { width: 56, height: 56 },
   brandName: {
-    fontSize: 34, fontWeight: '800', color: '#FFF',
-    letterSpacing: -0.5, marginBottom: 10,
+    fontSize: isDesktop ? 26 : 22, fontWeight: '800', color: '#FFF',
+    letterSpacing: -0.3, marginBottom: 10,
   },
   brandTagline: {
     fontSize: 15, color: 'rgba(255,255,255,0.65)',
@@ -585,8 +591,10 @@ const A = StyleSheet.create({
     width: 44, height: 44, borderRadius: 13,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
-  mobileBrandName: { fontSize: 18, fontWeight: '700', color: colors.text },
+  mobileLogoImg: { width: 38, height: 38 },
+  mobileBrandName: { fontSize: isTablet ? 17 : 15, fontWeight: '700', color: colors.text },
   mobileTagline: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
 
   // Step indicator
@@ -769,9 +777,9 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
             <View style={L.brandCircle2} />
             <View style={L.brandContent}>
               <View style={L.brandLogo}>
-                <Ionicons name="medical" size={34} color="#FFF" />
+                <Image source={require('../../assets/icon.png')} style={L.brandLogoImg} resizeMode="contain" />
               </View>
-              <Text style={L.brandName}>KAT Santé</Text>
+              <Text style={L.brandName}>KAT Management Systems</Text>
               <Text style={L.brandTagline}>
                 Accédez à votre espace de{'\n'}gestion médicale sécurisé
               </Text>
@@ -982,7 +990,7 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
               </View>
 
               {!isDesktop && (
-                <Text style={L.footerText}>© 2025 KAT Management Systems</Text>
+                <Text style={L.footerText}>© 2025 KAT Management Systems · RDC</Text>
               )}
             </ScrollView>
           </Animated.View>
@@ -1021,9 +1029,11 @@ const L = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 24,
+    overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
-  brandName: { fontSize: 34, fontWeight: '800', color: '#FFF', letterSpacing: -0.5, marginBottom: 10 },
+  brandLogoImg: { width: 56, height: 56 },
+  brandName: { fontSize: isDesktop ? 26 : 22, fontWeight: '800', color: '#FFF', letterSpacing: -0.3, marginBottom: 10 },
   brandTagline: { fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 23, marginBottom: 36 },
   brandDivider: {
     width: 44, height: 3,
@@ -1089,8 +1099,10 @@ const L = StyleSheet.create({
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
-  mobileBrandName: { fontSize: 17, fontWeight: '700', color: colors.text },
+  mobileLogoImg: { width: 30, height: 30 },
+  mobileBrandName: { fontSize: isTablet ? 16 : 14, fontWeight: '700', color: colors.text },
 
   // Desktop back link
   desktopBackBtn: {
