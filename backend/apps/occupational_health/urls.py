@@ -54,6 +54,7 @@ router.register(r'examinations', views.MedicalExaminationViewSet, basename='exam
 router.register(r'medical-exams', views.MedicalExaminationViewSet, basename='medical-exams')
 router.register(r'medical-exams-results', views.MedicalExaminationViewSet, basename='medical-exams-results')
 router.register(r'vital-signs', views.VitalSignsViewSet, basename='vitalsigns')
+router.register(r'physical-examinations', views.PhysicalExaminationViewSet, basename='physical-examination')
 router.register(r'fitness-certificates', views.FitnessCertificateViewSet, basename='fitnesscertificate')
 
 # Disease and incident endpoints

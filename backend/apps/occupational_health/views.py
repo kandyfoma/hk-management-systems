@@ -1003,6 +1003,27 @@ class VitalSignsViewSet(viewsets.ModelViewSet):
         """Auto-set recorded_by to current user"""
         serializer.save(recorded_by=self.request.user)
 
+class PhysicalExaminationViewSet(viewsets.ModelViewSet):
+    """Physical examination findings API"""
+
+    serializer_class = PhysicalExaminationSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['examination', 'examination__worker', 'examination__worker__enterprise', 'physical_exam_normal']
+    ordering = ['-performed_at']
+
+    def get_queryset(self):
+        return PhysicalExamination.objects.select_related(
+            'examination__worker', 'performed_by'
+        )
+
+    def perform_create(self, serializer):
+        """Auto-set performed_by to current user if not supplied"""
+        if not serializer.validated_data.get('performed_by'):
+            serializer.save(performed_by=self.request.user)
+        else:
+            serializer.save()
+
 class FitnessCertificateViewSet(viewsets.ModelViewSet):
     """Fitness certificate API with expiry tracking"""
     
