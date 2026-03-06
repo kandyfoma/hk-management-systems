@@ -280,6 +280,7 @@ export interface WorkSite {
 export interface OccupationalHealthPatient extends Patient {
   // Employment Information (required in OH context, optional on base Patient)
   employeeId: string;
+  nationalId?: string;          // N° Identité (CIN) — optional, populated from backend
   enterpriseId?: string;
   company: string;
   sector: IndustrySector;

@@ -1083,6 +1083,9 @@ export function OccHealthConsultationScreen({
         setDrugScreeningDone(parsed.drugScreeningDone);
         setBloodWorkDone(parsed.bloodWorkDone);
         setXrayDone(parsed.xrayDone);
+        setSpinalXrayDone(parsed.spinalXrayDone ?? false);
+        setLabTestsDone(parsed.labTestsDone ?? false);
+        setEcgDone(parsed.ecgDone ?? false);
         setMentalScreening(parsed.mentalScreening);
         setErgonomicNeeded(parsed.ergonomicNeeded);
         setErgonomicNotes(parsed.ergonomicNotes);
@@ -1118,6 +1121,13 @@ export function OccHealthConsultationScreen({
         setRestrictNoConfinedSpace(parsed.restrictNoConfinedSpace ?? false);
         setRestrictNoChemicalExposure(parsed.restrictNoChemicalExposure ?? false);
         setRestrictCustom(parsed.restrictCustom || '');
+        // Mining-specific restrictions
+        setRestrictUndergroundMine(parsed.restrictUndergroundMine ?? false);
+        setRestrictOpencastMine(parsed.restrictOpencastMine ?? false);
+        setRestrictNoiseExposure(parsed.restrictNoiseExposure ?? false);
+        setRestrictMobileEquipment(parsed.restrictMobileEquipment ?? false);
+        setRestrictIsPermanent(parsed.restrictIsPermanent ?? false);
+        setRestrictRevisionDate(parsed.restrictRevisionDate || '');
         // Legal compliance
         setLegalArticleReference(parsed.legalArticleReference || 'Code du Travail RDC, Art. 156 — Décret No. 68/432');
         setRightOfAppealOffered(parsed.rightOfAppealOffered ?? true);
@@ -1234,6 +1244,9 @@ export function OccHealthConsultationScreen({
             drugScreeningDone: false,
             bloodWorkDone: false,
             xrayDone: false,
+            spinalXrayDone: false,
+            labTestsDone: false,
+            ecgDone: false,
             mentalScreening: {},
             ergonomicNeeded: false,
             ergonomicNotes: '',
@@ -1268,6 +1281,12 @@ export function OccHealthConsultationScreen({
             restrictNoConfinedSpace: false,
             restrictNoChemicalExposure: false,
             restrictCustom: '',
+            restrictUndergroundMine: false,
+            restrictOpencastMine: false,
+            restrictNoiseExposure: false,
+            restrictMobileEquipment: false,
+            restrictIsPermanent: false,
+            restrictRevisionDate: '',
             legalArticleReference: 'Code du Travail RDC, Art. 156 — Décret No. 68/432',
             rightOfAppealOffered: true,
             rightOfAppealDeadlineDays: '15',
@@ -1386,6 +1405,9 @@ export function OccHealthConsultationScreen({
   const [drugScreeningDone, setDrugScreeningDone] = useState(false);
   const [bloodWorkDone, setBloodWorkDone] = useState(false);
   const [xrayDone, setXrayDone] = useState(false);
+  const [spinalXrayDone, setSpinalXrayDone] = useState(false);
+  const [labTestsDone, setLabTestsDone] = useState(false);
+  const [ecgDone, setEcgDone] = useState(false);
   // ─── Per-test status & existing results (3-state smart card) ──
   const [testStatuses, setTestStatuses] = useState<Record<string, PerTestStatus>>({});
   const [existingTestResults, setExistingTestResults] = useState<Record<string, ExistingTestResult | null>>({});
@@ -1562,6 +1584,14 @@ export function OccHealthConsultationScreen({
   const [restrictNoChemicalExposure, setRestrictNoChemicalExposure] = useState(false);
   const [restrictCustom, setRestrictCustom] = useState('');
 
+  // ─── Certificat — Restrictions secteur minier ──
+  const [restrictUndergroundMine, setRestrictUndergroundMine] = useState(false);
+  const [restrictOpencastMine, setRestrictOpencastMine] = useState(false);
+  const [restrictNoiseExposure, setRestrictNoiseExposure] = useState(false);
+  const [restrictMobileEquipment, setRestrictMobileEquipment] = useState(false);
+  const [restrictIsPermanent, setRestrictIsPermanent] = useState(false);
+  const [restrictRevisionDate, setRestrictRevisionDate] = useState('');
+
   // ─── Certificat — Conformité légale ──
   const [legalArticleReference, setLegalArticleReference] = useState('Code du Travail RDC, Art. 156 — Décret No. 68/432');
   const [rightOfAppealOffered, setRightOfAppealOffered] = useState(true);
@@ -1598,6 +1628,9 @@ export function OccHealthConsultationScreen({
     drugScreeningDone: boolean;
     bloodWorkDone: boolean;
     xrayDone: boolean;
+    spinalXrayDone?: boolean;
+    labTestsDone?: boolean;
+    ecgDone?: boolean;
     mentalScreening: Partial<MentalHealthScreening>;
     ergonomicNeeded: boolean;
     ergonomicNotes: string;
@@ -1636,6 +1669,13 @@ export function OccHealthConsultationScreen({
     restrictNoConfinedSpace?: boolean;
     restrictNoChemicalExposure?: boolean;
     restrictCustom?: string;
+    // Certificat — restrictions secteur minier
+    restrictUndergroundMine?: boolean;
+    restrictOpencastMine?: boolean;
+    restrictNoiseExposure?: boolean;
+    restrictMobileEquipment?: boolean;
+    restrictIsPermanent?: boolean;
+    restrictRevisionDate?: string;
     // Certificat — legal compliance
     legalArticleReference?: string;
     rightOfAppealOffered?: boolean;
@@ -1744,6 +1784,9 @@ export function OccHealthConsultationScreen({
         drugScreeningDone,
         bloodWorkDone,
         xrayDone,
+        spinalXrayDone,
+        labTestsDone,
+        ecgDone,
         mentalScreening,
         ergonomicNeeded,
         ergonomicNotes,
@@ -1782,6 +1825,13 @@ export function OccHealthConsultationScreen({
         restrictNoConfinedSpace,
         restrictNoChemicalExposure,
         restrictCustom,
+        // Mining-specific restrictions
+        restrictUndergroundMine,
+        restrictOpencastMine,
+        restrictNoiseExposure,
+        restrictMobileEquipment,
+        restrictIsPermanent,
+        restrictRevisionDate,
         // Legal compliance
         legalArticleReference,
         rightOfAppealOffered,
@@ -1837,13 +1887,14 @@ export function OccHealthConsultationScreen({
   }, [
     draftId, selectedWorker, examType, visitReason, referredBy, vitals, physicalExam,
     orderedTests, testExecutionMode, onsiteTestResults, audiometryDone, spirometryDone, visionDone, drugScreeningDone,
-    bloodWorkDone, xrayDone, mentalScreening, ergonomicNeeded, ergonomicNotes,
+    bloodWorkDone, xrayDone, spinalXrayDone, labTestsDone, ecgDone, mentalScreening, ergonomicNeeded, ergonomicNotes,
     mskComplaints, sectorAnswers, fitnessDecision, restrictions, recommendations, followUpNeeded,
     followUpDate, nextAppointmentDate, nextAppointmentReason, consultationNotes, currentStep, backendDraftExaminationId, syncDraftToBackend,
     anamnesisNotes, smokingStatus, packYears, alcoholAuditCScore, familyHistory, priorOccupationalHistory,
     workingSchedule, functionalComplaintsAtWork,
     restrictNoDriving, restrictNoHeightWork, restrictMaxLiftingKg, restrictNoNightShift,
     restrictAdaptedWorkstation, restrictReducedHours, restrictNoConfinedSpace, restrictNoChemicalExposure, restrictCustom,
+    restrictUndergroundMine, restrictOpencastMine, restrictNoiseExposure, restrictMobileEquipment, restrictIsPermanent, restrictRevisionDate,
     legalArticleReference, rightOfAppealOffered, rightOfAppealDeadlineDays, functionalImpairmentPercent,
   ]);
 
@@ -2550,6 +2601,10 @@ export function OccHealthConsultationScreen({
         ...(priorOccupationalHistory.length > 0 ? { prior_occupational_history: priorOccupationalHistory.map(e => ({ employer: e.employer, job_title: e.jobTitle, from_year: e.fromYear, to_year: e.toYear ?? null, exposures: e.exposures })) } : {}),
         ...(workingSchedule ? { working_schedule: workingSchedule } : {}),
         ...(functionalComplaintsAtWork ? { functional_complaints_at_work: functionalComplaintsAtWork } : {}),
+        // Test completion flags (certificate checklist)
+        spinal_xray_done: spinalXrayDone,
+        lab_tests_done: labTestsDone,
+        ecg_done: ecgDone,
       };
 
       let examinationId: number;
@@ -2620,8 +2675,12 @@ export function OccHealthConsultationScreen({
 
       // Build combined restrictions text for backward-compat free-text field
       const structuredRestrictionsText = [
+        restrictUndergroundMine ? 'Interdit mine souterraine' : '',
+        restrictOpencastMine ? 'Interdit mine à ciel ouvert' : '',
         restrictNoDriving ? 'Interdit de conduire' : '',
         restrictNoHeightWork ? 'Interdit travail en hauteur' : '',
+        restrictNoiseExposure ? 'Interdit exposition aux bruits' : '',
+        restrictMobileEquipment ? 'Interdit équipement mobile' : '',
         restrictMaxLiftingKg ? `Port de charge max ${restrictMaxLiftingKg} kg` : '',
         restrictNoNightShift ? 'Interdit travail de nuit' : '',
         restrictAdaptedWorkstation ? 'Poste aménagé requis' : '',
@@ -2656,6 +2715,13 @@ export function OccHealthConsultationScreen({
         restrict_no_confined_space: restrictNoConfinedSpace,
         restrict_no_chemical_exposure: restrictNoChemicalExposure,
         restrict_custom: restrictCustom || '',
+        // Mining-specific restriction checkboxes
+        restrict_underground_mine: restrictUndergroundMine,
+        restrict_opencast_mine: restrictOpencastMine,
+        restrict_noise_exposure: restrictNoiseExposure,
+        restrict_mobile_equipment: restrictMobileEquipment,
+        restriction_is_permanent: restrictIsPermanent,
+        restriction_revision_date: (!restrictIsPermanent && restrictRevisionDate) ? restrictRevisionDate : null,
         // Legal compliance (Priority 2)
         legal_article_reference: legalArticleReference || 'Code du Travail RDC, Art. 156 — Décret No. 68/432',
         right_of_appeal_offered: rightOfAppealOffered,
@@ -4539,6 +4605,35 @@ export function OccHealthConsultationScreen({
             </Text>
           </View>
         )}
+
+        {/* ── Supplemental tests (for certificate checklist) ── */}
+        <View style={[styles.sectionCard, { marginTop: 16 }]}>
+          <View style={styles.sectionCardHeader}>
+            <Ionicons name="list-circle" size={18} color={colors.primary} />
+            <Text style={styles.sectionCardTitle}>Tests complémentaires effectués</Text>
+          </View>
+          <Text style={[styles.helperText, { marginBottom: 10 }]}>
+            Cochez les examens réalisés hors du protocole sectoriel automatique — ils apparaîtront dans le certificat.
+          </Text>
+          {([
+            [spinalXrayDone, setSpinalXrayDone, 'medical', 'Radiographie Colonne Vertébrale'],
+            [labTestsDone,   setLabTestsDone,   'flask',   'Tests de Laboratoire'],
+            [ecgDone,        setEcgDone,        'pulse',   'ECG'],
+          ] as [boolean, (v: boolean) => void, keyof typeof Ionicons.glyphMap, string][]).map(([val, setter, icon, label]) => (
+            <TouchableOpacity
+              key={label}
+              style={[styles.checkboxRow, { marginBottom: 8 }]}
+              onPress={() => setter(!val)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, val && styles.checkboxActive]}>
+                {val && <Ionicons name="checkmark" size={14} color="#FFF" />}
+              </View>
+              <Ionicons name={icon} size={16} color={val ? colors.primary : colors.textSecondary} style={{ marginHorizontal: 8 }} />
+              <Text style={[styles.checkboxLabel, val && { color: colors.primary, fontWeight: '600' }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     );
   };
@@ -4616,6 +4711,69 @@ export function OccHealthConsultationScreen({
                 <Text style={[styles.checkboxLabel, val && { color: colors.warningDark, fontWeight: '600' }]}>{label}</Text>
               </TouchableOpacity>
             ))}
+
+            {/* Mining-specific restriction checkboxes */}
+            <Text style={[styles.fieldLabel, { marginTop: 10, marginBottom: 6, color: colors.textSecondary }]}>Secteur minier :</Text>
+            {([
+              [restrictUndergroundMine, setRestrictUndergroundMine, 'layers', 'Mine Souterraine'],
+              [restrictOpencastMine, setRestrictOpencastMine, 'earth', 'Mine à Ciel Ouvert'],
+              [restrictNoiseExposure, setRestrictNoiseExposure, 'volume-high', 'Exposition aux Bruits'],
+              [restrictMobileEquipment, setRestrictMobileEquipment, 'construct', 'Équipement Mobile'],
+            ] as [boolean, (v: boolean) => void, keyof typeof Ionicons.glyphMap, string][]).map(([val, setter, icon, label]) => (
+              <TouchableOpacity
+                key={label}
+                style={[styles.checkboxRow, { marginBottom: 8 }]}
+                onPress={() => setter(!val)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkbox, val && styles.checkboxActive]}>
+                  {val && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                </View>
+                <Ionicons name={icon} size={16} color={val ? colors.warning : colors.textSecondary} style={{ marginHorizontal: 8 }} />
+                <Text style={[styles.checkboxLabel, val && { color: colors.warningDark, fontWeight: '600' }]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {/* PERMANENT / TEMPORAIRE toggle */}
+            <View style={[styles.formGroup, { marginTop: 8 }]}>
+              <Text style={styles.fieldLabel}>Type de restriction</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.checkboxRow, { flex: 1, padding: 10, borderRadius: 8, backgroundColor: restrictIsPermanent ? '#FEE2E2' : colors.surface, borderWidth: 1, borderColor: restrictIsPermanent ? colors.error : colors.border }]}
+                  onPress={() => setRestrictIsPermanent(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, restrictIsPermanent && { backgroundColor: colors.error, borderColor: colors.error }]}>
+                    {restrictIsPermanent && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={[styles.checkboxLabel, { marginLeft: 8, color: restrictIsPermanent ? colors.error : colors.text }]}>PERMANENT</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.checkboxRow, { flex: 1, padding: 10, borderRadius: 8, backgroundColor: !restrictIsPermanent ? '#FFFBEB' : colors.surface, borderWidth: 1, borderColor: !restrictIsPermanent ? colors.warning : colors.border }]}
+                  onPress={() => setRestrictIsPermanent(false)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, !restrictIsPermanent && { backgroundColor: colors.warning, borderColor: colors.warning }]}>
+                    {!restrictIsPermanent && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={[styles.checkboxLabel, { marginLeft: 8, color: !restrictIsPermanent ? colors.warning : colors.text }]}>TEMPORAIRE</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Date de révision (shown only for TEMPORAIRE) */}
+            {!restrictIsPermanent && (
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Date de révision <Text style={styles.helperText}>(YYYY-MM-DD)</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  value={restrictRevisionDate}
+                  onChangeText={setRestrictRevisionDate}
+                  placeholder="Ex: 2026-09-01"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+            )}
 
             {/* Port de charge max */}
             <View style={[styles.formGroup, { marginTop: 4 }]}>

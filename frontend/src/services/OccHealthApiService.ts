@@ -51,6 +51,7 @@ function workerToPatient(w: any): OccupationalHealthPatient {
     accessCount: 0,
     // OH-specific
     employeeId: w.employee_id ?? '',
+    nationalId: w.national_id ?? '',
     company: w.enterprise_name ?? w.enterprise?.name ?? w.company ?? 'Non spécifié',
     sector: w.enterprise_sector ?? w.enterprise?.sector ?? w.sector ?? 'other',
     site: w.work_site_name ?? w.work_site?.name ?? w.site ?? 'Non spécifié',
@@ -78,6 +79,7 @@ function workerToPatient(w: any): OccupationalHealthPatient {
 function patientToWorker(p: OccupationalHealthPatient): Record<string, any> {
   return {
     employee_id: p.employeeId,
+    national_id: p.nationalId ?? '',
     first_name: p.firstName,
     last_name: p.lastName,
     middle_name: p.middleName ?? '',
@@ -129,6 +131,7 @@ function patientToWorkerPatch(p: OccupationalHealthPatient): Record<string, any>
 
   const payload: Record<string, any> = {};
   putIfNonEmpty(payload, 'employee_id', p.employeeId);
+  putIfNonEmpty(payload, 'national_id', p.nationalId);
   putIfNonEmpty(payload, 'first_name', p.firstName);
   putIfNonEmpty(payload, 'last_name', p.lastName);
   putIfNonEmpty(payload, 'date_of_birth', p.dateOfBirth);

@@ -1304,7 +1304,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ─────────────────────────────────────────────────────────────────────
         # 4.  ROW 2 — two-column card: Worker profile  |  Examination info
         # ─────────────────────────────────────────────────────────────────────
-        ROW2_H = 116
+        ROW2_H = 136
         card(ML,              y, col_w, ROW2_H)
         card(ML + col_w + COL_GAP, y, col_w, ROW2_H)
 
@@ -1313,15 +1313,22 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         cy_l -= 9
         cy_l = kv("Nom complet :", worker.full_name,                               ML + 6, cy_l)
         cy_l = kv("Matricule :",   worker.employee_id or '—',                      ML + 6, cy_l)
+        if getattr(worker, 'national_id', None):
+            cy_l = kv("N° Identité :", worker.national_id,                         ML + 6, cy_l, kw=80)
         dob_str = worker.date_of_birth.strftime('%d/%m/%Y') if worker.date_of_birth else '—'
-        cy_l = kv("Né(e) le :",    f"{dob_str}  (âge {worker.age} ans)",           ML + 6, cy_l, kw=68)
+        cy_l = kv("Âge :",         f"{worker.age} ans  (né(e) le {dob_str})",     ML + 6, cy_l, kw=42)
         gender_disp = worker.get_gender_display() if hasattr(worker, 'get_gender_display') else worker.gender.capitalize()
         cy_l = kv("Sexe :",        gender_disp,                                     ML + 6, cy_l)
         cy_l = kv("Poste :",       (worker.job_title or '—')[:34],                 ML + 6, cy_l)
         cat_disp = worker.get_job_category_display() if hasattr(worker, 'get_job_category_display') else worker.job_category
         cy_l = kv("Catégorie :",   cat_disp,                                        ML + 6, cy_l)
-        if worker.work_site:
-            cy_l = kv("Site :",    str(worker.work_site)[:30],                     ML + 6, cy_l)
+        dept_name = ''
+        if getattr(worker, 'occ_department', None):
+            dept_name = str(worker.occ_department)
+        elif getattr(worker, 'work_site', None):
+            dept_name = str(worker.work_site)
+        if dept_name:
+            cy_l = kv("Départ./GSP :", dept_name[:30],                            ML + 6, cy_l, kw=80)
 
         # — Right: Examination —
         cy_r = sec_header("EXAMEN MÉDICAL DE RÉFÉRENCE", y, left_x=rx, right_x=MR)
@@ -1337,6 +1344,36 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
             cy_r = kv("Prochain examen :", worker.next_exam_due.strftime('%d %b %Y'), rx + 6, cy_r, kw=105)
 
         y -= ROW2_H + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 4b. EXAMENS EFFECTUÉS (checklist mirroring paper cert)
+        # ─────────────────────────────────────────────────────────────────────
+        EXAM_ITEMS = [
+            ("Examen Médical",                  hasattr(exam, 'physical_exam')),
+            ("Audiométrie",                     hasattr(exam, 'audiometry')),
+            ("Spirométrie",                     hasattr(exam, 'spirometry')),
+            ("Test de Vision",                  hasattr(exam, 'vision_test')),
+            ("Radiographie Thoracique",         hasattr(exam, 'xray_result')),
+            ("Radio Colonne Vertébrale",        exam.spinal_xray_done),
+            ("Tests de Laboratoire",            exam.lab_tests_done),
+            ("ECG",                             exam.ecg_done),
+        ]
+        ex_rows = (len(EXAM_ITEMS) + 1) // 2
+        ex_h    = ex_rows * 13 + 38
+        card(ML, y, CW, ex_h, PANEL_BG)
+        cy_ex = sec_header("EXAMENS EFFECTUÉS", y)
+        cy_ex -= 8
+        row_y_ex = cy_ex
+        half_ex  = (CW - 8) / 2
+        left_ex  = EXAM_ITEMS[:ex_rows]
+        right_ex = EXAM_ITEMS[ex_rows:]
+        for i in range(max(len(left_ex), len(right_ex))):
+            if i < len(left_ex):
+                check_row(ML + 4,           row_y_ex, left_ex[i][0],  left_ex[i][1],  half_ex)
+            if i < len(right_ex):
+                check_row(ML + 4 + half_ex, row_y_ex, right_ex[i][0], right_ex[i][1], half_ex)
+            row_y_ex -= 13
+        y -= max(ex_h, y - row_y_ex + 4) + 10
 
         # ─────────────────────────────────────────────────────────────────────
         # 5.  MEDICAL DECISION RATIONALE
@@ -1355,23 +1392,27 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # 6.  RESTRICTIONS (structured boolean checklist)
         # ─────────────────────────────────────────────────────────────────────
         RESTRICTION_ITEMS = [
-            ("Interdit de conduire",             certificate.restrict_no_driving),
-            ("Interdit travail en hauteur",       certificate.restrict_no_height_work),
+            ("Mine Souterraine",                certificate.restrict_underground_mine),
+            ("Mine à Ciel Ouvert",              certificate.restrict_opencast_mine),
+            ("Travail en Hauteur",              certificate.restrict_no_height_work),
+            ("Milieux Confinés",                certificate.restrict_no_confined_space),
+            ("Exposition aux Bruits",           certificate.restrict_noise_exposure),
+            ("Équipement Mobile",               certificate.restrict_mobile_equipment),
+            ("Conduite de Véhicule",            certificate.restrict_no_driving),
             (f"Port de charge ≤ {certificate.restrict_max_lifting_kg} kg"
              if certificate.restrict_max_lifting_kg else "Limite port de charge",
              bool(certificate.restrict_max_lifting_kg)),
-            ("Interdit travail de nuit",          certificate.restrict_no_night_shift),
-            ("Poste aménagé requis",              certificate.restrict_adapted_workstation),
-            ("Horaires aménagés requis",          certificate.restrict_reduced_hours),
-            ("Interdit espaces confinés",         certificate.restrict_no_confined_space),
-            ("Interdit exposition chimique",      certificate.restrict_no_chemical_exposure),
+            ("Travail de Nuit",                 certificate.restrict_no_night_shift),
+            ("Poste aménagé requis",            certificate.restrict_adapted_workstation),
+            ("Horaires aménagés requis",        certificate.restrict_reduced_hours),
+            ("Exposition Chimique",             certificate.restrict_no_chemical_exposure),
         ]
         has_text = bool(certificate.restrictions or certificate.work_limitations or certificate.restrict_custom)
 
         if any(r[1] for r in RESTRICTION_ITEMS) or has_text:
             n_col  = 2
             rows   = (len(RESTRICTION_ITEMS) + n_col - 1) // n_col
-            rest_h = max(60, rows * 14 + 42 + (30 if has_text else 0))
+            rest_h = max(80, rows * 14 + 54 + (30 if has_text else 0))
             card(ML, y, CW, rest_h, HexColor('#FFFBEB'))
             # amber left border
             pdf.setFillColor(HexColor('#D97706'))
@@ -1404,6 +1445,20 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
                 row_y = wrap(f"Limitations de travail: {certificate.work_limitations.strip()}",
                              ML + 8, row_y, CW - 20, fs=8.5, color=GREY_900)
 
+            # PERMANENT / TEMPORAIRE indicator
+            perm_label = "PERMANENT" if certificate.restriction_is_permanent else "TEMPORAIRE"
+            perm_color = HexColor('#DC2626') if certificate.restriction_is_permanent else HexColor('#D97706')
+            row_y -= 5
+            pdf.setFillColor(perm_color)
+            pdf.setFont("Helvetica-Bold", 8)
+            pdf.drawString(ML + 8, row_y, f"Type de restriction : {perm_label}")
+            if not certificate.restriction_is_permanent and certificate.restriction_revision_date:
+                pdf.setFont("Helvetica", 8)
+                pdf.setFillColor(GREY_700)
+                pdf.drawString(ML + 8 + 176, row_y,
+                               f"Date de révision : {certificate.restriction_revision_date.strftime('%d/%m/%Y')}")
+            row_y -= 12
+
             y -= max(rest_h, y - row_y + 4) + 10
 
         # ─────────────────────────────────────────────────────────────────────
@@ -1420,6 +1475,21 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
             if certificate.follow_up_instructions:
                 cy_fu = wrap(certificate.follow_up_instructions.strip(), ML + 8, cy_fu, CW - 20, fs=9, color=GREY_900)
             y -= max(fu_h, y - cy_fu + 4) + 10
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 7b. RECOMMANDATIONS (free text from exam)
+        # ─────────────────────────────────────────────────────────────────────
+        reco_text = (getattr(exam, 'recommendations', None) or '').strip()
+        if reco_text:
+            reco_words = len(reco_text.split())
+            reco_h = max(50, reco_words // 10 * 12 + 38)
+            card(ML, y, CW, reco_h, HexColor('#F0FDF4'))
+            pdf.setFillColor(HexColor('#15803D'))
+            pdf.rect(ML, y - reco_h, 4, reco_h, fill=True, stroke=False)
+            cy_reco = sec_header("RECOMMANDATIONS", y)
+            cy_reco -= 9
+            cy_reco = wrap(reco_text, ML + 8, cy_reco, CW - 20, fs=9, color=GREY_900)
+            y -= max(reco_h, y - cy_reco + 4) + 10
 
         # ─────────────────────────────────────────────────────────────────────
         # 8.  LEGAL COMPLIANCE

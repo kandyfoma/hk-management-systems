@@ -544,6 +544,7 @@ class Worker(models.Model):
     
     # Personal Information
     employee_id = models.CharField(_("ID Employé"), max_length=50, unique=True)
+    national_id = models.CharField(_("N° Identité (CIN)"), max_length=50, blank=True, help_text=_("Numéro de la carte nationale d'identité"))
     first_name = models.CharField(_("Prénom"), max_length=100)
     last_name = models.CharField(_("Nom"), max_length=100)
     date_of_birth = models.DateField(_("Date Naissance"))
@@ -715,6 +716,11 @@ class MedicalExamination(models.Model):
     functional_complaints_at_work = models.TextField(
         _("Plaintes fonctionnelles au travail"), blank=True,
     )
+
+    # Individual test completion flags (for certificate checklist)
+    spinal_xray_done = models.BooleanField(_("Radio Colonne Vertébrale effectuée"), default=False)
+    lab_tests_done   = models.BooleanField(_("Tests de laboratoire effectués"), default=False)
+    ecg_done         = models.BooleanField(_("ECG effectué"), default=False)
 
     # Examination results summary
     examination_completed = models.BooleanField(_("Examen Terminé"), default=False)
@@ -1198,6 +1204,14 @@ class FitnessCertificate(models.Model):
     restrict_custom = models.TextField(
         _("Restriction personnalisée"), blank=True, help_text="Restriction non couverte par les cases ci-dessus",
     )
+
+    # ── Restrictions secteur minier ───────────────────────────────────────────
+    restrict_underground_mine = models.BooleanField(_("Interdit mine souterraine"), default=False)
+    restrict_opencast_mine = models.BooleanField(_("Interdit mine à ciel ouvert"), default=False)
+    restrict_noise_exposure = models.BooleanField(_("Interdit exposition aux bruits"), default=False)
+    restrict_mobile_equipment = models.BooleanField(_("Interdit équipement mobile"), default=False)
+    restriction_is_permanent = models.BooleanField(_("Restriction permanente"), default=False, help_text=_("True = PERMANENT, False = TEMPORAIRE"))
+    restriction_revision_date = models.DateField(_("Date de révision"), null=True, blank=True)
 
     # ── Conformité légale ─────────────────────────────────────────────────────
     legal_article_reference = models.CharField(
