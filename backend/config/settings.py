@@ -252,16 +252,16 @@ LOGGING = {
 JAZZMIN_SETTINGS = {
     # ============= Site Identity =============
     "show_ui_builder": False,
-    "site_title": "KAT Management Admin",
-    "site_header": "KAT Healthcare System",
-    "site_brand": "KAT Santé",
+    "site_title": "KAT Management Systems",
+    "site_header": "KAT Management Systems",
+    "site_brand": "KAT Management",
     "site_logo": "branding/admin-logo.png",
     "site_logo_classes": "img-circle",
     "site_icon": "branding/admin-icon.png",
     "login_logo": "branding/admin-logo.png",
     "login_logo_dark": "branding/admin-logo.png",
-    "welcome_sign": "Welcome to KAT Healthcare Management System",
-    "copyright": "© 2025 KAT Management Systems - RD Congo",
+    "welcome_sign": "Welcome to KAT Management Systems",
+    "copyright": "\u00a9 2025 KAT Management Systems \u2013 R\u00e9publique D\u00e9mocratique du Congo",
     
     # ============= Search & User Avatar =============
     "search_model": "accounts.User",
@@ -366,36 +366,36 @@ JAZZMIN_SETTINGS = {
 }
 
 # ============= Jazzmin UI Tweaks - Brand Colors from Frontend =============
-# Colors: Primary #003366, Secondary #c51618, Info #3182CE
+# Colors: Primary #122056 (dark navy), Secondary #5B65DC (purple-blue)
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
     "body_small_text": False,
     "brand_small_text": False,
-    "brand_colour": False,
+    "brand_colour": "navbar-primary",
     "accent": "accent-primary",
     "navbar": "navbar-dark",
-    "no_navbar_border": False,
+    "no_navbar_border": True,
     "navbar_fixed": True,
     "layout_boxed": False,
     "footer_fixed": False,
     "sidebar_fixed": True,
-    "sidebar": "sidebar-light-primary",
+    "sidebar": "sidebar-dark-primary",
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
     "sidebar_nav_child_indent": True,
     "sidebar_nav_compact_style": True,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": True,
-    "theme": "minty",
+    "theme": "flatly",
     "dark_mode_theme": None,
     "button_classes": {
-        "primary": "btn-outline-primary",
-        "secondary": "btn-outline-secondary",
-        "info": "btn-outline-info",
-        "warning": "btn-outline-warning",
-        "danger": "btn-outline-danger",
-        "success": "btn-outline-success",
+        "primary": "btn-primary",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
     },
     "actions_sticky_top": True,
 }
