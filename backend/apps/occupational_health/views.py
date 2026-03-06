@@ -1187,7 +1187,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ─────────────────────────────────────────────────────────────────────
         # 1.  HEADER BANNER
         # ─────────────────────────────────────────────────────────────────────
-        HDR_H = 86
+        HDR_H = 96
         # Main navy block
         pdf.setFillColor(NAVY)
         pdf.rect(0, H - HDR_H, W, HDR_H, fill=True, stroke=False)
@@ -1206,12 +1206,12 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # Main title
         pdf.setFillColor(WHITE)
         pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawCentredString(W / 2, H - 38, "CERTIFICAT MÉDICAL D'APTITUDE AU TRAVAIL")
+        pdf.drawCentredString(W / 2, H - 46, "CERTIFICAT MÉDICAL D'APTITUDE AU TRAVAIL")
 
         # Subtitle
         pdf.setFont("Helvetica", 8.5)
         pdf.setFillColor(HexColor('#93C5FD'))
-        pdf.drawCentredString(W / 2, H - 53, "Occupational Health Fitness Certificate  |  Medical Surveillance Program")
+        pdf.drawCentredString(W / 2, H - 62, "Occupational Health Fitness Certificate  |  Medical Surveillance Program")
 
         # Top-right: certificate number
         pdf.setFillColor(GOLD)
@@ -1260,14 +1260,14 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ─────────────────────────────────────────────────────────────────────
         COL_GAP = 8
         col_w   = (CW - COL_GAP) / 2
-        ROW1_H  = 96
+        ROW1_H  = 104
 
         card(ML,              y, col_w, ROW1_H)
         card(ML + col_w + COL_GAP, y, col_w, ROW1_H)
 
         # — Left: Organisation —
         cy_l = sec_header("ÉTABLISSEMENT / ORGANISATION", y, right_x=ML + col_w)
-        cy_l -= 3
+        cy_l -= 9
         ent_name  = (getattr(enterprise, 'name',    None) or '—')
         ent_addr  = (getattr(enterprise, 'address', None) or '').strip()
         ent_phone = (getattr(enterprise, 'phone',   None) or '').strip()
@@ -1291,7 +1291,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # — Right: Certificate details —
         rx = ML + col_w + COL_GAP
         cy_r = sec_header("INFORMATIONS DU CERTIFICAT", y, left_x=rx, right_x=MR)
-        cy_r -= 3
+        cy_r -= 9
         validity_days = (certificate.valid_until - certificate.issue_date).days
         cy_r = kv("Numéro :",        certificate.certificate_number,             rx + 6, cy_r)
         cy_r = kv("Émis le :",       certificate.issue_date.strftime('%d %b %Y'), rx + 6, cy_r)
@@ -1304,13 +1304,13 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ─────────────────────────────────────────────────────────────────────
         # 4.  ROW 2 — two-column card: Worker profile  |  Examination info
         # ─────────────────────────────────────────────────────────────────────
-        ROW2_H = 108
+        ROW2_H = 116
         card(ML,              y, col_w, ROW2_H)
         card(ML + col_w + COL_GAP, y, col_w, ROW2_H)
 
         # — Left: Worker —
         cy_l = sec_header("TRAVAILLEUR (WORKER PROFILE)", y, right_x=ML + col_w)
-        cy_l -= 3
+        cy_l -= 9
         cy_l = kv("Nom complet :", worker.full_name,                               ML + 6, cy_l)
         cy_l = kv("Matricule :",   worker.employee_id or '—',                      ML + 6, cy_l)
         dob_str = worker.date_of_birth.strftime('%d/%m/%Y') if worker.date_of_birth else '—'
@@ -1325,7 +1325,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
 
         # — Right: Examination —
         cy_r = sec_header("EXAMEN MÉDICAL DE RÉFÉRENCE", y, left_x=rx, right_x=MR)
-        cy_r -= 3
+        cy_r -= 9
         cy_r = kv("Type d'examen :", exam.get_exam_type_display(),             rx + 6, cy_r, kw=95)
         cy_r = kv("Date :",          exam.exam_date.strftime('%d %b %Y'),      rx + 6, cy_r)
         if exam.location:
@@ -1344,10 +1344,10 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         if certificate.decision_rationale:
             words_n  = len((certificate.decision_rationale or '').split())
             est_lines = max(2, words_n // 9 + 1)
-            rat_h    = max(46, est_lines * 12 + 28)
+            rat_h    = max(54, est_lines * 12 + 36)
             card(ML, y, CW, rat_h, LIGHT_BLUE)
             cy_rat = sec_header("JUSTIFICATION DE LA DÉCISION MÉDICALE", y)
-            cy_rat -= 5
+            cy_rat -= 10
             cy_rat  = wrap(certificate.decision_rationale.strip(), ML + 8, cy_rat, CW - 20, fs=9, color=GREY_900)
             y -= max(rat_h, y - cy_rat + 4) + 10
 
@@ -1371,7 +1371,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         if any(r[1] for r in RESTRICTION_ITEMS) or has_text:
             n_col  = 2
             rows   = (len(RESTRICTION_ITEMS) + n_col - 1) // n_col
-            rest_h = max(52, rows * 14 + 34 + (30 if has_text else 0))
+            rest_h = max(60, rows * 14 + 42 + (30 if has_text else 0))
             card(ML, y, CW, rest_h, HexColor('#FFFBEB'))
             # amber left border
             pdf.setFillColor(HexColor('#D97706'))
@@ -1381,7 +1381,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
             pdf.roundRect(ML, y - rest_h, CW, rest_h, 3, fill=False, stroke=True)
 
             cy_rest = sec_header("RESTRICTIONS & LIMITATIONS AU TRAVAIL", y)
-            cy_rest -= 2
+            cy_rest -= 8
             half = (CW - 8) / 2
             left_items  = RESTRICTION_ITEMS[:rows]
             right_items = RESTRICTION_ITEMS[rows:]
@@ -1411,10 +1411,10 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ─────────────────────────────────────────────────────────────────────
         if certificate.requires_follow_up:
             words_n  = len((certificate.follow_up_instructions or '').split())
-            fu_h     = max(52, words_n // 10 * 12 + 40)
+            fu_h     = max(60, words_n // 10 * 12 + 48)
             card(ML, y, CW, fu_h, HexColor('#EFF6FF'))
             cy_fu = sec_header("PLAN DE SUIVI MÉDICAL", y)
-            cy_fu -= 4
+            cy_fu -= 9
             if certificate.follow_up_frequency_months:
                 cy_fu = kv("Fréquence :", f"Tous les {certificate.follow_up_frequency_months} mois", ML + 8, cy_fu, kw=75)
             if certificate.follow_up_instructions:
@@ -1438,10 +1438,10 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
                 f"(déclaration CNSS/IPM)."
             )
         if legal_lines:
-            leg_h = len(legal_lines) * 14 + 30
+            leg_h = len(legal_lines) * 14 + 38
             card(ML, y, CW, leg_h, PANEL_BG)
             cy_leg = sec_header("CONFORMITÉ LÉGALE & RÉGLEMENTAIRE", y)
-            cy_leg -= 4
+            cy_leg -= 9
             for ll in legal_lines:
                 cy_leg = wrap(ll, ML + 8, cy_leg, CW - 20, fs=8, leading=12, color=GREY_700)
             y -= max(leg_h, y - cy_leg + 4) + 10
@@ -1449,7 +1449,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ─────────────────────────────────────────────────────────────────────
         # 9.  SIGNATURE BLOCK
         # ─────────────────────────────────────────────────────────────────────
-        SIG_H = 86
+        SIG_H = 94
         if y - SIG_H < 50:
             pdf.showPage()
             # Re-draw watermark on new page
@@ -1473,7 +1473,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
         # ── Left half: Doctor / Signature ────────────────────────────────────
         sig_col_w = col_w
         cy_sig = sec_header("MÉDECIN ÉVALUATEUR & SIGNATURE", sig_top, right_x=ML + sig_col_w)
-        cy_sig -= 3
+        cy_sig -= 9
         pdf.setFont("Helvetica-Bold", 10)
         pdf.setFillColor(NAVY)
         pdf.drawString(ML + 8, cy_sig, doctor_name)
@@ -1501,7 +1501,7 @@ class FitnessCertificateViewSet(viewsets.ModelViewSet):
 
         # Circular certification badge
         cx = stamp_lx + (col_w - 52) + 26
-        cy = cy_stamp  - 26
+        cy = cy_stamp  - 30
         pdf.setFillColor(DEC_BG)
         pdf.setStrokeColor(DEC_BORDER)
         pdf.setLineWidth(2.5)
