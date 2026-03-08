@@ -13,6 +13,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count, Q, Sum, Avg, F
 from django.utils import timezone
 from datetime import datetime, timedelta, date
+import calendar
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 
@@ -1698,6 +1699,141 @@ class OccupationalDiseaseViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(reported_by=self.request.user)
 
+# ─── Regulatory Report Auto-Creation Helper ──────────────────────────────────
+
+def _auto_create_regulatory_reports(incident, user):
+    """
+    Auto-create draft CNSS and ITM regulatory reports when a reportable incident
+    occurs in the mining sector (DRC).
+
+    Legal basis:
+      • CNSS: Code du Travail Art. 105-125 — 48h declaration obligation
+      • ITM:  Code Minier + Ordonnance 73-119 — 24-48h declaration obligation
+              For fatalities: immediate (24h); for AT: 48h
+
+    Returns a list of dicts describing created reports, e.g.:
+      [{'authority': 'CNSS', 'reference': 'CNSS-20260308-AB12CD', 'report_type': 'incident'}]
+    """
+    from datetime import timedelta
+
+    category  = incident.category
+    severity  = incident.severity
+    inc_date  = incident.incident_date
+    enterprise = incident.enterprise
+
+    # ── Mapping: incident category → regulatory report type ─────────────────
+    CNSS_TYPE_MAP = {
+        'fatality':                    'fatality',
+        'lost_time_injury':            'incident',
+        'medical_treatment':           'incident',
+        'occupational_disease_incident': 'occupational_disease',
+    }
+    ITM_TYPE_MAP = {
+        'fatality':                    'fatal_incident',
+        'lost_time_injury':            'work_accident_declaration',
+        'medical_treatment':           'work_accident_declaration',
+        'explosion':                   'severe_incident',
+        'fire':                        'severe_incident',
+        'chemical_spill':              'severe_incident',
+        'fall_from_height':            'severe_incident',
+        'machinery_accident':          'severe_incident',
+        'occupational_disease_incident': 'occupational_disease_notice',
+    }
+
+    # ── Trigger rules ────────────────────────────────────────────────────────
+    should_create_cnss = (
+        category in ('fatality', 'lost_time_injury') or
+        (category == 'medical_treatment' and severity >= 3) or
+        category == 'occupational_disease_incident'
+    )
+    should_create_itm = (
+        category in ('fatality', 'lost_time_injury') or
+        (category == 'medical_treatment' and severity >= 3) or
+        (category in ('explosion', 'fire', 'chemical_spill', 'fall_from_height', 'machinery_accident') and severity >= 4) or
+        category == 'occupational_disease_incident'
+    )
+
+    if not (should_create_cnss or should_create_itm):
+        return []
+
+    # 48-hour legal deadline (24h for fatalities)
+    deadline_days = 1 if category == 'fatality' else 2
+    deadline = inc_date + timedelta(days=deadline_days)
+
+    # Shared pre-populated content
+    base_content = {
+        'incident_number':          incident.incident_number,
+        'incident_date':            str(inc_date),
+        'incident_time':            str(incident.incident_time),
+        'location':                 incident.location_description,
+        'description':              incident.description,
+        'immediate_cause':          incident.immediate_cause,
+        'severity':                 incident.severity,
+        'category':                 incident.category,
+        'work_days_lost':           incident.work_days_lost,
+        'first_aid_given':          incident.first_aid_given,
+        'medical_treatment_required': incident.medical_treatment_required,
+        'auto_generated':           True,
+    }
+
+    created_reports = []
+
+    if should_create_cnss:
+        cnss_type = CNSS_TYPE_MAP.get(category, 'incident')
+        cnss = RegulatoryCNSSReport(
+            enterprise=enterprise,
+            report_type=cnss_type,
+            report_period_start=inc_date,
+            report_period_end=inc_date,
+            status='draft',
+            content_json=base_content,
+            related_incident=incident,
+            prepared_by=user,
+            notes=(
+                f"Déclaration automatique — Incident {incident.incident_number}.\n"
+                f"⚠️  Délai légal CNSS : 48h (avant le {deadline.strftime('%d/%m/%Y')}).\n"
+                f"Veuillez compléter et soumettre ce rapport avant l'échéance."
+            ),
+        )
+        cnss.save()
+        created_reports.append({
+            'authority': 'CNSS',
+            'reference': cnss.reference_number,
+            'report_type': cnss_type,
+            'deadline': str(deadline),
+        })
+
+    if should_create_itm:
+        itm_type = ITM_TYPE_MAP.get(category, 'work_accident_declaration')
+        itm = DRCRegulatoryReport(
+            enterprise=enterprise,
+            report_type=itm_type,
+            report_period_start=inc_date,
+            report_period_end=inc_date,
+            status='draft',
+            content_json=base_content,
+            submission_recipient='Inspection du Travail et des Mines (ITM)',
+            declaration_deadline=deadline,
+            workers_affected_count=incident.injured_workers.count() or None,
+            required_actions=incident.corrective_actions_planned or '',
+            submitted_by=user,
+        )
+        itm.save()
+        itm.related_incidents.add(incident)
+        created_reports.append({
+            'authority': 'ITM',
+            'reference': itm.reference_number,
+            'report_type': itm_type,
+            'deadline': str(deadline),
+        })
+
+    # Mark incident as reportable_to_authorities
+    incident.reportable_to_authorities = True
+    incident.save(update_fields=['reportable_to_authorities'])
+
+    return created_reports
+
+
 class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
     """Workplace incident management API"""
     
@@ -1740,6 +1876,22 @@ class WorkplaceIncidentViewSet(viewsets.ModelViewSet):
             enterprise=enterprise,
             status_history=status_history,
         )
+
+    def create(self, request, *args, **kwargs):
+        """Create incident and auto-generate regulatory reports if required."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        incident = serializer.instance
+
+        # Auto-generate CNSS / ITM draft reports for notifiable incidents
+        auto_reports = _auto_create_regulatory_reports(incident, request.user)
+
+        headers = self.get_success_headers(serializer.data)
+        response_data = dict(serializer.data)
+        if auto_reports:
+            response_data['regulatory_reports_auto_created'] = auto_reports
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -3164,7 +3316,18 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
         return RegulatoryCNSSReport.objects.select_related(
             'enterprise', 'prepared_by', 'related_incident', 'related_disease'
         )
-    
+
+    def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        enterprise = serializer.validated_data.get('enterprise')
+        if not enterprise:
+            enterprise = getattr(self.request.user, 'enterprise', None)
+        if not enterprise:
+            enterprise = Enterprise.objects.filter(is_active=True).first() or Enterprise.objects.first()
+        if not enterprise:
+            raise ValidationError({'enterprise': 'No enterprise found for this user.'})
+        serializer.save(enterprise=enterprise, prepared_by=self.request.user)
+
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """Submit CNSS report"""
@@ -3200,9 +3363,15 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
         enterprise_id = request.data.get('enterprise_id')
         month = request.data.get('month', date.today().month)
         year = request.data.get('year', date.today().year)
-        
-        enterprise = Enterprise.objects.get(id=enterprise_id)
-        
+
+        try:
+            enterprise = Enterprise.objects.get(id=enterprise_id)
+        except Enterprise.DoesNotExist:
+            return Response(
+                {'error': f'Enterprise {enterprise_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         # Gather monthly statistics
         stats = SiteHealthMetrics.objects.filter(
             enterprise=enterprise, year=year, month=month
@@ -3214,7 +3383,16 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Check for duplicate before creation
+        reference_number = f"CNSS-{enterprise_id}-{year}-{month:02d}"
+        if RegulatoryCNSSReport.objects.filter(reference_number=reference_number).exists():
+            return Response(
+                {'error': f'A report for this period already exists ({reference_number})'},
+                status=status.HTTP_409_CONFLICT
+            )
+
         # Create report
+        _, last_day = calendar.monthrange(year, month)
         report_content = {
             'total_workers': stats.total_workers,
             'incidents': stats.lost_time_injuries + stats.medical_treatment_cases,
@@ -3229,9 +3407,9 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
         report = RegulatoryCNSSReport.objects.create(
             enterprise=enterprise,
             report_type='monthly_stats',
-            reference_number=f"CNSS-{enterprise_id}-{year}-{month:02d}",
+            reference_number=reference_number,
             report_period_start=date(year, month, 1),
-            report_period_end=date(year, month, 28),
+            report_period_end=date(year, month, last_day),
             content_json=report_content,
             prepared_by=request.user,
             status='ready_for_submission'
@@ -3246,11 +3424,11 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
 
 class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
     """
-    DRC labour ministry regulatory report management
+    ITM (Inspection du Travail et des Mines) regulatory report management
     
-    GET /api/drc-reports/ - List DRC reports
+    GET /api/drc-reports/ - List ITM reports
     POST /api/drc-reports/ - Create report
-    POST /api/drc-reports/{id}/submit/ - Submit to DRC ministry
+    POST /api/drc-reports/{id}/submit/ - Submit to ITM
     """
     
     serializer_class = DRCRegulatoryReportSerializer
@@ -3265,16 +3443,33 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
         return DRCRegulatoryReport.objects.select_related(
             'enterprise', 'submitted_by'
         ).prefetch_related('related_incidents', 'related_diseases')
-    
+
+    def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        enterprise = serializer.validated_data.get('enterprise')
+        if not enterprise:
+            enterprise = getattr(self.request.user, 'enterprise', None)
+        if not enterprise:
+            enterprise = Enterprise.objects.filter(is_active=True).first() or Enterprise.objects.first()
+        if not enterprise:
+            raise ValidationError({'enterprise': 'No enterprise found for this user.'})
+        serializer.save(enterprise=enterprise, submitted_by=self.request.user)
+
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         """Submit DRC report"""
         report = self.get_object()
-        
+
+        if report.status in ('submitted', 'approved'):
+            return Response(
+                {'error': f'Report is already {report.status} and cannot be re-submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         report.status = 'submitted'
         report.submitted_date = timezone.now()
         report.submission_method = request.data.get('method', 'email')
-        report.submission_recipient = request.data.get('recipient', 'Ministère du Travail')
+        report.submission_recipient = request.data.get('recipient', 'Inspection du Travail et des Mines (ITM)')
         report.save()
         
         return Response({

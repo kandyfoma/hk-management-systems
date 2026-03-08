@@ -260,6 +260,7 @@ JAZZMIN_SETTINGS = {
     "site_icon": "branding/admin-icon.png",
     "login_logo": "branding/admin-logo.png",
     "login_logo_dark": "branding/admin-logo.png",
+    "custom_css": "admin/css/custom.css",
     "welcome_sign": "Welcome to KAT Management Systems",
     "copyright": "\u00a9 2025 KAT Management Systems \u2013 R\u00e9publique D\u00e9mocratique du Congo",
     

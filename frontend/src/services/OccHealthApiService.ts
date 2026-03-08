@@ -1508,6 +1508,11 @@ export class OccHealthApiService {
     submission_method?: string;
     submission_recipient?: string;
     required_actions?: string;
+    itm_office?: string;
+    itm_inspection_reference?: string;
+    declaration_deadline?: string;
+    workers_affected_count?: number;
+    accident_datetime?: string;
   }): Promise<{ data: any | null; error?: string }> {
     try {
       const res = await this.api.post(`${OH}/drc-reports/`, payload);
@@ -1526,6 +1531,75 @@ export class OccHealthApiService {
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/cnss-reports/{id}/ */
+  async getCNSSReport(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/cnss-reports/${id}/`);
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/cnss-reports/{id}/submit/ */
+  async submitCNSSReport(id: number | string, method?: string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/cnss-reports/${id}/submit/`, { method: method ?? 'online' });
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** DELETE /api/occupational-health/cnss-reports/{id}/ */
+  async deleteCNSSReport(id: number | string): Promise<{ error?: string }> {
+    try {
+      const res = await this.api.delete(`${OH}/cnss-reports/${id}/`);
+      if (!res.success) return { error: res.error?.message };
+      return {};
+    } catch (e: any) {
+      return { error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/drc-reports/{id}/ */
+  async getDRCReport(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/drc-reports/${id}/`);
+      if (!res.success) return { data: null, error: res.error?.message };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/drc-reports/{id}/submit/ */
+  async submitDRCReport(id: number | string, opts?: { method?: string; recipient?: string }): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/drc-reports/${id}/submit/`, {
+        method: opts?.method ?? 'email',
+        recipient: opts?.recipient ?? 'Inspection du Travail et des Mines (ITM)',
+      });
+      if (!res.success) return { data: null, error: res.error?.message ?? JSON.stringify(res.errors) };
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** DELETE /api/occupational-health/drc-reports/{id}/ */
+  async deleteDRCReport(id: number | string): Promise<{ error?: string }> {
+    try {
+      const res = await this.api.delete(`${OH}/drc-reports/${id}/`);
+      if (!res.success) return { error: res.error?.message };
+      return {};
+    } catch (e: any) {
+      return { error: e?.message };
     }
   }
 
@@ -1683,6 +1757,57 @@ export class OccHealthApiService {
     try {
       const res = await this.api.delete(`${OH}/incident-attachments/${id}/`);
       if (!res.success) return { success: false, error: res.error?.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message };
+    }
+  }
+
+  // ─── Compliance Audits ──────────────────────────────────────
+  /** GET /api/occupational-health/compliance-audits/ */
+  async listComplianceAudits(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/compliance-audits/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/compliance-audits/{id}/ */
+  async getComplianceAudit(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/compliance-audits/${id}/`);
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/compliance-audits/ */
+  async createComplianceAudit(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/compliance-audits/`, payload);
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/compliance-audits/{id}/ */
+  async updateComplianceAudit(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/compliance-audits/${id}/`, payload);
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** DELETE /api/occupational-health/compliance-audits/{id}/ */
+  async deleteComplianceAudit(id: number | string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await this.api.delete(`${OH}/compliance-audits/${id}/`);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message };

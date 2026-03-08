@@ -22,46 +22,46 @@ DEMO_INVESTIGATIONS = [
         "status": "closed",
         "investigation_date": today - timedelta(days=60),
         "investigation_findings": (
-            "Worker suffered a laceration on the right hand while operating the conveyor belt "
-            "without wearing mandatory cut-resistant gloves. The safety guard was found to be "
-            "partially displaced. CCTV footage confirmed PPE non-compliance."
+            "Un travailleur a subi une lacération à la main droite lors de l'utilisation du convoyeur "
+            "sans porter les gants de protection obligatoires contre les coupures. Le garde de sécurité s'est avéré "
+            "partiellement déplacé. Les images de surveillance ont confirmé la non-conformité aux EPI."
         ),
         "rca_method": "5why",
         "rca_documentation": (
-            "1. Why: Worker was injured? → Hand contacted moving belt.\n"
-            "2. Why: Hand contacted belt? → Safety guard was displaced.\n"
-            "3. Why: Guard was displaced? → Maintenance inspection was overdue by 2 weeks.\n"
-            "4. Why: Inspection was overdue? → Scheduling system did not send reminder alerts.\n"
-            "5. Why: No alerts? → Preventive maintenance module was misconfigured after last software upgrade."
+            "1. Pourquoi : Le travailleur a-t-il été blessé ? → La main a contacté la courroie en mouvement.\n"
+            "2. Pourquoi : La main a-t-elle contacté la courroie ? → Le garde de sécurité était déplacé.\n"
+            "3. Pourquoi : Le garde s'était-il déplacé ? → L'inspection de maintenance était en retard de 2 semaines.\n"
+            "4. Pourquoi : L'inspection était-elle en retard ? → Le système de planification n'a pas envoyé d'alertes de rappel.\n"
+            "5. Pourquoi : Pas d'alertes ? → Le module de maintenance préventive a été mal configuré après la dernière mise à niveau logicielle."
         ),
         "root_causes": [
-            "Preventive maintenance scheduling misconfiguration",
-            "PPE compliance monitoring gap",
+            "Erreur de configuration de la planification de la maintenance préventive",
+            "Lacune du contrôle de conformité des EPI",
         ],
         "contributing_factors": [
-            "Inadequate supervisor oversight",
-            "Worker fatigue (overtime shift)",
+            "Supervision insuffisante du superviseur",
+            "Fatigue du travailleur (quart supplémentaire)",
         ],
         "corrective_actions": (
-            "1. Immediately re-install and lock safety guard on conveyor CB-07.\n"
-            "2. Reconfigure PM scheduling alerts in CMMS.\n"
-            "3. Mandatory refresher PPE training for all line workers.\n"
-            "4. Supervisor checklist updated to include daily PPE spot-checks."
+            "1. Réinstaller et verrouiller immédiatement le garde de sécurité sur le convoyeur CB-07.\n"
+            "2. Reconfigurer les alertes de planification PM dans CMMS.\n"
+            "3. Formation obligatoire de recyclage des EPI pour tous les ouvriers à la chaîne.\n"
+            "4. Liste de contrôle du superviseur mise à jour pour inclure les vérifications quotidiennes des EPI."
         ),
         "corrective_action_deadline": today - timedelta(days=30),
         "corrective_action_implemented_date": today - timedelta(days=35),
         "preventive_actions": (
-            "Install automated PPE detection cameras at conveyor entry points. "
-            "Add monthly cross-audit by Safety Officer."
+            "Installer des caméras de détection des EPI automatisées aux points d'entrée du convoyeur. "
+            "Ajouter un audit croisé mensuel par l'agent de sécurité."
         ),
         "preventive_action_deadline": today + timedelta(days=30),
         "effectiveness_check_date": today - timedelta(days=10),
         "effectiveness_verified": True,
-        "effectiveness_notes": "Follow-up audit confirmed PPE compliance at 98%. No recurrence in 30-day period.",
+        "effectiveness_notes": "L'audit de suivi a confirmé la conformité des EPI à 98%. Aucune récurrence en 30 jours.",
         "completion_date": today - timedelta(days=8),
         "lessons_learned": (
-            "Software upgrades must include a post-upgrade validation checklist covering safety-critical modules. "
-            "PPE non-compliance must trigger immediate supervisor notification."
+            "Les mises à niveau logicielles doivent inclure une liste de contrôle de validation post-mise à niveau couvrant les modules critiques pour la sécurité. "
+            "La non-conformité des EPI doit déclencher une notification immédiate du superviseur."
         ),
     },
     {
@@ -70,44 +70,44 @@ DEMO_INVESTIGATIONS = [
         "status": "corrective_action_implemented",
         "investigation_date": today - timedelta(days=25),
         "investigation_findings": (
-            "Worker slipped on a wet floor in the chemical mixing area. "
-            "Wet floor signage was present, however anti-slip matting had been removed for cleaning and not replaced. "
-            "Worker sustained a sprained ankle; first aid administered on-site."
+            "Un travailleur a glissé sur le sol mouillé dans la zone de mélange des produits chimiques. "
+            "La signalisation du sol mouillé était présente, mais le revêtement antidérapant avait été retiré pour le nettoyage et non remplacé. "
+            "Le travailleur a subi une entorse à la cheville ; premiers secours administrés sur site."
         ),
         "rca_method": "fishbone",
         "rca_documentation": (
-            "Fishbone analysis (Ishikawa):\n"
-            "MAN: Worker aware of wet surface but chose shorter route.\n"
-            "MACHINE: Anti-slip matting removed during routine cleaning.\n"
-            "METHOD: Cleaning SOP does not specify immediate replacement after mopping.\n"
-            "ENVIRONMENT: Wet season, increased condensation in mixing area.\n"
-            "MEASUREMENT: No inspection checkpoint for matting after cleaning.\n"
-            "MATERIAL: Matting material degraded (requires replacement)."
+            "Analyse en arête de poisson (Ishikawa) :\n"
+            "HOMME : Le travailleur était conscient de la surface mouillée mais a choisi un itinéraire plus court.\n"
+            "MACHINE : Revêtement antidérapant retiré au cours du nettoyage régulier.\n"
+            "MÉTHODE : Le POP de nettoyage ne spécifie pas le remplacement immédiat après le lavage.\n"
+            "ENVIRONNEMENT : Saison humide, condensation accrue dans la zone de mélange.\n"
+            "MESURE : Aucun point de contrôle d'inspection pour le tapis après le nettoyage.\n"
+            "MATÉRIEL : Matériel de tapis dégradé (nécessite un remplacement)."
         ),
         "root_causes": [
-            "Cleaning SOP does not mandate immediate mat replacement",
-            "Degraded anti-slip matting not flagged during prior inspection",
+            "Le POP de nettoyage ne mandate pas le remplacement immédiat du tapis",
+            "Le revêtement antidérapant dégradé n'a pas été signalé lors d'une inspection antérieure",
         ],
         "contributing_factors": [
-            "High-traffic route used to save time",
-            "Increased condensation due to weather",
+            "Itinéraire à fort trafic utilisé pour économiser du temps",
+            "Condensation accrue due aux conditions météorologiques",
         ],
         "corrective_actions": (
-            "1. Update Cleaning SOP to require mat replacement before area is re-opened.\n"
-            "2. Replace all degraded anti-slip matting in chemical mixing area.\n"
-            "3. Add matting condition to monthly housekeeping inspection checklist."
+            "1. Mettre à jour le POP de nettoyage pour exiger le remplacement du tapis avant la réouverture de la zone.\n"
+            "2. Remplacer tout le revêtement antidérapant dégradé dans la zone de mélange des produits chimiques.\n"
+            "3. Ajouter l'état du tapis à la liste de contrôle de l'inspection ménagère mensuelle."
         ),
         "corrective_action_deadline": today - timedelta(days=5),
         "corrective_action_implemented_date": today - timedelta(days=7),
-        "preventive_actions": "Quarterly anti-slip surface audit for all wet-process areas.",
+        "preventive_actions": "Audit trimestriel des surfaces antidérapantes pour tous les secteurs à processus humide.",
         "preventive_action_deadline": today + timedelta(days=60),
         "effectiveness_check_date": today + timedelta(days=14),
         "effectiveness_verified": False,
         "effectiveness_notes": "",
         "completion_date": None,
         "lessons_learned": (
-            "SOPs must cover the full activity lifecycle including restoration steps, "
-            "not just the primary task steps."
+            "Les POP doivent couvrir l'ensemble du cycle de vie de l'activité, y compris les étapes de restauration, "
+            "pas seulement les étapes principales de la tâche."
         ),
     },
     {
@@ -116,37 +116,37 @@ DEMO_INVESTIGATIONS = [
         "status": "corrective_action_planned",
         "investigation_date": today - timedelta(days=10),
         "investigation_findings": (
-            "Worker reported hearing discomfort after extended operation of grinding machinery without "
-            "double hearing protection as required by the Noise Hazard Control Plan. "
-            "Audiometry follow-up scheduled. Noise levels measured at 96 dB(A) — above 85 dB(A) threshold."
+            "Un travailleur a signalé une gêne auditive après l'utilisation prolongée de machines de meulage sans "
+            "protection auditive double telle que requise par le Plan de contrôle des risques de bruit. "
+            "Un suivi audiométrique est prévu. Les niveaux de bruit mesurés à 96 dB(A) — au-dessus du seuil de 85 dB(A)."
         ),
         "rca_method": "fault_tree",
         "rca_documentation": (
-            "Fault Tree Top Event: Noise-induced hearing discomfort\n"
-            "├── Event A: Worker not using double HPE\n"
-            "│   ├── A1: Worker unaware of double-protection requirement for >90 dB areas\n"
-            "│   └── A2: Single earplug available at station — double not stocked\n"
-            "└── Event B: Exposure duration exceeded safe limit\n"
-            "    ├── B1: Job rotation schedule not followed by team leader\n"
-            "    └── B2: Rotation roster not displayed at workstation"
+            "Arbre des défaillances Événement supérieur : Gêne auditive induite par le bruit\n"
+            "├── Événement A : Le travailleur n'utilise pas l'EPP double\n"
+            "│   ├── A1 : Travailleur inconscient de l'exigence de protection double pour les zones >90 dB\n"
+            "│   └── A2 : Bouchon auriculaire simple disponible à la station — double non approvisionné\n"
+            "└── Événement B : La durée d'exposition a dépassé la limite sûre\n"
+            "    ├── B1 : Le calendrier de rotation des postes n'a pas été suivi par le chef d'équipe\n"
+            "    └── B2 : Le roster de rotation n'est pas affiché à la station de travail"
         ),
         "root_causes": [
-            "Inadequate HPE stock at grinding station (single earplug only)",
-            "Workers not trained on zonal hearing protection requirements",
+            "Stock d'EPP inadéquat à la station de meulage (bouchon simple uniquement)",
+            "Les travailleurs ne sont pas formés aux exigences de protection auditive zonale",
         ],
         "contributing_factors": [
-            "Job rotation schedule not enforced",
-            "Noise zone boundary signage inadequate",
+            "Le calendrier de rotation des postes n'est pas appliqué",
+            "La signalisation limite de la zone de bruit est inadéquate",
         ],
         "corrective_actions": (
-            "1. Stock both single and double HPE at all >90 dB workstations.\n"
-            "2. Conduct mandatory noise hazard awareness training for all grinding area workers.\n"
-            "3. Display rotation roster at each grinding station.\n"
-            "4. Team leader to sign off on rotation compliance daily."
+            "1. Approvisionner à la fois les bouchons surauriculaires simples et doubles à tous les postes de travail >90 dB.\n"
+            "2. Dispensaires une formation obligatoire de sensibilisation aux risques de bruit pour tous les travailleurs de la zone de meulage.\n"
+            "3. Afficher le roster de rotation à chaque poste de meulage.\n"
+            "4. Le chef d'équipe doit apposer un visa quotidien sur le respect de la rotation."
         ),
         "corrective_action_deadline": today + timedelta(days=14),
         "corrective_action_implemented_date": None,
-        "preventive_actions": "Annual noise survey and HPE adequacy review for all noise zones.",
+        "preventive_actions": "Enquête annuelle sur le bruit et révision de l'adéquation des EPP pour toutes les zones de bruit.",
         "preventive_action_deadline": today + timedelta(days=90),
         "effectiveness_check_date": today + timedelta(days=45),
         "effectiveness_verified": False,

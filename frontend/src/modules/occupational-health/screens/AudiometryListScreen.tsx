@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -33,6 +35,7 @@ interface AudiometryResult {
 }
 
 export function AudiometryListScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<AudiometryResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,11 +103,11 @@ export function AudiometryListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      showToast('Veuillez sélectionner un travailleur', 'error');
       return;
     }
     if (!formData.test_date || !formData.left_ear_db || !formData.right_ear_db) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
 
@@ -125,7 +128,7 @@ export function AudiometryListScreen() {
 
       const response = await api.post('/occupational-health/audiometry-results/', payload);
       if (response.success) {
-        Alert.alert('Succès', 'Résultat d\'audiométrie enregistré');
+        showToast('Résultat d\'audiométrie enregistré', 'success');
         setShowAddModal(false);
         setSelectedWorker(null);
         setFormData({
@@ -137,11 +140,11 @@ export function AudiometryListScreen() {
         });
         await loadResults();
       } else {
-        Alert.alert('Erreur', response.message || 'Erreur lors de la création');
+        showToast(response.message || 'Erreur lors de la création', 'error');
       }
     } catch (error) {
       console.error('Error creating audiometry result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -198,13 +201,13 @@ export function AudiometryListScreen() {
         );
         setShowEditModal(false);
         setSelectedItem(null);
-        Alert.alert('Succès', 'Résultat mis à jour');
+        showToast('Résultat mis à jour', 'success');
       } else {
-        Alert.alert('Erreur', 'Impossible de mettre à jour');
+        showToast('Impossible de mettre à jour', 'error');
       }
     } catch (error) {
       console.error('Error updating:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -223,10 +226,12 @@ export function AudiometryListScreen() {
               const response = await api.delete(`/occupational-health/audiometry-results/${item.id}/`);
               if (response.success) {
                 setResults(results.filter(r => r.id !== item.id));
-                Alert.alert('Succès', 'Résultat supprimé');
+                showToast('Résultat supprimé', 'success');
+              } else {
+                showToast('Impossible de supprimer', 'error');
               }
             } catch (error) {
-              Alert.alert('Erreur', 'Impossible de supprimer');
+              showToast('Impossible de supprimer', 'error');
             }
           },
         },
@@ -536,6 +541,7 @@ export function AudiometryListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <SimpleToastNotification message={toastMsg} />
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}

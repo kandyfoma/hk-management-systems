@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -431,6 +432,7 @@ export function DrugAlcoholScreeningListScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
+        <SimpleToastNotification message={toastMsg} />
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
@@ -829,3 +831,6 @@ export function DrugAlcoholScreeningListScreen() {
     </SafeAreaView>
   );
 }
+
+
+

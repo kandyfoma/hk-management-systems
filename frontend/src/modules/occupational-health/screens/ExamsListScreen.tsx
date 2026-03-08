@@ -4,6 +4,8 @@ import {
   Modal, Alert, ActivityIndicator, RefreshControl, SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
@@ -23,6 +25,7 @@ interface ExamResult {
 }
 
 export function ExamsListScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<ExamResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,11 +84,11 @@ export function ExamsListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      showToast('Veuillez sélectionner un travailleur', 'error');
       return;
     }
     if (!formData.exam_date || !formData.exam_type || !formData.finding || !formData.doctor_name) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
 
@@ -118,7 +121,7 @@ export function ExamsListScreen() {
       }
     } catch (error) {
       console.error('Error creating exam result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -162,11 +165,11 @@ export function ExamsListScreen() {
         setSelectedItem(null);
         Alert.alert('Succès', 'Examen mis à jour');
       } else {
-        Alert.alert('Erreur', 'Impossible de mettre à jour');
+        showToast('Impossible de mettre à jour', 'error');
       }
     } catch (error) {
       console.error('Error updating:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -188,7 +191,7 @@ export function ExamsListScreen() {
                 Alert.alert('Succès', 'Examen supprimé');
               }
             } catch (error) {
-              Alert.alert('Erreur', 'Impossible de supprimer');
+              showToast('Impossible de supprimer', 'error');
             }
           },
         },
@@ -283,7 +286,11 @@ export function ExamsListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <SimpleToastNotification message={toastMsg} />
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Examens Médicaux</Text>
@@ -436,3 +443,6 @@ export function ExamsListScreen() {
     </SafeAreaView>
   );
 }
+
+
+

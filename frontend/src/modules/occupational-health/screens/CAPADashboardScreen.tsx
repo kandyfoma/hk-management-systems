@@ -62,29 +62,29 @@ type BackendStatus =
 
 // --- Constants ---------------------------------------------------------------
 const PIPELINE_STAGES: { key: BackendStatus; label: string; short: string; color: string; icon: string }[] = [
-  { key: 'reported',                       label: 'Signale',             short: 'Signale',     color: '#EF4444', icon: 'warning-outline' },
-  { key: 'under_investigation',             label: 'En Enquete',          short: 'Enquete',     color: '#F97316', icon: 'search-outline' },
-  { key: 'root_cause_identified',           label: 'Cause Identifiee',    short: 'Cause',       color: '#EAB308', icon: 'bulb-outline' },
-  { key: 'corrective_action_planned',       label: 'Action Planifiee',    short: 'Planifiee',   color: '#3B82F6', icon: 'list-outline' },
-  { key: 'corrective_action_implemented',   label: 'Action Implementee',  short: 'Impl.',       color: '#8B5CF6', icon: 'checkmark-outline' },
-  { key: 'effectiveness_verified',          label: 'Efficacite Verifiee', short: 'Verifiee',    color: '#06B6D4', icon: 'shield-checkmark-outline' },
-  { key: 'closed',                          label: 'Cloture',             short: 'Cloture',     color: '#22C55E', icon: 'lock-closed-outline' },
+  { key: 'reported',                       label: 'Signalé',             short: 'Signalé',     color: '#EF4444', icon: 'warning-outline' },
+  { key: 'under_investigation',             label: 'En Enquête',          short: 'Enquête',     color: '#F97316', icon: 'search-outline' },
+  { key: 'root_cause_identified',           label: 'Cause Identifiée',    short: 'Cause',       color: '#EAB308', icon: 'bulb-outline' },
+  { key: 'corrective_action_planned',       label: 'Action Planifiée',    short: 'Planifiée',   color: '#3B82F6', icon: 'list-outline' },
+  { key: 'corrective_action_implemented',   label: 'Action Implémentée',  short: 'Impl.',       color: '#8B5CF6', icon: 'checkmark-outline' },
+  { key: 'effectiveness_verified',          label: 'Efficacité Vérifiée', short: 'Vérifiée',    color: '#06B6D4', icon: 'shield-checkmark-outline' },
+  { key: 'closed',                          label: 'Clôturée',             short: 'Clôturée',     color: '#22C55E', icon: 'lock-closed-outline' },
 ];
 
 const STATUS_MAP: Record<BackendStatus, { color: string; bg: string; icon: string; label: string; step: number }> = {
-  reported:                       { color: '#EF4444', bg: '#FEF2F2', icon: 'warning',            label: 'Signale',           step: 1 },
-  under_investigation:             { color: '#F97316', bg: '#FFF7ED', icon: 'search',             label: 'En Enquete',        step: 2 },
-  root_cause_identified:           { color: '#EAB308', bg: '#FEFCE8', icon: 'bulb',              label: 'Cause Identifiee',  step: 3 },
-  corrective_action_planned:       { color: '#3B82F6', bg: '#EFF6FF', icon: 'list',              label: 'Action Planifiee',  step: 4 },
-  corrective_action_implemented:   { color: '#8B5CF6', bg: '#F5F3FF', icon: 'checkmark-circle',  label: 'Implementee',       step: 5 },
-  effectiveness_verified:          { color: '#06B6D4', bg: '#ECFEFF', icon: 'shield-checkmark',  label: 'Verifiee',          step: 6 },
-  closed:                          { color: '#22C55E', bg: '#F0FDF4', icon: 'lock-closed',        label: 'Cloture',           step: 7 },
+  reported:                       { color: '#EF4444', bg: '#FEF2F2', icon: 'warning',            label: 'Signalé',           step: 1 },
+  under_investigation:             { color: '#F97316', bg: '#FFF7ED', icon: 'search',             label: 'En Enquête',        step: 2 },
+  root_cause_identified:           { color: '#EAB308', bg: '#FEFCE8', icon: 'bulb',              label: 'Cause Identifiée',  step: 3 },
+  corrective_action_planned:       { color: '#3B82F6', bg: '#EFF6FF', icon: 'list',              label: 'Action Planifiée',  step: 4 },
+  corrective_action_implemented:   { color: '#8B5CF6', bg: '#F5F3FF', icon: 'checkmark-circle',  label: 'Implémentée',       step: 5 },
+  effectiveness_verified:          { color: '#06B6D4', bg: '#ECFEFF', icon: 'shield-checkmark',  label: 'Vérifiée',          step: 6 },
+  closed:                          { color: '#22C55E', bg: '#F0FDF4', icon: 'lock-closed',        label: 'Clôturée',           step: 7 },
 };
 
 const RCA_LABELS: Record<string, string> = {
-  '5why':     '5 Pourquois',
+  '5why':     '5 Pourquoi',
   fishbone:   'Diagramme Ishikawa',
-  fault_tree: 'Arbre des Defaillances',
+  fault_tree: 'Arbre des Défaillances',
   timeline:   'Analyse Chronologique',
   other:      'Autre',
 };
@@ -163,7 +163,7 @@ const ps = StyleSheet.create({
 function CAPACard({ item, onPress }: { item: Investigation; onPress: () => void }) {
   const st = STATUS_MAP[item.status] ?? STATUS_MAP.reported;
   const days = daysUntil(item.corrective_action_deadline);
-  const dueLabel = days === null ? null : days < 0 ? `${Math.abs(days)}j en retard` : days === 0 ? 'Echeance auj.' : `${days}j restants`;
+  const dueLabel = days === null ? null : days < 0 ? `${Math.abs(days)}j retard` : days === 0 ? "Échéance auj." : `${days}j restants`;
   const dueColor = days !== null && days <= 0 ? colors.error : days !== null && days <= 7 ? '#F97316' : colors.textSecondary;
 
   return (
@@ -306,23 +306,23 @@ function DetailModal({
               })}
             </View>
             <Text style={dm.progressLbl}>
-              Etape {st.step} / {PIPELINE_STAGES.length} - {st.label}
+              Étape {st.step} / {PIPELINE_STAGES.length} - {st.label}
             </Text>
             {/* Incident */}
             {investigation.incident_detail && (
               <View style={dm.section}>
-                <Text style={dm.sectionTitle}>Incident Lie</Text>
+                <Text style={dm.sectionTitle}>Incident Lié</Text>
                 <View style={[dm.infoCard, { borderLeftColor: SEVERITY_COLORS[investigation.incident_detail.severity] ?? colors.outline }]}>
                   <View style={dm.infoRow}>
-                    <Text style={dm.infoLabel}>Numero</Text>
+                    <Text style={dm.infoLabel}>Numéro</Text>
                     <Text style={dm.infoValue}>{investigation.incident_detail.incident_number}</Text>
                   </View>
                   <View style={dm.infoRow}>
-                    <Text style={dm.infoLabel}>Categorie</Text>
+                    <Text style={dm.infoLabel}>Catégorie</Text>
                     <Text style={dm.infoValue}>{investigation.incident_detail.category_display}</Text>
                   </View>
                   <View style={dm.infoRow}>
-                    <Text style={dm.infoLabel}>Severite</Text>
+                    <Text style={dm.infoLabel}>Sévérité</Text>
                     <Text style={[dm.infoValue, { color: SEVERITY_COLORS[investigation.incident_detail.severity] }]}>
                       Niv. {investigation.incident_detail.severity} - {investigation.incident_detail.severity_display}
                     </Text>
@@ -336,21 +336,21 @@ function DetailModal({
             )}
             {/* Investigation */}
             <View style={dm.section}>
-              <Text style={dm.sectionTitle}>Details de l''Enquete</Text>
+              <Text style={dm.sectionTitle}>Détails de l'Enquête</Text>
               <View style={dm.infoCard}>
                 <View style={dm.infoRow}>
-                  <Text style={dm.infoLabel}>Date enquete</Text>
+                  <Text style={dm.infoLabel}>Date enquête</Text>
                   <Text style={dm.infoValue}>{fmtDate(investigation.investigation_date)}</Text>
                 </View>
                 {investigation.rca_method ? (
                   <View style={dm.infoRow}>
-                    <Text style={dm.infoLabel}>Methode RCA</Text>
+                    <Text style={dm.infoLabel}>Méthode RCA</Text>
                     <Text style={dm.infoValue}>{RCA_LABELS[investigation.rca_method] ?? investigation.rca_method}</Text>
                   </View>
                 ) : null}
                 {investigation.investigation_findings ? (
                   <View style={[dm.infoRow, { flexDirection: 'column', gap: 4 }]}>
-                    <Text style={dm.infoLabel}>Resultats</Text>
+                    <Text style={dm.infoLabel}>Résultats</Text>
                     <Text style={dm.infoBody}>{investigation.investigation_findings}</Text>
                   </View>
                 ) : null}
@@ -377,7 +377,7 @@ function DetailModal({
                     <Text style={dm.infoLabel}>Actions</Text>
                     <Text style={dm.infoBody}>{investigation.corrective_actions}</Text>
                   </View>
-                ) : <Text style={dm.emptyField}>Non renseigne</Text>}
+                ) : <Text style={dm.emptyField}>Non renseigné</Text>}
                 {investigation.corrective_action_owner_name ? (
                   <View style={dm.infoRow}>
                     <Text style={dm.infoLabel}>Responsable</Text>
@@ -386,7 +386,7 @@ function DetailModal({
                 ) : null}
                 {investigation.corrective_action_deadline ? (
                   <View style={dm.infoRow}>
-                    <Text style={dm.infoLabel}>Echeance</Text>
+                    <Text style={dm.infoLabel}>Échéance</Text>
                     <Text style={[dm.infoValue, investigation.is_overdue && { color: colors.error }]}>
                       {fmtDate(investigation.corrective_action_deadline)}
                       {investigation.is_overdue ? '  En retard' : ''}
@@ -398,12 +398,12 @@ function DetailModal({
             {/* Preventive actions */}
             {investigation.preventive_actions ? (
               <View style={dm.section}>
-                <Text style={dm.sectionTitle}>Actions Preventives</Text>
+                <Text style={dm.sectionTitle}>Actions Préventives</Text>
                 <View style={dm.infoCard}>
                   <Text style={dm.infoBody}>{investigation.preventive_actions}</Text>
                   {investigation.preventive_action_deadline ? (
                     <View style={[dm.infoRow, { marginTop: 6 }]}>
-                      <Text style={dm.infoLabel}>Echeance</Text>
+                      <Text style={dm.infoLabel}>Échéance</Text>
                       <Text style={dm.infoValue}>{fmtDate(investigation.preventive_action_deadline)}</Text>
                     </View>
                   ) : null}
@@ -413,7 +413,7 @@ function DetailModal({
             {/* Lessons learned */}
             {investigation.lessons_learned ? (
               <View style={dm.section}>
-                <Text style={dm.sectionTitle}>Lecons Apprises</Text>
+                <Text style={dm.sectionTitle}>Leçons Apprises</Text>
                 <View style={dm.infoCard}>
                   <Text style={dm.infoBody}>{investigation.lessons_learned}</Text>
                 </View>
@@ -496,8 +496,8 @@ function KPIBar({ investigations }: { investigations: Investigation[] }) {
   const items = [
     { label: 'Actifs',       value: active,      color: '#F97316', icon: 'reload-outline' },
     { label: 'En retard',    value: overdue,     color: colors.error, icon: 'alert-circle-outline' },
-    { label: 'Clotures',     value: closed,      color: '#22C55E', icon: 'checkmark-circle-outline' },
-    { label: '% Resolution', value: `${rate}%`,  color: '#3B82F6', icon: 'pie-chart-outline' },
+    { label: 'Clôturées',     value: closed,      color: '#22C55E', icon: 'checkmark-circle-outline' },
+    { label: '% Résolution', value: `${rate}%`,  color: '#3B82F6', icon: 'pie-chart-outline' },
   ];
 
   return (
@@ -561,9 +561,9 @@ export function CAPADashboardScreen({ navigation }: any) {
       );
       if (selected?.id === id) setSelected(prev => prev ? { ...prev, status: newStatus } : prev);
       setModalVisible(false);
-      showToast(`Statut mis a jour: ${STATUS_MAP[newStatus]?.label}`, 'success');
+      showToast(`Statut mis à jour: ${STATUS_MAP[newStatus]?.label}`, 'success');
     } catch (e: any) {
-      showToast(e?.response?.data?.detail ?? 'Erreur de mise a jour', 'error');
+      showToast(e?.response?.data?.detail ?? 'Erreur de mise à jour', 'error');
     }
   }, [selected]);
 
@@ -616,7 +616,7 @@ export function CAPADashboardScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={ss.title}>Tableau CAPA</Text>
-          <Text style={ss.subtitle}>Corrective &amp; Preventive Actions</Text>
+          <Text style={ss.subtitle}>Actions Correctives & Préventives</Text>
         </View>
         <TouchableOpacity style={ss.refreshBtn} onPress={() => { setRefreshing(true); load(true); }} activeOpacity={0.7} disabled={refreshing}>
           {refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh-outline" size={20} color={colors.primary} />}
@@ -678,7 +678,7 @@ export function CAPADashboardScreen({ navigation }: any) {
               <Ionicons name="document-text-outline" size={48} color={colors.outline} />
               <Text style={ss.emptyTitle}>Aucun CAPA</Text>
               <Text style={ss.emptySubt}>
-                {search ? 'Aucun resultat pour cette recherche' : activeStatus !== 'all' ? 'Aucun element dans cette etape' : 'Aucune investigation enregistree'}
+                {search ? 'Aucun résultat pour cette recherche' : activeStatus !== 'all' ? 'Aucun élément dans cette étape' : 'Aucune investigation enregistrée'}
               </Text>
             </View>
           ) : (

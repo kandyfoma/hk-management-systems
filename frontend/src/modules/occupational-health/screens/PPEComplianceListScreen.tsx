@@ -7,6 +7,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -27,6 +29,7 @@ interface PPEComplianceResult {
 }
 
 export function PPEComplianceListScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<PPEComplianceResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,11 +94,11 @@ export function PPEComplianceListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      showToast('Veuillez sélectionner un travailleur', 'error');
       return;
     }
     if (!formData.check_date) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
 
@@ -113,7 +116,7 @@ export function PPEComplianceListScreen() {
 
       const response = await api.post('/occupational-health/ppe-compliance-results/', payload);
       if (response.success) {
-        Alert.alert('Succès', 'Résultat de conformité EPI enregistré');
+        showToast('Résultat de conformé EPI enregistré', 'success');
         setShowAddModal(false);
         setSelectedWorker(null);
         setFormData({
@@ -130,7 +133,7 @@ export function PPEComplianceListScreen() {
       }
     } catch (error) {
       console.error('Error creating PPE result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -181,11 +184,11 @@ export function PPEComplianceListScreen() {
         setSelectedItem(null);
         Alert.alert('Succès', 'Résultat mis à jour');
       } else {
-        Alert.alert('Erreur', 'Impossible de mettre à jour');
+        showToast('Impossible de mettre à jour', 'error');
       }
     } catch (error) {
       console.error('Error updating:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -207,7 +210,7 @@ export function PPEComplianceListScreen() {
                 Alert.alert('Succès', 'Résultat supprimé');
               }
             } catch (error) {
-              Alert.alert('Erreur', 'Impossible de supprimer');
+              showToast('Impossible de supprimer', 'error');
             }
           },
         },
@@ -535,6 +538,7 @@ export function PPEComplianceListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <SimpleToastNotification message={toastMsg} />
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
@@ -921,4 +925,7 @@ export function PPEComplianceListScreen() {
     </SafeAreaView>
   );
 }
+
+
+
 

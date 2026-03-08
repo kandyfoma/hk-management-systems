@@ -1305,6 +1305,13 @@ class RegulatoryCNSSReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = RegulatoryCNSSReport
         fields = '__all__'
+        extra_kwargs = {
+            'reference_number': {'required': False},
+            'enterprise': {'required': False},
+            'prepared_by': {'read_only': True},
+            'prepared_date': {'read_only': True},
+            'updated_at': {'read_only': True},
+        }
     
     def get_incident_details(self, obj):
         """Include related incident details if present"""
@@ -1342,6 +1349,11 @@ class DRCRegulatoryReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = DRCRegulatoryReport
         fields = '__all__'
+        extra_kwargs = {
+            'reference_number': {'required': False},
+            'enterprise': {'required': False},
+            'submitted_by': {'read_only': True},
+        }
     
     def get_related_incidents_summary(self, obj):
         """Include count and summary of related incidents"""

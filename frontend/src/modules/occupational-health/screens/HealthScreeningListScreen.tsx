@@ -4,6 +4,8 @@ import {
   Modal, Alert, ActivityIndicator, RefreshControl, SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import ApiService from '../../../services/ApiService';
@@ -24,6 +26,7 @@ interface ScreeningResult {
 }
 
 export function HealthScreeningListScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const authUser = useSelector((state: RootState) => state.auth.user);
   const [results, setResults] = useState<ScreeningResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,11 +84,11 @@ export function HealthScreeningListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker) {
-      Alert.alert('Erreur', 'Veuillez sélectionner un travailleur');
+      showToast('Veuillez sélectionner un travailleur', 'error');
       return;
     }
     if (!formData.screening_date || !formData.screening_type || !formData.responses) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
 
@@ -117,7 +120,7 @@ export function HealthScreeningListScreen() {
       }
     } catch (error) {
       console.error('Error creating screening result:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -159,11 +162,11 @@ export function HealthScreeningListScreen() {
         setSelectedItem(null);
         Alert.alert('Succès', 'Dépistage mis à jour');
       } else {
-        Alert.alert('Erreur', 'Impossible de mettre à jour');
+        showToast('Impossible de mettre à jour', 'error');
       }
     } catch (error) {
       console.error('Error updating:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -185,7 +188,7 @@ export function HealthScreeningListScreen() {
                 Alert.alert('Succès', 'Dépistage supprimé');
               }
             } catch (error) {
-              Alert.alert('Erreur', 'Impossible de supprimer');
+              showToast('Impossible de supprimer', 'error');
             }
           },
         },
@@ -280,7 +283,11 @@ export function HealthScreeningListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <SimpleToastNotification message={toastMsg} />
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Dépistages Santé</Text>
@@ -428,3 +435,6 @@ export function HealthScreeningListScreen() {
     </SafeAreaView>
   );
 }
+
+
+

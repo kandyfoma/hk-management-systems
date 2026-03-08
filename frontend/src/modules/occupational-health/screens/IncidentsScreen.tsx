@@ -538,22 +538,33 @@ export function IncidentsScreen() {
       if (response.data) {
         // Reload incidents after successful creation
         loadData();
-        return true;
+        return response.data;
       }
     } catch (error) {
       console.error('Failed to save incident:', error);
       // Fall back to local storage if API fails
       const updatedIncidents = [incident, ...incidents];
       setIncidents(updatedIncidents);
-      return false;
+      return null;
     }
   };
 
   const handleAdd = async (inc: WorkplaceIncident) => {
-    const success = await saveData(inc);
+    const result = await saveData(inc);
     setShowAddModal(false);
-    if (success) {
-      showToast(`Incident ${inc.incidentNumber} déclaré et sauvegardé.`, 'success');
+    if (result) {
+      const autoReports: any[] = result.regulatory_reports_auto_created ?? [];
+      if (autoReports.length > 0) {
+        const authorities = autoReports.map((r: any) => r.authority?.toUpperCase()).filter(Boolean).join(' & ');
+        const deadline = autoReports.find((r: any) => r.deadline)?.deadline;
+        const deadlineNote = deadline ? ` — délai légal : ${deadline}` : '';
+        showToast(
+          `Incident déclaré ✓ Rapport${autoReports.length > 1 ? 's' : ''} ${authorities} créé${autoReports.length > 1 ? 's' : ''} automatiquement (brouillon)${deadlineNote}`,
+          'success',
+        );
+      } else {
+        showToast(`Incident ${inc.incidentNumber} déclaré et sauvegardé.`, 'success');
+      }
     } else {
       showToast(`Incident déclaré localement (sync pending).`, 'error');
     }

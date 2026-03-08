@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 
 interface VisionTestResult {
   id: string;
@@ -24,6 +26,7 @@ interface VisionTestResult {
 }
 
 export function VisionTestListScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<VisionTestResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -82,7 +85,7 @@ export function VisionTestListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.test_date || !formData.visual_acuity_os || !formData.visual_acuity_od) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
     try {
@@ -97,14 +100,14 @@ export function VisionTestListScreen() {
         notes: formData.notes,
       });
       if (response.success) {
-        Alert.alert('Succès', 'Résultat enregistré');
+        showToast('Résultat enregistré', 'success');
         setShowAddModal(false);
         setSelectedWorker(null);
         setFormData({ test_date: new Date().toISOString().split('T')[0], visual_acuity_os: '', visual_acuity_od: '', color_blindness: false, refractive_error: '', notes: '' });
         await loadResults();
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -140,7 +143,7 @@ export function VisionTestListScreen() {
         Alert.alert('Succès', 'Résultat mis à jour');
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -156,10 +159,10 @@ export function VisionTestListScreen() {
             const response = await api.delete(`/occupational-health/vision-test-results/${item.id}/`);
             if (response.success) {
               setResults(results.filter(r => r.id !== item.id));
-              Alert.alert('Succès', 'Résultat supprimé');
+                showToast('Résultat supprimé', 'success');
             }
           } catch (error) {
-            Alert.alert('Erreur', 'Impossible de supprimer');
+            showToast('Impossible de supprimer', 'error');
           }
         },
       },
@@ -238,7 +241,11 @@ export function VisionTestListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <SimpleToastNotification message={toastMsg} />
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Test de Vision</Text>
@@ -390,3 +397,5 @@ export function VisionTestListScreen() {
     </SafeAreaView>
   );
 }
+
+

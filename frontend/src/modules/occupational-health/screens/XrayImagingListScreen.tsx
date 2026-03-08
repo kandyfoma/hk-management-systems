@@ -4,6 +4,8 @@ import {
   Modal, Alert, ActivityIndicator, RefreshControl, SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSimpleToast } from '../../../hooks/useSimpleToast';
+import { SimpleToastNotification } from '../../../components/SimpleToastNotification';
 import ApiService from '../../../services/ApiService';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { WorkerSelectDropdown, Worker } from '../components/WorkerSelectDropdown';
@@ -22,6 +24,7 @@ interface XrayImagingResult {
 }
 
 export function XrayImagingListScreen() {
+  const { toastMsg, showToast } = useSimpleToast();
   const [results, setResults] = useState<XrayImagingResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,7 +79,7 @@ export function XrayImagingListScreen() {
 
   const handleSubmit = async () => {
     if (!selectedWorker || !formData.test_date || !formData.exam_type) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
       return;
     }
     try {
@@ -90,14 +93,14 @@ export function XrayImagingListScreen() {
         clinical_notes: formData.notes,
       });
       if (response.success) {
-        Alert.alert('Succès', 'Résultat enregistré');
+        showToast('Résultat enregistré', 'success');
         setShowAddModal(false);
         setSelectedWorker(null);
         setFormData({ test_date: new Date().toISOString().split('T')[0], exam_type: '', imaging_findings: '', radiologist_notes: '', notes: '' });
         await loadResults();
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -131,7 +134,7 @@ export function XrayImagingListScreen() {
         Alert.alert('Succès', 'Résultat mis à jour');
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      showToast('Une erreur est survenue', 'error');
     }
   };
 
@@ -147,10 +150,10 @@ export function XrayImagingListScreen() {
             const response = await api.delete(`/occupational-health/xray-imaging-results/${item.id}/`);
             if (response.success) {
               setResults(results.filter(r => r.id !== item.id));
-              Alert.alert('Succès', 'Résultat supprimé');
+                showToast('Résultat supprimé', 'success');
             }
           } catch (error) {
-            Alert.alert('Erreur', 'Impossible de supprimer');
+            showToast('Impossible de supprimer', 'error');
           }
         },
       },
@@ -229,7 +232,11 @@ export function XrayImagingListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <SimpleToastNotification message={toastMsg} />
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Imagerie Radiologique</Text>
@@ -367,3 +374,5 @@ export function XrayImagingListScreen() {
     </SafeAreaView>
   );
 }
+
+

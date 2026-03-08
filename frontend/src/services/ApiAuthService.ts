@@ -426,6 +426,70 @@ export class ApiAuthService {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // PASSWORD RESET / FORGOT PASSWORD
+  // ═══════════════════════════════════════════════════════════════
+
+  async requestPasswordReset(phone: string): Promise<AuthResult> {
+    try {
+      const response: ApiResponse = await ApiService.getInstance().post('/auth/password-reset/request/', {
+        phone,
+      });
+
+      return {
+        success: response.success,
+        error: response.error?.message,
+      };
+    } catch (error) {
+      console.error('Request password reset error:', error);
+      return {
+        success: false,
+        error: 'Network error. Please check your connection.',
+      };
+    }
+  }
+
+  async verifyResetCode(phone: string, resetCode: string): Promise<AuthResult> {
+    try {
+      const response: ApiResponse = await ApiService.getInstance().post('/auth/password-reset/verify-code/', {
+        phone,
+        reset_code: resetCode,
+      });
+
+      return {
+        success: response.success,
+        error: response.error?.message,
+      };
+    } catch (error) {
+      console.error('Verify reset code error:', error);
+      return {
+        success: false,
+        error: 'Network error. Please check your connection.',
+      };
+    }
+  }
+
+  async resetPasswordWithCode(phone: string, resetCode: string, newPassword: string): Promise<AuthResult> {
+    try {
+      const response: ApiResponse = await ApiService.getInstance().post('/auth/password-reset/confirm/', {
+        phone,
+        reset_code: resetCode,
+        new_password: newPassword,
+      });
+
+      return {
+        success: response.success,
+        error: response.error?.message,
+      };
+    } catch (error) {
+      console.error('Reset password error:', error);
+      return {
+        success: false,
+        error: 'Network error. Please check your connection.',
+      };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // MIGRATION FROM OLD SERVICE (temporary methods)
   // ═══════════════════════════════════════════════════════════════
 

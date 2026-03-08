@@ -2708,16 +2708,33 @@ class RegulatoryCNSSReport(models.Model):
         verbose_name = 'CNSS Report'
         verbose_name_plural = 'CNSS Reports'
         ordering = ['-prepared_date']
-    
+
+    def save(self, *args, **kwargs):
+        if not self.reference_number:
+            import uuid
+            from django.utils import timezone
+            today = timezone.now().date()
+            self.reference_number = f"CNSS-{today.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.reference_number} - {self.get_report_type_display()}"
 
 
 class DRCRegulatoryReport(models.Model):
-    """DRC (Democratic Republic of Congo) labor regulatory report"""
+    """ITM (Inspection du Travail et des Mines) regulatory report"""
     
     STATUS_CHOICES = [('draft', 'Draft'), ('submitted', 'Submitted'), ('approved', 'Approved'), ('rejected', 'Rejected')]
-    REPORT_TYPE_CHOICES = [('monthly_incident', 'Monthly Incidents'), ('quarterly_health', 'Quarterly Health'), ('annual_compliance', 'Annual Compliance'), ('fatal_incident', 'Fatal Incident'), ('severe_incident', 'Severe Incident'), ('occupational_disease_notice', 'Disease Notice')]
+    REPORT_TYPE_CHOICES = [
+        ('work_accident_declaration', 'Work Accident Declaration (AT)'),
+        ('monthly_incident', 'Monthly Incidents'),
+        ('quarterly_health', 'Quarterly Health'),
+        ('annual_compliance', 'Annual Compliance'),
+        ('annual_pamt', 'Plan Annuel de Médecine du Travail (PAMT)'),
+        ('fatal_incident', 'Fatal Incident'),
+        ('severe_incident', 'Severe Incident'),
+        ('occupational_disease_notice', 'Disease Notice'),
+    ]
     
     enterprise = models.ForeignKey(Enterprise, on_delete=models.CASCADE, related_name='drc_reports')
     report_type = models.CharField(max_length=100, choices=REPORT_TYPE_CHOICES)
@@ -2735,12 +2752,26 @@ class DRCRegulatoryReport(models.Model):
     authority_response = models.TextField(blank=True)
     authority_response_date = models.DateField(null=True, blank=True)
     required_actions = models.TextField(blank=True)
+    # ── ITM (Inspection du Travail et des Mines) specific fields ───────────────────
+    itm_office = models.CharField(max_length=100, blank=True, verbose_name='Bureau ITM')
+    itm_inspection_reference = models.CharField(max_length=100, blank=True, verbose_name='Référence ITM')
+    declaration_deadline = models.DateField(null=True, blank=True, verbose_name='Délai légal de déclaration')
+    workers_affected_count = models.PositiveIntegerField(null=True, blank=True, verbose_name='Nb. travailleurs affectés')
+    accident_datetime = models.DateTimeField(null=True, blank=True, verbose_name="Date/heure de l'accident")
     
     class Meta:
         verbose_name = 'DRC Report'
         verbose_name_plural = 'DRC Reports'
         ordering = ['-submitted_date']
-    
+
+    def save(self, *args, **kwargs):
+        if not self.reference_number:
+            import uuid
+            from django.utils import timezone
+            today = timezone.now().date()
+            self.reference_number = f"ITM-{today.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.reference_number} - {self.enterprise.name}"
 

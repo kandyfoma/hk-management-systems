@@ -52,6 +52,8 @@ const showAlert = (title: string, message: string, onOk?: () => void) => {
 type AuthStackParamList = {
   Login: undefined;
   LicenseActivation: undefined;
+  ForgotPassword: undefined;
+  Register: undefined;
 };
 
 const Stack = createStackNavigator<AuthStackParamList>();
@@ -71,6 +73,12 @@ export function AuthNavigator({ onAuthSuccess }: AuthNavigatorProps) {
       </Stack.Screen>
       <Stack.Screen name="Login">
         {(props) => <LoginScreen {...props} onSuccess={onAuthSuccess} />}
+      </Stack.Screen>
+      <Stack.Screen name="ForgotPassword">
+        {(props) => <ForgotPasswordScreen {...props} />}
+      </Stack.Screen>
+      <Stack.Screen name="Register">
+        {(props) => <RegisterScreen {...props} onSuccess={onAuthSuccess} />}
       </Stack.Screen>
     </Stack.Navigator>
   );
@@ -974,24 +982,1022 @@ function LoginScreen({ onSuccess, navigation, route }: any) {
                 )}
               </TouchableOpacity>
 
-              {/* Demo credentials */}
-              <View style={L.demoBox}>
-                <View style={L.demoHeader}>
-                  <Ionicons name="flask-outline" size={14} color={colors.secondary} />
-                  <Text style={L.demoTitle}>Identifiants de démonstration</Text>
-                </View>
-                <View style={L.demoRow}>
-                  <Text style={L.demoKey}>Téléphone</Text>
-                  <Text style={L.demoVal}>+243123456789</Text>
-                </View>
-                <View style={L.demoRow}>
-                  <Text style={L.demoKey}>Mot de passe</Text>
-                  <Text style={L.demoVal}>adminadmin</Text>
-                </View>
+              {/* Forgot password & Register links */}
+              <View style={L.authLinksRow}>
+                <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+                  <Text style={L.authLink}>Mot de passe oublié?</Text>
+                </TouchableOpacity>
+                <View style={L.authLinkDivider} />
+                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                  <Text style={L.authLink}>Créer un compte</Text>
+                </TouchableOpacity>
               </View>
 
               {!isDesktop && (
                 <Text style={L.footerText}>© 2025 KAT Management Systems · RDC</Text>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGISTER SCREEN
+// ═══════════════════════════════════════════════════════════════
+
+function RegisterScreen({ onSuccess, navigation, route }: any) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [statusType, setStatusType] = useState<'success' | 'error' | ''>('');
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { success: showSuccessToast, error: showErrorToast, info: showInfoToast } = useToast();
+
+  const { licenseKey } = route.params || {};
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+  }, []);
+
+  const validatePhone = (phoneNumber: string): boolean => {
+    // Accept various phone formats: +243..., 0..., or just digits
+    const phoneRegex = /^[+]?[0-9]{1,15}$/;
+    return phoneRegex.test(phoneNumber.replace(/[\s\-().]/g, ''));
+  };
+
+  const validateForm = (): boolean => {
+    if (!firstName.trim()) {
+      setStatusMessage('Le prénom est requis');
+      setStatusType('error');
+      showErrorToast('Le prénom est requis');
+      return false;
+    }
+
+    if (!lastName.trim()) {
+      setStatusMessage('Le nom est requis');
+      setStatusType('error');
+      showErrorToast('Le nom est requis');
+      return false;
+    }
+
+    if (!phone.trim()) {
+      setStatusMessage('Le numéro de téléphone est requis');
+      setStatusType('error');
+      showErrorToast('Le numéro de téléphone est requis');
+      return false;
+    }
+
+    if (!validatePhone(phone.trim())) {
+      setStatusMessage('Format de numéro de téléphone invalide');
+      setStatusType('error');
+      showErrorToast('Format de numéro de téléphone invalide');
+      return false;
+    }
+
+    if (password.length < 8) {
+      setStatusMessage('Le mot de passe doit contenir au moins 8 caractères');
+      setStatusType('error');
+      showErrorToast('Le mot de passe doit contenir au moins 8 caractères');
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      setStatusMessage('Les mots de passe ne correspondent pas');
+      setStatusType('error');
+      showErrorToast('Les mots de passe ne correspondent pas');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleRegister = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('');
+    showInfoToast('Création du compte en cours...');
+
+    try {
+      console.log('Starting registration process...');
+      
+      const result = await ApiAuthService.getInstance().register({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim(),
+        password: password.trim(),
+        licenseKey,
+        role: 'STAFF',
+      });
+
+      console.log('Registration result:', result);
+
+      if (result.success && result.user) {
+        const successMessage = `Bienvenue, ${result.user.first_name || result.user.firstName} !`;
+        setStatusMessage(successMessage);
+        setStatusType('success');
+        showSuccessToast(successMessage);
+        
+        console.log('✅ Registration successful, auto-logging in...');
+        // Auto-login after successful registration
+        try {
+          const loginResult = await ApiAuthService.getInstance().login({
+            phone: phone.trim(),
+            password: password.trim(),
+          });
+          
+          if (loginResult.success) {
+            console.log('✅ Auto-login successful');
+            setTimeout(() => {
+              onSuccess({ ...loginResult, activatedLicenseKey: licenseKey });
+            }, 500);
+          } else {
+            // If auto-login fails, still proceed with onSuccess
+            console.warn('Auto-login failed, proceeding with registration flow');
+            setTimeout(() => {
+              onSuccess({ ...result, activatedLicenseKey: licenseKey });
+            }, 800);
+          }
+        } catch (loginError) {
+          console.warn('Auto-login error:', loginError);
+          // Proceed with registration flow even if auto-login fails
+          setTimeout(() => {
+            onSuccess({ ...result, activatedLicenseKey: licenseKey });
+          }, 800);
+        }
+      } else {
+        let errorMessage = result.error || 'Erreur d\'enregistrement';
+        // Handle specific backend error messages
+        if (result.error?.includes('phone') || result.error?.includes('exists')) {
+          errorMessage = 'Ce numéro de téléphone est déjà enregistré';
+        } else if (result.error?.includes('password')) {
+          errorMessage = 'Le mot de passe ne respecte pas les critères de sécurité';
+        }
+        console.log('❌ Registration failed:', errorMessage);
+        setStatusMessage(errorMessage);
+        setStatusType('error');
+        showErrorToast(errorMessage);
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      let errorMessage = error instanceof Error ? error.message : 'Échec de l\'enregistrement. Veuillez réessayer.';
+      // Handle network errors
+      if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
+        errorMessage = 'Erreur réseau. Vérifiez votre connexion et réessayez.';
+      }
+      setStatusMessage(errorMessage);
+      setStatusType('error');
+      showErrorToast(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={R.safe}>
+      <View style={R.root}>
+        {/* ── Left brand panel — desktop only ───────────────── */}
+        {isDesktop && (
+          <View style={R.brandPanel}>
+            <View style={R.brandCircle1} />
+            <View style={R.brandCircle2} />
+            <View style={R.brandContent}>
+              <View style={R.brandLogo}>
+                <Image source={require('../../assets/icon.png')} style={R.brandLogoImg} resizeMode="contain" />
+              </View>
+              <Text style={R.brandName}>KAT Management Systems</Text>
+              <Text style={R.brandTagline}>
+                Créez votre compte pour accéder au{'\n'}système de gestion
+              </Text>
+              <View style={R.brandDivider} />
+              <View style={R.brandFeatures}>
+                {[
+                  { icon: 'shield-checkmark', text: 'Sécurité garantie' },
+                  { icon: 'cloud-offline', text: 'Accès hors ligne' },
+                  { icon: 'person-add', text: 'Inscription simple' },
+                  { icon: 'checkmark-done', text: 'Accès immédiat' },
+                ].map((f, i) => (
+                  <View key={i} style={R.brandFeatureRow}>
+                    <View style={R.brandFeatureIcon}>
+                      <Ionicons name={f.icon as keyof typeof Ionicons.glyphMap} size={15} color="#FFF" />
+                    </View>
+                    <Text style={R.brandFeatureText}>{f.text}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={R.brandStepPill}>
+                <Ionicons name="person-add-outline" size={12} color="rgba(255,255,255,0.75)" />
+                <Text style={R.brandStepLabel}>Créer un compte</Text>
+              </View>
+            </View>
+            <Text style={R.brandFooter}>© 2025 KAT Management Systems · RDC</Text>
+          </View>
+        )}
+
+        {/* ── Right form side ───────────────────────────────── */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={R.formSide}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <Animated.View style={[R.formSideInner, { opacity: fadeAnim }]}>
+            <ScrollView
+              contentContainerStyle={R.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Mobile header with back button */}
+              {!isDesktop && (
+                <View style={R.mobileHeader}>
+                  <TouchableOpacity style={R.mobileBackBtn} onPress={() => navigation.goBack()}>
+                    <Ionicons name="arrow-back" size={18} color={colors.text} />
+                  </TouchableOpacity>
+                  <View style={R.mobileLogoBox}>
+                    <Image source={require('../../assets/icon.png')} style={R.mobileLogoImg} resizeMode="contain" />
+                  </View>
+                  <Text style={R.mobileBrandName}>KAT Management</Text>
+                </View>
+              )}
+
+              {/* Desktop back link */}
+              {isDesktop && (
+                <TouchableOpacity style={R.desktopBackBtn} onPress={() => navigation.goBack()}>
+                  <Ionicons name="arrow-back" size={15} color={colors.textSecondary} />
+                  <Text style={R.desktopBackText}>Retour à la connexion</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Heading */}
+              <Text style={R.pageTitle}>Créer un compte</Text>
+              <Text style={R.pageDesc}>Remplissez le formulaire pour commencer</Text>
+
+              {/* Alert */}
+              {statusMessage ? (
+                <View style={[R.alert, statusType === 'success' ? R.alertSuccess : R.alertError]}>
+                  <Ionicons
+                    name={statusType === 'success' ? 'checkmark-circle' : 'alert-circle'}
+                    size={16}
+                    color={statusType === 'success' ? '#059669' : colors.error}
+                  />
+                  <Text style={[R.alertText, { color: statusType === 'success' ? '#059669' : colors.error }]}>
+                    {statusMessage}
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* First name field */}
+              <View style={R.fieldGroup}>
+                <Text style={R.fieldLabel}>PRÉNOM</Text>
+                <View style={R.inputBox}>
+                  <Ionicons name="person-outline" size={18} color={colors.textSecondary} style={R.fieldIcon} />
+                  <TextInput
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="Jean"
+                    placeholderTextColor={colors.textDisabled}
+                    style={R.input}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    mode="flat"
+                    underlineColor="transparent"
+                    activeUnderlineColor="transparent"
+                    contentStyle={R.inputContent}
+                  />
+                </View>
+              </View>
+
+              {/* Last name field */}
+              <View style={R.fieldGroup}>
+                <Text style={R.fieldLabel}>NOM</Text>
+                <View style={R.inputBox}>
+                  <Ionicons name="person-outline" size={18} color={colors.textSecondary} style={R.fieldIcon} />
+                  <TextInput
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Dupont"
+                    placeholderTextColor={colors.textDisabled}
+                    style={R.input}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    mode="flat"
+                    underlineColor="transparent"
+                    activeUnderlineColor="transparent"
+                    contentStyle={R.inputContent}
+                  />
+                </View>
+              </View>
+
+              {/* Phone field */}
+              <View style={R.fieldGroup}>
+                <Text style={R.fieldLabel}>NUMÉRO DE TÉLÉPHONE</Text>
+                <View style={R.inputBox}>
+                  <Ionicons name="call-outline" size={18} color={colors.textSecondary} style={R.fieldIcon} />
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="+243123456789"
+                    placeholderTextColor={colors.textDisabled}
+                    style={R.input}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="phone-pad"
+                    maxLength={20}
+                    mode="flat"
+                    underlineColor="transparent"
+                    activeUnderlineColor="transparent"
+                    contentStyle={R.inputContent}
+                  />
+                </View>
+              </View>
+
+              {/* Password field */}
+              <View style={R.fieldGroup}>
+                <Text style={R.fieldLabel}>MOT DE PASSE</Text>
+                <View style={R.inputBox}>
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} style={R.fieldIcon} />
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor={colors.textDisabled}
+                    style={R.input}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    mode="flat"
+                    underlineColor="transparent"
+                    activeUnderlineColor="transparent"
+                    contentStyle={R.inputContent}
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={R.eyeBtn}>
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Confirm password field */}
+              <View style={R.fieldGroup}>
+                <Text style={R.fieldLabel}>CONFIRMER LE MOT DE PASSE</Text>
+                <View style={R.inputBox}>
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} style={R.fieldIcon} />
+                  <TextInput
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor={colors.textDisabled}
+                    style={R.input}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    mode="flat"
+                    underlineColor="transparent"
+                    activeUnderlineColor="transparent"
+                    contentStyle={R.inputContent}
+                  />
+                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={R.eyeBtn}>
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Register button */}
+              <TouchableOpacity
+                style={[R.primaryBtn, (!firstName.trim() || !lastName.trim() || !phone.trim() || !password.trim() || !confirmPassword.trim() || isLoading) && R.primaryBtnDisabled]}
+                onPress={handleRegister}
+                disabled={!firstName.trim() || !lastName.trim() || !phone.trim() || !password.trim() || !confirmPassword.trim() || isLoading}
+                activeOpacity={0.85}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Text style={R.primaryBtnText}>Créer un Compte</Text>
+                    <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.75)" />
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Login link */}
+              <View style={R.authLinksRow}>
+                <Text style={R.authLinkText}>Vous avez déjà un compte?</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                  <Text style={R.authLink}>Se connecter</Text>
+                </TouchableOpacity>
+              </View>
+
+              {!isDesktop && (
+                <Text style={R.footerText}>© 2025 KAT Management Systems · RDC</Text>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORGOT PASSWORD SCREEN
+// ═══════════════════════════════════════════════════════════════
+
+type ForgotPasswordStep = 'phone' | 'code' | 'password';
+
+function ForgotPasswordScreen({ navigation }: any) {
+  const [step, setStep] = useState<ForgotPasswordStep>('phone');
+  const [phone, setPhone] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [statusType, setStatusType] = useState<'success' | 'error' | ''>('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [codeAttempts, setCodeAttempts] = useState(0);
+  const [requestAttempts, setRequestAttempts] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { success: showSuccessToast, error: showErrorToast, info: showInfoToast } = useToast();
+
+  const validatePhone = (phoneNumber: string): boolean => {
+    const phoneRegex = /^[+]?[0-9]{1,15}$/;
+    return phoneRegex.test(phoneNumber.replace(/[\s\-().]/g, ''));
+  };
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+  }, []);
+
+  const handleRequestReset = async () => {
+    if (!phone.trim()) {
+      setStatusMessage('Veuillez saisir votre numéro de téléphone');
+      setStatusType('error');
+      showErrorToast('Veuillez saisir votre numéro de téléphone');
+      return;
+    }
+
+    if (!validatePhone(phone.trim())) {
+      setStatusMessage('Format de numéro de téléphone invalide');
+      setStatusType('error');
+      showErrorToast('Format de numéro de téléphone invalide');
+      return;
+    }
+
+    // Limit reset code requests to 3 per session
+    if (requestAttempts >= 3) {
+      setStatusMessage('Trop de demandes. Veuillez réessayer dans 15 minutes.');
+      setStatusType('error');
+      showErrorToast('Trop de demandes. Veuillez réessayer dans 15 minutes.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('');
+    showInfoToast('Envoi du code de réinitialisation...');
+
+    try {
+      const result = await ApiAuthService.getInstance().requestPasswordReset(phone.trim());
+
+      if (result.success) {
+        setStep('code');
+        setCodeSent(true);
+        setRequestAttempts(prev => prev + 1);
+        setCodeAttempts(0);
+        const successMessage = 'Code de réinitialisation envoyé à votre téléphone';
+        setStatusMessage(successMessage);
+        setStatusType('success');
+        showSuccessToast(successMessage);
+      } else {
+        let errorMessage = result.error || 'Erreur lors de l\'envoi du code';
+        // Check if phone number doesn't exist
+        if (result.error?.includes('not found') || result.error?.includes('not exist')) {
+          errorMessage = 'Ce numéro de téléphone n\'existe pas dans notre système';
+        }
+        setStatusMessage(errorMessage);
+        setStatusType('error');
+        showErrorToast(errorMessage);
+      }
+    } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : 'Erreur réseau';
+      if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
+        errorMessage = 'Erreur réseau. Vérifiez votre connexion et réessayez.';
+      }
+      setStatusMessage(errorMessage);
+      setStatusType('error');
+      showErrorToast(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!resetCode.trim()) {
+      setStatusMessage('Veuillez saisir le code de réinitialisation');
+      setStatusType('error');
+      showErrorToast('Veuillez saisir le code de réinitialisation');
+      return;
+    }
+
+    if (resetCode.length < 4) {
+      setStatusMessage('Le code doit contenir au moins 4 caractères');
+      setStatusType('error');
+      showErrorToast('Le code doit contenir au moins 4 caractères');
+      return;
+    }
+
+    // Limit verification attempts to 5
+    if (codeAttempts >= 5) {
+      setStatusMessage('Trop de tentatives. Veuillez demander un nouveau code.');
+      setStatusType('error');
+      showErrorToast('Trop de tentatives. Veuillez demander un nouveau code.');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('');
+    showInfoToast('Vérification du code...');
+
+    try {
+      const result = await ApiAuthService.getInstance().verifyResetCode(phone.trim(), resetCode.trim());
+
+      if (result.success) {
+        setStep('password');
+        setCodeAttempts(0);
+        const successMessage = 'Code vérifié, créez un nouveau mot de passe';
+        setStatusMessage(successMessage);
+        setStatusType('success');
+        showSuccessToast(successMessage);
+      } else {
+        let errorMessage = result.error || 'Code invalide';
+        if (result.error?.includes('expired')) {
+          errorMessage = 'Le code a expiré. Veuillez demander un nouveau code.';
+        } else if (result.error?.includes('invalid')) {
+          errorMessage = `Code invalide (tentative ${codeAttempts + 1}/5)`;
+        }
+        setCodeAttempts(prev => prev + 1);
+        setStatusMessage(errorMessage);
+        setStatusType('error');
+        showErrorToast(errorMessage);
+      }
+    } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : 'Erreur réseau';
+      if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
+        errorMessage = 'Erreur réseau. Vérifiez votre connexion et réessayez.';
+      }
+      setStatusMessage(errorMessage);
+      setStatusType('error');
+      showErrorToast(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!newPassword.trim()) {
+      setStatusMessage('Veuillez saisir un nouveau mot de passe');
+      setStatusType('error');
+      showErrorToast('Veuillez saisir un nouveau mot de passe');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setStatusMessage('Le mot de passe doit contenir au moins 8 caractères');
+      setStatusType('error');
+      showErrorToast('Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
+
+    if (!confirmPassword.trim()) {
+      setStatusMessage('Veuillez confirmer le nouveau mot de passe');
+      setStatusType('error');
+      showErrorToast('Veuillez confirmer le nouveau mot de passe');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setStatusMessage('Les mots de passe ne correspondent pas');
+      setStatusType('error');
+      showErrorToast('Les mots de passe ne correspondent pas');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('');
+    showInfoToast('Réinitialisation du mot de passe...');
+
+    try {
+      const result = await ApiAuthService.getInstance().resetPasswordWithCode(
+        phone.trim(),
+        resetCode.trim(),
+        newPassword.trim()
+      );
+
+      if (result.success) {
+        const successMessage = 'Mot de passe réinitialisé avec succès !';
+        setStatusMessage(successMessage);
+        setStatusType('success');
+        showSuccessToast(successMessage);
+        
+        setTimeout(() => {
+          navigation.navigate('Login');
+        }, 1500);
+      } else {
+        let errorMessage = result.error || 'Erreur de réinitialisation';
+        if (result.error?.includes('expired')) {
+          errorMessage = 'Le code a expiré. Veuillez demander un nouveau code.';
+        } else if (result.error?.includes('invalid')) {
+          errorMessage = 'Code ou données invalides. Veuillez réessayer.';
+        }
+        setStatusMessage(errorMessage);
+        setStatusType('error');
+        showErrorToast(errorMessage);
+      }
+    } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : 'Erreur réseau';
+      if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
+        errorMessage = 'Erreur réseau. Vérifiez votre connexion et réessayez.';
+      }
+      setStatusMessage(errorMessage);
+      setStatusType('error');
+      showErrorToast(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const renderStepContent = () => {
+    switch (step) {
+      case 'phone':
+        return (
+          <>
+            <Text style={FP.pageTitle}>Réinitialiser le mot de passe</Text>
+            <Text style={FP.pageDesc}>Entrez votre numéro de téléphone pour recevoir un code</Text>
+
+            {statusMessage ? (
+              <View style={[FP.alert, statusType === 'success' ? FP.alertSuccess : FP.alertError]}>
+                <Ionicons
+                  name={statusType === 'success' ? 'checkmark-circle' : 'alert-circle'}
+                  size={16}
+                  color={statusType === 'success' ? '#059669' : colors.error}
+                />
+                <Text style={[FP.alertText, { color: statusType === 'success' ? '#059669' : colors.error }]}>
+                  {statusMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={FP.fieldGroup}>
+              <Text style={FP.fieldLabel}>NUMÉRO DE TÉLÉPHONE</Text>
+              <View style={FP.inputBox}>
+                <Ionicons name="call-outline" size={18} color={colors.textSecondary} style={FP.fieldIcon} />
+                <TextInput
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="+243123456789"
+                  placeholderTextColor={colors.textDisabled}
+                  style={FP.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="phone-pad"
+                  maxLength={20}
+                  mode="flat"
+                  underlineColor="transparent"
+                  activeUnderlineColor="transparent"
+                  contentStyle={FP.inputContent}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[FP.primaryBtn, (!phone.trim() || isLoading) && FP.primaryBtnDisabled]}
+              onPress={handleRequestReset}
+              disabled={!phone.trim() || isLoading}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Text style={FP.primaryBtnText}>Envoyer le Code</Text>
+                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.75)" />
+                </>
+              )}
+            </TouchableOpacity>
+          </>
+        );
+
+      case 'code':
+        return (
+          <>
+            <Text style={FP.pageTitle}>Vérifier le Code</Text>
+            <Text style={FP.pageDesc}>Entrez le code reçu à {phone}</Text>
+
+            {statusMessage ? (
+              <View style={[FP.alert, statusType === 'success' ? FP.alertSuccess : FP.alertError]}>
+                <Ionicons
+                  name={statusType === 'success' ? 'checkmark-circle' : 'alert-circle'}
+                  size={16}
+                  color={statusType === 'success' ? '#059669' : colors.error}
+                />
+                <Text style={[FP.alertText, { color: statusType === 'success' ? '#059669' : colors.error }]}>
+                  {statusMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={FP.fieldGroup}>
+              <Text style={FP.fieldLabel}>CODE DE RÉINITIALISATION</Text>
+              <Text style={{ fontSize: 12, color: colors.textTertiary, marginBottom: 8 }}>
+                Tentatives: {codeAttempts}/5
+              </Text>
+              <View style={FP.inputBox}>
+                <Ionicons name="key-outline" size={18} color={colors.textSecondary} style={FP.fieldIcon} />
+                <TextInput
+                  value={resetCode}
+                  onChangeText={setResetCode}
+                  placeholder="000000"
+                  placeholderTextColor={colors.textDisabled}
+                  style={FP.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  mode="flat"
+                  underlineColor="transparent"
+                  activeUnderlineColor="transparent"
+                  contentStyle={FP.inputContent}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[FP.primaryBtn, (!resetCode.trim() || isLoading || codeAttempts >= 5) && FP.primaryBtnDisabled]}
+              onPress={handleVerifyCode}
+              disabled={!resetCode.trim() || isLoading || codeAttempts >= 5}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Text style={FP.primaryBtnText}>Vérifier le Code</Text>
+                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.75)" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {codeSent && codeAttempts < 5 && (
+              <TouchableOpacity onPress={handleRequestReset} style={FP.tertiaryBtn}>
+                <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}>Renvoyer le Code</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity onPress={() => { setStep('phone'); setStatusMessage(''); setCodeAttempts(0); }} style={FP.secondaryBtn}>
+              <Text style={FP.secondaryBtnText}>Retour</Text>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 'password':
+        return (
+          <>
+            <Text style={FP.pageTitle}>Nouveau Mot de Passe</Text>
+            <Text style={FP.pageDesc}>Créez un nouveau mot de passe sécurisé</Text>
+
+            {statusMessage ? (
+              <View style={[FP.alert, statusType === 'success' ? FP.alertSuccess : FP.alertError]}>
+                <Ionicons
+                  name={statusType === 'success' ? 'checkmark-circle' : 'alert-circle'}
+                  size={16}
+                  color={statusType === 'success' ? '#059669' : colors.error}
+                />
+                <Text style={[FP.alertText, { color: statusType === 'success' ? '#059669' : colors.error }]}>
+                  {statusMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={FP.fieldGroup}>
+              <Text style={FP.fieldLabel}>NOUVEAU MOT DE PASSE</Text>
+              <View style={FP.inputBox}>
+                <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} style={FP.fieldIcon} />
+                <TextInput
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor={colors.textDisabled}
+                  style={FP.input}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  mode="flat"
+                  underlineColor="transparent"
+                  activeUnderlineColor="transparent"
+                  contentStyle={FP.inputContent}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={FP.eyeBtn}>
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={FP.fieldGroup}>
+              <Text style={FP.fieldLabel}>CONFIRMER LE MOT DE PASSE</Text>
+              <View style={FP.inputBox}>
+                <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} style={FP.fieldIcon} />
+                <TextInput
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor={colors.textDisabled}
+                  style={FP.input}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  mode="flat"
+                  underlineColor="transparent"
+                  activeUnderlineColor="transparent"
+                  contentStyle={FP.inputContent}
+                />
+                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={FP.eyeBtn}>
+                  <Ionicons
+                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[FP.primaryBtn, (!newPassword.trim() || !confirmPassword.trim() || isLoading) && FP.primaryBtnDisabled]}
+              onPress={handleResetPassword}
+              disabled={!newPassword.trim() || !confirmPassword.trim() || isLoading}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Text style={FP.primaryBtnText}>Réinitialiser le Mot de Passe</Text>
+                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.75)" />
+                </>
+              )}
+            </TouchableOpacity>
+          </>
+        );
+    }
+  };
+
+  return (
+    <SafeAreaView style={FP.safe}>
+      <View style={FP.root}>
+        {/* ── Left brand panel — desktop only ───────────────── */}
+        {isDesktop && (
+          <View style={FP.brandPanel}>
+            <View style={FP.brandCircle1} />
+            <View style={FP.brandCircle2} />
+            <View style={FP.brandContent}>
+              <View style={FP.brandLogo}>
+                <Image source={require('../../assets/icon.png')} style={FP.brandLogoImg} resizeMode="contain" />
+              </View>
+              <Text style={FP.brandName}>KAT Management Systems</Text>
+              <Text style={FP.brandTagline}>
+                Réinitialisez votre mot de{'\n'}passe en toute sécurité
+              </Text>
+              <View style={FP.brandDivider} />
+              <View style={FP.brandFeatures}>
+                {[
+                  { icon: 'shield-checkmark', text: 'Processus sécurisé' },
+                  { icon: 'key', text: 'Code de vérification' },
+                  { icon: 'lock-closed', text: 'Nouveau mot de passe' },
+                  { icon: 'checkmark-done', text: 'Accès restauré' },
+                ].map((f, i) => (
+                  <View key={i} style={FP.brandFeatureRow}>
+                    <View style={FP.brandFeatureIcon}>
+                      <Ionicons name={f.icon as keyof typeof Ionicons.glyphMap} size={15} color="#FFF" />
+                    </View>
+                    <Text style={FP.brandFeatureText}>{f.text}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={FP.brandStepPill}>
+                <Ionicons name="key-outline" size={12} color="rgba(255,255,255,0.75)" />
+                <Text style={FP.brandStepLabel}>Réinitialisation Sécurisée</Text>
+              </View>
+            </View>
+            <Text style={FP.brandFooter}>© 2025 KAT Management Systems · RDC</Text>
+          </View>
+        )}
+
+        {/* ── Right form side ───────────────────────────────── */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={FP.formSide}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <Animated.View style={[FP.formSideInner, { opacity: fadeAnim }]}>
+            <ScrollView
+              contentContainerStyle={FP.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Mobile header with back button */}
+              {!isDesktop && (
+                <View style={FP.mobileHeader}>
+                  <TouchableOpacity style={FP.mobileBackBtn} onPress={() => navigation.goBack()}>
+                    <Ionicons name="arrow-back" size={18} color={colors.text} />
+                  </TouchableOpacity>
+                  <View style={FP.mobileLogoBox}>
+                    <Image source={require('../../assets/icon.png')} style={FP.mobileLogoImg} resizeMode="contain" />
+                  </View>
+                  <Text style={FP.mobileBrandName}>KAT Management</Text>
+                </View>
+              )}
+
+              {/* Desktop back link */}
+              {isDesktop && (
+                <TouchableOpacity style={FP.desktopBackBtn} onPress={() => navigation.goBack()}>
+                  <Ionicons name="arrow-back" size={15} color={colors.textSecondary} />
+                  <Text style={FP.desktopBackText}>Retour à la connexion</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Step indicator */}
+              <View style={FP.stepRow}>
+                {[
+                  { label: 'Téléphone', stepName: 'phone' as const },
+                  { label: 'Code', stepName: 'code' as const },
+                  { label: 'Mot de passe', stepName: 'password' as const },
+                ].map((s, i) => {
+                  const steps: ForgotPasswordStep[] = ['phone', 'code', 'password'];
+                  const currentIndex = steps.indexOf(step);
+                  const stepIndex = steps.indexOf(s.stepName);
+                  const isActive = stepIndex === currentIndex;
+                  const isDone = stepIndex < currentIndex;
+                  
+                  return (
+                    <React.Fragment key={i}>
+                      <View style={FP.stepItem}>
+                        <View style={[
+                          FP.stepBubble,
+                          isDone ? FP.stepBubbleDone : isActive ? FP.stepBubbleActive : FP.stepBubbleInactive,
+                        ]}>
+                          {isDone
+                            ? <Ionicons name="checkmark" size={13} color="#FFF" />
+                            : <Text style={[FP.stepNum, isActive && FP.stepNumActive]}>{i + 1}</Text>
+                          }
+                        </View>
+                        <Text style={[
+                          FP.stepLabel,
+                          isDone && FP.stepLabelDone,
+                          isActive && FP.stepLabelActive,
+                        ]}>
+                          {s.label}
+                        </Text>
+                      </View>
+                      {i < 2 && (
+                        <View style={[FP.stepConnector, isDone && FP.stepConnectorDone]} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+
+              {renderStepContent()}
+
+              <View style={FP.authLinksRow}>
+                <Text style={FP.authLinkText}>Vous avez un compte?</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                  <Text style={FP.authLink}>Se connecter</Text>
+                </TouchableOpacity>
+              </View>
+
+              {!isDesktop && (
+                <Text style={FP.footerText}>© 2025 KAT Management Systems · RDC</Text>
               )}
             </ScrollView>
           </Animated.View>
@@ -1200,6 +2206,145 @@ const L = StyleSheet.create({
     fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier',
   },
 
+  // Auth links
+  authLinksRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 0,
+    marginTop: isDesktop ? 10 : 16,
+    paddingVertical: 12, paddingHorizontal: 0,
+  },
+  authLink: {
+    fontSize: 13, fontWeight: '600', color: colors.primary,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  authLinkDivider: {
+    width: 1, height: 18,
+    backgroundColor: colors.outline, marginHorizontal: 0,
+  },
+
   // Footer
+  footerText: { fontSize: 11, color: colors.textTertiary, textAlign: 'center', paddingTop: 4 },
+});
+// ---------------------------------------------------------------
+// REGISTER SCREEN STYLES
+// ---------------------------------------------------------------
+const R = StyleSheet.create({
+  // Layout
+  safe: { flex: 1, backgroundColor: colors.background, ...Platform.select({ web: { height: SCREEN_H } as any, default: {} }) },
+  root: { flex: 1, flexDirection: isDesktop ? 'row' : 'column', ...Platform.select({ web: { overflow: 'hidden' } as any, default: {} }) },
+  brandPanel: { width: '38%', backgroundColor: colors.primary, overflow: 'hidden', position: 'relative' },
+  brandCircle1: { position: 'absolute', top: -100, right: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.06)' },
+  brandCircle2: { position: 'absolute', bottom: -80, left: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(91,101,220,0.22)' },
+  brandContent: { flex: 1, padding: isDesktop ? 36 : 28, justifyContent: 'center', zIndex: 1 },
+  brandLogo: { width: 60, height: 60, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center', marginBottom: 18, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  brandLogoImg: { width: 50, height: 50 },
+  brandName: { fontSize: isDesktop ? 22 : 20, fontWeight: '800', color: '#FFF', letterSpacing: -0.3, marginBottom: 8 },
+  brandTagline: { fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 20, marginBottom: 20 },
+  brandDivider: { width: 44, height: 3, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, marginBottom: 18 },
+  brandFeatures: { gap: 12 },
+  brandFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  brandFeatureIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center' },
+  brandFeatureText: { fontSize: 13, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
+  brandStepPill: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7, alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  brandStepLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
+  brandFooter: { position: 'absolute', bottom: 16, left: 36, fontSize: 11, color: 'rgba(255,255,255,0.35)' },
+  formSide: { flex: 1, backgroundColor: colors.background },
+  formSideInner: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: isDesktop ? 48 : (isTablet ? 36 : 20), paddingTop: isDesktop ? 36 : 20, paddingBottom: isDesktop ? 24 : 40, maxWidth: isDesktop ? 520 : undefined, width: '100%', alignSelf: isDesktop ? 'center' : undefined },
+  mobileHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, marginTop: 4 },
+  mobileBackBtn: { width: 38, height: 38, borderRadius: 11, backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  mobileLogoBox: { width: 38, height: 38, borderRadius: 11, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', ...shadows.sm },
+  mobileLogoImg: { width: 32, height: 32 },
+  mobileBrandName: { fontSize: isTablet ? 16 : 14, fontWeight: '700', color: colors.text },
+  desktopBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20, alignSelf: 'flex-start', paddingVertical: 4 },
+  desktopBackText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
+  pageTitle: { fontSize: isDesktop ? 24 : 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5, marginBottom: 6 },
+  pageDesc: { fontSize: 14, color: colors.textSecondary, lineHeight: 21, marginBottom: isDesktop ? 14 : 22 },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 10, marginBottom: 20, borderWidth: 1 },
+  alertSuccess: { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' },
+  alertError: { backgroundColor: '#FFF5F5', borderColor: '#FECACA' },
+  alertText: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 18 },
+  fieldGroup: { marginBottom: isDesktop ? 12 : 18 },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: colors.textTertiary, letterSpacing: 1.1, marginBottom: 6, textTransform: 'uppercase' },
+  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.outline, paddingHorizontal: 14, minHeight: isDesktop ? 46 : 52, ...shadows.sm },
+  fieldIcon: { marginRight: 10 },
+  input: { flex: 1, backgroundColor: 'transparent', height: isDesktop ? 46 : 52, fontSize: 15, color: colors.text },
+  inputContent: { backgroundColor: 'transparent', paddingHorizontal: 0 },
+  eyeBtn: { paddingLeft: 10, paddingVertical: 6 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: isDesktop ? 13 : 16, paddingHorizontal: 20, marginTop: 4, marginBottom: isDesktop ? 12 : 18, ...shadows.md },
+  primaryBtnDisabled: { opacity: 0.42 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#FFF' },
+  authLinksRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: isDesktop ? 8 : 12 },
+  authLinkText: { fontSize: 13, color: colors.textSecondary },
+  authLink: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  footerText: { fontSize: 11, color: colors.textTertiary, textAlign: 'center', paddingTop: 4 },
+});
+
+// ---------------------------------------------------------------
+// FORGOTTEN PASSWORD SCREEN STYLES
+// ---------------------------------------------------------------
+const FP = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background, ...Platform.select({ web: { height: SCREEN_H } as any, default: {} }) },
+  root: { flex: 1, flexDirection: isDesktop ? 'row' : 'column', ...Platform.select({ web: { overflow: 'hidden' } as any, default: {} }) },
+  brandPanel: { width: '38%', backgroundColor: colors.primary, overflow: 'hidden', position: 'relative' },
+  brandCircle1: { position: 'absolute', top: -100, right: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.06)' },
+  brandCircle2: { position: 'absolute', bottom: -80, left: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(91,101,220,0.22)' },
+  brandContent: { flex: 1, padding: isDesktop ? 36 : 28, justifyContent: 'center', zIndex: 1 },
+  brandLogo: { width: 60, height: 60, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center', marginBottom: 18, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  brandLogoImg: { width: 50, height: 50 },
+  brandName: { fontSize: isDesktop ? 22 : 20, fontWeight: '800', color: '#FFF', letterSpacing: -0.3, marginBottom: 8 },
+  brandTagline: { fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 20, marginBottom: 20 },
+  brandDivider: { width: 44, height: 3, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, marginBottom: 18 },
+  brandFeatures: { gap: 12 },
+  brandFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  brandFeatureIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center' },
+  brandFeatureText: { fontSize: 13, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
+  brandStepPill: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7, alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  brandStepLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
+  brandFooter: { position: 'absolute', bottom: 16, left: 36, fontSize: 11, color: 'rgba(255,255,255,0.35)' },
+  formSide: { flex: 1, backgroundColor: colors.background },
+  formSideInner: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: isDesktop ? 48 : (isTablet ? 36 : 20), paddingTop: isDesktop ? 36 : 20, paddingBottom: isDesktop ? 24 : 40, maxWidth: isDesktop ? 520 : undefined, width: '100%', alignSelf: isDesktop ? 'center' : undefined },
+  mobileHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, marginTop: 4 },
+  mobileBackBtn: { width: 38, height: 38, borderRadius: 11, backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  mobileLogoBox: { width: 38, height: 38, borderRadius: 11, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', ...shadows.sm },
+  mobileLogoImg: { width: 32, height: 32 },
+  mobileBrandName: { fontSize: isTablet ? 16 : 14, fontWeight: '700', color: colors.text },
+  desktopBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20, alignSelf: 'flex-start', paddingVertical: 4 },
+  desktopBackText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
+  stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: isDesktop ? 18 : 28 },
+  stepItem: { alignItems: 'center', gap: 5 },
+  stepBubble: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  stepBubbleDone: { backgroundColor: colors.primary },
+  stepBubbleActive: { backgroundColor: colors.primary },
+  stepBubbleInactive: { backgroundColor: colors.surfaceVariant, borderWidth: 1, borderColor: colors.outline },
+  stepNum: { fontSize: 12, fontWeight: '700', color: colors.textTertiary },
+  stepNumActive: { color: '#FFF' },
+  stepLabel: { fontSize: 11, fontWeight: '500', color: colors.textTertiary },
+  stepLabelDone: { color: colors.textSecondary, fontWeight: '600' },
+  stepLabelActive: { color: colors.primary, fontWeight: '700' },
+  stepConnector: { flex: 1, height: 2, backgroundColor: colors.outline, marginHorizontal: 8, marginBottom: 18 },
+  stepConnectorDone: { backgroundColor: colors.primary },
+  pageTitle: { fontSize: isDesktop ? 24 : 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5, marginBottom: 6 },
+  pageDesc: { fontSize: 14, color: colors.textSecondary, lineHeight: 21, marginBottom: isDesktop ? 14 : 22 },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 10, marginBottom: 20, borderWidth: 1 },
+  alertSuccess: { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' },
+  alertError: { backgroundColor: '#FFF5F5', borderColor: '#FECACA' },
+  alertText: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 18 },
+  fieldGroup: { marginBottom: isDesktop ? 12 : 18 },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: colors.textTertiary, letterSpacing: 1.1, marginBottom: 6, textTransform: 'uppercase' },
+  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, borderColor: colors.outline, paddingHorizontal: 14, minHeight: isDesktop ? 46 : 52, ...shadows.sm },
+  fieldIcon: { marginRight: 10 },
+  input: { flex: 1, backgroundColor: 'transparent', height: isDesktop ? 46 : 52, fontSize: 15, color: colors.text },
+  inputContent: { backgroundColor: 'transparent', paddingHorizontal: 0 },
+  eyeBtn: { paddingLeft: 10, paddingVertical: 6 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: isDesktop ? 13 : 16, paddingHorizontal: 20, marginTop: 4, marginBottom: isDesktop ? 12 : 18, ...shadows.md },
+  primaryBtnDisabled: { opacity: 0.42 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#FFF' },
+  secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderRadius: 12, paddingVertical: isDesktop ? 11 : 14, paddingHorizontal: 20, marginBottom: isDesktop ? 12 : 18, borderWidth: 1.5, borderColor: colors.outline, ...shadows.sm },
+  secondaryBtnText: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  tertiaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 20, marginBottom: isDesktop ? 8 : 14 },
+  authLinksRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: isDesktop ? 8 : 12 },
+  authLinkText: { fontSize: 13, color: colors.textSecondary },
+  authLink: { fontSize: 13, fontWeight: '600', color: colors.primary },
   footerText: { fontSize: 11, color: colors.textTertiary, textAlign: 'center', paddingTop: 4 },
 });

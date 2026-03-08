@@ -1,12 +1,13 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Alert,
+  StyleSheet, Dimensions, Modal, Alert, ActivityIndicator, TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, borderRadius, shadows } from '../../../theme/theme';
+import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
 import { SECTOR_PROFILES, OccHealthUtils, type IndustrySector } from '../../../models/OccupationalHealth';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -73,16 +74,7 @@ function getAuditStatusColor(s: string): string {
 const SAMPLE_ITEMS: ComplianceItem[] = [
   { id: 'c1', category: 'iso45001', standard: 'ISO 45001:2018', clause: '§4.1', requirement: 'Compréhension de l\'organisme et de son contexte', status: 'compliant', evidence: 'Analyse SWOT SST réalisée, revue de direction Q4 2024.', responsiblePerson: 'Dir. SST', lastAuditDate: '2024-12-15', notes: '' },
   { id: 'c2', category: 'iso45001', standard: 'ISO 45001:2018', clause: '§5.4', requirement: 'Consultation et participation des travailleurs', status: 'partial', evidence: 'Comité SST en place, mais participation irrégulière.', responsiblePerson: 'RH', dueDate: '2025-03-01', lastAuditDate: '2024-12-15', notes: 'Action: renforcer le comité SST' },
-  { id: 'c3', category: 'iso45001', standard: 'ISO 45001:2018', clause: '§6.1', requirement: 'Actions face aux risques et opportunités', status: 'compliant', evidence: 'Évaluations des risques à jour pour 3 sites principaux.', responsiblePerson: 'Ing. HSE', lastAuditDate: '2024-12-15', notes: '' },
-  { id: 'c4', category: 'iso45001', standard: 'ISO 45001:2018', clause: '§8.1.2', requirement: 'Élimination des dangers et réduction des risques', status: 'partial', evidence: 'Hiérarchie des contrôles appliquée partiellement.', responsiblePerson: 'Ing. HSE', dueDate: '2025-06-01', notes: 'Plan d\'action en cours' },
   { id: 'c5', category: 'iso45001', standard: 'ISO 45001:2018', clause: '§9.1.2', requirement: 'Évaluation de la conformité', status: 'non_compliant', evidence: 'Audit de conformité légale non réalisé en 2024.', responsiblePerson: 'Dir. Juridique', dueDate: '2025-02-15', notes: 'PRIORITÉ HAUTE — audit à planifier' },
-  { id: 'c6', category: 'ilo', standard: 'Convention C155', clause: 'Art. 16', requirement: 'Garantir la sécurité des lieux de travail', status: 'compliant', evidence: 'Inspections mensuelles réalisées sur tous les sites.', responsiblePerson: 'HSE Manager', lastAuditDate: '2024-11-30', notes: '' },
-  { id: 'c7', category: 'ilo', standard: 'Convention C161', clause: 'Art. 5', requirement: 'Services de médecine du travail', status: 'compliant', evidence: 'Service médical du travail opérationnel, 3 médecins.', responsiblePerson: 'Dir. Médical', notes: '' },
-  { id: 'c8', category: 'national', standard: 'Code du Travail RDC', clause: 'Art. 171', requirement: 'Examens médicaux obligatoires (embauche, périodique, reprise)', status: 'partial', evidence: 'Examens d\'embauche systématiques, périodiques à renforcer.', responsiblePerson: 'Médecin du Travail', dueDate: '2025-04-01', notes: '' },
-  { id: 'c9', category: 'national', standard: 'Code du Travail RDC', clause: 'Art. 178', requirement: 'Déclaration des accidents de travail dans les 48h', status: 'compliant', evidence: 'Processus de déclaration en place via application.', responsiblePerson: 'HSE Manager', notes: '' },
-  { id: 'c10', category: 'sector', standard: 'Code Minier RDC', clause: 'Art. 285', requirement: 'Plan de gestion environnementale et sociale', status: 'partial', evidence: 'PGES existant mais nécessite mise à jour.', responsiblePerson: 'Dir. Environnement', dueDate: '2025-05-01', sector: 'mining', notes: '' },
-  { id: 'c11', category: 'internal', standard: 'Politique SST Interne', clause: 'POL-001', requirement: 'Formation SST initiale pour tous les nouveaux employés', status: 'compliant', evidence: 'Programme d\'intégration SST de 3 jours en place.', responsiblePerson: 'Formation', notes: '' },
-  { id: 'c12', category: 'internal', standard: 'Procédure EPI', clause: 'PROC-EPI-001', requirement: 'Dotation EPI selon matrice de risques', status: 'non_compliant', evidence: 'Ruptures de stock fréquentes sur certains EPI.', responsiblePerson: 'Logistique', dueDate: '2025-03-15', notes: 'Budget supplémentaire demandé' },
 ];
 
 const SAMPLE_AUDITS: AuditRecord[] = [
@@ -91,18 +83,6 @@ const SAMPLE_AUDITS: AuditRecord[] = [
     scope: 'Tous sites miniers et industriels', overallScore: 82,
     findings: [{ type: 'major_nc', count: 1 }, { type: 'minor_nc', count: 4 }, { type: 'observation', count: 7 }, { type: 'good_practice', count: 3 }],
     status: 'follow_up', nextAuditDate: '2025-06-15',
-  },
-  {
-    id: 'a2', title: 'Audit Interne SST Q1 2025', auditDate: '2025-01-20', auditor: 'Équipe SST Interne',
-    scope: 'Site Kamoto + Bureaux Lubumbashi', overallScore: 75,
-    findings: [{ type: 'minor_nc', count: 6 }, { type: 'observation', count: 10 }, { type: 'good_practice', count: 5 }],
-    status: 'in_progress',
-  },
-  {
-    id: 'a3', title: 'Inspection Ministère du Travail', auditDate: '2025-03-10', auditor: 'Inspection du Travail',
-    scope: 'Conformité Code du Travail', overallScore: 0,
-    findings: [],
-    status: 'planned',
   },
 ];
 
@@ -139,7 +119,7 @@ function ComplianceCard({ item, onPress }: { item: ComplianceItem; onPress: () =
 }
 
 // ─── Detail Modal ────────────────────────────────────────────
-function ComplianceDetailModal({ visible, item, onClose, onUpdateStatus }: { visible: boolean; item: ComplianceItem | null; onClose: () => void; onUpdateStatus: (id: string, status: ComplianceItem['status']) => void }) {
+function ComplianceDetailModal({ visible, item, onClose, onUpdateStatus, onDelete }: { visible: boolean; item: ComplianceItem | null; onClose: () => void; onUpdateStatus: (id: string, status: ComplianceItem['status']) => void; onDelete?: () => void }) {
   if (!item) return null;
   const catColor = getCategoryColor(item.category);
   const statColor = getStatusColor(item.status);
@@ -202,6 +182,12 @@ function ComplianceDetailModal({ visible, item, onClose, onUpdateStatus }: { vis
             </View>
           </ScrollView>
           <View style={styles.modalActions}>
+            {onDelete && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FEF2F2' }]} onPress={onDelete}>
+                <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Supprimer</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]} onPress={onClose}>
               <Text style={[styles.actionBtnText, { color: colors.text }]}>Fermer</Text>
             </TouchableOpacity>
@@ -219,23 +205,69 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 // ─── Main Screen ─────────────────────────────────────────────
 export function ComplianceScreen() {
   const [items, setItems] = useState<ComplianceItem[]>(SAMPLE_ITEMS);
-  const [audits] = useState<AuditRecord[]>(SAMPLE_AUDITS);
+  const [audits, setAudits] = useState<AuditRecord[]>(SAMPLE_AUDITS);
   const [selectedItem, setSelectedItem] = useState<ComplianceItem | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [loading, setLoading] = useState(false);
+  const [auditsLoading, setAuditsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { loadData(); }, []);
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+    loadAudits();
+  }, []);
+
   const loadData = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setItems(JSON.parse(stored));
-      else await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_ITEMS));
-    } catch { }
+      if (stored) {
+        setItems(JSON.parse(stored));
+      } else {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_ITEMS));
+        setItems(SAMPLE_ITEMS);
+      }
+      setError(null);
+    } catch (e) {
+      console.error('Error loading compliance data:', e);
+      setError('Erreur lors du chargement des données');
+    }
   };
+
+  const loadAudits = async () => {
+    setAuditsLoading(true);
+    try {
+      const result = await occHealthApi.listComplianceAudits();
+      if (result.data && result.data.length > 0) {
+        // Transform backend audit format to our format if needed
+        setAudits(result.data);
+      } else {
+        setAudits(SAMPLE_AUDITS);
+      }
+      setError(null);
+    } catch (e) {
+      console.error('Error loading audits:', e);
+      setAudits(SAMPLE_AUDITS);
+    } finally {
+      setAuditsLoading(false);
+    }
+  };
+
   const saveData = async (list: ComplianceItem[]) => {
-    setItems(list);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    try {
+      setLoading(true);
+      setItems(list);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      setError(null);
+    } catch (e) {
+      console.error('Error saving compliance data:', e);
+      setError('Erreur lors de la sauvegarde');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdateStatus = (id: string, status: ComplianceItem['status']) => {
@@ -243,6 +275,30 @@ export function ComplianceScreen() {
     saveData(updated);
     setSelectedItem(prev => prev && prev.id === id ? { ...prev, status } : prev);
     Alert.alert('Succès', 'Statut mis à jour.');
+  };
+
+  const handleAddItem = (newItem: ComplianceItem) => {
+    const updated = [...items, newItem];
+    saveData(updated);
+    setShowAddModal(false);
+    Alert.alert('Succès', 'Exigence créée avec succès.');
+  };
+
+  const handleDeleteItem = (id: string) => {
+    Alert.alert(
+      'Supprimer',
+      'Êtes-vous sûr de vouloir supprimer cette exigence?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer', style: 'destructive',
+          onPress: () => {
+            const updated = items.filter(i => i.id !== id);
+            saveData(updated);
+          },
+        },
+      ]
+    );
   };
 
   const filtered = useMemo(() => {
@@ -262,13 +318,31 @@ export function ComplianceScreen() {
     return { total: items.length, compliant, partial, nonCompliant, score };
   }, [items]);
 
+  if (error) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg }}>
+        <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+        <Text style={{ fontSize: 14, color: '#EF4444', marginTop: spacing.md }}>{error}</Text>
+        <TouchableOpacity onPress={loadData} style={{ marginTop: spacing.md, backgroundColor: ACCENT, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.lg }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>Réessayer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.screenTitle}>Conformité Réglementaire</Text>
           <Text style={styles.screenSubtitle}>Suivi ISO 45001, OIT, Code du Travail RDC et normes sectorielles</Text>
         </View>
+        <TouchableOpacity
+          style={{ backgroundColor: ACCENT, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}
+          onPress={() => setShowAddModal(true)}
+        >
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>+ Ajouter</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Score & Stats */}
@@ -299,47 +373,54 @@ export function ComplianceScreen() {
 
       {/* Audit Section */}
       <View style={styles.auditSection}>
-        <Text style={styles.sectionTitle}>Audits Récents & Planifiés</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Audits Récents & Planifiés</Text>
+          {auditsLoading && <ActivityIndicator size="small" color={ACCENT} />}
+        </View>
         <View style={{ gap: 10 }}>
-          {audits.map(a => {
-            const aColor = getAuditStatusColor(a.status);
-            return (
-              <View key={a.id} style={styles.auditCard}>
-                <View style={styles.auditHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.auditTitle}>{a.title}</Text>
-                    <Text style={styles.auditMeta}>{a.auditor} • {a.scope}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <View style={[styles.statusChip, { backgroundColor: aColor + '14' }]}>
-                      <View style={[styles.statusDot, { backgroundColor: aColor }]} />
-                      <Text style={[styles.statusChipText, { color: aColor }]}>{getAuditStatusLabel(a.status)}</Text>
+          {audits.length > 0 ? (
+            audits.map(a => {
+              const aColor = getAuditStatusColor(a.status);
+              return (
+                <View key={a.id} style={styles.auditCard}>
+                  <View style={styles.auditHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.auditTitle}>{a.title}</Text>
+                      <Text style={styles.auditMeta}>{a.auditor} • {a.scope}</Text>
                     </View>
-                    {a.overallScore > 0 && (
-                      <Text style={[styles.auditScore, { color: OccHealthUtils.getComplianceColor(a.overallScore) }]}>{a.overallScore}%</Text>
-                    )}
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <View style={[styles.statusChip, { backgroundColor: aColor + '14' }]}>
+                        <View style={[styles.statusDot, { backgroundColor: aColor }]} />
+                        <Text style={[styles.statusChipText, { color: aColor }]}>{getAuditStatusLabel(a.status)}</Text>
+                      </View>
+                      {a.overallScore > 0 && (
+                        <Text style={[styles.auditScore, { color: OccHealthUtils.getComplianceColor(a.overallScore) }]}>{a.overallScore}%</Text>
+                      )}
+                    </View>
+                  </View>
+                  {a.findings.length > 0 && (
+                    <View style={styles.findingsRow}>
+                      {a.findings.map((f, fi) => {
+                        const fColor = f.type === 'major_nc' ? '#DC2626' : f.type === 'minor_nc' ? '#EF4444' : f.type === 'observation' ? '#F59E0B' : '#22C55E';
+                        const fLabel = f.type === 'major_nc' ? 'NC Maj.' : f.type === 'minor_nc' ? 'NC Min.' : f.type === 'observation' ? 'Obs.' : 'BP';
+                        return (
+                          <View key={fi} style={[styles.findingBadge, { backgroundColor: fColor + '14' }]}>
+                            <Text style={[styles.findingText, { color: fColor }]}>{f.count} {fLabel}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                  <View style={styles.auditDates}>
+                    <Text style={styles.auditDateText}>Date: {new Date(a.auditDate).toLocaleDateString('fr-CD')}</Text>
+                    {a.nextAuditDate && <Text style={styles.auditDateText}>Prochain: {new Date(a.nextAuditDate).toLocaleDateString('fr-CD')}</Text>}
                   </View>
                 </View>
-                {a.findings.length > 0 && (
-                  <View style={styles.findingsRow}>
-                    {a.findings.map((f, fi) => {
-                      const fColor = f.type === 'major_nc' ? '#DC2626' : f.type === 'minor_nc' ? '#EF4444' : f.type === 'observation' ? '#F59E0B' : '#22C55E';
-                      const fLabel = f.type === 'major_nc' ? 'NC Maj.' : f.type === 'minor_nc' ? 'NC Min.' : f.type === 'observation' ? 'Obs.' : 'BP';
-                      return (
-                        <View key={fi} style={[styles.findingBadge, { backgroundColor: fColor + '14' }]}>
-                          <Text style={[styles.findingText, { color: fColor }]}>{f.count} {fLabel}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-                <View style={styles.auditDates}>
-                  <Text style={styles.auditDateText}>Date: {new Date(a.auditDate).toLocaleDateString('fr-CD')}</Text>
-                  {a.nextAuditDate && <Text style={styles.auditDateText}>Prochain: {new Date(a.nextAuditDate).toLocaleDateString('fr-CD')}</Text>}
-                </View>
-              </View>
-            );
-          })}
+              );
+            })
+          ) : (
+            <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg }}>Aucun audit trouvé</Text>
+          )}
         </View>
       </View>
 
@@ -363,8 +444,20 @@ export function ComplianceScreen() {
 
       <Text style={styles.resultsCount}>{filtered.length} exigence(s)</Text>
       <View style={styles.listContainer}>
-        {filtered.map(item => <ComplianceCard key={item.id} item={item} onPress={() => { setSelectedItem(item); setShowDetail(true); }} />)}
-        {filtered.length === 0 && (
+        {loading ? (
+          <ActivityIndicator size="large" color={ACCENT} style={{ marginVertical: spacing.lg }} />
+        ) : filtered.length > 0 ? (
+          filtered.map(item => (
+            <ComplianceCard
+              key={item.id}
+              item={item}
+              onPress={() => {
+                setSelectedItem(item);
+                setShowDetail(true);
+              }}
+            />
+          ))
+        ) : (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle-outline" size={48} color={colors.textTertiary} />
             <Text style={styles.emptyText}>Aucune exigence trouvée</Text>
@@ -372,8 +465,208 @@ export function ComplianceScreen() {
         )}
       </View>
 
-      <ComplianceDetailModal visible={showDetail} item={selectedItem} onClose={() => { setShowDetail(false); setSelectedItem(null); }} onUpdateStatus={handleUpdateStatus} />
+      <ComplianceDetailModal
+        visible={showDetail}
+        item={selectedItem}
+        onClose={() => {
+          setShowDetail(false);
+          setSelectedItem(null);
+        }}
+        onUpdateStatus={handleUpdateStatus}
+        onDelete={() => {
+          if (selectedItem) handleDeleteItem(selectedItem.id);
+          setShowDetail(false);
+          setSelectedItem(null);
+        }}
+      />
+      <AddComplianceModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddItem}
+      />
     </ScrollView>
+  );
+}
+
+// ─── Add Compliance Modal ────────────────────────────────────
+function AddComplianceModal({
+  visible,
+  onClose,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onAdd: (item: ComplianceItem) => void;
+}) {
+  const [category, setCategory] = useState<'iso45001' | 'ilo' | 'national' | 'sector' | 'internal'>('iso45001');
+  const [standard, setStandard] = useState('');
+  const [clause, setClause] = useState('');
+  const [requirement, setRequirement] = useState('');
+  const [evidence, setEvidence] = useState('');
+  const [responsiblePerson, setResponsiblePerson] = useState('');
+  const [status, setStatus] = useState<'compliant' | 'partial' | 'non_compliant' | 'not_applicable'>('partial');
+  const [dueDate, setDueDate] = useState('');
+
+  const canSave =  standard && clause && requirement && responsiblePerson;
+
+  const handleSave = () => {
+    if (!canSave) {
+      Alert.alert('Erreur', 'Veuillez remplir les champs obligatoires');
+      return;
+    }
+    const newItem: ComplianceItem = {
+      id: `${Date.now()}`,
+      category,
+      standard,
+      clause,
+      requirement,
+      evidence,
+      responsiblePerson,
+      status,
+      dueDate: dueDate || undefined,
+      notes: '',
+    };
+    onAdd(newItem);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Nouvelle Exigence</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            <View style={{ gap: spacing.md }}>
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Catégorie *</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {(['iso45001', 'ilo', 'national', 'sector', 'internal'] as const).map(c => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.categoryButton, category === c && { backgroundColor: ACCENT, borderColor: ACCENT }]}
+                      onPress={() => setCategory(c)}
+                    >
+                      <Text style={[{ fontSize: 11, fontWeight: '600', color: category === c ? '#FFF' : colors.text }]}>
+                        {getCategoryLabel(c)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Standard/Norme *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: ISO 45001:2018"
+                  value={standard}
+                  onChangeText={setStandard}
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Clause/Article *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: §4.1 ou Art. 105"
+                  value={clause}
+                  onChangeText={setClause}
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Exigence *</Text>
+                <TextInput
+                  style={[styles.input, { height: 80 }]}
+                  placeholder="Description de l'exigence réglementaire"
+                  value={requirement}
+                  onChangeText={setRequirement}
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Preuve/Évidence</Text>
+                <TextInput
+                  style={[styles.input, { height: 60 }]}
+                  placeholder="Documentation, inspections, etc."
+                  value={evidence}
+                  onChangeText={setEvidence}
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Responsable *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nom du responsable"
+                  value={responsiblePerson}
+                  onChangeText={setResponsiblePerson}
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Statut</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {(['compliant', 'partial', 'non_compliant', 'not_applicable'] as const).map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[styles.statusButton, status === s && { backgroundColor: getStatusColor(s) }]}
+                      onPress={() => setStatus(s)}
+                    >
+                      <View style={[styles.statusDot, { backgroundColor: getStatusColor(s) }]} />
+                      <Text style={[{ fontSize: 10, color: status === s ? '#FFF' : colors.text }]}>
+                        {getStatusLabel(s)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>Date Limite (optionnel)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="YYYY-MM-DD"
+                  value={dueDate}
+                  onChangeText={setDueDate}
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}
+              onPress={onClose}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: ACCENT, opacity: canSave ? 1 : 0.5 }]}
+              onPress={handleSave}
+              disabled={!canSave}
+            >
+              <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Créer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -458,4 +751,35 @@ const styles = StyleSheet.create({
   statusOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusOption: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surfaceVariant },
   statusOptionText: { fontSize: 12, color: colors.textSecondary },
+
+  // Add form styles
+  categoryButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  statusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.outline,
+  },
+  input: {
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.outline,
+    color: colors.text,
+    fontSize: 13,
+  },
 });
