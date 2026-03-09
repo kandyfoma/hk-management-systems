@@ -47,7 +47,17 @@ python manage.py migrate --noinput || {
 }
 echo "   [OK] Migrations step done"
 
-# ── 3. Load / refresh occupational health protocol seed data ────────────────
+# ── 3. Create superuser admin account ───────────────────────────────────────
+#
+#   create_superuser.py is idempotent — it creates the admin user on first run,
+#   and updates the password on subsequent runs if it already exists.
+#   Phone: +243828812498, Password: adminadmin
+#
+echo "[3/7] Creating superuser admin account..."
+python create_superuser.py || echo "   [WARN] create_superuser.py failed (non-fatal, continuing...)"
+echo "   [OK] Superuser step done"
+
+# ── 4. Load / refresh occupational health protocol seed data ────────────────
 #
 #   load_occ_protocols is fully idempotent (uses get_or_create).
 #   It will:
@@ -55,37 +65,37 @@ echo "   [OK] Migrations step done"
 #     - Add new sectors / departments / positions / protocols
 #     - Leave existing records untouched (no data loss)
 #
-echo "[3/6] Loading occupational health protocol data..."
+echo "[4/7] Loading occupational health protocol data..."
 python manage.py load_occ_protocols || echo "   [WARN] load_occ_protocols failed (non-fatal, continuing...)"
 echo "   [OK] Protocol step done"
 
-# ── 4. Seed demo users + patients ───────────────────────────────────────────
+# ── 5. Seed demo users + patients ───────────────────────────────────────────
 #
 #   seed_demo_data is fully idempotent (uses get_or_create).
 #   It creates the demo organization, staff accounts, and 20 demo patients
 #   only if they do not already exist.  Safe to run on every container start.
 #
-echo "[4/6] Loading demo seed data (users + patients)..."
+echo "[5/7] Loading demo seed data (users + patients)..."
 python manage.py seed_demo_data || echo "   [WARN] seed_demo_data failed (non-fatal, continuing...)"
 echo "   [OK] Demo seed step done"
 
-# ── 4b. Seed CAPA (IncidentInvestigation) demo data ────────────────────────
+# ── 5b. Seed CAPA (IncidentInvestigation) demo data ────────────────────────
 #
 #   seed_capa_demo is fully idempotent (skips existing records).
 #   Requires WorkplaceIncident records to exist first; emits a warning and
 #   exits cleanly if none are found.
 #
-echo "[4b/6] Loading CAPA demo data (incident investigations)..."
+echo "[5b/7] Loading CAPA demo data (incident investigations)..."
 python manage.py seed_capa_demo || echo "   [WARN] seed_capa_demo failed (non-fatal, continuing...)"
 echo "   [OK] CAPA demo seed step done"
 
-# ── 5. Collect static files ─────────────────────────────────────────────────
-echo "[5/6] Collecting static files..."
+# ── 6. Collect static files ─────────────────────────────────────────────────
+echo \"[6/7] Collecting static files...\"
 python manage.py collectstatic --noinput --clear || echo "   [WARN] collectstatic failed (non-fatal, continuing...)"
 echo "   [OK] Static files step done"
 
-# ── 6. Start gunicorn ───────────────────────────────────────────────────────
-echo "[6/6] Starting Gunicorn..."
+# ── 7. Start gunicorn ───────────────────────────────────────────────────────
+echo \"[7/7] Starting Gunicorn...\"
 WORKERS=${GUNICORN_WORKERS:-3}
 TIMEOUT=${GUNICORN_TIMEOUT:-120}
 # Railway injects $PORT; fall back to 8000 for local Docker
