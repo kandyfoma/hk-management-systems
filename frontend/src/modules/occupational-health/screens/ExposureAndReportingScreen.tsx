@@ -1030,9 +1030,24 @@ function CompleteReportModal({
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Extract any existing period start date for comparison
+  const periodStart = report.report_period_start ?? '';
+
   const errors = {
     periodEnd: !periodEnd ? 'La date de fin de période est obligatoire.' : null,
+    periodOrder: periodStart && periodEnd && new Date(periodEnd) < new Date(periodStart) 
+      ? 'La date de fin doit être après la date de début.'
+      : null,
     itmOffice: !isCnss && !itmOffice ? 'Veuillez sélectionner le bureau ITM compétent.' : null,
+    workersAffectedCount: !isCnss && workersAffectedCount && parseInt(workersAffectedCount, 10) < 0 
+      ? 'Le nombre doit être positif.'
+      : null,
+    requiredActions: !isCnss && requiredActions && requiredActions.trim().length === 0
+      ? 'Ce champ ne peut pas contenir seulement des espaces.'
+      : null,
+    notes: notes && notes.trim().length === 0 
+      ? 'Le champ de notes ne peut pas contenir seulement des espaces.'
+      : null,
   };
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -1110,7 +1125,7 @@ function CompleteReportModal({
             <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: spacing.xs }}>
               Fin de période <Text style={{ color: '#EF4444' }}>*</Text>
             </Text>
-            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, borderColor: submitted && errors.periodEnd ? '#EF4444' : colors.outline, borderWidth: submitted && errors.periodEnd ? 1.5 : 1 }]}>
+            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, borderColor: submitted && (errors.periodEnd || errors.periodOrder) ? '#EF4444' : colors.outline, borderWidth: submitted && (errors.periodEnd || errors.periodOrder) ? 1.5 : 1 }]}>
               <DateInput
                 value={periodEnd}
                 onChangeText={setPeriodEnd}
@@ -1120,9 +1135,9 @@ function CompleteReportModal({
                 inputStyle={{ fontSize: 13, color: colors.text }}
               />
             </View>
-            {submitted && errors.periodEnd ? (
+            {submitted && (errors.periodEnd || errors.periodOrder) ? (
               <Text style={{ fontSize: 10, color: '#EF4444', marginBottom: spacing.sm, marginTop: -spacing.xs }}>
-                {errors.periodEnd}
+                {errors.periodEnd || errors.periodOrder}
               </Text>
             ) : !!periodEnd ? (
               <Text style={{ fontSize: 10, color: colors.textSecondary, marginBottom: spacing.sm, marginTop: -spacing.xs }}>
@@ -1190,21 +1205,35 @@ function CompleteReportModal({
                   placeholder="ex: 3"
                   placeholderTextColor={colors.textSecondary}
                   keyboardType="numeric"
-                  style={[styles.textInput, { marginBottom: spacing.md }]}
+                  style={[styles.textInput, { marginBottom: spacing.xs, borderColor: submitted && errors.workersAffectedCount ? '#EF4444' : colors.outline, borderWidth: submitted && errors.workersAffectedCount ? 1.5 : 1 }]}
                 />
+                {submitted && errors.workersAffectedCount && (
+                  <Text style={{ fontSize: 10, color: '#EF4444', marginBottom: spacing.md }}>
+                    {errors.workersAffectedCount}
+                  </Text>
+                )}
 
                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: spacing.xs }}>
                   Actions correctives requises
                 </Text>
                 <TextInput
                   value={requiredActions}
-                  onChangeText={setRequiredActions}
+                  onChangeText={v => setRequiredActions(v.slice(0, 1000))}
                   placeholder="Mesures prises ou prévues par l'employeur…"
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={3}
-                  style={[styles.textInput, { height: 80, textAlignVertical: 'top', paddingTop: spacing.sm, marginBottom: spacing.md }]}
+                  maxLength={1000}
+                  style={[styles.textInput, { height: 80, textAlignVertical: 'top', paddingTop: spacing.sm, marginBottom: spacing.xs, borderColor: submitted && errors.requiredActions ? '#EF4444' : colors.outline, borderWidth: submitted && errors.requiredActions ? 1.5 : 1 }]}
                 />
+                {submitted && errors.requiredActions && (
+                  <Text style={{ fontSize: 10, color: '#EF4444', marginBottom: spacing.md }}>
+                    {errors.requiredActions}
+                  </Text>
+                )}
+                <Text style={{ fontSize: 9, color: colors.textSecondary, marginBottom: spacing.md }}>
+                  {requiredActions.length}/1000 caractères
+                </Text>
               </>
             )}
 
@@ -1214,20 +1243,44 @@ function CompleteReportModal({
             </Text>
             <TextInput
               value={notes}
-              onChangeText={setNotes}
+              onChangeText={v => setNotes(v.slice(0, 1000))}
               placeholder="Remarques ou informations complémentaires…"
               placeholderTextColor={colors.textSecondary}
               multiline
               numberOfLines={3}
-              style={[styles.textInput, { height: 80, textAlignVertical: 'top', paddingTop: spacing.sm }]}
+              maxLength={1000}
+              style={[styles.textInput, { height: 80, textAlignVertical: 'top', paddingTop: spacing.sm, borderColor: submitted && errors.notes ? '#EF4444' : colors.outline, borderWidth: submitted && errors.notes ? 1.5 : 1 }]}
             />
+            {submitted && errors.notes && (
+              <Text style={{ fontSize: 10, color: '#EF4444', marginTop: spacing.xs, marginBottom: spacing.md }}>
+                {errors.notes}
+              </Text>
+            )}
+            <Text style={{ fontSize: 9, color: colors.textSecondary, marginBottom: spacing.lg }}>
+              {notes.length}/1000 caractères
+            </Text>
 
             {submitted && hasErrors && (
               <View style={{ backgroundColor: '#FEF2F2', borderRadius: borderRadius.md, padding: spacing.sm, marginTop: spacing.lg, borderLeftWidth: 3, borderLeftColor: '#EF4444' }}>
                 <Text style={{ fontSize: 11, fontWeight: '600', color: '#EF4444', marginBottom: 2 }}>Veuillez compléter les champs obligatoires :</Text>
-                {Object.values(errors).filter(Boolean).map((msg, i) => (
-                  <Text key={i} style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {msg}</Text>
-                ))}
+                {errors.periodEnd && (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {errors.periodEnd}</Text>
+                )}
+                {errors.periodOrder && (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {errors.periodOrder}</Text>
+                )}
+                {errors.itmOffice && (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {errors.itmOffice}</Text>
+                )}
+                {errors.workersAffectedCount && (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {errors.workersAffectedCount}</Text>
+                )}
+                {errors.requiredActions && (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {errors.requiredActions}</Text>
+                )}
+                {errors.notes && (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 2 }}>• {errors.notes}</Text>
+                )}
               </View>
             )}
 

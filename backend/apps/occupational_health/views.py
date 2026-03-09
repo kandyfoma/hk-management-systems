@@ -1760,6 +1760,18 @@ def _auto_create_regulatory_reports(incident, user):
     deadline_days = 1 if category == 'fatality' else 2
     deadline = inc_date + timedelta(days=deadline_days)
 
+    # Injured worker details for regulatory declarations
+    injured_workers_data = []
+    for w in incident.injured_workers.all():
+        injured_workers_data.append({
+            'employee_id': w.employee_id,
+            'full_name': f"{w.first_name} {w.last_name}",
+            'national_id': w.national_id or '',
+            'job_title': w.job_title,
+            'gender': w.gender,
+            'date_of_birth': str(w.date_of_birth),
+        })
+
     # Shared pre-populated content
     base_content = {
         'incident_number':          incident.incident_number,
@@ -1772,7 +1784,13 @@ def _auto_create_regulatory_reports(incident, user):
         'category':                 incident.category,
         'work_days_lost':           incident.work_days_lost,
         'first_aid_given':          incident.first_aid_given,
+        'first_aid_by':             incident.first_aid_by or '',
         'medical_treatment_required': incident.medical_treatment_required,
+        'hospital_name':            incident.hospital_name or '',
+        'body_parts_affected':      incident.body_parts_affected,
+        'injury_type':              incident.injury_type or '',
+        'injured_workers':          injured_workers_data,
+        'injured_workers_count':    len(injured_workers_data),
         'auto_generated':           True,
     }
 
@@ -3330,12 +3348,26 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit CNSS report"""
+        """Submit CNSS report with idempotency check"""
         report = self.get_object()
+        
+        # Prevent double submissions
+        if report.status == 'submitted':
+            return Response(
+                {'error': 'Report already submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         if report.status != 'ready_for_submission':
             return Response(
                 {'error': 'Report must be in "ready_for_submission" status'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify required fields before submit
+        if not report.report_period_end:
+            return Response(
+                {'error': 'Report period end date is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -3352,7 +3384,7 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def export_pdf(self, request, pk=None):
-        """Export CNSS report as PDF for download/printing"""
+        """Export CNSS report as professionally styled PDF — French language"""
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.pdfgen import canvas as rl_canvas
@@ -3367,74 +3399,242 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
         
         report = self.get_object()
         
-        # Create PDF
+        # ─── Color palette ───
+        NAVY = HexColor('#0D1F3C')
+        MID_BLUE = HexColor('#1A3D7C')
+        LIGHT_BLUE = HexColor('#EBF2FF')
+        GOLD = HexColor('#C9A435')
+        WHITE = colors.white
+        GREY_900 = HexColor('#111827')
+        GREY_700 = HexColor('#374151')
+        GREY_500 = HexColor('#6B7280')
+        GREY_300 = HexColor('#D1D5DB')
+        PANEL_BG = HexColor('#F8FAFF')
+        RED_BG = HexColor('#FEE2E2')
+        RED_TEXT = HexColor('#7F1D1D')
+        RED_BORDER = HexColor('#DC2626')
+        
+        # Safe string helper
+        def safe_str(value, max_len=70):
+            if value is None: return "—"
+            return str(value)[:max_len].encode('utf-8', errors='replace').decode('utf-8')
+        
+        # PDF setup
         buf = BytesIO()
         pdf = rl_canvas.Canvas(buf, pagesize=A4)
         W, H = A4
         ML, MR = 36, W - 36
+        CW = MR - ML
         y = H - 36
         
-        # Header
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(ML, y, f"DÉCLARATION CNSS")
-        y -= 24
+        pdf.setTitle(f"Déclaration CNSS — {report.reference_number}")
+        pdf.setAuthor("KAT Management Systems — Médecine du Travail")
+        pdf.setSubject("Report d'Incident CNSS — ISO 45001")
         
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(HexColor('#666666'))
-        pdf.drawString(ML, y, f"Référence: {report.reference_number}")
-        y -= 14
-        pdf.drawString(ML, y, f"Statut: {report.get_status_display()}")
-        y -= 20
-        
-        # Content
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.setFillColor(HexColor('#0D1F3C'))
-        pdf.drawString(ML, y, "Informations du rapport")
-        y -= 16
-        
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(HexColor('#333333'))
-        content_data = [
-            ("Type de rapport", report.get_report_type_display()),
-            ("Entreprise", str(report.enterprise)),
-            ("Période de rapport", f"{report.report_period_start} → {report.report_period_end}"),
-            ("Date de préparation", str(report.prepared_date)),
-            ("Préparé par", str(report.prepared_by)),
-        ]
-        
-        for key, value in content_data:
+        # ─── Helper functions ───
+        def sec_header(label, top_y, right_x=None, left_x=None):
+            """Dark blue bar with gold left accent"""
+            lx = left_x if left_x else ML
+            rx = right_x if right_x else MR
+            bar_w = rx - lx
+            pdf.setFillColor(MID_BLUE)
+            pdf.rect(lx, top_y - 20, bar_w, 20, fill=True, stroke=False)
+            pdf.setFillColor(GOLD)
+            pdf.rect(lx, top_y - 20, 4, 20, fill=True, stroke=False)
+            pdf.setFillColor(WHITE)
             pdf.setFont("Helvetica-Bold", 9)
-            pdf.drawString(ML, y, f"{key}:")
-            y -= 12
-            pdf.setFont("Helvetica", 9)
-            pdf.drawString(ML + 20, y, str(value))
-            y -= 14
+            pdf.drawString(lx + 10, top_y - 14, label)
+            return top_y - 24
         
-        # Content JSON
-        if report.content_json:
-            y -= 6
-            pdf.setFont("Helvetica-Bold", 11)
-            pdf.setFillColor(HexColor('#0D1F3C'))
-            pdf.drawString(ML, y, "Contenu du rapport")
-            y -= 16
+        def card(lx, top_y, w, h, bg=PANEL_BG):
+            """Rounded card panel"""
+            pdf.setFillColor(bg)
+            pdf.roundRect(lx, top_y - h, w, h, 3, fill=True, stroke=False)
+            pdf.setStrokeColor(GREY_300)
+            pdf.setLineWidth(0.5)
+            pdf.roundRect(lx, top_y - h, w, h, 3, fill=False, stroke=True)
+        
+        def kv(key, val, lx, cy, kw=90, fs=8.8):
+            """Key-value row"""
+            pdf.setFont("Helvetica-Bold", fs - 0.5)
+            pdf.setFillColor(GREY_500)
+            pdf.drawString(lx, cy, key)
+            pdf.setFont("Helvetica", fs)
+            pdf.setFillColor(GREY_900)
+            v = safe_str(val, 45)
+            pdf.drawString(lx + kw, cy, v)
+            return cy - 13
+        
+        def wrap(text, lx, cy, max_w, fs=8.5, leading=12, color=GREY_700):
+            """Word-wrap text"""
+            pdf.setFont("Helvetica", fs)
+            pdf.setFillColor(color)
+            words = (text or '').split()
+            if not words: return cy - leading
+            line = words[0]
+            for w_word in words[1:]:
+                cand = f"{line} {w_word}"
+                if pdf.stringWidth(cand, "Helvetica", fs) <= max_w:
+                    line = cand
+                else:
+                    pdf.drawString(lx, cy, line)
+                    cy -= leading
+                    line = w_word
+            pdf.drawString(lx, cy, line)
+            return cy - leading
+        
+        # ─── 1. HEADER BANNER ───
+        HDR_H = 96
+        pdf.setFillColor(NAVY)
+        pdf.rect(0, H - HDR_H, W, HDR_H, fill=True, stroke=False)
+        pdf.setFillColor(GOLD)
+        pdf.rect(0, H - HDR_H, 7, HDR_H, fill=True, stroke=False)
+        pdf.setFillColor(GOLD)
+        pdf.rect(0, H - HDR_H - 3, W, 3, fill=True, stroke=False)
+        
+        # Top caption
+        pdf.setFillColor(HexColor('#94A3B8'))
+        pdf.setFont("Helvetica", 7.5)
+        pdf.drawString(ML + 8, H - 15, "KAT MANAGEMENT SYSTEMS  ·  MÉDECINE DU TRAVAIL  ·  ISO 45001")
+        
+        # Main title
+        pdf.setFillColor(WHITE)
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawCentredString(W / 2, H - 48, "DÉCLARATION D'INCIDENT")
+        
+        # Subtitle
+        pdf.setFont("Helvetica", 8.5)
+        pdf.setFillColor(HexColor('#93C5FD'))
+        pdf.drawCentredString(W / 2, H - 62, "Rapport CNSS — Commission Nationale de Sécurité Sociale")
+        
+        # Top-right: report number
+        pdf.setFillColor(GOLD)
+        pdf.setFont("Helvetica-Bold", 7)
+        pdf.drawRightString(MR, H - 15, "RÉFÉRENCE")
+        pdf.setFillColor(WHITE)
+        pdf.setFont("Helvetica-Bold", 10.5)
+        pdf.drawRightString(MR, H - 28, report.reference_number)
+        pdf.setFillColor(HexColor('#94A3B8'))
+        pdf.setFont("Helvetica", 7.5)
+        pdf.drawRightString(MR, H - 40, f"Statut : {report.get_status_display()}")
+        if report.prepared_date:
+            pdf.drawRightString(MR, H - 51, f"Préparé le : {report.prepared_date.strftime('%d %b %Y')}")
+        
+        y = H - HDR_H - 3
+        
+        # ─── 2. STATUS BAR ───
+        STATUS_H = 44
+        y -= STATUS_H
+        status_color = RED_BG if report.status != 'submitted' else HexColor('#DBEAFE')
+        status_text_color = RED_TEXT if report.status != 'submitted' else HexColor('#1E3A5F')
+        pdf.setFillColor(status_color)
+        pdf.rect(ML, y, CW, STATUS_H, fill=True, stroke=False)
+        pdf.setFillColor(RED_BORDER if report.status != 'submitted' else HexColor('#2563EB'))
+        pdf.rect(ML, y, 5, STATUS_H, fill=True, stroke=False)
+        pdf.setStrokeColor(RED_BORDER if report.status != 'submitted' else HexColor('#2563EB'))
+        pdf.setLineWidth(1.2)
+        pdf.rect(ML, y, CW, STATUS_H, fill=False, stroke=True)
+        pdf.setFillColor(status_text_color)
+        pdf.setFont("Helvetica-Bold", 13)
+        status_text = f"Statut : {report.get_status_display()}"
+        pdf.drawCentredString(W / 2, y + 20, status_text)
+        
+        y -= 12
+        
+        # ─── 3. ENTERPRISE & REPORT INFO ───
+        col_w = (CW - 8) / 2
+        ROW_H = 90
+        card(ML, y, col_w, ROW_H)
+        card(ML + col_w + 8, y, col_w, ROW_H)
+        
+        # Left: Organization
+        cy_l = sec_header("ENTREPRISE", y, right_x=ML + col_w)
+        cy_l -= 9
+        ent_name = safe_str((report.enterprise.name if report.enterprise else '—'), 40)
+        pdf.setFillColor(NAVY)
+        pdf.setFont("Helvetica-Bold", 9.5)
+        pdf.drawString(ML + 8, cy_l, ent_name)
+        cy_l -= 12
+        if report.enterprise and report.enterprise.address:
+            cy_l = wrap(report.enterprise.address, ML + 8, cy_l, col_w - 18, fs=8, leading=11)
+        
+        # Right: Report Details
+        rx = ML + col_w + 8
+        cy_r = sec_header("DÉTAILS DE DÉCLARATION", y, left_x=rx, right_x=MR)
+        cy_r -= 9
+        cy_r = kv("Type :", report.get_report_type_display(), rx + 6, cy_r)
+        cy_r = kv("Période :", f"{report.report_period_start or 'N/A'}", rx + 6, cy_r)
+        cy_r = kv("Statut :", report.get_status_display(), rx + 6, cy_r)
+        if report.prepared_date:
+            cy_r = kv("Date :", report.prepared_date.strftime('%d/%m/%Y'), rx + 6, cy_r)
+        
+        y -= ROW_H + 10
+        
+        # ─── 4. INCIDENT DETAILS ───
+        if report.content_json and isinstance(report.content_json, dict):
+            cj = report.content_json
             
-            pdf.setFont("Helvetica", 9)
-            pdf.setFillColor(HexColor('#333333'))
-            for key, value in report.content_json.items():
-                pdf.drawString(ML, y, f"• {key}: {value}")
-                y -= 12
+            # Incident fields
+            incident_fields = [(k, cj[k]) for k in ['incident_number', 'incident_date', 'location', 'description', 'severity'] 
+                              if k in cj]
+            if incident_fields:
+                est_h = len(incident_fields) * 14 + 36
+                card(ML, y, CW, est_h, LIGHT_BLUE)
+                cy_inc = sec_header("INFORMATIONS DE L'INCIDENT", y)
+                cy_inc -= 9
+                for key, val in incident_fields:
+                    key_label = {'incident_number': 'N° Incident', 'incident_date': 'Date', 
+                                'location': 'Lieu', 'description': 'Description', 'severity': 'Gravité'}.get(key, key)
+                    if key == 'description':
+                        pdf.setFont("Helvetica-Bold", 8)
+                        pdf.setFillColor(GREY_500)
+                        pdf.drawString(ML + 8, cy_inc, key_label)
+                        cy_inc -= 11
+                        cy_inc = wrap(safe_str(val, 150), ML + 8, cy_inc, CW - 20, fs=8, leading=11)
+                    else:
+                        cy_inc = kv(key_label + " :", safe_str(val, 60), ML + 8, cy_inc, kw=75)
+                y -= est_h + 10
+            
+            # Injured workers section
+            workers = cj.get('injured_workers', [])
+            if workers and isinstance(workers, list):
+                worker_h = len(workers) * 60 + 50
+                card(ML, y, CW, worker_h, RED_BG)
+                pdf.setFillColor(RED_BORDER)
+                pdf.rect(ML, y - worker_h, 5, worker_h, fill=True, stroke=False)
+                pdf.setStrokeColor(RED_BORDER)
+                pdf.setLineWidth(1)
+                pdf.roundRect(ML, y - worker_h, CW, worker_h, 3, fill=False, stroke=True)
+                
+                cy_w = sec_header(f"TRAVAILLEURS AFFECTÉS ({len(workers)})", y)
+                cy_w -= 8
+                for i, w in enumerate(workers):
+                    if not isinstance(w, dict): continue
+                    name = safe_str(w.get('full_name', 'Inconnu'), 40)
+                    pdf.setFillColor(RED_TEXT)
+                    pdf.setFont("Helvetica-Bold", 9.5)
+                    pdf.drawString(ML + 8, cy_w, f"{i+1}. {name}")
+                    cy_w -= 11
+                    pdf.setFont("Helvetica", 8)
+                    pdf.setFillColor(GREY_700)
+                    cy_w = kv("ID Employé :", safe_str(w.get('employee_id', '—'), 25), ML + 10, cy_w, kw=70)
+                    cy_w = kv("N° Identité :", safe_str(w.get('national_id', '—'), 25), ML + 10, cy_w, kw=70)
+                    cy_w = kv("Fonction :", safe_str(w.get('job_title', '—'), 30), ML + 10, cy_w, kw=60)
+                    cy_w -= 2
+                y -= worker_h + 10
         
-        # Footer
-        pdf.setFont("Helvetica", 8)
-        pdf.setFillColor(HexColor('#999999'))
-        pdf.drawString(ML, 20, f"Généré le {timezone.now().strftime('%d/%m/%Y %H:%M')}")
-        pdf.drawString(MR - 100, 20, "Rapport réglementaire CNSS — Confidentiel")
+        # ─── FOOTER ───
+        pdf.setFont("Helvetica", 7.5)
+        pdf.setFillColor(GREY_500)
+        pdf.drawString(ML, 18, f"Généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')}")
+        pdf.drawRightString(MR, 18, "Rapport Officiel CNSS — Confidentiel")
         
         pdf.save()
         buf.seek(0)
         
         response = HttpResponse(buf.getvalue(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="CNSS_{report.reference_number}.pdf"'
+        filename = f"CNSS_{safe_str(report.reference_number, 30)}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
     
     @action(detail=False, methods=['get'])
@@ -3544,12 +3744,32 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit DRC report"""
+        """Submit DRC report with idempotency check"""
         report = self.get_object()
 
-        if report.status in ('submitted', 'approved'):
+        # Prevent double submissions
+        if report.status == 'submitted':
             return Response(
-                {'error': f'Report is already {report.status} and cannot be re-submitted'},
+                {'error': 'Report already submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if report.status in ('approved',):
+            return Response(
+                {'error': f'Report is {report.status} and cannot be re-submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify required fields
+        if not report.report_period_end:
+            return Response(
+                {'error': 'Report period end date is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not report.itm_office:
+            return Response(
+                {'error': 'ITM office is required for submission'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -3567,7 +3787,7 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def export_pdf(self, request, pk=None):
-        """Export ITM/DRC report as PDF for download/printing"""
+        """Export ITM/DRC report as PDF for download/printing with safe text handling"""
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.pdfgen import canvas as rl_canvas
@@ -3582,6 +3802,29 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
         
         report = self.get_object()
         
+        # Helper function for safe text rendering with unicode handling
+        def safe_str(value, max_len=70):
+            """Convert value to safe string with encoding and truncation"""
+            if value is None:
+                return "—"
+            try:
+                string_val = str(value)
+                # Truncate before encoding to ensure proper length
+                truncated = string_val[:max_len]
+                # Encode to UTF-8 with replacement for problematic chars, then decode back
+                safe = truncated.encode('utf-8', errors='replace').decode('utf-8')
+                return safe
+            except Exception:
+                return "—"
+        
+        def check_page_space(current_y, needed_space=40):
+            """Automatically create new page if space is needed"""
+            nonlocal pdf
+            if current_y < needed_space:
+                pdf.showPage()
+                return H - 36
+            return current_y
+        
         # Create PDF
         buf = BytesIO()
         pdf = rl_canvas.Canvas(buf, pagesize=A4)
@@ -3591,17 +3834,21 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
         
         # Header
         pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(ML, y, f"DÉCLARATION ITM/DRC")
+        y = check_page_space(y, 20)
+        pdf.drawString(ML, y, "DÉCLARATION ITM/DRC")
         y -= 24
         
         pdf.setFont("Helvetica", 10)
         pdf.setFillColor(HexColor('#666666'))
-        pdf.drawString(ML, y, f"Référence: {report.reference_number}")
+        y = check_page_space(y, 16)
+        pdf.drawString(ML, y, f"Référence: {safe_str(report.reference_number, 40)}")
         y -= 14
-        pdf.drawString(ML, y, f"Statut: {report.get_status_display()}")
+        y = check_page_space(y, 16)
+        pdf.drawString(ML, y, f"Statut: {safe_str(report.get_status_display(), 30)}")
         y -= 20
         
-        # Content
+        # Content section
+        y = check_page_space(y, 20)
         pdf.setFont("Helvetica-Bold", 11)
         pdf.setFillColor(HexColor('#0D1F3C'))
         pdf.drawString(ML, y, "Informations du rapport")
@@ -3609,50 +3856,120 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
         
         pdf.setFont("Helvetica", 10)
         pdf.setFillColor(HexColor('#333333'))
+        
+        # Safe field extraction with null checks
+        enterprise_name = safe_str(report.enterprise.name if report.enterprise else None, 60)
+        report_type = safe_str(report.get_report_type_display() if report.report_type else "Non spécifié", 50)
+        period_start = safe_str(report.report_period_start if report.report_period_start else "Non disponible", 40)
+        period_end = safe_str(report.report_period_end if report.report_period_end else "Non disponible", 40)
+        itm_office = safe_str(report.itm_office if report.itm_office else "Non spécifié", 50)
+        submission_method = safe_str(report.get_submission_method_display() if hasattr(report, 'submission_method') else "Manual", 40)
+        
         content_data = [
-            ("Type de rapport", report.get_report_type_display()),
-            ("Entreprise", str(report.enterprise)),
-            ("Période de rapport", f"{report.report_period_start} → {report.report_period_end}"),
-            ("Bureau ITM", report.itm_office or "Non spécifié"),
-            ("Méthode de soumission", report.get_submission_method_display()),
+            ("Type de rapport", report_type),
+            ("Entreprise", enterprise_name),
+            ("Période de rapport", f"{period_start} → {period_end}"),
+            ("Bureau ITM", itm_office),
+            ("Méthode de soumission", submission_method),
         ]
         
         for key, value in content_data:
+            y = check_page_space(y, 18)
             pdf.setFont("Helvetica-Bold", 9)
+            pdf.setFillColor(HexColor('#0D1F3C'))
             pdf.drawString(ML, y, f"{key}:")
             y -= 12
             pdf.setFont("Helvetica", 9)
-            pdf.drawString(ML + 20, y, str(value))
+            pdf.setFillColor(HexColor('#333333'))
+            # Wrap long values safely
+            safe_value = safe_str(value, 65)
+            pdf.drawString(ML + 20, y, safe_value)
             y -= 14
         
-        # Content JSON
-        if report.content_json:
-            y -= 6
-            pdf.setFont("Helvetica-Bold", 11)
-            pdf.setFillColor(HexColor('#0D1F3C'))
-            pdf.drawString(ML, y, "Contenu du rapport")
-            y -= 16
-            
-            pdf.setFont("Helvetica", 9)
-            pdf.setFillColor(HexColor('#333333'))
-            for key, value in report.content_json.items():
-                if isinstance(value, (list, dict)):
-                    pdf.drawString(ML, y, f"• {key}: {str(value)[:60]}...")
-                else:
-                    pdf.drawString(ML, y, f"• {key}: {value}")
-                y -= 12
+        # Incident details + injured workers sections
+        if report.content_json and isinstance(report.content_json, dict):
+            cj = report.content_json
+            incident_fields = [
+                k for k in cj if k not in ('injured_workers', 'auto_generated', 'injured_workers_count')
+            ]
+            if incident_fields:
+                y -= 6
+                y = check_page_space(y, 40)
+                pdf.setFont("Helvetica-Bold", 11)
+                pdf.setFillColor(HexColor('#0D1F3C'))
+                pdf.drawString(ML, y, "Details de l'incident")
+                y -= 16
+                pdf.setFont("Helvetica", 9)
+                pdf.setFillColor(HexColor('#333333'))
+                for key in incident_fields:
+                    value = cj[key]
+                    y = check_page_space(y, 14)
+                    key_safe = safe_str(key, 40)
+                    if isinstance(value, (list, dict)):
+                        val_str = safe_str(str(value), 60)
+                    else:
+                        val_str = safe_str(value, 65)
+                    pdf.drawString(ML, y, f"• {key_safe}: {val_str}")
+                    y -= 12
+
+            # Injured workers section
+            workers = cj.get('injured_workers', [])
+            if workers and isinstance(workers, list):
+                y = check_page_space(y, 50)
+                y -= 8
+                pdf.setFont("Helvetica-Bold", 11)
+                pdf.setFillColor(HexColor('#DC2626'))
+                pdf.drawString(ML, y, f"Travailleurs Blesses / Victimes ({len(workers)})")
+                y -= 4
+                pdf.setStrokeColor(HexColor('#DC2626'))
+                pdf.line(ML, y, MR, y)
+                y -= 14
+                for i, w in enumerate(workers):
+                    if not isinstance(w, dict):
+                        continue
+                    y = check_page_space(y, 80)
+                    pdf.setFillColor(HexColor('#FEF2F2'))
+                    pdf.roundRect(ML, y - 52, MR - ML, 58, 4, fill=1, stroke=0)
+                    pdf.setFillColor(HexColor('#0D1F3C'))
+                    pdf.setFont("Helvetica-Bold", 10)
+                    name = safe_str(w.get('full_name', 'Inconnu'), 40)
+                    pdf.drawString(ML + 6, y - 2, f"{i+1}. {name}")
+                    pdf.setFont("Helvetica", 8)
+                    pdf.setFillColor(HexColor('#333333'))
+                    row_data = [
+                        ("ID Employe",  safe_str(w.get('employee_id', '—'), 25)),
+                        ("N. Identite",  safe_str(w.get('national_id', '—'), 25)),
+                        ("Fonction",     safe_str(w.get('job_title', '—'), 30)),
+                        ("Sexe",         safe_str(w.get('gender', '—'), 15)),
+                        ("Date naiss.",  safe_str(w.get('date_of_birth', '—'), 20)),
+                    ]
+                    col1_x = ML + 6
+                    col2_x = ML + (MR - ML) // 2
+                    ry = y - 16
+                    for j, (lbl, val) in enumerate(row_data):
+                        x = col1_x if j % 2 == 0 else col2_x
+                        if j % 2 == 0 and j > 0:
+                            ry -= 11
+                        pdf.setFont("Helvetica-Bold", 7)
+                        pdf.drawString(x, ry, f"{lbl}: ")
+                        pdf.setFont("Helvetica", 7)
+                        pdf.drawString(x + 45, ry, val)
+                    y -= 66
         
-        # Footer
+        # Footer with safe timestamp
+        y = check_page_space(y, 24)
         pdf.setFont("Helvetica", 8)
         pdf.setFillColor(HexColor('#999999'))
-        pdf.drawString(ML, 20, f"Généré le {timezone.now().strftime('%d/%m/%Y %H:%M')}")
+        timestamp = timezone.now().strftime('%d/%m/%Y %H:%M')
+        pdf.drawString(ML, 20, f"Généré le {timestamp}")
         pdf.drawString(MR - 100, 20, "Rapport réglementaire ITM/DRC — Confidentiel")
         
         pdf.save()
         buf.seek(0)
         
         response = HttpResponse(buf.getvalue(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="ITM_{report.reference_number}.pdf"'
+        safe_filename = safe_str(report.reference_number, 40)
+        response['Content-Disposition'] = f'attachment; filename="ITM_{safe_filename}.pdf"'
         return response
     
     @action(detail=False, methods=['get'])

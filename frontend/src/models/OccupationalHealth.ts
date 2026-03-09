@@ -656,9 +656,18 @@ export type IncidentCategory =
 export interface AffectedWorker {
   workerId: string;
   workerName: string;
+  // Regulatory identification (required for CNSS / ITM declarations)
+  employeeId?: string;
+  nationalId?: string;
+  jobTitle?: string;
+  dateOfBirth?: string;
+  gender?: 'male' | 'female' | 'other';
+  // Injury details
   injuryType?: string;
   bodyPart?: string;
   treatmentProvided?: string;
+  hospitalized?: boolean;
+  hospitalName?: string;
   daysOff?: number;
   returnToWorkDate?: string;
   fitnessStatusAfter?: FitnessStatus;

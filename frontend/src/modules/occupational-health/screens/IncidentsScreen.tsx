@@ -213,6 +213,47 @@ function AddIncidentModal({
   const [reportedBy, setReportedBy] = useState('');
   const [immediateActions, setImmediateActions] = useState('');
 
+  // Affected workers
+  const [affectedWorkers, setAffectedWorkers] = useState<AffectedWorker[]>([]);
+  const [showWorkerForm, setShowWorkerForm] = useState(false);
+  const [workerName, setWorkerName] = useState('');
+  const [workerEmployeeId, setWorkerEmployeeId] = useState('');
+  const [workerJobTitle, setWorkerJobTitle] = useState('');
+  const [workerNationalId, setWorkerNationalId] = useState('');
+  const [workerInjuryType, setWorkerInjuryType] = useState('');
+  const [workerBodyPart, setWorkerBodyPart] = useState('');
+  const [workerTreatment, setWorkerTreatment] = useState('');
+  const [workerHospitalized, setWorkerHospitalized] = useState(false);
+  const [workerDaysOff, setWorkerDaysOff] = useState('');
+
+  const resetWorkerForm = () => {
+    setWorkerName(''); setWorkerEmployeeId(''); setWorkerJobTitle(''); setWorkerNationalId('');
+    setWorkerInjuryType(''); setWorkerBodyPart(''); setWorkerTreatment('');
+    setWorkerHospitalized(false); setWorkerDaysOff('');
+    setShowWorkerForm(false);
+  };
+
+  const handleAddWorker = () => {
+    if (!workerName.trim()) return;
+    const w: AffectedWorker = {
+      workerId: `w-${Date.now()}`,
+      workerName: workerName.trim(),
+      employeeId: workerEmployeeId.trim() || undefined,
+      jobTitle: workerJobTitle.trim() || undefined,
+      nationalId: workerNationalId.trim() || undefined,
+      injuryType: workerInjuryType.trim() || undefined,
+      bodyPart: workerBodyPart.trim() || undefined,
+      treatmentProvided: workerTreatment.trim() || undefined,
+      hospitalized: workerHospitalized,
+      daysOff: workerDaysOff ? parseInt(workerDaysOff, 10) : undefined,
+    };
+    setAffectedWorkers(prev => [...prev, w]);
+    resetWorkerForm();
+  };
+
+  const handleRemoveWorker = (index: number) => {
+    setAffectedWorkers(prev => prev.filter((_, i) => i !== index));
+  };
   const handleSave = () => {
     if (!description.trim()) {
       showToast('La description est obligatoire.', 'error');
@@ -225,7 +266,7 @@ function AddIncidentModal({
       reportedDate: new Date().toISOString().split('T')[0],
       incidentDate, incidentTime, sector, type, severity, category,
       site: site.trim() || 'Non spécifié', area: area.trim() || 'Non spécifié',
-      affectedWorkers: [], description: description.trim(),
+      affectedWorkers, description: description.trim(),
       immediateActions: immediateActions.trim(),
       ppeWorn: false, investigationStatus: 'open',
       reportedToAuthorities: false, lostTimeDays: 0,
@@ -233,6 +274,7 @@ function AddIncidentModal({
     };
     onSave(newIncident);
     setDescription(''); setSite(''); setArea(''); setReportedBy(''); setImmediateActions('');
+    setAffectedWorkers([]); resetWorkerForm();
   };
 
   const typeOptions: { value: IncidentType; label: string }[] = [
@@ -324,6 +366,106 @@ function AddIncidentModal({
               <TextInput style={[styles.formInput, { minHeight: 60, textAlignVertical: 'top' }]}
                 value={immediateActions} onChangeText={setImmediateActions}
                 placeholder="Actions prises immédiatement..." multiline numberOfLines={3} />
+            </View>
+
+            {/* ── Travailleurs / Victimes affectés ── */}
+            <View style={styles.formSection}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={styles.formLabel}>Travailleurs Affectés</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>requis pour CNSS/ITM</Text>
+              </View>
+
+              {/* Added workers list */}
+              {affectedWorkers.map((aw, idx) => (
+                <View key={idx} style={{ backgroundColor: colors.surfaceVariant, borderRadius: 10, padding: 10, marginBottom: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{aw.workerName}</Text>
+                    {aw.employeeId && <Text style={{ fontSize: 11, color: colors.textSecondary }}>ID : {aw.employeeId}</Text>}
+                    {aw.jobTitle && <Text style={{ fontSize: 11, color: colors.textSecondary }}>{aw.jobTitle}</Text>}
+                    {aw.injuryType && <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 2 }}>🩹 {aw.injuryType}{aw.bodyPart ? ` — ${aw.bodyPart}` : ''}</Text>}
+                    {aw.hospitalized && <Text style={{ fontSize: 11, color: '#DC2626', fontWeight: '600' }}>🏥 Hospitalisé</Text>}
+                    {aw.daysOff != null && aw.daysOff > 0 && <Text style={{ fontSize: 11, color: colors.textSecondary }}>{aw.daysOff} jour(s) d'arrêt</Text>}
+                  </View>
+                  <TouchableOpacity onPress={() => handleRemoveWorker(idx)} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              {/* Inline worker entry form */}
+              {showWorkerForm ? (
+                <View style={{ backgroundColor: '#FFF7ED', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#EA580C30', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#EA580C', marginBottom: 10 }}>Ajouter un travailleur affecté</Text>
+
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Nom complet <Text style={{ color: '#EF4444' }}>*</Text></Text>
+                  <TextInput style={[styles.formInput, { marginBottom: 8 }]} value={workerName} onChangeText={setWorkerName} placeholder="Prénom Nom" />
+
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>ID Employé</Text>
+                      <TextInput style={styles.formInput} value={workerEmployeeId} onChangeText={setWorkerEmployeeId} placeholder="EMP-001" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>N° Identité (CIN)</Text>
+                      <TextInput style={styles.formInput} value={workerNationalId} onChangeText={setWorkerNationalId} placeholder="CIN / Passeport" />
+                    </View>
+                  </View>
+
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Fonction / Poste</Text>
+                  <TextInput style={[styles.formInput, { marginBottom: 8 }]} value={workerJobTitle} onChangeText={setWorkerJobTitle} placeholder="ex: Opérateur machine" />
+
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Nature de la blessure</Text>
+                  <TextInput style={[styles.formInput, { marginBottom: 8 }]} value={workerInjuryType} onChangeText={setWorkerInjuryType} placeholder="ex: Fracture, brûlure, coupure…" />
+
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Partie du corps atteinte</Text>
+                  <TextInput style={[styles.formInput, { marginBottom: 8 }]} value={workerBodyPart} onChangeText={setWorkerBodyPart} placeholder="ex: Main droite, jambe gauche…" />
+
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Soins apportés</Text>
+                  <TextInput style={[styles.formInput, { marginBottom: 8 }]} value={workerTreatment} onChangeText={setWorkerTreatment} placeholder="ex: Premiers secours, transfert hôpital…" />
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => setWorkerHospitalized(v => !v)}
+                      style={{ width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: workerHospitalized ? '#EF4444' : colors.outline, backgroundColor: workerHospitalized ? '#EF4444' : 'transparent', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      {workerHospitalized && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 12, color: colors.text }}>Hospitalisé(e)</Text>
+                  </View>
+
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}>Jours d'arrêt de travail</Text>
+                  <TextInput
+                    style={[styles.formInput, { marginBottom: 10 }]}
+                    value={workerDaysOff}
+                    onChangeText={v => setWorkerDaysOff(v.replace(/[^0-9]/g, ''))}
+                    placeholder="0"
+                    keyboardType="numeric"
+                  />
+
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity onPress={resetWorkerForm} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.surfaceVariant, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '600' }}>Annuler</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleAddWorker}
+                      disabled={!workerName.trim()}
+                      style={{ flex: 2, paddingVertical: 8, borderRadius: 8, backgroundColor: workerName.trim() ? '#EA580C' : colors.outline, alignItems: 'center' }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#FFF', fontWeight: '700' }}>Confirmer le travailleur</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowWorkerForm(true)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#EA580C', backgroundColor: '#FFF7ED' }}
+                >
+                  <Ionicons name="person-add-outline" size={16} color="#EA580C" />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#EA580C' }}>
+                    {affectedWorkers.length === 0 ? 'Ajouter un travailleur affecté' : 'Ajouter un autre travailleur'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
           <View style={styles.modalActions}>

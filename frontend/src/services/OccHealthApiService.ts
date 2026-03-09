@@ -1606,21 +1606,19 @@ export class OccHealthApiService {
   /** GET /api/occupational-health/cnss-reports/{id}/export_pdf/ - Download CNSS report as PDF */
   async exportCNSSReportPDF(id: number | string): Promise<{ error?: string }> {
     try {
-      const res = await this.api.get(`${OH}/cnss-reports/${id}/export_pdf/`, { 
-        responseType: 'blob',
-      });
-      
-      // Create blob URL and trigger download
-      const blob = res instanceof Blob ? res : res.data;
-      const url = window.URL.createObjectURL(blob);
+      const res = await this.api.getBlob(`${OH}/cnss-reports/${id}/export_pdf/`);
+      if (!res.success || !res.data) {
+        return { error: res.error?.message ?? 'PDF download failed' };
+      }
+      const fileName = res.data.fileName ?? `CNSS_report_${id}.pdf`;
+      const url = URL.createObjectURL(res.data.blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `CNSS_report_${id}.pdf`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
+      URL.revokeObjectURL(url);
       return {};
     } catch (e: any) {
       return { error: e?.message ?? 'PDF download failed' };
@@ -1630,21 +1628,19 @@ export class OccHealthApiService {
   /** GET /api/occupational-health/drc-reports/{id}/export_pdf/ - Download ITM report as PDF */
   async exportDRCReportPDF(id: number | string): Promise<{ error?: string }> {
     try {
-      const res = await this.api.get(`${OH}/drc-reports/${id}/export_pdf/`, { 
-        responseType: 'blob',
-      });
-      
-      // Create blob URL and trigger download
-      const blob = res instanceof Blob ? res : res.data;
-      const url = window.URL.createObjectURL(blob);
+      const res = await this.api.getBlob(`${OH}/drc-reports/${id}/export_pdf/`);
+      if (!res.success || !res.data) {
+        return { error: res.error?.message ?? 'PDF download failed' };
+      }
+      const fileName = res.data.fileName ?? `ITM_report_${id}.pdf`;
+      const url = URL.createObjectURL(res.data.blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `ITM_report_${id}.pdf`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
+      URL.revokeObjectURL(url);
       return {};
     } catch (e: any) {
       return { error: e?.message ?? 'PDF download failed' };
