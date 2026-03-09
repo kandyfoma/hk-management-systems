@@ -1879,6 +1879,171 @@ export class OccHealthApiService {
     }
   }
 
+  // ─── Hazard Register ───────────────────────────────────────
+  /** GET /api/occupational-health/ohs/hazard-register/ */
+  async listHazardRegister(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/hazard-register/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Training Certifications ──────────────────────────────
+  /** GET /api/occupational-health/ohs/training-certifications/ */
+  async listTrainingCertifications(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/training-certifications/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Emergency Drills ────────────────────────────────────────
+  /** GET /api/occupational-health/ohs/emergency-drills/ */
+  async listEmergencyDrills(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/emergency-drills/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/ohs/emergency-drills/overdue_drills/ */
+  async listOverdueDrills(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/emergency-drills/overdue_drills/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Contractor Qualifications ───────────────────────────────
+  /** GET /api/occupational-health/ohs/contractor-qualifications/ */
+  async listContractorQualifications(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/contractor-qualifications/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/ohs/contractor-qualifications/pending_review/ */
+  async listPendingContractors(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/contractor-qualifications/pending_review/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Health Surveillance ─────────────────────────────────────
+  /** GET /api/occupational-health/ohs/health-surveillance/ */
+  async listHealthSurveillance(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/health-surveillance/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Performance Indicators ──────────────────────────────────
+  /** GET /api/occupational-health/ohs/performance-indicators/ */
+  async listPerformanceIndicators(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/performance-indicators/`);
+      const raw = res.data;
+      return { data: Array.isArray(raw) ? raw : (raw?.results ?? []) };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/ohs/performance-indicators/out_of_bounds/ */
+  async listOutOfBoundsKPIs(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/performance-indicators/out_of_bounds/`);
+      const raw = res.data;
+      return { data: Array.isArray(raw) ? raw : (raw?.results ?? []) };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Compliance Summary ──────────────────────────────────────
+  /** GET /api/occupational-health/ohs/regulatory-requirements/compliance_summary/ */
+  async getComplianceSummary(): Promise<{ data: any; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/regulatory-requirements/compliance_summary/`);
+      return { data: res.data ?? {} };
+    } catch (e: any) {
+      return { data: {}, error: e?.message };
+    }
+  }
+
+  // ─── Dashboard Stats ─────────────────────────────────────────
+  /** GET /api/occupational-health/dashboard/stats/ */
+  async getDashboardStats(): Promise<{ data: any; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/dashboard/stats/`);
+      return { data: res.data ?? {} };
+    } catch (e: any) {
+      return { data: {}, error: e?.message };
+    }
+  }
+
+  // ─── Incident Statistics ─────────────────────────────────────
+  /** GET /api/occupational-health/workplace-incidents/statistics/ */
+  async getIncidentStatistics(): Promise<{ data: any; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/workplace-incidents/statistics/`);
+      return { data: res.data ?? {} };
+    } catch (e: any) {
+      return { data: {}, error: e?.message };
+    }
+  }
+
+  // ─── Hazard Identification Statistics ────────────────────────
+  /** GET /api/occupational-health/hazard-identifications/statistics/ */
+  async getHazardIdentificationStats(): Promise<{ data: any; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/hazard-identifications/statistics/`);
+      return { data: res.data ?? {} };
+    } catch (e: any) {
+      return { data: {}, error: e?.message };
+    }
+  }
+
+  // ─── High-Risk Hazards ────────────────────────────────────────
+  /** GET /api/occupational-health/ohs/hazard-register/high_risk_hazards/ */
+  async listHighRiskHazards(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/hazard-register/high_risk_hazards/`);
+      const raw = res.data;
+      return { data: Array.isArray(raw) ? raw : (raw?.results ?? []) };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  // ─── Sector Analysis ─────────────────────────────────────────
+  /** GET /api/occupational-health/sector-analysis/?sector=<key> */
+  async getSectorAnalysis(sector: string): Promise<{ data: any; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/sector-analysis/`, { sector });
+      return { data: res.data ?? {} };
+    } catch (e: any) {
+      return { data: {}, error: e?.message };
+    }
+  }
+
   /** POST /api/occupational-health/ohs/regulatory-requirements/ */
   async createRegulatoryRequirement(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
     try {

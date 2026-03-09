@@ -34,7 +34,7 @@ import { MedicalTestVisualizationScreen, ExitExamScreen } from '../modules/occup
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from '../modules/occupational-health/screens/DiseaseRegistryAndHealthScreeningScreen';
 import { RegulatoryReportsScreen } from '../modules/occupational-health/screens/ExposureAndReportingScreen';
 import { ExposureMonitoringScreen } from '../modules/occupational-health/screens/ExposureMonitoringScreen';
-import { ISO45001DashboardScreen, ISO27001DashboardScreen } from '../modules/occupational-health/screens/ComplianceDashboardsScreen';
+import { ISO45001DashboardScreen } from '../modules/occupational-health/screens/ComplianceDashboardsScreen';
 import { MedicalExamManagementScreen } from '../modules/occupational-health/screens/MedicalExamManagementScreen';
 import { WorkerRiskProfileScreen } from '../modules/occupational-health/screens/WorkerRiskProfileScreen';
 import { OverexposureAlertScreen } from '../modules/occupational-health/screens/OverexposureAlertScreen';
@@ -334,6 +334,18 @@ const createDynamicSections = (
       ],
     });
 
+    // Maladies & Pathologies
+    sections.push({
+      title: 'Maladies & Pathologies',
+      collapsible: true,
+      defaultCollapsed: false,
+      items: [
+        { id: 'oh-diseases', label: 'Maladies Professionnelles', icon: 'fitness-outline', iconActive: 'fitness' },
+        { id: 'oh-health-screening', label: 'Dépistage Santé', icon: 'pulse-outline', iconActive: 'pulse' },
+        { id: 'oh-exit-exams', label: 'Examens de Départ', icon: 'log-out-outline', iconActive: 'log-out' },
+      ],
+    });
+
     // Sécurité au Travail
     sections.push({
       title: 'Sécurité au Travail',
@@ -359,7 +371,6 @@ const createDynamicSections = (
       items: [
         { id: 'oh-regulatory-reports', label: 'Rapports Réglementaires', icon: 'document-attach-outline', iconActive: 'document-attach' },
         { id: 'oh-iso45001', label: 'ISO 45001', icon: 'shield-outline', iconActive: 'shield' },
-        { id: 'oh-iso27001', label: 'ISO 27001', icon: 'lock-closed-outline', iconActive: 'lock-closed' },
         { id: 'oh-reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
         { id: 'oh-compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
         { id: 'oh-analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
@@ -552,6 +563,16 @@ function DesktopApp() {
       'oh-overexposure-alerts': 'OCCUPATIONAL_HEALTH',
       'oh-ppe-compliance': 'OCCUPATIONAL_HEALTH', // Unified view for compliance records, entry form, and list
       'oh-ppe-compliance-dashboard': 'OCCUPATIONAL_HEALTH',
+      'oh-regulatory-reports': 'OCCUPATIONAL_HEALTH',
+      'oh-iso45001': 'OCCUPATIONAL_HEALTH',
+      'oh-reports': 'OCCUPATIONAL_HEALTH',
+      'oh-compliance': 'OCCUPATIONAL_HEALTH',
+      'oh-analytics': 'OCCUPATIONAL_HEALTH',
+      'oh-enterprise-management': 'OCCUPATIONAL_HEALTH',
+      'oh-medical-test-catalog': 'OCCUPATIONAL_HEALTH',
+      'oh-exam-management': 'OCCUPATIONAL_HEALTH',
+      'oh-health-screening': 'OCCUPATIONAL_HEALTH',
+      'oh-exit-exams': 'OCCUPATIONAL_HEALTH',
     };
 
     return (screen: string) => {
@@ -832,7 +853,6 @@ function DesktopApp() {
     if (activeScreen === 'oh-heavy-metals') return <HeavyMetalsScreen />;
     if (activeScreen === 'oh-regulatory-reports') return <RegulatoryReportsScreen />;
     if (activeScreen === 'oh-iso45001') return <ISO45001DashboardScreen />;
-    if (activeScreen === 'oh-iso27001') return <ISO27001DashboardScreen />;
     if (activeScreen === 'oh-reports') return <AdminReportsScreen />;
     if (activeScreen === 'oh-compliance') return <ComplianceScreen />;
     if (activeScreen === 'oh-analytics') return <AnalyticsScreen />;

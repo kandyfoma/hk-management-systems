@@ -1,67 +1,94 @@
-﻿import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Dimensions,
+  StyleSheet, Dimensions, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
 import { SECTOR_PROFILES, OccHealthUtils, type IndustrySector } from '../../../models/OccupationalHealth';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
 const ACCENT = colors.primary;
 
-// ─── Mock Trend Data ─────────────────────────────────────────
-const MONTHLY_TRENDS = [
-  { month: 'Juil', incidents: 12, exams: 120, ltifr: 3.2, compliance: 78 },
-  { month: 'Août', incidents: 10, exams: 115, ltifr: 2.9, compliance: 79 },
-  { month: 'Sep', incidents: 11, exams: 130, ltifr: 3.0, compliance: 80 },
-  { month: 'Oct', incidents: 8, exams: 140, ltifr: 2.6, compliance: 82 },
-  { month: 'Nov', incidents: 9, exams: 135, ltifr: 2.7, compliance: 84 },
-  { month: 'Déc', incidents: 7, exams: 142, ltifr: 2.4, compliance: 85 },
-  { month: 'Jan', incidents: 8, exams: 145, ltifr: 2.4, compliance: 87 },
-];
+// ─── Display label maps ───────────────────────────────────────
+const HAZARD_TYPE_LABELS: Record<string, string> = {
+  physical: 'Physique',
+  chemical: 'Chimique',
+  biological: 'Biologique',
+  ergonomic: 'Ergonomique',
+  psychosocial: 'Psychosocial',
+  environmental: 'Environnemental',
+};
 
-const SECTOR_ANALYTICS: { sector: IndustrySector; workers: number; incidents: number; ltifr: number; compliance: number; avgRiskScore: number; fitness: number }[] = [
-  { sector: 'mining', workers: 250, incidents: 18, ltifr: 3.6, compliance: 82, avgRiskScore: 14.5, fitness: 85 },
-  { sector: 'manufacturing', workers: 120, incidents: 8, ltifr: 2.1, compliance: 88, avgRiskScore: 10.2, fitness: 90 },
-  { sector: 'construction', workers: 80, incidents: 12, ltifr: 4.2, compliance: 75, avgRiskScore: 13.8, fitness: 82 },
-  { sector: 'healthcare', workers: 45, incidents: 3, ltifr: 1.5, compliance: 95, avgRiskScore: 8.5, fitness: 94 },
-  { sector: 'banking_finance', workers: 35, incidents: 1, ltifr: 0.5, compliance: 92, avgRiskScore: 5.2, fitness: 96 },
-  { sector: 'telecom_it', workers: 25, incidents: 2, ltifr: 1.2, compliance: 90, avgRiskScore: 6.8, fitness: 93 },
-];
+const HAZARD_TYPE_COLORS: Record<string, string> = {
+  physical: '#3B82F6',
+  chemical: '#EF4444',
+  biological: '#22C55E',
+  ergonomic: '#8B5CF6',
+  psychosocial: '#EC4899',
+  environmental: '#0891B2',
+};
 
-const RISK_DISTRIBUTION = [
-  { label: 'Bruit', count: 45, color: '#3B82F6' },
-  { label: 'Poussières', count: 38, color: '#D97706' },
-  { label: 'Ergonomique', count: 32, color: '#8B5CF6' },
-  { label: 'Psychosocial', count: 28, color: '#EC4899' },
-  { label: 'Chimique', count: 22, color: '#EF4444' },
-  { label: 'Biologique', count: 15, color: '#22C55E' },
-  { label: 'Vibrations', count: 12, color: '#0891B2' },
-  { label: 'Chaleur', count: 8, color: '#F59E0B' },
-];
+const SEVERITY_LABELS: Record<string, string> = {
+  critical: 'Critique',
+  fatal: 'Fatal',
+  high: 'Élevé',
+  major: 'Majeur',
+  medium: 'Moyen',
+  low: 'Faible',
+  minor: 'Mineur',
+};
 
-const TOP_HAZARDS = [
-  { hazard: 'Exposition silice > VLE', score: 20, site: 'Kamoto Mines', sector: 'mining' as IndustrySector, trend: 'stable' as const },
-  { hazard: 'Bruit > 95 dB(A) concassage', score: 18, site: 'Usine Likasi', sector: 'manufacturing' as IndustrySector, trend: 'down' as const },
-  { hazard: 'AES chirurgie', score: 16, site: 'Hôpital Sendwe', sector: 'healthcare' as IndustrySector, trend: 'up' as const },
-  { hazard: 'Chutes échafaudages', score: 15, site: 'Chantier Kolwezi', sector: 'construction' as IndustrySector, trend: 'down' as const },
-  { hazard: 'Burnout call center', score: 14, site: 'Siège Rawbank', sector: 'banking_finance' as IndustrySector, trend: 'up' as const },
-];
+const RISK_LEVEL_COLORS: Record<string, string> = {
+  critical: '#EF4444',
+  high: '#F59E0B',
+  medium: '#8B5CF6',
+  low: '#22C55E',
+};
+
+const CONTROL_TO_TREND: Record<string, 'up' | 'down' | 'stable'> = {
+  excellent: 'down',
+  good: 'down',
+  fair: 'stable',
+  poor: 'up',
+  ineffective: 'up',
+};
+
+const INDICATOR_TREND_MAP: Record<string, { icon: 'trending-up' | 'trending-down' | 'remove'; color: string }> = {
+  improving:  { icon: 'trending-down', color: '#22C55E' },
+  stable:     { icon: 'remove',        color: '#94A3B8' },
+  worsening:  { icon: 'trending-up',   color: '#EF4444' },
+  insufficient_data: { icon: 'remove', color: '#94A3B8' },
+};
 
 // ─── Bar Chart (Simple) ─────────────────────────────────────
-function SimpleBarChart({ data, valueKey, maxValue, barColor, label }: { data: typeof MONTHLY_TRENDS; valueKey: keyof typeof MONTHLY_TRENDS[0]; maxValue: number; barColor: string; label: string }) {
+function SimpleBarChart({ data, valueKey, maxValue, barColor, label }: {
+  data: Array<Record<string, any>>;
+  valueKey: string;
+  maxValue: number;
+  barColor: string;
+  label: string;
+}) {
+  if (!data.length) return (
+    <View style={styles.chartContainer}>
+      <Text style={styles.chartTitle}>{label}</Text>
+      <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+        <Text style={{ fontSize: 12, color: colors.textSecondary }}>Aucune donnée disponible</Text>
+      </View>
+    </View>
+  );
   return (
     <View style={styles.chartContainer}>
       <Text style={styles.chartTitle}>{label}</Text>
       <View style={styles.chartBody}>
         {data.map((d, i) => {
           const val = Number(d[valueKey]);
-          const height = Math.max(4, (val / maxValue) * 100);
+          const height = Math.max(4, maxValue > 0 ? (val / maxValue) * 100 : 0);
           return (
             <View key={i} style={styles.barColumn}>
-              <Text style={styles.barValue}>{val}</Text>
+              <Text style={styles.barValue}>{Number.isInteger(val) ? val : val.toFixed(1)}</Text>
               <View style={[styles.bar, { height, backgroundColor: barColor }]} />
               <Text style={styles.barLabel}>{d.month}</Text>
             </View>
@@ -73,8 +100,13 @@ function SimpleBarChart({ data, valueKey, maxValue, barColor, label }: { data: t
 }
 
 // ─── Horizontal Bar ──────────────────────────────────────────
-function HorizontalBarChart({ data }: { data: typeof RISK_DISTRIBUTION }) {
-  const maxVal = Math.max(...data.map(d => d.count));
+function HorizontalBarChart({ data }: { data: Array<{ label: string; count: number; color: string }> }) {
+  const maxVal = Math.max(...data.map(d => d.count), 1);
+  if (!data.length) return (
+    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+      <Text style={{ fontSize: 12, color: colors.textSecondary }}>Aucune donnée disponible</Text>
+    </View>
+  );
   return (
     <View style={styles.hBarContainer}>
       {data.map((d, i) => (
@@ -91,32 +123,45 @@ function HorizontalBarChart({ data }: { data: typeof RISK_DISTRIBUTION }) {
 }
 
 // ─── Sector Comparison Table ─────────────────────────────────
-function SectorComparisonTable() {
+function SectorComparisonTable({ sectors, sectorDetails }: {
+  sectors: Array<{ sector: string; name: string; workers: number }>;
+  sectorDetails: Record<string, any>;
+}) {
+  if (!sectors.length) return (
+    <View style={{ alignItems: 'center', padding: 20 }}>
+      <Text style={{ fontSize: 12, color: colors.textSecondary }}>Aucun secteur disponible</Text>
+    </View>
+  );
   return (
     <View style={styles.tableContainer}>
       <View style={styles.tableHeader}>
         <Text style={[styles.tableHeadCell, { flex: 2 }]}>Secteur</Text>
-        <Text style={styles.tableHeadCell}>Patients</Text>
-        <Text style={styles.tableHeadCell}>Incidents</Text>
-        <Text style={styles.tableHeadCell}>LTIFR</Text>
-        <Text style={styles.tableHeadCell}>Conformité</Text>
+        <Text style={styles.tableHeadCell}>Travailleurs</Text>
+        <Text style={styles.tableHeadCell}>Incidents YTD</Text>
         <Text style={styles.tableHeadCell}>Aptitude</Text>
-        <Text style={styles.tableHeadCell}>Risque Moy.</Text>
+        <Text style={styles.tableHeadCell}>Maladies YTD</Text>
       </View>
-      {SECTOR_ANALYTICS.map((row, i) => {
-        const sp = SECTOR_PROFILES[row.sector];
+      {sectors.map((row, i) => {
+        const sp = SECTOR_PROFILES[row.sector as IndustrySector] ?? { icon: 'briefcase', label: row.name, color: '#808080' };
+        const detail = sectorDetails[row.sector] ?? {};
+        const activeW = detail.active_workers ?? row.workers;
+        const fitW = (detail.fit_workers ?? 0) + (detail.restricted_workers ?? 0);
+        const fitnessRate = activeW > 0 ? Math.round((fitW / activeW) * 100) : null;
+        const incidents = detail.total_incidents_ytd ?? '—';
+        const diseases = detail.total_diseases_ytd ?? '—';
         return (
           <View key={i} style={[styles.tableRow, i % 2 === 0 && { backgroundColor: colors.surfaceVariant }]}>
             <View style={[styles.tableCell, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
               <Ionicons name={sp.icon as any} size={14} color={sp.color} />
               <Text style={styles.tableCellText}>{sp.label}</Text>
             </View>
-            <Text style={[styles.tableCell, styles.tableCellText]}>{row.workers}</Text>
-            <Text style={[styles.tableCell, styles.tableCellText]}>{row.incidents}</Text>
-            <Text style={[styles.tableCell, styles.tableCellText, { color: row.ltifr > 3 ? '#EF4444' : row.ltifr > 2 ? '#F59E0B' : '#22C55E', fontWeight: '600' }]}>{row.ltifr}</Text>
-            <Text style={[styles.tableCell, styles.tableCellText, { color: OccHealthUtils.getComplianceColor(row.compliance), fontWeight: '600' }]}>{row.compliance}%</Text>
-            <Text style={[styles.tableCell, styles.tableCellText, { color: row.fitness >= 90 ? '#22C55E' : '#F59E0B', fontWeight: '600' }]}>{row.fitness}%</Text>
-            <Text style={[styles.tableCell, styles.tableCellText, { color: OccHealthUtils.getRiskScoreColor(row.avgRiskScore), fontWeight: '600' }]}>{row.avgRiskScore}</Text>
+            <Text style={[styles.tableCell, styles.tableCellText]}>{activeW}</Text>
+            <Text style={[styles.tableCell, styles.tableCellText]}>{incidents}</Text>
+            <Text style={[styles.tableCell, styles.tableCellText, {
+              color: fitnessRate != null ? (fitnessRate >= 90 ? '#22C55E' : '#F59E0B') : colors.textSecondary,
+              fontWeight: '600',
+            }]}>{fitnessRate != null ? `${fitnessRate}%` : '—'}</Text>
+            <Text style={[styles.tableCell, styles.tableCellText]}>{diseases}</Text>
           </View>
         );
       })}
@@ -127,16 +172,116 @@ function SectorComparisonTable() {
 // ─── Main Screen ─────────────────────────────────────────────
 export function AnalyticsScreen() {
   const [view, setView] = useState<'overview' | 'trends' | 'sectors' | 'risks'>('overview');
+  const [loading, setLoading] = useState(true);
+  const [dashboardStats, setDashboardStats] = useState<any>({});
+  const [incidentStats, setIncidentStats] = useState<any>({});
+  const [hazardStats, setHazardStats] = useState<any>({});
+  const [highRiskHazards, setHighRiskHazards] = useState<any[]>([]);
+  const [performanceIndicators, setPerformanceIndicators] = useState<any[]>([]);
+  const [sectorDetails, setSectorDetails] = useState<Record<string, any>>({});
 
-  const globalStats = useMemo(() => {
-    const totalWorkers = SECTOR_ANALYTICS.reduce((s, a) => s + a.workers, 0);
-    const totalIncidents = SECTOR_ANALYTICS.reduce((s, a) => s + a.incidents, 0);
-    const avgLTIFR = SECTOR_ANALYTICS.reduce((s, a) => s + a.ltifr * a.workers, 0) / totalWorkers;
-    const avgCompliance = SECTOR_ANALYTICS.reduce((s, a) => s + a.compliance * a.workers, 0) / totalWorkers;
-    const avgFitness = SECTOR_ANALYTICS.reduce((s, a) => s + a.fitness * a.workers, 0) / totalWorkers;
-    const totalExposures = RISK_DISTRIBUTION.reduce((s, r) => s + r.count, 0);
-    return { totalWorkers, totalIncidents, avgLTIFR: avgLTIFR.toFixed(1), avgCompliance: Math.round(avgCompliance), avgFitness: Math.round(avgFitness), totalExposures, sectors: SECTOR_ANALYTICS.length };
-  }, []);
+  useEffect(() => { loadAnalytics(); }, []);
+
+  const loadAnalytics = async () => {
+    setLoading(true);
+    const [statsRes, incidentRes, hazardRes, highRiskRes, kpiRes] = await Promise.allSettled([
+      occHealthApi.getDashboardStats(),
+      occHealthApi.getIncidentStatistics(),
+      occHealthApi.getHazardIdentificationStats(),
+      occHealthApi.listHighRiskHazards(),
+      occHealthApi.listPerformanceIndicators(),
+    ]);
+
+    const stats = statsRes.status === 'fulfilled' ? (statsRes.value.data ?? {}) : {};
+    if (statsRes.status === 'fulfilled') setDashboardStats(stats);
+    if (incidentRes.status === 'fulfilled') setIncidentStats(incidentRes.value.data ?? {});
+    if (hazardRes.status === 'fulfilled') setHazardStats(hazardRes.value.data ?? {});
+    if (highRiskRes.status === 'fulfilled') setHighRiskHazards(highRiskRes.value.data ?? []);
+    if (kpiRes.status === 'fulfilled') setPerformanceIndicators(kpiRes.value.data ?? []);
+
+    // Load per-sector details in parallel
+    const sectorKeys: string[] = (stats?.sectors ?? []).map((s: any) => s.sector).filter(Boolean);
+    if (sectorKeys.length > 0) {
+      const sectorResults = await Promise.allSettled(
+        sectorKeys.map(sk => occHealthApi.getSectorAnalysis(sk))
+      );
+      const details: Record<string, any> = {};
+      sectorResults.forEach((r, i) => {
+        if (r.status === 'fulfilled') details[sectorKeys[i]] = r.value.data ?? {};
+      });
+      setSectorDetails(details);
+    }
+    setLoading(false);
+  };
+
+  // ─── Derived global stats ────────────────────────────────────
+  const globalStats = useMemo(() => ({
+    totalWorkers: dashboardStats?.active_workers ?? 0,
+    totalIncidents: dashboardStats?.total_incidents_this_month ?? 0,
+    avgLTIFR: String(dashboardStats?.ytd_ltifr ?? '—'),
+    avgCompliance: Math.round(dashboardStats?.exam_compliance_rate ?? 0),
+    avgFitness: Math.round(dashboardStats?.overall_fitness_rate ?? 0),
+    totalExposures: hazardStats?.total_hazards ?? 0,
+    sectors: (dashboardStats?.sectors ?? []).length,
+  }), [dashboardStats, hazardStats]);
+
+  // ─── Chart data ──────────────────────────────────────────────
+
+  // Overview: incident bars from incidentStats.by_severity
+  const incidentSeverityData = useMemo(() =>
+    Object.entries(incidentStats?.by_severity ?? {})
+      .slice(0, 7)
+      .map(([k, v]) => ({ month: SEVERITY_LABELS[k] ?? k, incidents: Number(v) }))
+  , [incidentStats]);
+
+  // Overview: fitness bars from dashboardStats.fitness_overview
+  const fitnessChartData = useMemo(() =>
+    (dashboardStats?.fitness_overview ?? []).map((fo: any) => ({
+      month: (fo.label ?? '').split(' ')[0],
+      exams: fo.count ?? 0,
+    }))
+  , [dashboardStats]);
+
+  // Trends: lagging & leading KPI bars from PerformanceIndicator.previous_values
+  const lagKPIs = useMemo(() =>
+    performanceIndicators.filter(p => p.indicator_type === 'lagging'), [performanceIndicators]);
+  const leadKPIs = useMemo(() =>
+    performanceIndicators.filter(p => p.indicator_type === 'leading'), [performanceIndicators]);
+
+  const buildKPIChart = (kpis: any[], valueKey: string) => {
+    if (!kpis.length) return [];
+    const kpi = kpis[0];
+    if (Array.isArray(kpi.previous_values) && kpi.previous_values.length > 0) {
+      return kpi.previous_values.slice(-7).map((pv: any) => ({
+        month: String(pv.date ?? '').slice(0, 7),
+        [valueKey]: Number(pv.value ?? 0),
+      }));
+    }
+    return [{ month: 'Actuel', [valueKey]: Number(kpi.current_value ?? 0) }];
+  };
+
+  const lagChart = useMemo(() => buildKPIChart(lagKPIs, 'ltifr'), [lagKPIs]);
+  const leadChart = useMemo(() => buildKPIChart(leadKPIs, 'compliance'), [leadKPIs]);
+
+  // Risks: hazard type distribution from hazardStats.by_type
+  const riskDistribution = useMemo(() =>
+    Object.entries(hazardStats?.by_type ?? {}).map(([k, v]) => ({
+      label: HAZARD_TYPE_LABELS[k] ?? k,
+      count: Number(v),
+      color: HAZARD_TYPE_COLORS[k] ?? '#808080',
+    }))
+  , [hazardStats]);
+
+  // ─── Render ──────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={ACCENT} />
+        <Text style={{ marginTop: 12, color: colors.textSecondary, fontSize: 14 }}>Chargement des analytics…</Text>
+      </View>
+    );
+  }
+
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -170,7 +315,7 @@ export function AnalyticsScreen() {
           { label: 'LTIFR Moy.', value: globalStats.avgLTIFR, icon: 'analytics', color: '#8B5CF6' },
           { label: 'Conformité', value: `${globalStats.avgCompliance}%`, icon: 'checkmark-circle', color: '#22C55E' },
           { label: 'Aptitude', value: `${globalStats.avgFitness}%`, icon: 'fitness', color: '#0891B2' },
-          { label: 'Expositions', value: globalStats.totalExposures, icon: 'alert-circle', color: '#EF4444' },
+          { label: 'Dangers', value: globalStats.totalExposures, icon: 'alert-circle', color: '#EF4444' },
         ].map((s, i) => (
           <View key={i} style={[styles.statCard, { backgroundColor: s.color }]}>
             <View style={styles.statIcon}>
@@ -187,36 +332,64 @@ export function AnalyticsScreen() {
         <>
           <View style={styles.chartsRow}>
             <View style={styles.chartWrapper}>
-              <SimpleBarChart data={MONTHLY_TRENDS} valueKey="incidents" maxValue={15} barColor="#F59E0B" label="Incidents (6 mois)" />
+              <SimpleBarChart
+                data={incidentSeverityData}
+                valueKey="incidents"
+                maxValue={Math.max(...incidentSeverityData.map(d => d.incidents), 1)}
+                barColor="#F59E0B"
+                label="Incidents par Sévérité"
+              />
             </View>
             <View style={styles.chartWrapper}>
-              <SimpleBarChart data={MONTHLY_TRENDS} valueKey="exams" maxValue={160} barColor="#3B82F6" label="Examens Réalisés" />
+              <SimpleBarChart
+                data={fitnessChartData}
+                valueKey="exams"
+                maxValue={Math.max(...fitnessChartData.map((d: any) => d.exams), 1)}
+                barColor="#3B82F6"
+                label="Distribution Aptitude"
+              />
             </View>
           </View>
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Top 5 Dangers Critiques</Text>
-            {TOP_HAZARDS.map((h, i) => {
-              const sp = SECTOR_PROFILES[h.sector];
-              const riskColor = OccHealthUtils.getRiskScoreColor(h.score);
-              return (
-                <View key={i} style={styles.hazardRow}>
-                  <Text style={styles.hazardRank}>#{i + 1}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.hazardName}>{h.hazard}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      <Ionicons name={sp.icon as any} size={12} color={sp.color} />
-                      <Text style={styles.hazardSite}>{h.site}</Text>
+            {highRiskHazards.slice(0, 5).length === 0 ? (
+              <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>
+                Aucun danger critique enregistré
+              </Text>
+            ) : (
+              highRiskHazards.slice(0, 5).map((h: any, i: number) => {
+                const riskScore = h.risk_score_after ?? h.risk_score_before ?? 0;
+                const riskColor = OccHealthUtils.getRiskScoreColor(riskScore);
+                const trend = CONTROL_TO_TREND[h.control_effectiveness] ?? 'stable';
+                const site = h.work_site?.name ?? h.enterprise?.name ?? h.location ?? '—';
+                const hazardTypeKey = h.hazard_type ?? 'physical';
+                return (
+                  <View key={i} style={styles.hazardRow}>
+                    <Text style={styles.hazardRank}>#{i + 1}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.hazardName}>{h.description}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Ionicons name="location-outline" size={12} color={HAZARD_TYPE_COLORS[hazardTypeKey] ?? '#808080'} />
+                        <Text style={styles.hazardSite}>{site}</Text>
+                        <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+                          · {HAZARD_TYPE_LABELS[hazardTypeKey] ?? hazardTypeKey}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <View style={[styles.scoreBadge, { backgroundColor: riskColor + '14' }]}>
+                        <Text style={[styles.scoreText, { color: riskColor }]}>Score: {riskScore}</Text>
+                      </View>
+                      <Ionicons
+                        name={trend === 'up' ? 'trending-up' : trend === 'down' ? 'trending-down' : 'remove'}
+                        size={16}
+                        color={trend === 'up' ? '#EF4444' : trend === 'down' ? '#22C55E' : '#94A3B8'}
+                      />
                     </View>
                   </View>
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <View style={[styles.scoreBadge, { backgroundColor: riskColor + '14' }]}>
-                      <Text style={[styles.scoreText, { color: riskColor }]}>Score: {h.score}</Text>
-                    </View>
-                    <Ionicons name={h.trend === 'up' ? 'trending-up' : h.trend === 'down' ? 'trending-down' : 'remove'} size={16} color={h.trend === 'up' ? '#EF4444' : h.trend === 'down' ? '#22C55E' : '#94A3B8'} />
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })
+            )}
           </View>
         </>
       )}
@@ -226,30 +399,55 @@ export function AnalyticsScreen() {
         <>
           <View style={styles.chartsRow}>
             <View style={styles.chartWrapper}>
-              <SimpleBarChart data={MONTHLY_TRENDS} valueKey="ltifr" maxValue={4} barColor="#8B5CF6" label="Évolution LTIFR" />
+              <SimpleBarChart
+                data={lagChart}
+                valueKey="ltifr"
+                maxValue={Math.max(...lagChart.map((d: any) => d.ltifr), 1)}
+                barColor="#8B5CF6"
+                label={lagKPIs[0] ? `${lagKPIs[0].indicator_name} (Retardé)` : 'Indicateurs Retardés'}
+              />
             </View>
             <View style={styles.chartWrapper}>
-              <SimpleBarChart data={MONTHLY_TRENDS} valueKey="compliance" maxValue={100} barColor="#22C55E" label="Évolution Conformité (%)" />
+              <SimpleBarChart
+                data={leadChart}
+                valueKey="compliance"
+                maxValue={Math.max(...leadChart.map((d: any) => d.compliance), 1)}
+                barColor="#22C55E"
+                label={leadKPIs[0] ? `${leadKPIs[0].indicator_name} (Avancé)` : 'Indicateurs Avancés'}
+              />
             </View>
           </View>
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Indicateurs Clés de Tendance</Text>
-            {[
-              { label: 'Incidents en baisse', desc: '-42% sur 6 mois (de 12 à 7)', icon: 'trending-down', color: '#22C55E' },
-              { label: 'Examens en hausse', desc: '+21% sur 6 mois (de 120 à 145)', icon: 'trending-up', color: '#3B82F6' },
-              { label: 'LTIFR en amélioration', desc: 'De 3.2 à 2.4 (-25%)', icon: 'trending-down', color: '#22C55E' },
-              { label: 'Conformité en hausse', desc: 'De 78% à 87% (+9 pts)', icon: 'trending-up', color: '#22C55E' },
-            ].map((t, i) => (
-              <View key={i} style={styles.trendRow}>
-                <View style={[styles.trendIcon, { backgroundColor: t.color + '14' }]}>
-                  <Ionicons name={t.icon as any} size={18} color={t.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.trendLabel}>{t.label}</Text>
-                  <Text style={styles.trendDesc}>{t.desc}</Text>
-                </View>
-              </View>
-            ))}
+            <Text style={styles.sectionTitle}>Indicateurs de Performance SST</Text>
+            {performanceIndicators.length === 0 ? (
+              <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>
+                Aucun indicateur configuré
+              </Text>
+            ) : (
+              performanceIndicators.slice(0, 6).map((kpi: any, i: number) => {
+                const trendInfo = INDICATOR_TREND_MAP[kpi.trend] ?? INDICATOR_TREND_MAP.insufficient_data;
+                const currentVal = kpi.current_value != null ? Number(kpi.current_value).toFixed(1) : '—';
+                const target = kpi.target_value != null ? `Cible: ${kpi.target_value} ${kpi.target_unit ?? ''}` : '';
+                return (
+                  <View key={kpi.id ?? i} style={styles.trendRow}>
+                    <View style={[styles.trendIcon, { backgroundColor: trendInfo.color + '14' }]}>
+                      <Ionicons name={trendInfo.icon} size={18} color={trendInfo.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.trendLabel}>{kpi.indicator_name}</Text>
+                      <Text style={styles.trendDesc}>
+                        Valeur actuelle: {currentVal} {kpi.target_unit ?? ''}{target ? ` · ${target}` : ''}
+                      </Text>
+                    </View>
+                    <View style={{ backgroundColor: kpi.indicator_type === 'leading' ? '#3B82F614' : '#F59E0B14', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '600', color: kpi.indicator_type === 'leading' ? '#3B82F6' : '#F59E0B' }}>
+                        {kpi.indicator_type === 'leading' ? 'Avancé' : 'Retardé'}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         </>
       )}
@@ -259,7 +457,10 @@ export function AnalyticsScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Comparaison par Secteur</Text>
           <ScrollView horizontal={!isDesktop} showsHorizontalScrollIndicator={true}>
-            <SectorComparisonTable />
+            <SectorComparisonTable
+              sectors={dashboardStats?.sectors ?? []}
+              sectorDetails={sectorDetails}
+            />
           </ScrollView>
         </View>
       )}
@@ -269,40 +470,50 @@ export function AnalyticsScreen() {
         <>
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Distribution des Risques par Type</Text>
-            <HorizontalBarChart data={RISK_DISTRIBUTION} />
+            <HorizontalBarChart data={riskDistribution} />
           </View>
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Heatmap Risques par Secteur</Text>
+            <Text style={styles.sectionTitle}>Risques par Niveau</Text>
             <View style={styles.heatmapContainer}>
               <View style={styles.heatmapHeader}>
                 <View style={{ width: 80 }} />
-                {['Bruit', 'Chimique', 'Ergo', 'Psycho', 'Bio'].map(r => (
+                {['Critique', 'Élevé', 'Moyen', 'Faible'].map(r => (
                   <Text key={r} style={styles.heatmapColLabel}>{r}</Text>
                 ))}
               </View>
-              {[
-                { sector: 'Mines', values: [4, 5, 3, 2, 1] },
-                { sector: 'Industrie', values: [5, 3, 3, 2, 1] },
-                { sector: 'BTP', values: [3, 2, 5, 2, 1] },
-                { sector: 'Santé', values: [1, 2, 3, 4, 5] },
-                { sector: 'Banque', values: [1, 1, 4, 5, 1] },
-              ].map((row, ri) => (
-                <View key={ri} style={styles.heatmapRow}>
-                  <Text style={styles.heatmapRowLabel}>{row.sector}</Text>
-                  {row.values.map((v, ci) => {
-                    const opacity = v / 5;
-                    const bg = v >= 4 ? `rgba(239,68,68,${opacity})` : v >= 3 ? `rgba(245,158,11,${opacity})` : `rgba(34,197,94,${opacity * 0.8})`;
-                    return (
-                      <View key={ci} style={[styles.heatmapCell, { backgroundColor: bg }]}>
-                        <Text style={styles.heatmapCellText}>{v}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              ))}
+              {Object.entries(hazardStats?.by_risk_level ?? {}).map(([level, count], ri) => {
+                const numCount = Number(count);
+                const maxForRow = Math.max(...Object.values(hazardStats?.by_risk_level ?? {}).map(Number), 1);
+                const intensity = Math.round((numCount / maxForRow) * 5);
+                const color = RISK_LEVEL_COLORS[level] ?? '#808080';
+                return (
+                  <View key={level} style={styles.heatmapRow}>
+                    <Text style={styles.heatmapRowLabel}>{HAZARD_TYPE_LABELS[level] ?? level}</Text>
+                    {['critical', 'high', 'medium', 'low'].map(col => {
+                      const isMatch = col === level;
+                      const bg = isMatch ? `${RISK_LEVEL_COLORS[col]}${Math.round(((numCount / maxForRow) || 0.1) * 255).toString(16).padStart(2, '0')}` : `${colors.surfaceVariant}`;
+                      return (
+                        <View key={col} style={[styles.heatmapCell, { backgroundColor: bg }]}>
+                          <Text style={styles.heatmapCellText}>{isMatch ? numCount : ''}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+              {Object.keys(hazardStats?.by_risk_level ?? {}).length === 0 && (
+                <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'center', paddingVertical: 12 }}>
+                  Aucune donnée de niveau de risque disponible
+                </Text>
+              )}
             </View>
             <View style={styles.heatmapLegend}>
-              {[{ l: 'Faible (1)', c: 'rgba(34,197,94,0.3)' }, { l: 'Modéré (2-3)', c: 'rgba(245,158,11,0.5)' }, { l: 'Élevé (4-5)', c: 'rgba(239,68,68,0.7)' }].map((l, i) => (
+              {[
+                { l: `Critique: ${hazardStats?.by_risk_level?.critical ?? 0}`, c: RISK_LEVEL_COLORS.critical },
+                { l: `Élevé: ${hazardStats?.by_risk_level?.high ?? 0}`, c: RISK_LEVEL_COLORS.high },
+                { l: `Moyen: ${hazardStats?.by_risk_level?.medium ?? 0}`, c: RISK_LEVEL_COLORS.medium },
+                { l: `Faible: ${hazardStats?.by_risk_level?.low ?? 0}`, c: RISK_LEVEL_COLORS.low },
+              ].map((l, i) => (
                 <View key={i} style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: l.c }]} />
                   <Text style={styles.legendText}>{l.l}</Text>

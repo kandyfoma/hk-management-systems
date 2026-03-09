@@ -215,11 +215,31 @@ export function ComplianceScreen() {
   const [auditsLoading, setAuditsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // KPI strip state
+  const [overdueDrills, setOverdueDrills] = useState<any[]>([]);
+  const [pendingContractors, setPendingContractors] = useState<any[]>([]);
+  const [surveillanceCount, setSurveillanceCount] = useState<number | null>(null);
+  const [complianceSummary, setComplianceSummary] = useState<any>({});
+
   // Load data on mount
   useEffect(() => {
     loadData();
     loadAudits();
+    loadKPIs();
   }, []);
+
+  const loadKPIs = async () => {
+    const [drillsRes, contractorsRes, survRes, summaryRes] = await Promise.allSettled([
+      occHealthApi.listOverdueDrills(),
+      occHealthApi.listPendingContractors(),
+      occHealthApi.listHealthSurveillance(),
+      occHealthApi.getComplianceSummary(),
+    ]);
+    if ((drillsRes as any).value?.data) setOverdueDrills((drillsRes as any).value.data);
+    if ((contractorsRes as any).value?.data) setPendingContractors((contractorsRes as any).value.data);
+    if ((survRes as any).value?.data) setSurveillanceCount(((survRes as any).value.data as any[]).length);
+    if ((summaryRes as any).value?.data) setComplianceSummary((summaryRes as any).value.data);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -411,6 +431,44 @@ export function ComplianceScreen() {
         >
           <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>+ Ajouter</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* KPI Strip */}
+      <View style={styles.kpiStrip}>
+        {[
+          {
+            label: 'Conformité ISO 45001',
+            value: complianceSummary.compliance_score != null
+              ? `${Math.round(complianceSummary.compliance_score)}%`
+              : '—',
+            icon: 'trophy-outline',
+            color: '#8B5CF6',
+          },
+          {
+            label: 'Exercices en Retard',
+            value: overdueDrills.length,
+            icon: 'flame-outline',
+            color: overdueDrills.length > 0 ? '#EF4444' : '#22C55E',
+          },
+          {
+            label: 'Prestataires à Valider',
+            value: pendingContractors.length,
+            icon: 'people-outline',
+            color: pendingContractors.length > 0 ? '#F59E0B' : '#22C55E',
+          },
+          {
+            label: 'Surveillances Santé',
+            value: surveillanceCount ?? '—',
+            icon: 'eye-outline',
+            color: '#06B6D4',
+          },
+        ].map((kpi, i) => (
+          <View key={i} style={styles.kpiCard}>
+            <Ionicons name={kpi.icon as any} size={20} color={kpi.color} />
+            <Text style={[styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
+            <Text style={styles.kpiLabel} numberOfLines={2}>{kpi.label}</Text>
+          </View>
+        ))}
       </View>
 
       {/* Score & Stats */}
@@ -756,6 +814,11 @@ const styles = StyleSheet.create({
   miniStatIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   miniStatValue: { fontSize: 18, fontWeight: '700', color: colors.text },
   miniStatLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+
+  kpiStrip: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  kpiCard: { flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: 12, alignItems: 'center', gap: 4, ...shadows.xs },
+  kpiValue: { fontSize: 18, fontWeight: '700' },
+  kpiLabel: { fontSize: 9, color: colors.textSecondary, textAlign: 'center', lineHeight: 13 },
 
   sectionTitle: { fontSize: 13, fontWeight: '700', color: ACCENT, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
 

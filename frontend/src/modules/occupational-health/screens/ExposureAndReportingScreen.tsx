@@ -525,6 +525,25 @@ export function RegulatoryReportsScreen() {
                     </Text>
                   ) : null}
 
+                  {/* Workers section */}
+                  {(r.workers_affected_count > 0 || r.content_json?.workers?.length > 0) && (
+                    <View style={{ marginTop: spacing.sm, backgroundColor: '#FEF2F2', borderRadius: borderRadius.md, padding: spacing.sm }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: '#991B1B', marginBottom: 4 }}>
+                        Travailleurs impliqués ({r.workers_affected_count ?? r.content_json?.workers?.length ?? 0})
+                      </Text>
+                      {r.content_json?.workers?.slice(0, 2).map((w: any, i: number) => (
+                        <Text key={i} style={{ fontSize: 11, color: '#333', marginBottom: 2 }}>
+                          • {w.full_name}{w.employee_id ? ` — ${w.employee_id}` : ''}{w.job_title ? ` (${w.job_title})` : ''}
+                        </Text>
+                      ))}
+                      {r.content_json?.workers?.length > 2 && (
+                        <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                          +{r.content_json.workers.length - 2} autre(s)
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
                   {/* Action buttons */}
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outlineVariant, paddingTop: spacing.sm, flexWrap: 'wrap' }}>
                     <TouchableOpacity
@@ -534,16 +553,18 @@ export function RegulatoryReportsScreen() {
                       <Ionicons name="eye-outline" size={14} color={colors.textSecondary} />
                       <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textSecondary }}>Voir</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDownload(r.id, activeTab === 'cnss')}
-                      disabled={actionLoadingId === r.id}
-                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#EBF2FF', paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md, borderWidth: 1, borderColor: '#1A3D7C' }}
-                    >
-                      {actionLoadingId === r.id
-                        ? <ActivityIndicator size="small" color="#1A3D7C" />
-                        : <Ionicons name="download-outline" size={14} color="#1A3D7C" />}
-                      <Text style={{ fontSize: 11, fontWeight: '600', color: '#1A3D7C' }}>PDF</Text>
-                    </TouchableOpacity>
+                    {['submitted', 'acknowledged', 'approved'].includes(r.status) && (
+                      <TouchableOpacity
+                        onPress={() => handleDownload(r.id, activeTab === 'cnss')}
+                        disabled={actionLoadingId === r.id}
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#EBF2FF', paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md, borderWidth: 1, borderColor: '#1A3D7C' }}
+                      >
+                        {actionLoadingId === r.id
+                          ? <ActivityIndicator size="small" color="#1A3D7C" />
+                          : <Ionicons name="download-outline" size={14} color="#1A3D7C" />}
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#1A3D7C' }}>PDF</Text>
+                      </TouchableOpacity>
+                    )}
                     {r.status === 'draft' && (
                       <TouchableOpacity
                         onPress={() => setEditingReport({ report: r, isCnss: activeTab === 'cnss' })}
@@ -946,6 +967,33 @@ function ReportDetailsModal({
                 <Row label="Bureau ITM" value={report.itm_office} />
                 <Row label="Délai légal" value={report.declaration_deadline} />
                 <Row label="Travailleurs affectés" value={report.workers_affected_count} />
+                {(() => {
+                  const workerList: any[] = Array.isArray(content.workers) && content.workers.length > 0
+                    ? content.workers
+                    : Array.isArray(content.injured_workers) && content.injured_workers.length > 0
+                    ? content.injured_workers
+                    : [];
+                  if (workerList.length === 0) return null;
+                  return (
+                    <View style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
+                        Travailleurs impliqués ({workerList.length})
+                      </Text>
+                      {workerList.map((w: any, i: number) => (
+                        <View key={i} style={{ backgroundColor: '#FEF2F2', borderRadius: borderRadius.md, padding: spacing.sm, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: '#DC2626' }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#991B1B', marginBottom: 4 }}>{i + 1}. {w.full_name ?? w.name ?? '—'}</Text>
+                          <View style={{ gap: 3 }}>
+                            {(w.employee_id) ? <Text style={{ fontSize: 11, color: colors.text }}><Text style={{ fontWeight: '600' }}>ID Employé: </Text>{w.employee_id}</Text> : null}
+                            {(w.national_id) ? <Text style={{ fontSize: 11, color: colors.text }}><Text style={{ fontWeight: '600' }}>N. Identité: </Text>{w.national_id}</Text> : null}
+                            {(w.job_title) ? <Text style={{ fontSize: 11, color: colors.text }}><Text style={{ fontWeight: '600' }}>Fonction: </Text>{w.job_title}</Text> : null}
+                            {(w.gender) ? <Text style={{ fontSize: 11, color: colors.text }}><Text style={{ fontWeight: '600' }}>Sexe: </Text>{w.gender}</Text> : null}
+                            {(w.date_of_birth) ? <Text style={{ fontSize: 11, color: colors.text }}><Text style={{ fontWeight: '600' }}>Date naissance: </Text>{w.date_of_birth}</Text> : null}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
                 <Row label="Destinataire" value={report.submission_recipient} />
                 {!!report.required_actions && (
                   <View style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant }}>
@@ -1027,6 +1075,16 @@ function CompleteReportModal({
     report.workers_affected_count != null ? String(report.workers_affected_count) : '',
   );
   const [requiredActions, setRequiredActions] = useState<string>(report.required_actions ?? '');
+  const [workers, setWorkers] = useState<Array<{ full_name: string; employee_id: string; national_id: string; job_title: string }>>(
+    Array.isArray(content.workers)
+      ? content.workers.map((w: any) => ({
+          full_name: w.full_name ?? '',
+          employee_id: w.employee_id ?? '',
+          national_id: w.national_id ?? '',
+          job_title: w.job_title ?? '',
+        }))
+      : [],
+  );
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -1066,6 +1124,10 @@ function CompleteReportModal({
       payload.itm_office = itmOffice || undefined;
       payload.required_actions = requiredActions || undefined;
       if (workersAffectedCount) payload.workers_affected_count = parseInt(workersAffectedCount, 10);
+      const validWorkers = workers.filter(w => w.full_name.trim());
+      if (validWorkers.length > 0) {
+        payload.content_json = { ...content, workers: validWorkers };
+      }
     }
     const res = isCnss
       ? await occHealthApi.patchCNSSReport(report.id, payload)
@@ -1212,6 +1274,55 @@ function CompleteReportModal({
                     {errors.workersAffectedCount}
                   </Text>
                 )}
+
+                <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.md }}>
+                  Détails des travailleurs impliqués
+                </Text>
+                {workers.map((w, i) => (
+                  <View key={i} style={{ backgroundColor: colors.background, borderRadius: borderRadius.md, padding: spacing.sm, marginBottom: spacing.xs, borderWidth: 1, borderColor: colors.outline }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>Travailleur {i + 1}</Text>
+                      <TouchableOpacity onPress={() => setWorkers(workers.filter((_, j) => j !== i))}>
+                        <Ionicons name="close-circle" size={18} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <TextInput
+                      value={w.full_name}
+                      onChangeText={v => { const u = [...workers]; u[i] = { ...u[i], full_name: v }; setWorkers(u); }}
+                      placeholder="Nom complet *"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.textInput, { marginBottom: 4 }]}
+                    />
+                    <TextInput
+                      value={w.employee_id}
+                      onChangeText={v => { const u = [...workers]; u[i] = { ...u[i], employee_id: v }; setWorkers(u); }}
+                      placeholder="ID Employé"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.textInput, { marginBottom: 4 }]}
+                    />
+                    <TextInput
+                      value={w.national_id}
+                      onChangeText={v => { const u = [...workers]; u[i] = { ...u[i], national_id: v }; setWorkers(u); }}
+                      placeholder="N. Identité nationale"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.textInput, { marginBottom: 4 }]}
+                    />
+                    <TextInput
+                      value={w.job_title}
+                      onChangeText={v => { const u = [...workers]; u[i] = { ...u[i], job_title: v }; setWorkers(u); }}
+                      placeholder="Fonction / Poste"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.textInput, { marginBottom: 0 }]}
+                    />
+                  </View>
+                ))}
+                <TouchableOpacity
+                  onPress={() => setWorkers([...workers, { full_name: '', employee_id: '', national_id: '', job_title: '' }])}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.primary + '20', paddingVertical: spacing.sm, borderRadius: borderRadius.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.primary }}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: colors.primary }}>Ajouter un travailleur</Text>
+                </TouchableOpacity>
 
                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: spacing.xs }}>
                   Actions correctives requises

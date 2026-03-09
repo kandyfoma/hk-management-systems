@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows } from '../../../theme/theme';
 import { OccHealthUtils, SECTOR_PROFILES } from '../../../models/OccupationalHealth';
 import ApiService from '../../../services/ApiService';
+import { occHealthApi } from '../../../services/OccHealthApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -143,7 +144,9 @@ export function AdminReportsScreen() {
       };
 
       // Parallel data fetching
-      const [examsRes, incidentsRes, diseasesRes, alertsRes, ppeRes, workersRes] = 
+      const [examsRes, incidentsRes, diseasesRes, alertsRes, ppeRes, workersRes,
+             drillsRes, contractorsRes, surveillanceRes, kpisRes, complianceSummaryRes,
+             dashStatsRes, hazardStatsRes] = 
         await Promise.allSettled([
           apiService.get('/occupational-health/examinations/', { params: { ...baseParams, limit: 1000 } }),
           apiService.get('/occupational-health/workplace-incidents/', { params: { ...baseParams, limit: 1000 } }),
@@ -151,6 +154,13 @@ export function AdminReportsScreen() {
           apiService.get('/occupational-health/overexposure-alerts/', { params: { ...baseParams } }),
           apiService.get('/occupational-health/ppe-compliance/', { params: { ...baseParams } }),
           apiService.get('/occupational-health/workers/', { params: { ...baseParams, limit: 1000 } }),
+          occHealthApi.listOverdueDrills(),
+          occHealthApi.listPendingContractors(),
+          occHealthApi.listHealthSurveillance(),
+          occHealthApi.listOutOfBoundsKPIs(),
+          occHealthApi.getComplianceSummary(),
+          occHealthApi.getDashboardStats(),
+          occHealthApi.getHazardIdentificationStats(),
         ]);
 
       const exams = (examsRes as any).value?.data?.results || [];
@@ -159,17 +169,24 @@ export function AdminReportsScreen() {
       const alerts = (alertsRes as any).value?.data?.results || [];
       const ppe = (ppeRes as any).value?.data?.results || [];
       const workers = (workersRes as any).value?.data?.results || [];
+      const overdueDrills: any[] = (drillsRes as any).value?.data ?? [];
+      const pendingContractors: any[] = (contractorsRes as any).value?.data ?? [];
+      const surveillance: any[] = (surveillanceRes as any).value?.data ?? [];
+      const outOfBoundsKPIs: any[] = (kpisRes as any).value?.data ?? [];
+      const complianceSummary: any = (complianceSummaryRes as any).value?.data ?? {};
+      const dashboardStatsData: any = (dashStatsRes as any).value?.data ?? {};
+      const hazardStatsData: any = (hazardStatsRes as any).value?.data ?? {};
 
       // Generate consolidated reports
       const newReports = new Map<ReportType, ReportData>();
       
-      newReports.set('executive-summary', generateExecutiveSummary(exams, incidents, diseases, workers));
-      newReports.set('incident-trends', generateIncidentReport(incidents));
+      newReports.set('executive-summary', generateExecutiveSummary(exams, incidents, diseases, workers, alerts, dashboardStatsData));
+      newReports.set('incident-trends', generateIncidentReport(incidents, dashboardStatsData));
       newReports.set('medical-compliance', generateMedicalReport(exams, diseases));
-      newReports.set('exposure-risk', generateExposureReport(alerts, ppe));
-      newReports.set('regulatory-compliance', generateRegulatoryReport(incidents, diseases));
-      newReports.set('worker-health', generateWorkerReport(workers, exams));
-      newReports.set('risk-matrix', generateRiskMatrix(incidents, alerts));
+      newReports.set('exposure-risk', generateExposureReport(alerts, ppe, outOfBoundsKPIs, hazardStatsData));
+      newReports.set('regulatory-compliance', generateRegulatoryReport(incidents, diseases, overdueDrills, pendingContractors, complianceSummary));
+      newReports.set('worker-health', generateWorkerReport(workers, exams, surveillance, dashboardStatsData, hazardStatsData));
+      newReports.set('risk-matrix', generateRiskMatrix(incidents, alerts, hazardStatsData));
 
       setReports(newReports);
       if (!activeReportId || !newReports.has(activeReportId as ReportType)) {
@@ -189,133 +206,191 @@ export function AdminReportsScreen() {
   }, [loadReports]);
 
   // ─── Report Generators ──────────────────────────────────────
-  const generateExecutiveSummary = (exams: any[], incidents: any[], diseases: any[], workers: any[]): ReportData => {
+  const generateExecutiveSummary = (exams: any[], incidents: any[], diseases: any[], workers: any[], alerts: any[], dashStats: any): ReportData => {
     const now = new Date();
     const thisMonth = incidents.filter(i => {
       const d = new Date(i.incident_date);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
 
+    // Dynamic trend: compare this month vs monthly average over the selected range
+    const msPerMonth = 30 * 24 * 60 * 60 * 1000;
+    const monthsInRange = Math.max(1, Math.round(
+      (dateRange.endDate.getTime() - dateRange.startDate.getTime()) / msPerMonth
+    ));
+    const avgPerMonth = incidents.length / monthsInRange;
+    const incidentTrend: 'up' | 'down' = thisMonth >= avgPerMonth ? 'up' : 'down';
+    const incidentDelta = Math.abs(thisMonth - Math.round(avgPerMonth));
+    const incidentTrendValue = incidentDelta > 0 ? `${incidentTrend === 'up' ? '+' : '-'}${incidentDelta}` : undefined;
+
     const fit = exams.filter(e => e.fitness_status === 'fit').length;
-    const aptitude = exams.length > 0 ? Math.round((fit / exams.length) * 100) : 0;
+    const aptitude = exams.length > 0
+      ? Math.round((fit / exams.length) * 100)
+      : Math.round(dashStats?.overall_fitness_rate ?? 0);
+    const activeWorkers = dashStats?.active_workers ?? workers.length;
 
     return {
       ...reportConfigs['executive-summary'],
       generatedAt: new Date(),
       metrics: [
-        { label: 'Travailleurs en Suivi', value: workers.length, icon: 'people', color: '#3B82F6', trend: 'up', trendValue: `+${Math.round(workers.length * 0.05)}` },
-        { label: 'Incidents ce Mois', value: thisMonth, icon: 'warning', color: thisMonth > 2 ? '#EF4444' : '#22C55E', trend: thisMonth > 2 ? 'up' : 'down', trendValue: thisMonth > 2 ? '+2' : '-1' },
+        { label: 'Travailleurs en Suivi', value: activeWorkers, icon: 'people', color: '#3B82F6' },
+        { label: 'Incidents ce Mois', value: thisMonth, icon: 'warning', color: thisMonth > 2 ? '#EF4444' : '#22C55E', trend: incidentTrend, trendValue: incidentTrendValue },
         { label: 'Maladies Déclarées', value: diseases.length, icon: 'bandage', color: '#DC2626' },
-        { label: 'Taux Aptitude', value: `${aptitude}%`, icon: 'shield-checkmark', color: '#22C55E', benchmark: '≥ 85%' },
-        { label: 'Examens Effectués', value: exams.length, icon: 'medkit', color: '#3B82F6', trend: 'up', trendValue: '+8%' },
-        { label: 'Alertes d\'Exposition', value: 0, icon: 'alert-circle', color: '#F59E0B' },
+        { label: 'Taux Aptitude', value: aptitude > 0 ? `${aptitude}%` : '—', icon: 'shield-checkmark', color: '#22C55E', benchmark: '≥ 85%' },
+        { label: 'Examens Effectués', value: exams.length, icon: 'medkit', color: '#3B82F6' },
+        { label: 'Alertes d\'Exposition', value: alerts.length, icon: 'alert-circle', color: alerts.length > 0 ? '#EF4444' : '#22C55E' },
       ],
     };
   };
 
-  const generateIncidentReport = (incidents: any[]): ReportData => {
+  const generateIncidentReport = (incidents: any[], dashStats: any): ReportData => {
     const critical = incidents.filter(i => i.severity === 'critical' || i.severity === 'high').length;
-    const ltifr = OccHealthUtils.calculateLTIFR(Math.round(incidents.length * 0.3), 1250000);
-    const trifr = OccHealthUtils.calculateTRIFR(incidents.length, 1250000);
-    const daysLost = incidents.reduce((sum, i) => sum + (i.days_lost || 0), 0);
+    const daysLost = incidents.reduce((sum, i) => sum + (i.days_lost || i.work_days_lost || 0), 0);
+    // Prefer real YTD rates from dashboard stats; fall back to formula-based estimate
+    const ltifr = dashStats?.ytd_ltifr != null
+      ? Number(dashStats.ytd_ltifr).toFixed(2)
+      : OccHealthUtils.calculateLTIFR(Math.round(incidents.length * 0.3), 1250000).toFixed(2);
+    const trifr = dashStats?.ytd_trifr != null
+      ? Number(dashStats.ytd_trifr).toFixed(2)
+      : OccHealthUtils.calculateTRIFR(incidents.length, 1250000).toFixed(2);
+    // Closed incidents = fully processed and reported
+    const closed = incidents.filter(i => i.status === 'closed').length;
+    const closureLabel = incidents.length > 0 ? `${closed} / ${incidents.length}` : '—';
 
     return {
       ...reportConfigs['incident-trends'],
       generatedAt: new Date(),
       metrics: [
-        { label: 'Total Incidents', value: incidents.length, icon: 'warning', color: '#EF4444', trend: 'down', trendValue: '-8%' },
-        { label: 'Incidents Critiques', value: critical, icon: 'alert-circle', color: '#DC2626', trend: 'down', trendValue: '-2' },
-        { label: 'LTIFR', value: ltifr.toFixed(2), icon: 'analytics', color: '#8B5CF6', benchmark: '< 2.5' },
-        { label: 'TRIFR', value: trifr.toFixed(2), icon: 'trending-up', color: '#6366F1', benchmark: '< 5.0' },
+        { label: 'Total Incidents', value: incidents.length, icon: 'warning', color: '#EF4444' },
+        { label: 'Incidents Critiques', value: critical, icon: 'alert-circle', color: '#DC2626' },
+        { label: 'LTIFR', value: ltifr, icon: 'analytics', color: '#8B5CF6', benchmark: '< 2.5' },
+        { label: 'TRIFR', value: trifr, icon: 'trending-up', color: '#6366F1', benchmark: '< 5.0' },
         { label: 'Jours d\'Arrêt', value: daysLost, icon: 'calendar', color: '#DC2626' },
-        { label: 'Conformité CNSS', value: '98%', icon: 'checkmark', color: '#22C55E', benchmark: '= 100%' },
+        { label: 'Incidents Fermés', value: closureLabel, icon: 'checkmark', color: closed === incidents.length && incidents.length > 0 ? '#22C55E' : '#F59E0B', benchmark: '= 100%' },
       ],
     };
   };
 
   const generateMedicalReport = (exams: any[], diseases: any[]): ReportData => {
     const fit = exams.filter(e => e.fitness_status === 'fit').length;
-    const unfit = exams.filter(e => e.fitness_status === 'unfit').length;
-    const provisional = exams.filter(e => e.fitness_status === 'provisional').length;
+    const unfit = exams.filter(e => ['unfit', 'permanently_unfit'].includes(e.fitness_status)).length;
+    const provisional = exams.filter(e => ['provisional', 'fit_with_restrictions', 'temporarily_unfit'].includes(e.fitness_status)).length;
     const aptitude = exams.length > 0 ? Math.round((fit / exams.length) * 100) : 0;
+    // Documentation compliance: exams that have a fitness decision (not pending/unknown)
+    const documented = exams.filter(e => e.fitness_status && !['pending', 'not_evaluated', '', null, undefined].includes(e.fitness_status)).length;
+    const docCompliance = exams.length > 0 ? Math.round((documented / exams.length) * 100) : 0;
 
     return {
       ...reportConfigs['medical-compliance'],
       generatedAt: new Date(),
       metrics: [
-        { label: 'Taux Aptitude Global', value: `${aptitude}%`, icon: 'shield-checkmark', color: '#22C55E', trend: 'up', trendValue: '+2.3%', benchmark: '≥ 85%' },
+        { label: 'Taux Aptitude Global', value: exams.length > 0 ? `${aptitude}%` : '—', icon: 'shield-checkmark', color: '#22C55E', benchmark: '≥ 85%' },
         { label: 'Travailleurs Aptes', value: fit, icon: 'checkmark-circle', color: '#10B981' },
-        { label: 'Inaptes Permanents', value: unfit, icon: 'close-circle', color: '#EF4444' },
+        { label: 'Inaptes / Restrictions', value: unfit + provisional, icon: 'close-circle', color: unfit > 0 ? '#EF4444' : '#F59E0B' },
         { label: 'Aptitude Provisoire', value: provisional, icon: 'alert-circle', color: '#F59E0B' },
         { label: 'Maladies Professionnelles', value: diseases.length, icon: 'bandage', color: '#DC2626' },
-        { label: 'Conformité Documentation', value: '96%', icon: 'document-text', color: '#6366F1', benchmark: '≥ 90%' },
+        { label: 'Conformité Documentation', value: exams.length > 0 ? `${docCompliance}%` : '—', icon: 'document-text', color: '#6366F1', benchmark: '≥ 90%' },
       ],
     };
   };
 
-  const generateExposureReport = (alerts: any[], ppe: any[]): ReportData => {
+  const generateExposureReport = (alerts: any[], ppe: any[], outOfBoundsKPIs: any[], hazardStats: any): ReportData => {
     const critical = alerts.filter(a => a.severity === 'critical').length;
     const compliant = ppe.filter(p => p.is_compliant).length;
     const compliance = ppe.length > 0 ? Math.round((compliant / ppe.length) * 100) : 100;
+    // Workers exposed from hazard register statistics (real headcount)
+    const workersExposed = hazardStats?.workers_exposed ?? alerts.length;
 
     return {
       ...reportConfigs['exposure-risk'],
       generatedAt: new Date(),
       metrics: [
-        { label: 'Alertes Actives', value: alerts.length, icon: 'alert', color: '#F59E0B', trend: 'down', trendValue: '-3' },
+        { label: 'Alertes Actives', value: alerts.length, icon: 'alert', color: alerts.length > 0 ? '#F59E0B' : '#22C55E' },
         { label: 'Critiques', value: critical, icon: 'alert-circle', color: '#DC2626' },
-        { label: 'Conformité EPI', value: `${compliance}%`, icon: 'shield-checkmark', color: '#22C55E', benchmark: '≥ 90%' },
+        { label: 'Conformité EPI', value: ppe.length > 0 ? `${compliance}%` : '—', icon: 'shield-checkmark', color: '#22C55E', benchmark: '≥ 90%' },
         { label: 'EPI Non-Conforme', value: ppe.length - compliant, icon: 'close-circle', color: '#EF4444' },
-        { label: 'Travailleurs Exposés', value: Math.round(alerts.length * 2.5), icon: 'warning', color: '#F59E0B' },
-        { label: 'Actions Correctives', value: 12, icon: 'checkmark-circle', color: '#0891B2' },
+        { label: 'Travailleurs Exposés', value: workersExposed, icon: 'warning', color: '#F59E0B' },
+        { label: 'KPIs Hors Seuil', value: outOfBoundsKPIs.length, icon: 'analytics', color: outOfBoundsKPIs.length > 0 ? '#DC2626' : '#0891B2' },
       ],
     };
   };
 
-  const generateRegulatoryReport = (incidents: any[], diseases: any[]): ReportData => {
+  const generateRegulatoryReport = (
+    incidents: any[], diseases: any[],
+    overdueDrills: any[], pendingContractors: any[],
+    complianceSummary: any,
+  ): ReportData => {
+    const isoScore = complianceSummary.compliance_score != null
+      ? `${Math.round(complianceSummary.compliance_score)}%`
+      : '—';
+    const openCapas = complianceSummary.open_capas ?? complianceSummary.non_compliant_count ?? '—';
+
     return {
       ...reportConfigs['regulatory-compliance'],
       generatedAt: new Date(),
       metrics: [
         { label: 'Rapports CNSS', value: incidents.length, icon: 'document-text', color: '#6366F1' },
         { label: 'Notifications DRC', value: diseases.length, icon: 'mail', color: '#8B5CF6' },
-        { label: 'Rapports Pendants', value: 2, icon: 'time', color: '#F59E0B', trend: 'down', trendValue: '-1' },
-        { label: 'Délai Moyen Réponse', value: '8j', icon: 'calendar', color: '#06B6D4' },
-        { label: 'CAPA Fermées', value: 18, icon: 'checkmark-circle', color: '#22C55E', trend: 'up', trendValue: '+3' },
-        { label: 'Conformité ISO 45001', value: '92%', icon: 'trophy', color: '#8B5CF6', benchmark: '≥ 90%' },
+        { label: 'Exercices en Retard', value: overdueDrills.length, icon: 'time', color: overdueDrills.length > 0 ? '#F59E0B' : '#22C55E', trend: overdueDrills.length > 0 ? 'up' : 'stable', trendValue: overdueDrills.length > 0 ? `+${overdueDrills.length}` : undefined },
+        { label: 'Prestataires en Attente', value: pendingContractors.length, icon: 'people', color: pendingContractors.length > 0 ? '#F59E0B' : '#22C55E' },
+        { label: 'CAPA Ouvertes', value: openCapas, icon: 'alert-circle', color: '#EF4444' },
+        { label: 'Conformité ISO 45001', value: isoScore, icon: 'trophy', color: '#8B5CF6', benchmark: '≥ 90%' },
       ],
     };
   };
 
-  const generateWorkerReport = (workers: any[], exams: any[]): ReportData => {
-    const atRisk = Math.round(workers.length * 0.15);
-    const highExposure = Math.round(workers.length * 0.22);
+  const generateWorkerReport = (workers: any[], exams: any[], surveillance: any[], dashStats: any, hazardStats: any): ReportData => {
+    const activeWorkers = dashStats?.active_workers ?? workers.length;
+    // High-risk workers from dashboard stats
+    const atRisk = dashStats?.high_risk_workers ?? 0;
+    // Workers exposed from hazard register (real headcount from hazard register stats)
+    const workersExposed = hazardStats?.workers_exposed ?? 0;
+    // Exams performed in the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentExams = exams.filter(e => {
+      const d = new Date(e.exam_date);
+      return !isNaN(d.getTime()) && d >= thirtyDaysAgo;
+    }).length;
+    const surveillanceCoverage = activeWorkers > 0
+      ? Math.round((surveillance.length / activeWorkers) * 100)
+      : 0;
 
     return {
       ...reportConfigs['worker-health'],
       generatedAt: new Date(),
       metrics: [
-        { label: 'Travailleurs Totaux', value: workers.length, icon: 'people', color: '#06B6D4', trend: 'up', trendValue: '+12' },
+        { label: 'Travailleurs Actifs', value: activeWorkers, icon: 'people', color: '#06B6D4' },
         { label: 'À Risque Identifié', value: atRisk, icon: 'alert', color: '#F59E0B' },
-        { label: 'Haute Exposition', value: highExposure, icon: 'warning', color: '#EF4444' },
-        { label: 'Examen Récent (30j)', value: Math.round(exams.length * 0.7), icon: 'medkit', color: '#3B82F6' },
-        { label: 'Rotation Prévue', value: 5, icon: 'repeat', color: '#0891B2' },
-        { label: 'Formations SST', value: '87%', icon: 'school', color: '#22C55E' },
+        { label: 'Exposés aux Dangers', value: workersExposed, icon: 'warning', color: '#EF4444' },
+        { label: 'Examen Récent (30j)', value: recentExams, icon: 'medkit', color: '#3B82F6' },
+        { label: 'Surveillance Santé', value: surveillance.length, icon: 'eye', color: '#0891B2' },
+        { label: 'Couverture Surveillance', value: activeWorkers > 0 ? `${surveillanceCoverage}%` : '—', icon: 'shield-checkmark', color: '#22C55E', benchmark: '≥ 80%' },
       ],
     };
   };
 
-  const generateRiskMatrix = (incidents: any[], alerts: any[]): ReportData => {
+  const generateRiskMatrix = (incidents: any[], alerts: any[], hazardStats: any): ReportData => {
+    const byLevel = hazardStats?.by_risk_level ?? {};
+    const totalHazards = hazardStats?.total_hazards ?? 0;
+    const byStatus = hazardStats?.by_status ?? {};
+    // Hazards with controlled/mitigated status = controls in place
+    const controlled = (byStatus.controlled ?? 0) + (byStatus.mitigated ?? 0) + (byStatus.closed ?? 0);
+    const controlsRate = totalHazards > 0 ? Math.round((controlled / totalHazards) * 100) : null;
+    const avgScore = hazardStats?.average_risk_score != null
+      ? Number(hazardStats.average_risk_score).toFixed(1)
+      : '—';
+
     return {
       ...reportConfigs['risk-matrix'],
       generatedAt: new Date(),
       metrics: [
-        { label: 'Risques Critiques', value: 3, icon: 'alert-circle', color: '#DC2626' },
-        { label: 'Risques Élevés', value: 7, icon: 'warning', color: '#EF4444' },
-        { label: 'Risques Modérés', value: 12, icon: 'alert', color: '#F59E0B' },
-        { label: 'Risques Faibles', value: 18, icon: 'checkmark', color: '#22C55E' },
-        { label: 'Zones Critiques', value: 2, icon: 'location', color: '#8B5CF6' },
-        { label: 'Contrôles en Place', value: '84%', icon: 'shield-checkmark', color: '#0891B2' },
+        { label: 'Risques Critiques', value: byLevel.critical ?? 0, icon: 'alert-circle', color: '#DC2626' },
+        { label: 'Risques Élevés', value: byLevel.high ?? 0, icon: 'warning', color: '#EF4444' },
+        { label: 'Risques Modérés', value: byLevel.medium ?? 0, icon: 'alert', color: '#F59E0B' },
+        { label: 'Risques Faibles', value: byLevel.low ?? 0, icon: 'checkmark', color: '#22C55E' },
+        { label: 'Score Risque Moyen', value: avgScore, icon: 'analytics', color: '#8B5CF6', benchmark: '< 10' },
+        { label: 'Dangers Maîtrisés', value: controlsRate != null ? `${controlsRate}%` : `${controlled} / ${totalHazards}`, icon: 'shield-checkmark', color: '#0891B2', benchmark: '≥ 80%' },
       ],
     };
   };

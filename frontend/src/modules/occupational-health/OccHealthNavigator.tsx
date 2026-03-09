@@ -12,7 +12,7 @@ import { DiseasesScreen } from './screens/DiseasesScreen';
 import { SurveillanceScreen } from './screens/SurveillanceScreen';
 import { RiskAssessmentScreen } from './screens/RiskAssessmentScreen';
 import { PPEManagementScreen } from './screens/PPEManagementScreen';
-import { ReportsScreen } from './screens/ReportsScreen';
+import { AdminReportsScreen } from './screens/AdminReportsScreen';
 import { ComplianceScreen } from './screens/ComplianceScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { ProtocolManagementScreen } from './screens/ProtocolManagementScreen';
@@ -26,10 +26,9 @@ import { MedicalTestVisualizationScreen, ExitExamScreen } from './screens/Medica
 import { MedicalTestCatalogScreen } from './screens/MedicalTestCatalogScreen';
 import { DiseaseRegistryScreen, HealthScreeningFormScreen } from './screens/DiseaseRegistryAndHealthScreeningScreen';
 import { RegulatoryReportsScreen } from './screens/ExposureAndReportingScreen';
-import { ISO45001DashboardScreen, ISO27001DashboardScreen } from './screens/ComplianceDashboardsScreen';
+import { ISO45001DashboardScreen } from './screens/ComplianceDashboardsScreen';
 import { WorkerRiskProfileScreen } from './screens/WorkerRiskProfileScreen';
 import { OverexposureAlertScreen } from './screens/OverexposureAlertScreen';
-import { PPEComplianceRecordScreen } from './screens/PPEComplianceRecordScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { FitnessDashboardScreen } from './screens/FitnessDashboardScreen';
 import { CAPADashboardScreen } from './screens/CAPADashboardScreen';
@@ -321,7 +320,6 @@ export function OccHealthNavigator() {
       items: [
         { id: 'regulatory-reports', label: 'Rapports Réglementaires', icon: 'document-attach-outline', iconActive: 'document-attach' },
         { id: 'iso45001', label: 'ISO 45001', icon: 'shield-outline', iconActive: 'shield' },
-        { id: 'iso27001', label: 'ISO 27001', icon: 'lock-closed-outline', iconActive: 'lock-closed' },
         { id: 'reports', label: 'Rapports SST', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
         { id: 'compliance', label: 'Conformité Réglementaire', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle' },
         { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
@@ -488,10 +486,6 @@ export function OccHealthNavigator() {
       return <ISO45001DashboardScreen />;
     }
 
-    if (activeScreen === 'iso27001') {
-      return <ISO27001DashboardScreen />;
-    }
-
     if (activeScreen === 'ppe-management') {
       return <PPEManagementScreen />;
     }
@@ -505,11 +499,11 @@ export function OccHealthNavigator() {
     }
 
     if (activeScreen === 'ppe-compliance') {
-      return <PPEComplianceRecordScreen />;
+      return <PPEComplianceScreen />;
     }
 
     if (activeScreen === 'reports') {
-      return <ReportsScreen />;
+      return <AdminReportsScreen />;
     }
 
     if (activeScreen === 'compliance') {
