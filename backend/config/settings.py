@@ -207,11 +207,42 @@ CORS_ALLOWED_ORIGINS = config(
     cast=lambda x: [i.strip() for i in x.split(',') if i.strip()]
 )
 
+# Add custom production domains to CORS allowed origins
+cors_domains = [
+    'https://api.katms.org',
+    'https://katms.org',
+]
+for domain in cors_domains:
+    if domain not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(domain)
+
+# Add Railway host if available
+if railway_static_url:
+    cors_railway = f'https://{railway_host}'
+    if cors_railway not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(cors_railway)
+
 CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
     default='',
     cast=lambda x: [i.strip() for i in x.split(',') if i.strip()]
 )
+
+# Add custom production domains to CSRF trusted origins
+csrf_domains = [
+    'https://api.katms.org',
+    'https://katms.org',
+    'https://*.katms.org',
+]
+for domain in csrf_domains:
+    if domain not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(domain)
+
+# Add Railway host if available
+if railway_static_url:
+    csrf_railway = f'https://{railway_host}'
+    if csrf_railway not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(csrf_railway)
 
 CORS_ALLOW_CREDENTIALS = True
 
