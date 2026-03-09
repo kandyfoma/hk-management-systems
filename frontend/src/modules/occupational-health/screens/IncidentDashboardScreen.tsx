@@ -1636,11 +1636,11 @@ function CreateIncidentModal({
 // ─── Stat Card ───────────────────────────────────────────────
 function StatCard({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
   return (
-    <View style={[styles.statCard, styles.cardShadow, { borderTopColor: color, borderTopWidth: 3 }]}>
-      <View style={[styles.statCardIcon, { backgroundColor: color + '15' }]}>
-        <Ionicons name={icon as any} size={20} color={color} />
+    <View style={[styles.statCard, styles.cardShadow, { backgroundColor: color }]}>
+      <View style={[styles.statCardIcon, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+        <Ionicons name={icon as any} size={20} color="#FFFFFF" />
       </View>
-      <Text style={[styles.statCardValue, { color }]}>{value}</Text>
+      <Text style={styles.statCardValue}>{value}</Text>
       <Text style={styles.statCardLabel}>{label}</Text>
     </View>
   );
@@ -2183,8 +2183,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  statCardValue: { fontSize: 22, fontWeight: '800' },
-  statCardLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  statCardValue: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+  statCardLabel: { fontSize: 10, color: 'rgba(255,255,255,0.8)', marginTop: 2, fontWeight: '500' },
   cardShadow: { ...shadows.sm },
 
   // Improved toolbar with search and filter toggle

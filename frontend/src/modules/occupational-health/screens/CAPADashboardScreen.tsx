@@ -503,11 +503,11 @@ function KPIBar({ investigations }: { investigations: Investigation[] }) {
   return (
     <View style={kb.row}>
       {items.map(item => (
-        <View key={item.label} style={[kb.card, shadows.sm]}>
-          <View style={[kb.iconWrap, { backgroundColor: item.color + '18' }]}>
-            <Ionicons name={item.icon as any} size={18} color={item.color} />
+        <View key={item.label} style={[kb.card, shadows.sm, { backgroundColor: item.color }]}>
+          <View style={[kb.iconWrap, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+            <Ionicons name={item.icon as any} size={18} color="#FFF" />
           </View>
-          <Text style={[kb.value, { color: item.color }]}>{item.value}</Text>
+          <Text style={kb.value}>{item.value}</Text>
           <Text style={kb.label}>{item.label}</Text>
         </View>
       ))}
@@ -519,8 +519,8 @@ const kb = StyleSheet.create({
   row:      { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
   card:     { flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: spacing.md, alignItems: 'center', gap: 4 },
   iconWrap: { width: 36, height: 36, borderRadius: borderRadius.lg, justifyContent: 'center', alignItems: 'center' },
-  value:    { fontSize: 20, fontWeight: '800' },
-  label:    { fontSize: 9, color: colors.textSecondary, textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  value:    { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
+  label:    { fontSize: 9, color: 'rgba(255,255,255,0.8)', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
 });
 
 // --- Main Screen -------------------------------------------------------------

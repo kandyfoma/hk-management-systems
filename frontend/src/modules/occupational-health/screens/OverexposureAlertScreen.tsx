@@ -1025,8 +1025,8 @@ export function OverexposureAlertScreen() {
           { label: 'Suivi médical',   value: stats.followUp, color: '#F59E0B' },
           { label: 'Résolues',        value: stats.resolved, color: '#22C55E' },
         ].map(s => (
-          <View key={s.label} style={styles.statCard}>
-            <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
+          <View key={s.label} style={[styles.statCard, { backgroundColor: s.color }]}>
+            <Text style={styles.statValue}>{s.value}</Text>
             <Text style={styles.statLabel}>{s.label}</Text>
           </View>
         ))}
@@ -1841,8 +1841,8 @@ const styles = StyleSheet.create({
   // Stats
   statsRow:           { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   statCard:           { flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.sm, alignItems: 'center', ...shadows.sm },
-  statValue:          { fontSize: 22, fontWeight: '800' },
-  statLabel:          { fontSize: 9, fontWeight: '600', color: colors.textSecondary, textAlign: 'center', marginTop: 2 },
+  statValue:          { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+  statLabel:          { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginTop: 2 },
 
   // Filters
   filterBar:          { marginBottom: spacing.md },
