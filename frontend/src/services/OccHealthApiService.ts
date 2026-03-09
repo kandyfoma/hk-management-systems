@@ -1603,6 +1603,54 @@ export class OccHealthApiService {
     }
   }
 
+  /** GET /api/occupational-health/cnss-reports/{id}/export_pdf/ - Download CNSS report as PDF */
+  async exportCNSSReportPDF(id: number | string): Promise<{ error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/cnss-reports/${id}/export_pdf/`, { 
+        responseType: 'blob',
+      });
+      
+      // Create blob URL and trigger download
+      const blob = res instanceof Blob ? res : res.data;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CNSS_report_${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      return {};
+    } catch (e: any) {
+      return { error: e?.message ?? 'PDF download failed' };
+    }
+  }
+
+  /** GET /api/occupational-health/drc-reports/{id}/export_pdf/ - Download ITM report as PDF */
+  async exportDRCReportPDF(id: number | string): Promise<{ error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/drc-reports/${id}/export_pdf/`, { 
+        responseType: 'blob',
+      });
+      
+      // Create blob URL and trigger download
+      const blob = res instanceof Blob ? res : res.data;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ITM_report_${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      return {};
+    } catch (e: any) {
+      return { error: e?.message ?? 'PDF download failed' };
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   // SURVEILLANCE PROGRAMS
   // ─────────────────────────────────────────────────────────────
@@ -1764,50 +1812,101 @@ export class OccHealthApiService {
   }
 
   // ─── Compliance Audits ──────────────────────────────────────
-  /** GET /api/occupational-health/compliance-audits/ */
+  /** GET /api/occupational-health/ohs/compliance-audits/ */
   async listComplianceAudits(): Promise<{ data: any[]; error?: string }> {
     try {
-      const res = await this.api.get(`${OH}/compliance-audits/`);
+      const res = await this.api.get(`${OH}/ohs/compliance-audits/`);
       return { data: res.data ?? [] };
     } catch (e: any) {
       return { data: [], error: e?.message };
     }
   }
 
-  /** GET /api/occupational-health/compliance-audits/{id}/ */
+  /** GET /api/occupational-health/ohs/compliance-audits/{id}/ */
   async getComplianceAudit(id: number | string): Promise<{ data: any | null; error?: string }> {
     try {
-      const res = await this.api.get(`${OH}/compliance-audits/${id}/`);
+      const res = await this.api.get(`${OH}/ohs/compliance-audits/${id}/`);
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };
     }
   }
 
-  /** POST /api/occupational-health/compliance-audits/ */
+  /** POST /api/occupational-health/ohs/compliance-audits/ */
   async createComplianceAudit(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
     try {
-      const res = await this.api.post(`${OH}/compliance-audits/`, payload);
+      const res = await this.api.post(`${OH}/ohs/compliance-audits/`, payload);
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };
     }
   }
 
-  /** PATCH /api/occupational-health/compliance-audits/{id}/ */
+  /** PATCH /api/occupational-health/ohs/compliance-audits/{id}/ */
   async updateComplianceAudit(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
     try {
-      const res = await this.api.patch(`${OH}/compliance-audits/${id}/`, payload);
+      const res = await this.api.patch(`${OH}/ohs/compliance-audits/${id}/`, payload);
       return { data: res.data };
     } catch (e: any) {
       return { data: null, error: e?.message };
     }
   }
 
-  /** DELETE /api/occupational-health/compliance-audits/{id}/ */
+  /** DELETE /api/occupational-health/ohs/compliance-audits/{id}/ */
   async deleteComplianceAudit(id: number | string): Promise<{ success: boolean; error?: string }> {
     try {
-      const res = await this.api.delete(`${OH}/compliance-audits/${id}/`);
+      const res = await this.api.delete(`${OH}/ohs/compliance-audits/${id}/`);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message };
+    }
+  }
+
+  // ─── Regulatory Requirements ────────────────────────────────
+  /** GET /api/occupational-health/ohs/regulatory-requirements/ */
+  async listRegulatoryRequirements(): Promise<{ data: any[]; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/regulatory-requirements/`);
+      return { data: res.data ?? [] };
+    } catch (e: any) {
+      return { data: [], error: e?.message };
+    }
+  }
+
+  /** GET /api/occupational-health/ohs/regulatory-requirements/{id}/ */
+  async getRegulatoryRequirement(id: number | string): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.get(`${OH}/ohs/regulatory-requirements/${id}/`);
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** POST /api/occupational-health/ohs/regulatory-requirements/ */
+  async createRegulatoryRequirement(payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.post(`${OH}/ohs/regulatory-requirements/`, payload);
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** PATCH /api/occupational-health/ohs/regulatory-requirements/{id}/ */
+  async updateRegulatoryRequirement(id: number | string, payload: Record<string, any>): Promise<{ data: any | null; error?: string }> {
+    try {
+      const res = await this.api.patch(`${OH}/ohs/regulatory-requirements/${id}/`, payload);
+      return { data: res.data };
+    } catch (e: any) {
+      return { data: null, error: e?.message };
+    }
+  }
+
+  /** DELETE /api/occupational-health/ohs/regulatory-requirements/{id}/ */
+  async deleteRegulatoryRequirement(id: number | string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await this.api.delete(`${OH}/ohs/regulatory-requirements/${id}/`);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message };

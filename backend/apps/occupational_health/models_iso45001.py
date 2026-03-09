@@ -535,6 +535,61 @@ class ComplianceAudit(models.Model):
         return f"{self.audit_id} - {self.enterprise}"
 
 
+class RegulatoryRequirement(models.Model):
+    """ISO 45001 and regulatory compliance requirements tracking"""
+    
+    CATEGORY_CHOICES = [
+        ('iso_45001', 'ISO 45001'),
+        ('ilo', 'ILO Conventions'),
+        ('national', 'National Law'),
+        ('sectoral', 'Sector Specific'),
+        ('internal', 'Internal Standards'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('compliant', 'Compliant'),
+        ('partial', 'Partial Compliance'),
+        ('non_compliant', 'Non-Compliant'),
+        ('not_applicable', 'Not Applicable'),
+    ]
+    
+    requirement_id = models.CharField(max_length=50, unique=True)
+    enterprise = models.ForeignKey('occupational_health.Enterprise', on_delete=models.CASCADE, related_name='regulatory_requirements')
+    
+    # Requirement details
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    standard_name = models.CharField(max_length=200, help_text='e.g., ISO 45001, ILO-C190')
+    clause_reference = models.CharField(max_length=100, blank=True, help_text='e.g., Section 5.2')
+    requirement_text = models.TextField()
+    
+    # Compliance status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='partial')
+    
+    # Evidence and implementation
+    evidence_document = models.TextField(blank=True, help_text='Description of evidence demonstrating compliance')
+    responsible_department = models.CharField(max_length=200, blank=True)
+    responsible_person = models.CharField(max_length=200, blank=True)
+    
+    # Dates
+    identified_date = models.DateField(auto_now_add=True)
+    implementation_deadline = models.DateField(null=True, blank=True)
+    last_review_date = models.DateField(null=True, blank=True)
+    next_review_date = models.DateField(null=True, blank=True)
+    
+    # Notes and comments
+    implementation_notes = models.TextField(blank=True)
+    audit_findings = models.TextField(blank=True)
+    
+    class Meta:
+        verbose_name = 'Regulatory Requirement'
+        verbose_name_plural = 'Regulatory Requirements'
+        ordering = ['category', 'requirement_id']
+        unique_together = ['enterprise', 'requirement_id']
+    
+    def __str__(self):
+        return f"{self.requirement_id} - {self.get_category_display()}"
+
+
 class ContractorQualification(models.Model):
     """Third-party/contractor safety management"""
     

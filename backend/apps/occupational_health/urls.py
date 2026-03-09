@@ -144,7 +144,7 @@ from .views_iso_compliance import (
     SafetyTrainingViewSet, TrainingCertificationViewSet,
     EmergencyProcedureViewSet, EmergencyDrillViewSet,
     HealthSurveillanceViewSet, PerformanceIndicatorViewSet,
-    ComplianceAuditViewSet, ContractorQualificationViewSet,
+    ComplianceAuditViewSet, RegulatoryRequirementViewSet, ContractorQualificationViewSet,
     ManagementReviewViewSet, WorkerFeedbackViewSet,
 )
 
@@ -169,6 +169,7 @@ router.register(r'ohs/emergency-drills', EmergencyDrillViewSet, basename='emerge
 router.register(r'ohs/health-surveillance', HealthSurveillanceViewSet, basename='health-surveillance')
 router.register(r'ohs/performance-indicators', PerformanceIndicatorViewSet, basename='performance-indicator')
 router.register(r'ohs/compliance-audits', ComplianceAuditViewSet, basename='compliance-audit')
+router.register(r'ohs/regulatory-requirements', RegulatoryRequirementViewSet, basename='regulatory-requirement')
 router.register(r'ohs/contractor-qualifications', ContractorQualificationViewSet, basename='contractor-qualification')
 router.register(r'ohs/management-reviews', ManagementReviewViewSet, basename='management-review')
 router.register(r'ohs/worker-feedback', WorkerFeedbackViewSet, basename='worker-feedback')

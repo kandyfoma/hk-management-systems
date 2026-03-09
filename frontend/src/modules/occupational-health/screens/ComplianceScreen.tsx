@@ -222,18 +222,36 @@ export function ComplianceScreen() {
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setItems(JSON.parse(stored));
+      const result = await occHealthApi.listRegulatoryRequirements();
+      if (result.data && result.data.length > 0) {
+        // Transform backend data to frontend format
+        const transformed = result.data.map((r: any) => ({
+          id: String(r.id),
+          category: r.category.replace('iso_45001', 'iso45001').replace('sectoral', 'sector').replace('national', 'national').replace('ilo', 'ilo').replace('internal', 'internal'),
+          standard: r.standard_name || '',
+          clause: r.clause_reference || '',
+          requirement: r.requirement_text || '',
+          status: r.status.replace('non_compliant', 'non_compliant'),
+          evidence: r.evidence_document || '',
+          responsiblePerson: r.responsible_person || '',
+          dueDate: r.implementation_deadline || undefined,
+          lastAuditDate: r.last_review_date || undefined,
+          notes: r.implementation_notes || '',
+          backendId: r.id,
+        }));
+        setItems(transformed);
       } else {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_ITEMS));
         setItems(SAMPLE_ITEMS);
       }
       setError(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error loading compliance data:', e);
-      setError('Erreur lors du chargement des données');
+      setError('Erreur lors du chargement des exigences. Utilisation des données d\'exemple.');
+      setItems(SAMPLE_ITEMS);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -260,7 +278,7 @@ export function ComplianceScreen() {
     try {
       setLoading(true);
       setItems(list);
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      // No longer saving to localStorage - use API
       setError(null);
     } catch (e) {
       console.error('Error saving compliance data:', e);
@@ -270,18 +288,57 @@ export function ComplianceScreen() {
     }
   };
 
-  const handleUpdateStatus = (id: string, status: ComplianceItem['status']) => {
-    const updated = items.map(i => i.id === id ? { ...i, status } : i);
-    saveData(updated);
-    setSelectedItem(prev => prev && prev.id === id ? { ...prev, status } : prev);
-    Alert.alert('Succès', 'Statut mis à jour.');
+  const handleUpdateStatus = async (id: string, status: ComplianceItem['status']) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    
+    try {
+      setLoading(true);
+      const backendId = (item as any).backendId || id;
+      await occHealthApi.updateRegulatoryRequirement(backendId, { status });
+      
+      const updated = items.map(i => i.id === id ? { ...i, status } : i);
+      setItems(updated);
+      setSelectedItem(prev => prev && prev.id === id ? { ...prev, status } : prev);
+      Alert.alert('Succès', 'Statut mis à jour.');
+    } catch (e: any) {
+      console.error('Error updating status:', e);
+      Alert.alert('Erreur', 'Impossible de mettre à jour le statut');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddItem = (newItem: ComplianceItem) => {
-    const updated = [...items, newItem];
-    saveData(updated);
-    setShowAddModal(false);
-    Alert.alert('Succès', 'Exigence créée avec succès.');
+  const handleAddItem = async (newItem: ComplianceItem) => {
+    try {
+      setLoading(true);
+      const payload = {
+        category: newItem.category.replace('iso45001', 'iso_45001').replace('sector', 'sectoral'),
+        standard_name: newItem.standard,
+        clause_reference: newItem.clause,
+        requirement_text: newItem.requirement,
+        evidence_document: newItem.evidence,
+        responsible_person: newItem.responsiblePerson,
+        status: newItem.status,
+        implementation_deadline: newItem.dueDate || null,
+        implementation_notes: newItem.notes,
+      };
+      
+      const result = await occHealthApi.createRegulatoryRequirement(payload);
+      if (result.error) {
+        Alert.alert('Erreur', result.error);
+        return;
+      }
+      
+      setShowAddModal(false);
+      await loadData(); // Reload to get the new item from API
+      Alert.alert('Succès', 'Exigence créée avec succès.');
+    } catch (e: any) {
+      console.error('Error adding item:', e);
+      Alert.alert('Erreur', 'Impossible de créer l\'exigence');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteItem = (id: string) => {
@@ -292,9 +349,20 @@ export function ComplianceScreen() {
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer', style: 'destructive',
-          onPress: () => {
-            const updated = items.filter(i => i.id !== id);
-            saveData(updated);
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const item = items.find(i => i.id === id);
+              const backendId = item && (item as any).backendId ? (item as any).backendId : id;
+              await occHealthApi.deleteRegulatoryRequirement(backendId);
+              const updated = items.filter(i => i.id !== id);
+              setItems(updated);
+            } catch (e: any) {
+              console.error('Error deleting item:', e);
+              Alert.alert('Erreur', 'Impossible de supprimer l\'exigence');
+            } finally {
+              setLoading(false);
+            }
           },
         },
       ]

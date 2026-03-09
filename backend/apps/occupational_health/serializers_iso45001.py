@@ -15,6 +15,7 @@ from .models_iso45001 import (
     HealthSurveillance,
     PerformanceIndicator,
     ComplianceAudit,
+    RegulatoryRequirement,
     ContractorQualification,
     ManagementReview,
     WorkerFeedback,
@@ -299,3 +300,19 @@ class WorkerFeedbackSerializer(serializers.ModelSerializer):
             'action_taken', 'action_completion_date', 'effectiveness_notes', 'follow_up_message', 'follow_up_date'
         ]
         read_only_fields = ['submitted_date']
+
+
+class RegulatoryRequirementSerializer(serializers.ModelSerializer):
+    """Serializer for regulatory requirements"""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = RegulatoryRequirement
+        fields = [
+            'id', 'requirement_id', 'enterprise', 'category', 'category_display', 'standard_name',
+            'clause_reference', 'requirement_text', 'status', 'status_display', 'evidence_document',
+            'responsible_department', 'responsible_person', 'identified_date', 'implementation_deadline',
+            'last_review_date', 'next_review_date', 'implementation_notes', 'audit_findings'
+        ]
+        read_only_fields = ['identified_date']

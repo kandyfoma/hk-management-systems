@@ -390,6 +390,19 @@ export function RegulatoryReportsScreen() {
     }
   }, [fetchReports]);
 
+  const handleDownload = useCallback(async (id: number, isCnss: boolean) => {
+    setActionLoadingId(id);
+    const res = isCnss
+      ? await occHealthApi.exportCNSSReportPDF(id)
+      : await occHealthApi.exportDRCReportPDF(id);
+    setActionLoadingId(null);
+    if (res.error) {
+      showToast(`Erreur téléchargement: ${res.error}`, 'error');
+    } else {
+      showToast(isCnss ? 'Rapport CNSS téléchargé' : 'Rapport ITM téléchargé', 'success');
+    }
+  }, []);
+
   const list = activeTab === 'cnss' ? cnssReports : drcReports;
   const typeLabels = activeTab === 'cnss' ? CNSS_TYPE_LABELS : ITM_TYPE_LABELS;
 
@@ -513,13 +526,23 @@ export function RegulatoryReportsScreen() {
                   ) : null}
 
                   {/* Action buttons */}
-                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outlineVariant, paddingTop: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.outlineVariant, paddingTop: spacing.sm, flexWrap: 'wrap' }}>
                     <TouchableOpacity
                       onPress={() => setViewingReport({ report: r, isCnss: activeTab === 'cnss' })}
                       style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.outlineVariant, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md }}
                     >
                       <Ionicons name="eye-outline" size={14} color={colors.textSecondary} />
                       <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textSecondary }}>Voir</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDownload(r.id, activeTab === 'cnss')}
+                      disabled={actionLoadingId === r.id}
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#EBF2FF', paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md, borderWidth: 1, borderColor: '#1A3D7C' }}
+                    >
+                      {actionLoadingId === r.id
+                        ? <ActivityIndicator size="small" color="#1A3D7C" />
+                        : <Ionicons name="download-outline" size={14} color="#1A3D7C" />}
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: '#1A3D7C' }}>PDF</Text>
                     </TouchableOpacity>
                     {r.status === 'draft' && (
                       <TouchableOpacity

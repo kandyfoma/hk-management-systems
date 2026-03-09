@@ -3350,6 +3350,93 @@ class RegulatoryCNSSReportViewSet(viewsets.ModelViewSet):
             'submitted_date': report.submitted_date,
         })
     
+    @action(detail=True, methods=['get'])
+    def export_pdf(self, request, pk=None):
+        """Export CNSS report as PDF for download/printing"""
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas as rl_canvas
+            from reportlab.lib import colors
+            from reportlab.lib.colors import HexColor
+            from io import BytesIO
+        except ImportError:
+            return Response(
+                {'detail': 'PDF generation not available'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        
+        report = self.get_object()
+        
+        # Create PDF
+        buf = BytesIO()
+        pdf = rl_canvas.Canvas(buf, pagesize=A4)
+        W, H = A4
+        ML, MR = 36, W - 36
+        y = H - 36
+        
+        # Header
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(ML, y, f"DÉCLARATION CNSS")
+        y -= 24
+        
+        pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(HexColor('#666666'))
+        pdf.drawString(ML, y, f"Référence: {report.reference_number}")
+        y -= 14
+        pdf.drawString(ML, y, f"Statut: {report.get_status_display()}")
+        y -= 20
+        
+        # Content
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.setFillColor(HexColor('#0D1F3C'))
+        pdf.drawString(ML, y, "Informations du rapport")
+        y -= 16
+        
+        pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(HexColor('#333333'))
+        content_data = [
+            ("Type de rapport", report.get_report_type_display()),
+            ("Entreprise", str(report.enterprise)),
+            ("Période de rapport", f"{report.report_period_start} → {report.report_period_end}"),
+            ("Date de préparation", str(report.prepared_date)),
+            ("Préparé par", str(report.prepared_by)),
+        ]
+        
+        for key, value in content_data:
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.drawString(ML, y, f"{key}:")
+            y -= 12
+            pdf.setFont("Helvetica", 9)
+            pdf.drawString(ML + 20, y, str(value))
+            y -= 14
+        
+        # Content JSON
+        if report.content_json:
+            y -= 6
+            pdf.setFont("Helvetica-Bold", 11)
+            pdf.setFillColor(HexColor('#0D1F3C'))
+            pdf.drawString(ML, y, "Contenu du rapport")
+            y -= 16
+            
+            pdf.setFont("Helvetica", 9)
+            pdf.setFillColor(HexColor('#333333'))
+            for key, value in report.content_json.items():
+                pdf.drawString(ML, y, f"• {key}: {value}")
+                y -= 12
+        
+        # Footer
+        pdf.setFont("Helvetica", 8)
+        pdf.setFillColor(HexColor('#999999'))
+        pdf.drawString(ML, 20, f"Généré le {timezone.now().strftime('%d/%m/%Y %H:%M')}")
+        pdf.drawString(MR - 100, 20, "Rapport réglementaire CNSS — Confidentiel")
+        
+        pdf.save()
+        buf.seek(0)
+        
+        response = HttpResponse(buf.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="CNSS_{report.reference_number}.pdf"'
+        return response
+    
     @action(detail=False, methods=['get'])
     def pending(self, request):
         """Get pending CNSS reports"""
@@ -3477,6 +3564,96 @@ class DRCRegulatoryReportViewSet(viewsets.ModelViewSet):
             'reference_number': report.reference_number,
             'submitted_date': report.submitted_date,
         })
+    
+    @action(detail=True, methods=['get'])
+    def export_pdf(self, request, pk=None):
+        """Export ITM/DRC report as PDF for download/printing"""
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas as rl_canvas
+            from reportlab.lib import colors
+            from reportlab.lib.colors import HexColor
+            from io import BytesIO
+        except ImportError:
+            return Response(
+                {'detail': 'PDF generation not available'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        
+        report = self.get_object()
+        
+        # Create PDF
+        buf = BytesIO()
+        pdf = rl_canvas.Canvas(buf, pagesize=A4)
+        W, H = A4
+        ML, MR = 36, W - 36
+        y = H - 36
+        
+        # Header
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(ML, y, f"DÉCLARATION ITM/DRC")
+        y -= 24
+        
+        pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(HexColor('#666666'))
+        pdf.drawString(ML, y, f"Référence: {report.reference_number}")
+        y -= 14
+        pdf.drawString(ML, y, f"Statut: {report.get_status_display()}")
+        y -= 20
+        
+        # Content
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.setFillColor(HexColor('#0D1F3C'))
+        pdf.drawString(ML, y, "Informations du rapport")
+        y -= 16
+        
+        pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(HexColor('#333333'))
+        content_data = [
+            ("Type de rapport", report.get_report_type_display()),
+            ("Entreprise", str(report.enterprise)),
+            ("Période de rapport", f"{report.report_period_start} → {report.report_period_end}"),
+            ("Bureau ITM", report.itm_office or "Non spécifié"),
+            ("Méthode de soumission", report.get_submission_method_display()),
+        ]
+        
+        for key, value in content_data:
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.drawString(ML, y, f"{key}:")
+            y -= 12
+            pdf.setFont("Helvetica", 9)
+            pdf.drawString(ML + 20, y, str(value))
+            y -= 14
+        
+        # Content JSON
+        if report.content_json:
+            y -= 6
+            pdf.setFont("Helvetica-Bold", 11)
+            pdf.setFillColor(HexColor('#0D1F3C'))
+            pdf.drawString(ML, y, "Contenu du rapport")
+            y -= 16
+            
+            pdf.setFont("Helvetica", 9)
+            pdf.setFillColor(HexColor('#333333'))
+            for key, value in report.content_json.items():
+                if isinstance(value, (list, dict)):
+                    pdf.drawString(ML, y, f"• {key}: {str(value)[:60]}...")
+                else:
+                    pdf.drawString(ML, y, f"• {key}: {value}")
+                y -= 12
+        
+        # Footer
+        pdf.setFont("Helvetica", 8)
+        pdf.setFillColor(HexColor('#999999'))
+        pdf.drawString(ML, 20, f"Généré le {timezone.now().strftime('%d/%m/%Y %H:%M')}")
+        pdf.drawString(MR - 100, 20, "Rapport réglementaire ITM/DRC — Confidentiel")
+        
+        pdf.save()
+        buf.seek(0)
+        
+        response = HttpResponse(buf.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="ITM_{report.reference_number}.pdf"'
+        return response
     
     @action(detail=False, methods=['get'])
     def fatal_incidents(self, request):

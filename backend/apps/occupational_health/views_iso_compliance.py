@@ -29,13 +29,13 @@ from .models_iso45001 import (
     OHSPolicy, HazardRegister, IncidentInvestigation, SafetyTraining,
     TrainingCertification, EmergencyProcedure, EmergencyDrill,  
     HealthSurveillance, PerformanceIndicator, ComplianceAudit,
-    ContractorQualification, ManagementReview, WorkerFeedback,
+    RegulatoryRequirement, ContractorQualification, ManagementReview, WorkerFeedback,
 )
 from .serializers_iso45001 import (
     OHSPolicySerializer, HazardRegisterSerializer, IncidentInvestigationSerializer,
     SafetyTrainingSerializer, TrainingCertificationSerializer, EmergencyProcedureSerializer,
     EmergencyDrillSerializer, HealthSurveillanceSerializer, PerformanceIndicatorSerializer,
-    ComplianceAuditSerializer, ContractorQualificationSerializer, ManagementReviewSerializer,
+    ComplianceAuditSerializer, RegulatoryRequirementSerializer, ContractorQualificationSerializer, ManagementReviewSerializer,
     WorkerFeedbackSerializer,
 )
 
@@ -458,6 +458,54 @@ class ComplianceAuditViewSet(viewsets.ModelViewSet):
     filterset_fields = ['audit_type', 'enterprise']
     search_fields = ['audit_id']
     ordering_fields = ['-actual_date']
+
+
+class RegulatoryRequirementViewSet(viewsets.ModelViewSet):
+    """Regulatory and compliance requirements management"""
+    queryset = RegulatoryRequirement.objects.all()
+    serializer_class = RegulatoryRequirementSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category', 'status', 'enterprise']
+    search_fields = ['requirement_id', 'standard_name', 'requirement_text']
+    ordering_fields = ['-identified_date', 'category', 'status']
+    
+    @action(detail=False, methods=['get'])
+    def by_category(self, request):
+        """Get requirements grouped by category"""
+        category = request.query_params.get('category')
+        if category:
+            requirements = RegulatoryRequirement.objects.filter(category=category).order_by('standard_name')
+        else:
+            requirements = RegulatoryRequirement.objects.all().order_by('category', 'standard_name')
+        serializer = self.get_serializer(requirements, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def compliance_summary(self, request):
+        """Get compliance summary with audit scores"""
+        enterprise_id = request.query_params.get('enterprise_id')
+        queryset = RegulatoryRequirement.objects.all()
+        
+        if enterprise_id:
+            queryset = queryset.filter(enterprise_id=enterprise_id)
+        
+        total = queryset.count()
+        compliant = queryset.filter(status='compliant').count()
+        partial = queryset.filter(status='partial').count()
+        
+        compliance_score = 0
+        if total > 0:
+            compliance_score = round(((compliant + partial * 0.5) / total) * 100, 1)
+        
+        return Response({
+            'total_requirements': total,
+            'compliant': compliant,
+            'partial_compliance': partial,
+            'non_compliant': queryset.filter(status='non_compliant').count(),
+            'not_applicable': queryset.filter(status='not_applicable').count(),
+            'compliance_score': compliance_score
+        })
 
 
 class ContractorQualificationViewSet(viewsets.ModelViewSet):
