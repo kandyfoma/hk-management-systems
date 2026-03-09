@@ -26,6 +26,11 @@ if railway_static_url:
 if 'healthcheck.railway.app' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('healthcheck.railway.app')
 
+# Custom production domains
+for domain in ['api.katms.org', 'katms.org', '*.katms.org']:
+    if domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(domain)
+
 # Application definition
 DJANGO_APPS = [
     'jazzmin',  # Modern admin interface
