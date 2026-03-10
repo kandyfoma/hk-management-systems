@@ -53,18 +53,19 @@ try:
     else:
         print("[*] Creating new superuser...")
         # Use create() directly since the custom User model uses phone instead of username
+        # Must include organization_id at creation time (NOT NULL constraint)
         user = User.objects.create(
             phone='+243828812498',
             email='admin@hkmanagement.com',
             first_name='Admin',
             last_name='User',
             primary_role=UserRole.ADMIN,
+            organization=org,  # Pass organization at creation time
             is_superuser=True,
             is_staff=True,
             is_active=True,
         )
         user.set_password('adminadmin')
-        user.organization = org
         user.save()
         print('✅ Superuser created successfully')
     
