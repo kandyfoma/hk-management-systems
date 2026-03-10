@@ -47,18 +47,23 @@ try:
         user.set_password('adminadmin')
         user.is_superuser = True
         user.is_staff = True
+        user.is_active = True
         user.save()
         print('✅ Superuser password updated successfully')
     else:
         print("[*] Creating new superuser...")
-        user = User.objects.create_superuser(
+        # Use create() directly since the custom User model uses phone instead of username
+        user = User.objects.create(
             phone='+243828812498',
             email='admin@hkmanagement.com',
-            password='adminadmin',
             first_name='Admin',
             last_name='User',
             primary_role=UserRole.ADMIN,
+            is_superuser=True,
+            is_staff=True,
+            is_active=True,
         )
+        user.set_password('adminadmin')
         user.organization = org
         user.save()
         print('✅ Superuser created successfully')
