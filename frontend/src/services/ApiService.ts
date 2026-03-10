@@ -34,8 +34,11 @@ const getBaseURL = () => {
 
   if (Platform.OS === 'web') {
     const webHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-    const host = webHost === 'localhost' ? '127.0.0.1' : webHost;
-    return `http://${host}:8000/api/v1`;
+    if (webHost === 'localhost' || webHost === '127.0.0.1') {
+      return 'http://127.0.0.1:8000/api/v1';
+    }
+    // Deployed web app — always point to the production API
+    return 'https://api.katms.org/api/v1';
   }
 
   // Physical device on same Wi-Fi as dev machine
