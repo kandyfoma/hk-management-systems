@@ -54,7 +54,11 @@ echo "   [OK] Migrations step done"
 #   Phone: +243828812498, Password: adminadmin
 #
 echo "[3/7] Creating superuser admin account..."
-python create_superuser.py || echo "   [WARN] create_superuser.py failed (non-fatal, continuing...)"
+python create_superuser.py
+if [ $? -ne 0 ]; then
+  echo "   [ERROR] create_superuser.py failed!"
+  exit 1
+fi
 echo "   [OK] Superuser step done"
 
 # ── 4. Load / refresh occupational health protocol seed data ────────────────
