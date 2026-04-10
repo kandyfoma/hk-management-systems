@@ -228,6 +228,8 @@ class Sale(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['created_at']),
             models.Index(fields=['cashier', 'created_at']),
+            models.Index(fields=['organization', 'created_at']),
+            models.Index(fields=['organization', 'status']),
         ]
 
     def __str__(self):
@@ -241,12 +243,21 @@ class Sale(models.Model):
         return self.customer_name or "Client anonyme"
 
     def save(self, *args, **kwargs):
-        # Auto-generate sale number if not provided
+        # Auto-generate sale number if not provided (race-safe with retry)
         if not self.sale_number:
             from django.utils import timezone
+            import random
             today = timezone.now().date()
-            count = Sale.objects.filter(created_at__date=today).count() + 1
-            self.sale_number = f"VNT-{today.strftime('%Y%m%d')}-{count:03d}"
+            for attempt in range(5):
+                count = Sale.objects.filter(created_at__date=today).count() + 1 + attempt
+                candidate = f"VNT-{today.strftime('%Y%m%d')}-{count:04d}"
+                if not Sale.objects.filter(sale_number=candidate).exists():
+                    self.sale_number = candidate
+                    break
+            else:
+                # Fallback: use UUID suffix for uniqueness
+                import uuid
+                self.sale_number = f"VNT-{today.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
             
         # Auto-generate receipt number
         if not self.receipt_number:

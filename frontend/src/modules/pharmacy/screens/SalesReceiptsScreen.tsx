@@ -11,6 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import ApiService from '../../../services/ApiService';
 import { SaleUtils } from '../../../models/Sale';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -400,7 +402,26 @@ export function SalesReceiptsScreen() {
         return;
       }
 
-      toast.info('Téléchargement disponible sur version web');
+      // Mobile: save to filesystem and share
+      if (FileSystem.documentDirectory) {
+        const filePath = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(filePath, content, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(filePath, {
+            mimeType: 'text/html',
+            dialogTitle: 'Partager le reçu',
+            UTI: 'public.html',
+          });
+          toast.success('Reçu partagé');
+        } else {
+          toast.info('Le reçu a été enregistré localement');
+        }
+      } else {
+        toast.info('Téléchargement non disponible sur cet appareil');
+      }
     } catch {
       toast.error('Impossible de télécharger le reçu');
     }

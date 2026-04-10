@@ -247,7 +247,18 @@ export function AnalyticsScreen() {
 
   const calculateAnalytics = (sales: any[], allSales: any[], dateRange: { start: Date; end: Date }): AnalyticsData => {
     const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_amount ?? 0), 0);
-    const estimatedCost = totalRevenue * 0.72;
+    // Calculate actual cost from sale items if available, fallback to estimate
+    const actualCost = sales.reduce((sum, sale) => {
+      if (sale.items && Array.isArray(sale.items)) {
+        return sum + sale.items.reduce((itemSum: number, item: any) => {
+          const unitCost = Number(item.unit_cost ?? 0);
+          const qty = Number(item.quantity ?? 0);
+          return itemSum + (unitCost * qty);
+        }, 0);
+      }
+      return sum;
+    }, 0);
+    const estimatedCost = actualCost > 0 ? actualCost : totalRevenue * 0.72;
     const totalProfit = totalRevenue - estimatedCost;
     const totalSales = sales.length;
     const totalCustomers = new Set(sales.map((s) => s.customer).filter(Boolean)).size;

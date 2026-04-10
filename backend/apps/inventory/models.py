@@ -156,6 +156,7 @@ class Product(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
         help_text='Prix d\'achat'
     )
     selling_price = models.DecimalField(
@@ -163,6 +164,7 @@ class Product(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
         help_text='Prix de vente'
     )
     markup_percentage = models.DecimalField(
@@ -230,6 +232,8 @@ class Product(models.Model):
             models.Index(fields=['barcode']),
             models.Index(fields=['category']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['organization', 'is_active', 'category']),
+            models.Index(fields=['organization', 'name']),
         ]
 
     def __str__(self):
@@ -430,6 +434,7 @@ class InventoryBatch(models.Model):
             models.Index(fields=['batch_number']),
             models.Index(fields=['expiry_date']),
             models.Index(fields=['status']),
+            models.Index(fields=['inventory_item', 'status', 'expiry_date']),
         ]
     
     def __str__(self):
@@ -537,6 +542,7 @@ class StockMovement(models.Model):
             models.Index(fields=['movement_type']),
             models.Index(fields=['movement_date']),
             models.Index(fields=['reference_number']),
+            models.Index(fields=['inventory_item', 'movement_date']),
         ]
     
     def __str__(self):

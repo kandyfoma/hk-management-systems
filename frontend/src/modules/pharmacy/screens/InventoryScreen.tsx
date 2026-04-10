@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   Dimensions,
@@ -1566,8 +1567,10 @@ function CatalogContent({ products, allProducts, searchQuery, setSearchQuery,
         <EmptyState icon="cube-outline" title="Aucun produit trouvé"
           sub={searchQuery ? 'Modifiez votre recherche' : 'Ajoutez des produits à l\'inventaire'} />
       ) : (
-        <View style={{ gap: 8 }}>
-          {products.map(p => (
+        <FlatList
+          data={products}
+          keyExtractor={(p) => p.id}
+          renderItem={({ item: p }) => (
             <ProductCard
               key={p.id}
               product={p}
@@ -1577,8 +1580,15 @@ function CatalogContent({ products, allProducts, searchQuery, setSearchQuery,
               onDelete={() => onDelete(p)}
               onAdjust={() => onAdjust(p)}
             />
-          ))}
-        </View>
+          )}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          getItemLayout={undefined}
+          scrollEnabled={false}
+        />
       )}
     </>
   );

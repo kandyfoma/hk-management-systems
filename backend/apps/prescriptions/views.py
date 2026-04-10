@@ -26,6 +26,14 @@ class PrescriptionListCreateAPIView(generics.ListCreateAPIView):
     search_fields = ['prescription_number', 'patient__first_name', 'patient__last_name']
     ordering = ['-created_at']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(organization=organization)
+        return queryset
+
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return PrescriptionCreateSerializer
@@ -125,9 +133,14 @@ def dispense_item_view(request, item_id):
 @api_view(['GET'])
 def pending_prescriptions_view(request):
     """Get pending prescriptions"""
+    user = getattr(request, 'user', None)
+    organization = getattr(user, 'organization', None)
+
     prescriptions = Prescription.objects.filter(
         status=PrescriptionStatus.PENDING
     ).select_related('patient', 'doctor')
+    if organization is not None:
+        prescriptions = prescriptions.filter(organization=organization)
     
     return Response({
         'count': prescriptions.count(),
@@ -139,10 +152,18 @@ def pending_prescriptions_view(request):
 def expired_prescriptions_view(request):
     """Get expired prescriptions"""
     today = timezone.now().date()
+    user = getattr(request, 'user', None)
+    organization = getattr(user, 'organization', None)
+
     expired = Prescription.objects.filter(
         valid_until__lt=today,
         status__in=[PrescriptionStatus.PENDING, PrescriptionStatus.PARTIALLY_DISPENSED]
     )
+    if organization is not None:
+        expired = expired.filter(organization=organization)
+    
+    # Auto-expire prescriptions that are past their valid_until date
+    expired.update(status=PrescriptionStatus.EXPIRED)
     
     return Response({'count': expired.count()})
 
@@ -150,11 +171,18 @@ def expired_prescriptions_view(request):
 @api_view(['GET'])
 def prescription_stats_view(request):
     """Get prescription statistics"""
+    user = getattr(request, 'user', None)
+    organization = getattr(user, 'organization', None)
+
+    base_qs = Prescription.objects.all()
+    if organization is not None:
+        base_qs = base_qs.filter(organization=organization)
+
     stats = {
-        'total_prescriptions': Prescription.objects.count(),
-        'pending_count': Prescription.objects.filter(status=PrescriptionStatus.PENDING).count(),
-        'completed_count': Prescription.objects.filter(status=PrescriptionStatus.FULLY_DISPENSED).count(),
-        'expired_count': Prescription.objects.filter(status=PrescriptionStatus.EXPIRED).count(),
+        'total_prescriptions': base_qs.count(),
+        'pending_count': base_qs.filter(status=PrescriptionStatus.PENDING).count(),
+        'completed_count': base_qs.filter(status=PrescriptionStatus.FULLY_DISPENSED).count(),
+        'expired_count': base_qs.filter(status=PrescriptionStatus.EXPIRED).count(),
     }
     return Response(stats)
 

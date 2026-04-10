@@ -133,8 +133,16 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['category', 'is_active', 'requires_prescription']
-    search_fields = ['name', 'sku', 'barcode']
+    search_fields = ['name', 'sku', 'barcode', 'generic_name']
     ordering = ['name']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(organization=organization)
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(
@@ -149,9 +157,34 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
 class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.select_related('organization', 'primary_supplier', 'created_by', 'updated_by')
     serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(organization=organization)
+        return queryset
     
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        # Check for active inventory before deletion
+        active_stock = InventoryItem.objects.filter(
+            product=instance,
+            quantity_on_hand__gt=0
+        ).exists()
+        if active_stock:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                "Impossible de supprimer un produit avec du stock actif. "
+                "D\u00e9sactivez-le ou effectuez un ajustement de stock d'abord."
+            )
+        # Soft delete instead of hard delete
+        instance.is_active = False
+        instance.is_discontinued = True
+        instance.save()
 
 
 class InventoryItemListAPIView(generics.ListCreateAPIView):
@@ -191,6 +224,14 @@ class InventoryBatchListAPIView(generics.ListCreateAPIView):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['status']
     ordering = ['expiry_date']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(inventory_item__organization=organization)
+        return queryset
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -215,6 +256,14 @@ class StockMovementListAPIView(generics.ListCreateAPIView):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['movement_type', 'direction', 'inventory_item']
     ordering = ['-movement_date']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+        organization = getattr(user, 'organization', None)
+        if organization is not None:
+            queryset = queryset.filter(inventory_item__organization=organization)
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

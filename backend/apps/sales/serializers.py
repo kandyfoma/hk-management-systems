@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from django.db import transaction
+from django.db import transaction, IntegrityError
+from django.db.models import F
 from django.utils import timezone
 from decimal import Decimal
 from .models import Sale, SaleItem, SalePayment, Cart, CartItem
@@ -106,24 +107,50 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             'item_count', 'created_at'
         ]
     
+    def validate_items(self, items_data):
+        """Validate items before sale creation: check active, expired, stock."""
+        if not items_data:
+            raise serializers.ValidationError("Au moins un article est requis.")
+
+        today = timezone.now().date()
+        for item_data in items_data:
+            product = item_data.get('product')
+            if not product:
+                continue
+            if not product.is_active:
+                raise serializers.ValidationError(
+                    f"Le produit '{product.name}' est inactif et ne peut pas être vendu."
+                )
+            if product.is_discontinued:
+                raise serializers.ValidationError(
+                    f"Le produit '{product.name}' est discontinué."
+                )
+            # Check product-level expiry
+            if product.expiration_date and product.expiration_date < today:
+                raise serializers.ValidationError(
+                    f"Le produit '{product.name}' est expiré (date: {product.expiration_date})."
+                )
+        return items_data
+
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop('items')
         payments_data = validated_data.pop('payments', [])
-        
+
         # Calculate totals
         subtotal = Decimal('0.00')
-        
         for item_data in items_data:
             quantity = item_data['quantity']
             unit_price = item_data['unit_price']
             discount = item_data.get('discount_amount', Decimal('0.00'))
-            
             line_total = (quantity * unit_price) - discount
             subtotal += line_total
-        
+
+        if subtotal < 0:
+            raise serializers.ValidationError("Le total de la vente ne peut pas être négatif.")
+
         total_amount = subtotal
-        
+
         sale = Sale.objects.create(
             subtotal=subtotal,
             tax_amount=Decimal('0.00'),
@@ -131,15 +158,15 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             item_count=len(items_data),
             **validated_data
         )
-        
-        # Create sale items and deduct inventory
+
+        # Create sale items and deduct inventory with row-level locking
         organization = sale.organization
         cashier = self.context['request'].user if 'request' in self.context else None
+        today = timezone.now().date()
 
         for item_data in items_data:
             SaleItem.objects.create(sale=sale, **item_data)
 
-            # Deduct stock from InventoryItem
             product = item_data.get('product')
             qty_sold = int(item_data.get('quantity', 0))
             if product and qty_sold > 0:
@@ -148,14 +175,26 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                     inv_qs = inv_qs.filter(organization=organization)
                 if sale.facility_id:
                     inv_qs = inv_qs.filter(facility_id=sale.facility_id)
-                inv_item = inv_qs.first()
+
+                # Use select_for_update to prevent race conditions
+                inv_item = inv_qs.select_for_update().first()
                 if inv_item:
                     prev_qty = int(inv_item.quantity_on_hand or 0)
-                    new_qty = max(0, prev_qty - qty_sold)
-                    inv_item.quantity_on_hand = new_qty
-                    inv_item.save()  # triggers stock_status recalculation via model.save()
 
-                    # Log stock movement
+                    # Enforce stock availability unless negative stock allowed
+                    allow_negative = getattr(product, 'allow_negative_stock', False)
+                    if not allow_negative and prev_qty < qty_sold:
+                        raise serializers.ValidationError(
+                            f"Stock insuffisant pour '{product.name}': "
+                            f"{prev_qty} disponible(s), {qty_sold} demandé(s)."
+                        )
+
+                    new_qty = prev_qty - qty_sold
+                    inv_item.quantity_on_hand = new_qty
+                    inv_item.last_sold = timezone.now()
+                    inv_item.last_movement = timezone.now()
+                    inv_item.save()
+
                     StockMovement.objects.create(
                         inventory_item=inv_item,
                         movement_type='SALE',
@@ -175,6 +214,24 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                         reason='Vente POS',
                     )
 
+                    # Check batch expiry (FEFO - deduct from soonest expiring first)
+                    batches = inv_item.batches.filter(
+                        status='AVAILABLE',
+                        current_quantity__gt=0
+                    ).order_by('expiry_date')
+                    remaining_to_deduct = qty_sold
+                    for batch in batches:
+                        if remaining_to_deduct <= 0:
+                            break
+                        if batch.expiry_date and batch.expiry_date < today:
+                            continue  # Skip expired batches
+                        deduct_from_batch = min(remaining_to_deduct, batch.current_quantity)
+                        batch.current_quantity -= deduct_from_batch
+                        if batch.current_quantity <= 0:
+                            batch.status = 'DEPLETED'
+                        batch.save()
+                        remaining_to_deduct -= deduct_from_batch
+
         # Create payments if provided
         for payment_data in payments_data:
             SalePayment.objects.create(sale=sale, **payment_data)
@@ -193,9 +250,9 @@ class CartItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'cart', 'product', 'product_name', 'product_sku', 'product_price',
             'quantity', 'unit_price', 'discount_amount', 'line_total', 'notes',
-            'added_at'
+            'created_at'
         ]
-        read_only_fields = ['id', 'cart', 'added_at']
+        read_only_fields = ['id', 'cart', 'created_at']
     
     def get_line_total(self, obj):
         return (obj.quantity * obj.unit_price) - obj.discount_amount
@@ -262,17 +319,40 @@ class QuickSaleSerializer(serializers.Serializer):
 
 class ReturnSaleSerializer(serializers.Serializer):
     """Serializer for sale returns"""
-    sale_id = serializers.IntegerField()
+    sale_id = serializers.UUIDField()
     items_to_return = serializers.ListField(
         child=serializers.DictField(),
         min_length=1
     )
     return_reason = serializers.CharField(max_length=500)
     refund_method = serializers.CharField(max_length=20)
-    
+
     def validate_sale_id(self, value):
         try:
             Sale.objects.get(id=value, status='COMPLETED')
         except Sale.DoesNotExist:
             raise serializers.ValidationError("Sale not found or not completed")
         return value
+
+
+class VoidSaleSerializer(serializers.Serializer):
+    """Serializer for voiding a sale"""
+    void_reason = serializers.CharField(max_length=500)
+
+    def validate_void_reason(self, value):
+        if not value or len(value.strip()) < 5:
+            raise serializers.ValidationError(
+                "La raison d'annulation doit contenir au moins 5 caractères."
+            )
+        return value.strip()
+
+
+class RefundSaleSerializer(serializers.Serializer):
+    """Serializer for refunding a sale (full or partial)"""
+    items_to_refund = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        help_text='If empty, full refund. Each dict: {item_id, quantity}'
+    )
+    refund_reason = serializers.CharField(max_length=500)
+    refund_method = serializers.CharField(max_length=20, default='CASH')
