@@ -286,7 +286,8 @@ export function OccHealthNavigator() {
       title: 'Médecine du Travail',
       items: [
         { id: 'medical-exams', label: 'Visite du Médecin', icon: 'medkit-outline', iconActive: 'medkit', badge: pendingCount > 0 ? pendingCount : undefined },
-        { id: 'medical-tests', label: 'Catalogue des Tests', icon: 'flask-outline', iconActive: 'flask' },
+        { id: 'medical-tests', label: 'Catalogue Évaluations Médicales', icon: 'flask-outline', iconActive: 'flask' },
+        { id: 'exam-management', label: 'Gestion Examens', icon: 'document-outline', iconActive: 'document' },
         { id: 'certificates', label: 'Certificats Aptitude', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
         { id: 'oh-fitness-dashboard', label: 'Aptitude au Travail (FFD)', icon: 'shield-half-outline', iconActive: 'shield-half' },
         { id: 'previous-visits', label: 'Historique Visites', icon: 'time-outline', iconActive: 'time' },
@@ -306,13 +307,13 @@ export function OccHealthNavigator() {
       title: 'Sécurité au Travail',
       items: [
         { id: 'incident-dashboard', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
-        { id: 'oh-capa-dashboard', label: 'Actions CAPA', icon: 'construct-outline', iconActive: 'construct' },
         { id: 'risk-assessment', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
         { id: 'exposure-monitoring', label: 'Monitoring Expositions', icon: 'water-outline', iconActive: 'water' },
         { id: 'ppe-management', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
         { id: 'worker-risk-profiles', label: 'Profils de Risque', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
         { id: 'overexposure-alerts', label: 'Alertes Surexposition', icon: 'alert-outline', iconActive: 'alert' },
         { id: 'ppe-compliance', label: 'Conformité EPI', icon: 'checkmark-outline', iconActive: 'checkmark' },
+        { id: 'oh-capa-dashboard', label: 'Actions CAPA', icon: 'construct-outline', iconActive: 'construct' },
       ],
     },
     {

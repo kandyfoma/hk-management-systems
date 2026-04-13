@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.utils import timezone as tz
 from .models import (
     HospitalEncounter, VitalSigns, HospitalDepartment, 
     HospitalBed, EncounterType, EncounterStatus, BedStatus,
@@ -61,6 +62,34 @@ class VitalSignsCreateSerializer(serializers.ModelSerializer):
             'blood_glucose', 'measurement_location', 'measurement_method',
             'clinical_notes', 'measured_by', 'verified_by'
         ]
+
+    def validate(self, data):
+        # Blood pressure: systolic must be > diastolic
+        sys_bp = data.get('blood_pressure_systolic')
+        dia_bp = data.get('blood_pressure_diastolic')
+        if sys_bp and dia_bp and sys_bp <= dia_bp:
+            raise serializers.ValidationError(
+                "La pression systolique doit être supérieure à la diastolique."
+            )
+
+        # Cannot add vitals to a completed/cancelled encounter
+        encounter = data.get('encounter')
+        if encounter and encounter.status in [
+            EncounterStatus.COMPLETED, EncounterStatus.CANCELLED
+        ]:
+            raise serializers.ValidationError(
+                "Impossible d'ajouter des signes vitaux à une consultation terminée ou annulée."
+            )
+
+        # Cross-org validation
+        request = self.context.get('request')
+        if request and encounter:
+            if encounter.organization != request.user.organization:
+                raise serializers.ValidationError(
+                    "Cette consultation n'appartient pas à votre établissement."
+                )
+
+        return data
 
 
 class VitalSignsListSerializer(serializers.ModelSerializer):
@@ -150,6 +179,36 @@ class HospitalEncounterCreateSerializer(serializers.ModelSerializer):
             'referred_by', 'referred_to', 'admission_date', 'discharge_date',
             'estimated_cost'
         ]
+
+    def validate(self, data):
+        # Discharge date after admission date
+        if data.get('admission_date') and data.get('discharge_date'):
+            if data['discharge_date'] < data['admission_date']:
+                raise serializers.ValidationError(
+                    "La date de sortie ne peut pas être antérieure à la date d'admission."
+                )
+
+        # Inpatient/ICU/Surgery must have department
+        enc_type = data.get('encounter_type', '')
+        if enc_type in ['inpatient', 'icu', 'surgery'] and not data.get('department'):
+            raise serializers.ValidationError(
+                "Un département est requis pour ce type de consultation."
+            )
+
+        # Prevent overlapping active inpatient encounters for same patient
+        patient = data.get('patient')
+        if patient and enc_type in ['inpatient', 'icu', 'surgery']:
+            existing = HospitalEncounter.objects.filter(
+                patient=patient,
+                encounter_type__in=['inpatient', 'icu', 'surgery'],
+                status__in=[EncounterStatus.CHECKED_IN, EncounterStatus.IN_PROGRESS],
+            ).exists()
+            if existing:
+                raise serializers.ValidationError(
+                    "Ce patient a déjà une hospitalisation active."
+                )
+
+        return data
 
 
 class HospitalEncounterDetailSerializer(serializers.ModelSerializer):
@@ -247,15 +306,6 @@ class HospitalEncounterListSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
     patient_number = serializers.CharField(source='patient.patient_number', read_only=True)
     attending_physician_name = serializers.CharField(source='attending_physician.full_name', read_only=True)
-    
-    class Meta:
-        model = HospitalEncounter
-        fields = [
-            'id', 'encounter_number', 'patient', 'patient_name', 'patient_number',
-            'encounter_type', 'status', 'chief_complaint',
-            'attending_physician_name', 'department',
-            'admission_date', 'created_at'
-        ]
     
     class Meta:
         model = HospitalEncounter
@@ -422,10 +472,20 @@ class TriageSerializer(serializers.ModelSerializer):
         ]
     
     def create(self, validated_data):
-        """Generate triage number on creation"""
+        """Generate triage number on creation — race-safe with UUID fallback"""
         import datetime
-        triage_number = f"TR{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-        validated_data['triage_number'] = triage_number
+        import uuid as _uuid
+        from django.db import IntegrityError
+        for attempt in range(5):
+            ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:18]
+            triage_number = f"TR{ts}"
+            validated_data['triage_number'] = triage_number
+            try:
+                return super().create(validated_data)
+            except IntegrityError:
+                if attempt == 4:
+                    validated_data['triage_number'] = f"TR{_uuid.uuid4().hex[:12].upper()}"
+                continue
         return super().create(validated_data)
 
 

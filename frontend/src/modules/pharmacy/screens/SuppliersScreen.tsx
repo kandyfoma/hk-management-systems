@@ -392,7 +392,7 @@ const s = StyleSheet.create({
 
   // Terms
   termsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  termChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 12, paddingVertical: 8, flex: 1, minWidth: 140 },
+  termChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingHorizontal: 12, paddingVertical: 8, flex: 1, minWidth: 120 },
   termLabel: { fontSize: 10, color: colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   termValue: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 1 },
 

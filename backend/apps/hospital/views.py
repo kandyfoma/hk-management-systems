@@ -1,9 +1,11 @@
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -23,20 +25,32 @@ from .serializers import (
 from apps.audit.decorators import audit_critical_action
 
 
+class StandardPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 # ═══════════════════════════════════════════════════════════════
 #  VITAL SIGNS API VIEWS
 # ═══════════════════════════════════════════════════════════════
 
 class VitalSignsListCreateAPIView(generics.ListCreateAPIView):
     """List and create vital signs"""
-    queryset = VitalSigns.objects.select_related(
-        'patient', 'encounter', 'measured_by', 'verified_by', 'created_by', 'updated_by'
-    ).prefetch_related('encounter__nursing_staff')
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['patient', 'encounter', 'measured_by', 'is_abnormal']
     search_fields = ['patient__first_name', 'patient__last_name', 'patient__patient_number']
     ordering_fields = ['measured_at', 'created_at', 'temperature', 'heart_rate']
     ordering = ['-measured_at']
+
+    def get_queryset(self):
+        return VitalSigns.objects.filter(
+            patient__hospital_encounters__organization=self.request.user.organization
+        ).select_related(
+            'patient', 'encounter', 'measured_by', 'verified_by', 'created_by', 'updated_by'
+        ).prefetch_related('encounter__nursing_staff').distinct()
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -54,10 +68,15 @@ class VitalSignsListCreateAPIView(generics.ListCreateAPIView):
 
 class VitalSignsDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete vital signs"""
-    queryset = VitalSigns.objects.select_related(
-        'patient', 'encounter', 'measured_by', 'verified_by', 'created_by', 'updated_by'
-    )
+    permission_classes = [IsAuthenticated]
     serializer_class = VitalSignsSerializer
+
+    def get_queryset(self):
+        return VitalSigns.objects.filter(
+            patient__hospital_encounters__organization=self.request.user.organization
+        ).select_related(
+            'patient', 'encounter', 'measured_by', 'verified_by', 'created_by', 'updated_by'
+        ).distinct()
 
     @audit_critical_action(description="Modification de signes vitaux")
     def perform_update(self, serializer):
@@ -69,12 +88,14 @@ class VitalSignsDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def vital_signs_patient_history_view(request, patient_id):
     """Get vital signs history for a specific patient"""
     try:
         vital_signs = VitalSigns.objects.filter(
-            patient_id=patient_id
-        ).select_related('measured_by', 'encounter').order_by('-measured_at')[:20]
+            patient_id=patient_id,
+            patient__hospital_encounters__organization=request.user.organization
+        ).select_related('measured_by', 'encounter').order_by('-measured_at').distinct()[:20]
         
         serializer = VitalSignsListSerializer(vital_signs, many=True)
         return Response({
@@ -89,11 +110,13 @@ def vital_signs_patient_history_view(request, patient_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def vital_signs_abnormal_view(request):
     """Get all abnormal vital signs"""
     abnormal_vitals = VitalSigns.objects.filter(
-        measured_at__date=timezone.now().date()
-    ).select_related('patient', 'measured_by')
+        measured_at__date=timezone.now().date(),
+        patient__hospital_encounters__organization=request.user.organization
+    ).select_related('patient', 'measured_by').distinct()
     
     # Filter for abnormal values
     abnormal_list = [v for v in abnormal_vitals if v.is_abnormal]
@@ -111,9 +134,8 @@ def vital_signs_abnormal_view(request):
 
 class HospitalEncounterListCreateAPIView(generics.ListCreateAPIView):
     """List and create hospital encounters"""
-    queryset = HospitalEncounter.objects.select_related(
-        'patient', 'organization', 'attending_physician', 'created_by', 'updated_by'
-    ).prefetch_related('nursing_staff')
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['encounter_type', 'status', 'attending_physician', 'department']
     search_fields = [
@@ -122,6 +144,13 @@ class HospitalEncounterListCreateAPIView(generics.ListCreateAPIView):
     ]
     ordering_fields = ['created_at', 'admission_date', 'encounter_number']
     ordering = ['-created_at']
+
+    def get_queryset(self):
+        return HospitalEncounter.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
+            'patient', 'organization', 'attending_physician', 'created_by', 'updated_by'
+        ).prefetch_related('nursing_staff')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -138,10 +167,19 @@ class HospitalEncounterListCreateAPIView(generics.ListCreateAPIView):
 
 class HospitalEncounterDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete hospital encounter"""
-    queryset = HospitalEncounter.objects.select_related(
-        'patient', 'organization', 'attending_physician', 'created_by', 'updated_by'
-    ).prefetch_related('nursing_staff', 'vital_signs', 'prescriptions')
+    permission_classes = [IsAuthenticated]
     serializer_class = HospitalEncounterDetailSerializer
+
+    def get_queryset(self):
+        return HospitalEncounter.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
+            'patient', 'organization', 'attending_physician', 'created_by', 'updated_by'
+        ).prefetch_related(
+            'nursing_staff',
+            'vital_signs',
+            'prescriptions',
+        )
 
     @audit_critical_action(description="Modification de consultation hospitalière")
     def perform_update(self, serializer):
@@ -153,22 +191,27 @@ class HospitalEncounterDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def encounter_stats_view(request):
     """Get encounter statistics"""
     today = timezone.now().date()
+    org = request.user.organization
     
     stats = {
         'today_encounters': HospitalEncounter.objects.filter(
-            created_at__date=today
+            organization=org, created_at__date=today
         ).count(),
         'active_encounters': HospitalEncounter.objects.filter(
+            organization=org,
             status__in=[EncounterStatus.CHECKED_IN, EncounterStatus.IN_PROGRESS]
         ).count(),
         'emergency_encounters': HospitalEncounter.objects.filter(
+            organization=org,
             encounter_type=EncounterType.EMERGENCY,
             status__in=[EncounterStatus.CHECKED_IN, EncounterStatus.IN_PROGRESS]
         ).count(),
         'inpatient_count': HospitalEncounter.objects.filter(
+            organization=org,
             encounter_type=EncounterType.INPATIENT,
             status=EncounterStatus.IN_PROGRESS
         ).count()
@@ -178,6 +221,7 @@ def encounter_stats_view(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def encounter_prescriptions_view(request, encounter_id):
     """Get all prescriptions for a specific encounter"""
     try:
@@ -185,7 +229,10 @@ def encounter_prescriptions_view(request, encounter_id):
         from apps.prescriptions.serializers import PrescriptionListSerializer
         from apps.prescriptions.models import Prescription
         
-        encounter = HospitalEncounter.objects.get(id=encounter_id)
+        encounter = HospitalEncounter.objects.get(
+            id=encounter_id,
+            organization=request.user.organization
+        )
         prescriptions = encounter.prescriptions.select_related(
             'patient', 'doctor', 'organization'
         ).prefetch_related('items').order_by('-created_at')
@@ -218,15 +265,21 @@ def encounter_prescriptions_view(request, encounter_id):
 
 class HospitalDepartmentListCreateAPIView(generics.ListCreateAPIView):
     """List and create hospital departments"""
-    queryset = HospitalDepartment.objects.select_related(
-        'organization', 'department_head'
-    ).prefetch_related('beds')
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     serializer_class = HospitalDepartmentSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['organization', 'is_active', 'department_head']
+    filterset_fields = ['is_active', 'department_head']
     search_fields = ['name', 'code', 'description']
     ordering_fields = ['name', 'code', 'created_at']
     ordering = ['name']
+
+    def get_queryset(self):
+        return HospitalDepartment.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
+            'organization', 'department_head'
+        ).prefetch_related('beds')
 
     @audit_critical_action(description="Création de service hospitalier")
     def perform_create(self, serializer):
@@ -235,10 +288,15 @@ class HospitalDepartmentListCreateAPIView(generics.ListCreateAPIView):
 
 class HospitalDepartmentDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete hospital department"""
-    queryset = HospitalDepartment.objects.select_related(
-        'organization', 'department_head'
-    ).prefetch_related('beds')
+    permission_classes = [IsAuthenticated]
     serializer_class = HospitalDepartmentSerializer
+
+    def get_queryset(self):
+        return HospitalDepartment.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
+            'organization', 'department_head'
+        ).prefetch_related('beds')
 
     @audit_critical_action(description="Modification de service hospitalier")
     def perform_update(self, serializer):
@@ -257,14 +315,20 @@ class HospitalDepartmentDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 class HospitalBedListCreateAPIView(generics.ListCreateAPIView):
     """List and create hospital beds"""
-    queryset = HospitalBed.objects.select_related(
-        'department__organization', 'current_patient', 'current_encounter'
-    )
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['department', 'status', 'bed_type', 'is_active']
     search_fields = ['bed_number', 'room_number', 'department__name']
     ordering_fields = ['department__name', 'room_number', 'bed_number']
     ordering = ['department__name', 'room_number', 'bed_number']
+
+    def get_queryset(self):
+        return HospitalBed.objects.filter(
+            department__organization=self.request.user.organization
+        ).select_related(
+            'department__organization', 'current_patient', 'current_encounter'
+        )
 
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -278,10 +342,15 @@ class HospitalBedListCreateAPIView(generics.ListCreateAPIView):
 
 class HospitalBedDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete hospital bed"""
-    queryset = HospitalBed.objects.select_related(
-        'department__organization', 'current_patient', 'current_encounter'
-    )
+    permission_classes = [IsAuthenticated]
     serializer_class = HospitalBedSerializer
+
+    def get_queryset(self):
+        return HospitalBed.objects.filter(
+            department__organization=self.request.user.organization
+        ).select_related(
+            'department__organization', 'current_patient', 'current_encounter'
+        )
 
     @audit_critical_action(description="Modification de lit hospitalier")
     def perform_update(self, serializer):
@@ -295,39 +364,57 @@ class HospitalBedDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 @audit_critical_action(description="Assignation de lit à un patient")
 def assign_bed_view(request, bed_id):
-    """Assign a bed to a patient and encounter"""
+    """Assign a bed to a patient and encounter — atomic with row-level locking"""
+    patient_id = request.data.get('patient_id')
+    encounter_id = request.data.get('encounter_id')
+
+    if not patient_id or not encounter_id:
+        return Response(
+            {'error': 'patient_id et encounter_id sont requis'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     try:
-        bed = HospitalBed.objects.get(id=bed_id)
-        patient_id = request.data.get('patient_id')
-        encounter_id = request.data.get('encounter_id')
-        
-        if bed.status != BedStatus.AVAILABLE:
-            return Response(
-                {'error': 'Le lit n\'est pas disponible'},
-                status=status.HTTP_400_BAD_REQUEST
+        with transaction.atomic():
+            bed = HospitalBed.objects.select_for_update().get(
+                id=bed_id,
+                department__organization=request.user.organization
             )
-        
-        # Update bed assignment
-        bed.status = BedStatus.OCCUPIED
-        bed.current_patient_id = patient_id
-        bed.current_encounter_id = encounter_id
-        bed.save()
-        
-        # Update encounter with bed info
-        if encounter_id:
-            encounter = HospitalEncounter.objects.get(id=encounter_id)
+
+            if bed.status != BedStatus.AVAILABLE:
+                return Response(
+                    {'error': 'Le lit n\'est pas disponible'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            encounter = HospitalEncounter.objects.select_for_update().get(
+                id=encounter_id,
+                organization=request.user.organization
+            )
+
+            bed.status = BedStatus.OCCUPIED
+            bed.current_patient_id = patient_id
+            bed.current_encounter = encounter
+            bed.save()
+
             encounter.room_number = bed.room_number
             encounter.bed_number = bed.bed_number
-            encounter.save()
-        
+            encounter.save(update_fields=['room_number', 'bed_number', 'updated_at'])
+
         serializer = HospitalBedSerializer(bed)
         return Response(serializer.data)
-        
+
     except HospitalBed.DoesNotExist:
         return Response(
             {'error': 'Lit non trouvé'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except HospitalEncounter.DoesNotExist:
+        return Response(
+            {'error': 'Consultation non trouvée'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
@@ -338,19 +425,23 @@ def assign_bed_view(request, bed_id):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 @audit_critical_action(description="Libération de lit hospitalier")
 def release_bed_view(request, bed_id):
-    """Release a bed from current patient"""
+    """Release a bed from current patient — atomic"""
     try:
-        bed = HospitalBed.objects.get(id=bed_id)
-        
-        # Clear bed assignment
-        bed.status = BedStatus.CLEANING
-        bed.current_patient = None
-        bed.current_encounter = None
-        bed.last_cleaned = timezone.now()
-        bed.save()
-        
+        with transaction.atomic():
+            bed = HospitalBed.objects.select_for_update().get(
+                id=bed_id,
+                department__organization=request.user.organization
+            )
+
+            bed.status = BedStatus.CLEANING
+            bed.current_patient = None
+            bed.current_encounter = None
+            bed.last_cleaned = timezone.now()
+            bed.save()
+
         serializer = HospitalBedSerializer(bed)
         return Response(serializer.data)
         
@@ -367,21 +458,25 @@ def release_bed_view(request, bed_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def bed_occupancy_view(request):
     """Get bed occupancy statistics"""
-    total_beds = HospitalBed.objects.filter(is_active=True).count()
+    org = request.user.organization
+    total_beds = HospitalBed.objects.filter(
+        is_active=True, department__organization=org
+    ).count()
     occupied_beds = HospitalBed.objects.filter(
-        is_active=True,
+        is_active=True, department__organization=org,
         status=BedStatus.OCCUPIED
     ).count()
     available_beds = HospitalBed.objects.filter(
-        is_active=True,
+        is_active=True, department__organization=org,
         status=BedStatus.AVAILABLE
     ).count()
     
     # Department breakdown
     department_stats = HospitalDepartment.objects.filter(
-        is_active=True
+        is_active=True, organization=org
     ).annotate(
         total_beds=Count('beds', filter=Q(beds__is_active=True)),
         occupied_beds=Count('beds', filter=Q(
@@ -444,36 +539,48 @@ def bed_status_choices_view(request):
 # ═══════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def hospital_dashboard_view(request):
     """Get hospital dashboard statistics"""
     today = timezone.now().date()
+    org = request.user.organization
     
     # Today's statistics
-    today_encounters = HospitalEncounter.objects.filter(created_at__date=today).count()
-    today_vitals = VitalSigns.objects.filter(measured_at__date=today).count()
+    today_encounters = HospitalEncounter.objects.filter(
+        organization=org, created_at__date=today
+    ).count()
+    today_vitals = VitalSigns.objects.filter(
+        measured_at__date=today,
+        patient__hospital_encounters__organization=org
+    ).distinct().count()
     
     # Active statistics
     active_encounters = HospitalEncounter.objects.filter(
+        organization=org,
         status__in=[EncounterStatus.CHECKED_IN, EncounterStatus.IN_PROGRESS]
     ).count()
     
     emergency_cases = HospitalEncounter.objects.filter(
+        organization=org,
         encounter_type=EncounterType.EMERGENCY,
         status__in=[EncounterStatus.CHECKED_IN, EncounterStatus.IN_PROGRESS]
     ).count()
     
     # Bed occupancy
-    total_beds = HospitalBed.objects.filter(is_active=True).count()
+    total_beds = HospitalBed.objects.filter(
+        is_active=True, department__organization=org
+    ).count()
     occupied_beds = HospitalBed.objects.filter(
-        is_active=True,
+        is_active=True, department__organization=org,
         status=BedStatus.OCCUPIED
     ).count()
     occupancy_rate = round((occupied_beds / total_beds * 100), 1) if total_beds > 0 else 0
     
     # Abnormal vitals today
     abnormal_vitals = VitalSigns.objects.filter(
-        measured_at__date=today
-    )
+        measured_at__date=today,
+        patient__hospital_encounters__organization=org
+    ).distinct()
     abnormal_count = len([v for v in abnormal_vitals if v.is_abnormal])
     
     return Response({
@@ -486,11 +593,14 @@ def hospital_dashboard_view(request):
         'available_beds': total_beds - occupied_beds,
         'occupancy_rate': occupancy_rate,
         'abnormal_vitals_today': abnormal_count,
-        'departments_count': HospitalDepartment.objects.filter(is_active=True).count()
+        'departments_count': HospitalDepartment.objects.filter(
+            is_active=True, organization=org
+        ).count()
     })
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def patient_medical_summary_view(request, patient_id):
     """Get comprehensive medical summary for a patient"""
     try:
@@ -498,16 +608,24 @@ def patient_medical_summary_view(request, patient_id):
         from apps.prescriptions.models import Prescription, PrescriptionStatus
         from apps.prescriptions.serializers import PrescriptionListSerializer
         
+        org = request.user.organization
         patient = Patient.objects.get(id=patient_id)
+
+        # Verify patient belongs to this org via encounters
+        if not HospitalEncounter.objects.filter(patient=patient, organization=org).exists():
+            return Response(
+                {'error': 'Patient non trouvé'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         
-        # Get recent encounters
+        # Get recent encounters — org-scoped
         recent_encounters = HospitalEncounter.objects.filter(
-            patient=patient
+            patient=patient, organization=org
         ).select_related('attending_physician').order_by('-created_at')[:5]
         
-        # Get recent prescriptions
+        # Get recent prescriptions — org-scoped
         recent_prescriptions = Prescription.objects.filter(
-            patient=patient
+            patient=patient, organization=org
         ).select_related('doctor', 'encounter').order_by('-created_at')[:5]
         
         # Get recent vital signs
@@ -534,10 +652,14 @@ def patient_medical_summary_view(request, patient_id):
             'recent_prescriptions': prescription_serializer.data,
             'recent_vital_signs': vitals_serializer.data,
             'statistics': {
-                'total_encounters': HospitalEncounter.objects.filter(patient=patient).count(),
-                'total_prescriptions': Prescription.objects.filter(patient=patient).count(),
+                'total_encounters': HospitalEncounter.objects.filter(
+                    patient=patient, organization=org
+                ).count(),
+                'total_prescriptions': Prescription.objects.filter(
+                    patient=patient, organization=org
+                ).count(),
                 'active_prescriptions': Prescription.objects.filter(
-                    patient=patient, 
+                    patient=patient, organization=org,
                     status=PrescriptionStatus.PENDING
                 ).count()
             }
@@ -560,14 +682,20 @@ def patient_medical_summary_view(request, patient_id):
 
 class TriageListCreateAPIView(generics.ListCreateAPIView):
     """List and create triages"""
-    queryset = Triage.objects.select_related(
-        'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
-    )
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['patient', 'triage_level', 'status', 'organization']
+    filterset_fields = ['patient', 'triage_level', 'status']
     search_fields = ['patient__first_name', 'patient__last_name', 'patient__patient_number', 'triage_number', 'chief_complaint']
     ordering_fields = ['triage_date', 'triage_level', 'created_at']
     ordering = ['-triage_date']
+
+    def get_queryset(self):
+        return Triage.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
+            'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
+        )
 
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -584,10 +712,15 @@ class TriageListCreateAPIView(generics.ListCreateAPIView):
 
 class TriageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a triage"""
-    queryset = Triage.objects.select_related(
-        'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
-    )
+    permission_classes = [IsAuthenticated]
     serializer_class = TriageSerializer
+
+    def get_queryset(self):
+        return Triage.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
+            'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
+        )
 
     @audit_critical_action(description="Mise à jour d'un triage")
     def perform_update(self, serializer):
@@ -599,10 +732,14 @@ class TriageDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def triage_by_patient_view(request, patient_id):
     """Get triages for a specific patient"""
     try:
-        triages = Triage.objects.filter(patient_id=patient_id).select_related(
+        triages = Triage.objects.filter(
+            patient_id=patient_id,
+            organization=request.user.organization
+        ).select_related(
             'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'
         ).order_by('-triage_date')
         
@@ -620,10 +757,14 @@ def triage_by_patient_view(request, patient_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def triage_by_level_view(request, level):
     """Get triages by priority level"""
     try:
-        triages = Triage.objects.filter(triage_level=level, status__in=[
+        triages = Triage.objects.filter(
+            triage_level=level,
+            organization=request.user.organization,
+            status__in=[
             TriageStatus.IN_PROGRESS, TriageStatus.COMPLETED
         ]).select_related(
             'patient', 'encounter', 'nurse', 'assigned_doctor', 'organization'

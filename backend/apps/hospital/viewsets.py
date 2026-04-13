@@ -7,6 +7,8 @@ and comprehensive CRUD operations for hospital encounters and related data.
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count, Q, Prefetch
@@ -22,11 +24,18 @@ from .serializers import (
 from apps.audit.decorators import audit_critical_action
 
 
+class StandardPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class HospitalEncounterViewSet(viewsets.ModelViewSet):
     """
     Enhanced Hospital Encounter ViewSet with comprehensive relationship handling
     """
-    permission_classes = []  # Add appropriate permissions
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'patient', 'encounter_type', 'status', 'attending_physician', 
@@ -40,8 +49,10 @@ class HospitalEncounterViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        """Optimized queryset with proper relationship loading"""
-        return HospitalEncounter.objects.select_related(
+        """Optimized queryset with proper relationship loading — org-scoped"""
+        return HospitalEncounter.objects.filter(
+            organization=self.request.user.organization
+        ).select_related(
             'patient', 'organization', 'attending_physician', 'created_by', 'updated_by'
         ).prefetch_related(
             'nursing_staff',
@@ -170,7 +181,8 @@ class VitalSignsViewSet(viewsets.ModelViewSet):
     """
     Enhanced Vital Signs ViewSet with encounter relationship handling
     """
-    permission_classes = []  # Add appropriate permissions
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['patient', 'encounter', 'measured_by', 'is_abnormal']
     search_fields = ['patient__first_name', 'patient__last_name', 'patient__patient_number']
@@ -178,11 +190,13 @@ class VitalSignsViewSet(viewsets.ModelViewSet):
     ordering = ['-measured_at']
 
     def get_queryset(self):
-        """Optimized queryset with relationships"""
-        return VitalSigns.objects.select_related(
+        """Optimized queryset with relationships — org-scoped"""
+        return VitalSigns.objects.filter(
+            patient__hospital_encounters__organization=self.request.user.organization
+        ).select_related(
             'patient', 'encounter', 'encounter__patient', 'encounter__attending_physician',
             'measured_by', 'verified_by', 'created_by', 'updated_by'
-        )
+        ).distinct()
 
     def get_serializer_class(self):
         if self.action == 'create':

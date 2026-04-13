@@ -1,4 +1,5 @@
 from django.db.models.signals import post_save, post_delete
+from django.db import transaction
 from django.dispatch import receiver
 from django.utils import timezone
 from .models import VitalSigns, HospitalEncounter, HospitalBed
@@ -64,16 +65,16 @@ def encounter_post_save(sender, instance, created, **kwargs):
         instance.room_number and instance.bed_number):
         
         try:
-            # Find the bed and update its status
-            bed = HospitalBed.objects.get(
-                room_number=instance.room_number,
-                bed_number=instance.bed_number
-            )
-            if bed.status == 'available':
-                bed.status = 'occupied'
-                bed.current_patient = instance.patient
-                bed.current_encounter = instance
-                bed.save()
+            with transaction.atomic():
+                bed = HospitalBed.objects.select_for_update().get(
+                    room_number=instance.room_number,
+                    bed_number=instance.bed_number
+                )
+                if bed.status == 'available':
+                    bed.status = 'occupied'
+                    bed.current_patient = instance.patient
+                    bed.current_encounter = instance
+                    bed.save()
         except HospitalBed.DoesNotExist:
             pass
 

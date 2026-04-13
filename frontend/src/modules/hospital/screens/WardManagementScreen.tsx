@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, shadows, spacing } from '../../../theme/theme';
@@ -19,6 +20,7 @@ import {
   BedUtils,
   WARD_TYPE_CONFIG,
 } from '../../../models/Ward';
+import ApiService from '../../../services/ApiService';
 
 const { width } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -60,133 +62,6 @@ interface SampleWard {
   beds: SampleBed[];
 }
 
-// ─── Sample Data ─────────────────────────────────────────────
-const sampleWards: SampleWard[] = [
-  {
-    id: 'W001',
-    name: 'Médecine Générale',
-    code: 'MG',
-    type: 'general',
-    floor: 2,
-    building: 'Bâtiment Principal',
-    organizationId: 'ORG001',
-    totalBeds: 20,
-    occupiedBeds: 14,
-    availableBeds: 5,
-    reservedBeds: 1,
-    nurseStationPhone: '+243 999 000 001',
-    headNurseId: 'N001',
-    headNurseName: 'Infirmière Chef Marie',
-    isActive: true,
-    gender: 'mixed',
-    ageGroup: 'adult',
-    createdAt: new Date().toISOString(),
-    beds: [
-      { id: 'B001', bedNumber: 'MG-101', wardId: 'W001', roomNumber: '101', type: 'standard', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Jean Mukendi' },
-      { id: 'B002', bedNumber: 'MG-102', wardId: 'W001', roomNumber: '101', type: 'standard', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Pierre Kasongo' },
-      { id: 'B003', bedNumber: 'MG-103', wardId: 'W001', roomNumber: '102', type: 'standard', status: 'available', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B004', bedNumber: 'MG-104', wardId: 'W001', roomNumber: '102', type: 'standard', status: 'cleaning', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B005', bedNumber: 'MG-105', wardId: 'W001', roomNumber: '103', type: 'semi_private', status: 'reserved', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B006', bedNumber: 'MG-106', wardId: 'W001', roomNumber: '103', type: 'semi_private', status: 'available', isActive: true, createdAt: new Date().toISOString() },
-    ],
-  },
-  {
-    id: 'W002',
-    name: 'Soins Intensifs (USI)',
-    code: 'USI',
-    type: 'icu',
-    floor: 1,
-    building: 'Bâtiment Principal',
-    organizationId: 'ORG001',
-    totalBeds: 8,
-    occupiedBeds: 6,
-    availableBeds: 2,
-    reservedBeds: 0,
-    nurseStationPhone: '+243 999 000 002',
-    headNurseId: 'N002',
-    headNurseName: 'Infirmier Chef Paul',
-    isActive: true,
-    gender: 'mixed',
-    ageGroup: 'adult',
-    createdAt: new Date().toISOString(),
-    beds: [
-      { id: 'B101', bedNumber: 'USI-01', wardId: 'W002', roomNumber: 'USI-A', type: 'icu', status: 'occupied', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString(), patientName: 'Marie Kabamba' },
-      { id: 'B102', bedNumber: 'USI-02', wardId: 'W002', roomNumber: 'USI-A', type: 'icu', status: 'occupied', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString(), patientName: 'David Mutombo' },
-      { id: 'B103', bedNumber: 'USI-03', wardId: 'W002', roomNumber: 'USI-B', type: 'icu', status: 'available', isActive: true, hasMonitor: true, hasVentilator: true, createdAt: new Date().toISOString() },
-      { id: 'B104', bedNumber: 'USI-04', wardId: 'W002', roomNumber: 'USI-B', type: 'icu', status: 'available', isActive: true, hasMonitor: true, hasVentilator: false, createdAt: new Date().toISOString() },
-    ],
-  },
-  {
-    id: 'W003',
-    name: 'Pédiatrie',
-    code: 'PED',
-    type: 'pediatric',
-    floor: 3,
-    building: 'Bâtiment Principal',
-    organizationId: 'ORG001',
-    totalBeds: 15,
-    occupiedBeds: 8,
-    availableBeds: 7,
-    reservedBeds: 0,
-    nurseStationPhone: '+243 999 000 003',
-    isActive: true,
-    gender: 'mixed',
-    ageGroup: 'pediatric',
-    createdAt: new Date().toISOString(),
-    beds: [
-      { id: 'B201', bedNumber: 'PED-01', wardId: 'W003', roomNumber: '301', type: 'pediatric', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Petit Ange (5 ans)' },
-      { id: 'B202', bedNumber: 'PED-02', wardId: 'W003', roomNumber: '301', type: 'pediatric', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Grace (7 ans)' },
-      { id: 'B203', bedNumber: 'PED-03', wardId: 'W003', roomNumber: '302', type: 'pediatric', status: 'available', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B204', bedNumber: 'PED-04', wardId: 'W003', roomNumber: '302', type: 'pediatric', status: 'available', isActive: true, createdAt: new Date().toISOString() },
-    ],
-  },
-  {
-    id: 'W004',
-    name: 'Maternité',
-    code: 'MAT',
-    type: 'maternity',
-    floor: 2,
-    building: 'Bâtiment B',
-    organizationId: 'ORG001',
-    totalBeds: 12,
-    occupiedBeds: 9,
-    availableBeds: 3,
-    reservedBeds: 0,
-    nurseStationPhone: '+243 999 000 004',
-    isActive: true,
-    gender: 'female',
-    ageGroup: 'adult',
-    createdAt: new Date().toISOString(),
-    beds: [
-      { id: 'B301', bedNumber: 'MAT-01', wardId: 'W004', roomNumber: 'M1', type: 'delivery', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Sophie Mwamba' },
-      { id: 'B302', bedNumber: 'MAT-02', wardId: 'W004', roomNumber: 'M1', type: 'standard', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Clarisse Ndaya' },
-      { id: 'B303', bedNumber: 'MAT-03', wardId: 'W004', roomNumber: 'M2', type: 'standard', status: 'available', isActive: true, createdAt: new Date().toISOString() },
-    ],
-  },
-  {
-    id: 'W005',
-    name: 'Chirurgie',
-    code: 'CHI',
-    type: 'surgical',
-    floor: 1,
-    building: 'Bâtiment Principal',
-    organizationId: 'ORG001',
-    totalBeds: 18,
-    occupiedBeds: 12,
-    availableBeds: 4,
-    reservedBeds: 2,
-    nurseStationPhone: '+243 999 000 005',
-    isActive: true,
-    gender: 'mixed',
-    ageGroup: 'adult',
-    createdAt: new Date().toISOString(),
-    beds: [
-      { id: 'B401', bedNumber: 'CHI-01', wardId: 'W005', roomNumber: 'S1', type: 'post_op', status: 'occupied', isActive: true, createdAt: new Date().toISOString(), patientName: 'Francois Katumba' },
-      { id: 'B402', bedNumber: 'CHI-02', wardId: 'W005', roomNumber: 'S1', type: 'standard', status: 'maintenance', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'B403', bedNumber: 'CHI-03', wardId: 'W005', roomNumber: 'S2', type: 'standard', status: 'available', isActive: true, createdAt: new Date().toISOString() },
-    ],
-  },
-];
 
 // ─── Section Header Component ────────────────────────────────
 function SectionHeader({
@@ -388,8 +263,80 @@ function WardCard({ ward, expanded, onToggle }: {
 
 // ─── Main Component ──────────────────────────────────────────
 export function WardManagementScreen() {
-  const [expandedWards, setExpandedWards] = useState<string[]>([sampleWards[0].id]);
+  const api = ApiService.getInstance();
+  const [wards, setWards] = useState<SampleWard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedWards, setExpandedWards] = useState<string[]>([]);
   const [selectedType, setSelectedType] = useState<WardType | null>(null);
+
+  // Fetch departments + beds from API
+  const fetchWards = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [deptRes, bedsRes] = await Promise.all([
+        api.get('/hospital/departments/?page_size=100'),
+        api.get('/hospital/beds/?page_size=500'),
+      ]);
+
+      const departments = deptRes?.data?.results ?? deptRes?.data ?? [];
+      const allBeds = bedsRes?.data?.results ?? bedsRes?.data ?? [];
+
+      const mapped: SampleWard[] = departments.map((dept: any) => {
+        const deptBeds = allBeds
+          .filter((b: any) => b.department === dept.id || b.department_name === dept.name)
+          .map((b: any) => ({
+            id: b.id,
+            bedNumber: b.bed_number,
+            wardId: dept.id,
+            roomNumber: b.room_number,
+            type: b.bed_type || 'standard',
+            status: b.status || 'available',
+            isActive: b.is_active ?? true,
+            createdAt: b.created_at,
+            patientName: b.current_patient_name || undefined,
+            hasMonitor: b.has_cardiac_monitor,
+            hasVentilator: false,
+          }));
+
+        const occupied = deptBeds.filter((b: SampleBed) => b.status === 'occupied').length;
+        const available = deptBeds.filter((b: SampleBed) => b.status === 'available').length;
+        const reserved = deptBeds.filter((b: SampleBed) => b.status === 'reserved').length;
+
+        return {
+          id: dept.id,
+          name: dept.name,
+          code: dept.code,
+          type: (dept.code?.toLowerCase() === 'usi' ? 'icu' : 'general') as WardType,
+          floor: parseInt(dept.floor) || 1,
+          building: dept.location || 'Bâtiment Principal',
+          organizationId: dept.organization,
+          totalBeds: dept.total_beds ?? deptBeds.length,
+          occupiedBeds: dept.occupied_beds ?? occupied,
+          availableBeds: dept.available_beds ?? available,
+          reservedBeds: reserved,
+          nurseStationPhone: dept.phone || '',
+          headNurseName: dept.department_head_name || undefined,
+          isActive: dept.is_active ?? true,
+          gender: 'mixed' as const,
+          ageGroup: 'adult' as const,
+          createdAt: dept.created_at,
+          beds: deptBeds,
+        };
+      });
+
+      setWards(mapped);
+      if (mapped.length > 0) setExpandedWards([mapped[0].id]);
+    } catch (err: any) {
+      console.error('[WardManagement] Error fetching wards:', err);
+      setError('Impossible de charger les services. Vérifiez votre connexion.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchWards(); }, [fetchWards]);
 
   // Toggle ward expansion
   const toggleWard = (wardId: string) => {
@@ -401,19 +348,44 @@ export function WardManagementScreen() {
   };
 
   // Calculate totals
-  const totals = sampleWards.reduce((acc, ward) => ({
+  const totals = wards.reduce((acc, ward) => ({
     totalBeds: acc.totalBeds + ward.totalBeds,
     occupied: acc.occupied + ward.occupiedBeds,
     available: acc.available + ward.availableBeds,
     reserved: acc.reserved + ward.reservedBeds,
   }), { totalBeds: 0, occupied: 0, available: 0, reserved: 0 });
 
-  const overallOccupancy = Math.round((totals.occupied / totals.totalBeds) * 100);
+  const overallOccupancy = totals.totalBeds > 0
+    ? Math.round((totals.occupied / totals.totalBeds) * 100) : 0;
 
   // Filter wards
   const filteredWards = selectedType
-    ? sampleWards.filter(w => w.type === selectedType)
-    : sampleWards;
+    ? wards.filter(w => w.type === selectedType)
+    : wards;
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ marginTop: 12, color: colors.textSecondary }}>Chargement des services…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <Ionicons name="cloud-offline" size={48} color={colors.error} />
+        <Text style={{ marginTop: 12, color: colors.error, textAlign: 'center' }}>{error}</Text>
+        <TouchableOpacity
+          style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: colors.primary, borderRadius: 8 }}
+          onPress={fetchWards}
+        >
+          <Text style={{ color: '#FFF', fontWeight: '600' }}>Réessayer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

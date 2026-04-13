@@ -7,6 +7,17 @@ import { ConsultationHistoryScreen } from './screens/ConsultationHistoryScreen';
 import { PatientListScreen } from './screens/PatientListScreen';
 import { PatientDetailScreen } from './screens/PatientDetailScreen';
 import { PatientRegistrationScreen } from './screens/PatientRegistrationScreen';
+import { EmergencyDashboardScreen } from './screens/EmergencyDashboardScreen';
+import { TriageScreen } from './screens/TriageScreen';
+import { HospitalPatientIntakeScreen } from './screens/HospitalPatientIntakeScreen';
+import { HospitalConsultationScreen } from './screens/HospitalConsultationScreen';
+import { AppointmentSchedulerScreen } from './screens/AppointmentSchedulerScreen';
+import { WardManagementScreen } from './screens/WardManagementScreen';
+import { AdmissionScreen } from './screens/AdmissionScreen';
+import { MedicationAdministrationScreen } from './screens/MedicationAdministrationScreen';
+import { ClinicalNotesScreen } from './screens/ClinicalNotesScreen';
+import { LaboratoryScreen } from './screens/LaboratoryScreen';
+import { HospitalBillingScreen } from './screens/HospitalBillingScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 import { Patient } from '../../models/Patient';
@@ -16,19 +27,31 @@ const hospitalSections: SidebarSection[] = [
   {
     title: 'Principal',
     items: [
-      { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
+      { id: 'dashboard', label: 'Vue d\'Ensemble', icon: 'grid-outline', iconActive: 'grid' },
+      { id: 'emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 },
+      { id: 'triage', label: 'Triage', icon: 'heart-outline', iconActive: 'heart' },
       { id: 'patients', label: 'Gestion Patients', icon: 'people-outline', iconActive: 'people' },
     ],
   },
   {
     title: 'Services Cliniques',
     items: [
+      { id: 'intake', label: 'Accueil Consultation', icon: 'person-add-outline', iconActive: 'person-add' },
+      { id: 'consultation', label: 'Consultation', icon: 'medkit-outline', iconActive: 'medkit' },
+      { id: 'consultations', label: 'Historique Consult.', icon: 'time-outline', iconActive: 'time' },
       { id: 'appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar', badge: 5 },
-      { id: 'consultations', label: 'Historique Consultations', icon: 'time-outline', iconActive: 'time' },
       { id: 'prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
+      { id: 'clinical-notes', label: 'Notes Cliniques', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'medical-records', label: 'Dossiers Médicaux', icon: 'folder-open-outline', iconActive: 'folder-open' },
-      { id: 'lab-results', label: 'Résultats Labo', icon: 'flask-outline', iconActive: 'flask', badge: 2 },
-      { id: 'wards', label: 'Services & Lits', icon: 'bed-outline', iconActive: 'bed' },
+      { id: 'lab-results', label: 'Laboratoire', icon: 'flask-outline', iconActive: 'flask', badge: 2 },
+    ],
+  },
+  {
+    title: 'Hospitalisation',
+    items: [
+      { id: 'wards', label: 'Services & Lits', icon: 'home-outline', iconActive: 'home' },
+      { id: 'admissions', label: 'Hospitalisations', icon: 'log-in-outline', iconActive: 'log-in' },
+      { id: 'mar', label: 'Adm. Médicaments', icon: 'medkit-outline', iconActive: 'medkit' },
     ],
   },
   {
@@ -184,6 +207,13 @@ export function HospitalNavigator() {
   const [patientView, setPatientView] = useState<'list' | 'detail' | 'register'>('list');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
+  // Hospital consultation state
+  const [consultationPatientId, setConsultationPatientId] = useState<string | null>(null);
+  const [pendingConsultationToLoad, setPendingConsultationToLoad] = useState<string | null>(null);
+
+  // Emergency/Triage refresh trigger
+  const [emergencyRefreshTrigger, setEmergencyRefreshTrigger] = useState(0);
+
   const handleSelectPatient = useCallback((patient: Patient) => {
     setSelectedPatientId(patient.id);
     setPatientView('detail');
@@ -203,7 +233,22 @@ export function HospitalNavigator() {
     setPatientView('detail');
   }, []);
 
+  // Hospital consultation handlers
+  const handleStartConsultation = useCallback((patient: Patient) => {
+    setConsultationPatientId(patient.id);
+    setActiveScreen('consultation');
+  }, []);
 
+  const handleNavigateToConsultation = useCallback((pendingId?: string) => {
+    setConsultationPatientId(null);
+    setPendingConsultationToLoad(pendingId || null);
+    setActiveScreen('consultation');
+  }, []);
+
+  const handleConsultationComplete = useCallback(() => {
+    setConsultationPatientId(null);
+    setActiveScreen('consultations');
+  }, []);
 
   // Reset patient sub-navigation when switching away
   const handleScreenChange = useCallback((screen: string) => {
@@ -216,18 +261,96 @@ export function HospitalNavigator() {
 
   const renderContent = () => {
     if (activeScreen === 'dashboard') {
-      return <HospitalDashboardContent />;
+      return <HospitalDashboardContent onNavigate={handleScreenChange} />;
+    }
+
+    if (activeScreen === 'emergency') {
+      return (
+        <EmergencyDashboardScreen
+          key={`emergency-${emergencyRefreshTrigger}`}
+          onNavigateToTriage={() => setActiveScreen('triage')}
+        />
+      );
+    }
+
+    if (activeScreen === 'triage') {
+      return (
+        <TriageScreen
+          onNavigateToRegisterPatient={() => {
+            setActiveScreen('patients');
+            setPatientView('register');
+          }}
+          onTriageSaved={() => {
+            setEmergencyRefreshTrigger(prev => prev + 1);
+          }}
+          onNavigateToEmergency={() => {
+            setEmergencyRefreshTrigger(prev => prev + 1);
+            setActiveScreen('emergency');
+          }}
+        />
+      );
+    }
+
+    if (activeScreen === 'intake') {
+      return (
+        <HospitalPatientIntakeScreen
+          onConsultationQueued={() => {}}
+          onNavigateToConsultation={handleNavigateToConsultation}
+        />
+      );
+    }
+
+    if (activeScreen === 'consultation') {
+      return (
+        <HospitalConsultationScreen
+          patientId={consultationPatientId || undefined}
+          pendingConsultationToLoad={pendingConsultationToLoad}
+          onPendingLoaded={() => setPendingConsultationToLoad(null)}
+          onBack={() => setActiveScreen('patients')}
+          onComplete={handleConsultationComplete}
+        />
+      );
+    }
+
+    if (activeScreen === 'consultations') {
+      return (
+        <ConsultationHistoryScreen
+          onBack={() => setActiveScreen('dashboard')}
+        />
+      );
     }
 
     if (activeScreen === 'prescriptions') {
       return <HospitalPrescriptionsScreen />;
     }
 
-    if (activeScreen === 'consultations') {
-      return <ConsultationHistoryScreen />;
+    if (activeScreen === 'appointments') {
+      return <AppointmentSchedulerScreen />;
     }
 
+    if (activeScreen === 'wards') {
+      return <WardManagementScreen />;
+    }
 
+    if (activeScreen === 'admissions') {
+      return <AdmissionScreen />;
+    }
+
+    if (activeScreen === 'mar') {
+      return <MedicationAdministrationScreen />;
+    }
+
+    if (activeScreen === 'clinical-notes') {
+      return <ClinicalNotesScreen />;
+    }
+
+    if (activeScreen === 'lab-results') {
+      return <LaboratoryScreen />;
+    }
+
+    if (activeScreen === 'billing') {
+      return <HospitalBillingScreen />;
+    }
 
     if (activeScreen === 'patients') {
       switch (patientView) {
@@ -237,15 +360,13 @@ export function HospitalNavigator() {
               <PatientDetailScreen
                 patientId={selectedPatientId}
                 onBack={handleBackToPatientList}
-                onNewEncounter={() => {/* TODO: wire encounter creation */}}
+                onNewEncounter={handleStartConsultation}
                 onEditPatient={() => {/* TODO: wire patient editing */}}
                 onGoToTriage={(patient, encounterId) => {
-                  console.log(`➡️ Navigate to triage for encounter ${encounterId}`);
-                  // TODO: navigate to triage screen with encounterId
+                  setActiveScreen('triage');
                 }}
                 onGoToConsultation={(patient, encounterId) => {
-                  console.log(`➡️ Navigate to consultation for encounter ${encounterId}`);
-                  // TODO: navigate to consultation screen with encounterId
+                  handleStartConsultation(patient);
                 }}
               />
             );

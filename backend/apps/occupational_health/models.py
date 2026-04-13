@@ -3400,10 +3400,10 @@ class OccConsultation(models.Model):
         verbose_name = _("Consultation Santé Travail")
         verbose_name_plural = _("Consultations Santé Travail")
         ordering = ['-created_at']
-        index_together = [
-            ['worker', 'status'],
-            ['doctor', 'status'],
-            ['created_at'],
+        indexes = [
+            models.Index(fields=['worker', 'status']),
+            models.Index(fields=['doctor', 'status']),
+            models.Index(fields=['created_at']),
         ]
     
     def __str__(self):

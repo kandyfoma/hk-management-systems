@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../theme/theme';
@@ -32,6 +33,9 @@ interface PrescriptionFormData {
 }
 
 export function HospitalPrescriptionsScreen() {
+  const { width } = Dimensions.get('window');
+  const isDesktop = width >= 768;
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [drugs, setDrugs] = useState<Drug[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -511,7 +515,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
   },
   section: {
     marginTop: 24,
@@ -643,11 +647,13 @@ const styles = StyleSheet.create({
   },
   fieldRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     marginBottom: 12,
     gap: 12,
   },
   field: {
     flex: 1,
+    minWidth: 140,
   },
   fullField: {
     marginBottom: 12,
@@ -670,6 +676,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingVertical: 24,
     gap: 12,
   },

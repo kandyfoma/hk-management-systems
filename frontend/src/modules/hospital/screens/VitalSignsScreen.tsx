@@ -66,6 +66,18 @@ export function VitalSignsScreen({
     return { label: 'Obésité', color: colors.error };
   }, [bmi]);
 
+  // ─── Range validation constants ─────────────────────────
+  const VITAL_RANGES = {
+    temperature: { min: 30, max: 50, label: 'Température' },
+    bloodPressureSystolic: { min: 50, max: 300, label: 'Pression systolique' },
+    bloodPressureDiastolic: { min: 30, max: 200, label: 'Pression diastolique' },
+    heartRate: { min: 30, max: 250, label: 'Fréquence cardiaque' },
+    respiratoryRate: { min: 5, max: 60, label: 'Fréquence respiratoire' },
+    oxygenSaturation: { min: 50, max: 100, label: 'Saturation O₂' },
+    weight: { min: 0.5, max: 500, label: 'Poids' },
+    height: { min: 30, max: 250, label: 'Taille' },
+  } as const;
+
   // ─── Handlers ────────────────────────────────────────────
   const handleSave = () => {
     // Validate required vitals (you can adjust this based on requirements)
@@ -73,6 +85,33 @@ export function VitalSignsScreen({
       Alert.alert(
         'Signes vitaux incomplets',
         'Veuillez saisir au moins la température, la tension artérielle ou la fréquence cardiaque.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Range validation
+    const errors: string[] = [];
+    for (const [key, range] of Object.entries(VITAL_RANGES)) {
+      const val = vitals[key as keyof VitalSigns];
+      if (val !== undefined && val !== null) {
+        if (val < range.min || val > range.max) {
+          errors.push(`${range.label}: doit être entre ${range.min} et ${range.max}`);
+        }
+      }
+    }
+
+    // Systolic must be > diastolic
+    if (vitals.bloodPressureSystolic && vitals.bloodPressureDiastolic) {
+      if (vitals.bloodPressureSystolic <= vitals.bloodPressureDiastolic) {
+        errors.push('La pression systolique doit être supérieure à la diastolique');
+      }
+    }
+
+    if (errors.length > 0) {
+      Alert.alert(
+        'Valeurs hors limites',
+        errors.join('\n'),
         [{ text: 'OK' }]
       );
       return;

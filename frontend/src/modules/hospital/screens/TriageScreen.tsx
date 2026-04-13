@@ -353,6 +353,35 @@ export function TriageScreen({ onNavigateToRegisterPatient, onTriageSaved, onNav
       return;
     }
 
+    // ── Vital signs range validation ──
+    const rangeErrors: string[] = [];
+    const tempVal = temperature ? parseFloat(temperature) : null;
+    const hrVal = heartRate ? parseInt(heartRate) : null;
+    const sysVal = systolic ? parseInt(systolic) : null;
+    const diaVal = diastolic ? parseInt(diastolic) : null;
+    const rrVal = respiratoryRate ? parseInt(respiratoryRate) : null;
+    const spo2Val = oxygenSat ? parseFloat(oxygenSat) : null;
+
+    if (tempVal !== null && (tempVal < 30 || tempVal > 50))
+      rangeErrors.push('Température: 30-50 °C');
+    if (hrVal !== null && (hrVal < 30 || hrVal > 250))
+      rangeErrors.push('Fréquence cardiaque: 30-250 bpm');
+    if (sysVal !== null && (sysVal < 50 || sysVal > 300))
+      rangeErrors.push('Systolique: 50-300 mmHg');
+    if (diaVal !== null && (diaVal < 30 || diaVal > 200))
+      rangeErrors.push('Diastolique: 30-200 mmHg');
+    if (sysVal !== null && diaVal !== null && sysVal <= diaVal)
+      rangeErrors.push('La systolique doit être supérieure à la diastolique');
+    if (rrVal !== null && (rrVal < 5 || rrVal > 60))
+      rangeErrors.push('Fréquence respiratoire: 5-60 /min');
+    if (spo2Val !== null && (spo2Val < 50 || spo2Val > 100))
+      rangeErrors.push('SpO₂: 50-100 %');
+
+    if (rangeErrors.length > 0) {
+      alert('Valeurs hors limites:\n' + rangeErrors.join('\n'));
+      return;
+    }
+
     setSubmitting(true);
     const triageData: Partial<Triage> = {
       chiefComplaint,

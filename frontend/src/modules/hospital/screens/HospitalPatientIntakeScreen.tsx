@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -535,8 +536,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: colors.text,
   },
-  vitalsRow: { flexDirection: 'row', gap: 8 },
-  vitalInput: { flex: 1 },
+  vitalsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  vitalInput: { flex: 1, minWidth: 80 },
   queueBtn: {
     marginTop: 14,
     backgroundColor: ACCENT,

@@ -1,6 +1,7 @@
 import uuid
 from decimal import Decimal
-from django.db import models
+from django.db import models, IntegrityError
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth import get_user_model
 
@@ -143,17 +144,77 @@ class HospitalEncounter(models.Model):
         verbose_name = 'Consultation hospitalière'
         verbose_name_plural = 'Consultations hospitalières'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['organization', 'status']),
+            models.Index(fields=['organization', '-created_at']),
+            models.Index(fields=['patient', '-created_at']),
+            models.Index(fields=['encounter_type', 'status']),
+            models.Index(fields=['admission_date']),
+        ]
         
     def __str__(self):
         return f"{self.encounter_number} - {self.patient.full_name}"
-    
+
+    # Valid status transitions
+    VALID_TRANSITIONS = {
+        'scheduled': ['checked_in', 'cancelled', 'no_show'],
+        'checked_in': ['in_progress', 'cancelled', 'no_show'],
+        'in_progress': ['completed', 'cancelled'],
+        'completed': [],
+        'cancelled': [],
+        'no_show': [],
+    }
+
+    def clean(self):
+        super().clean()
+        # Validate status transition
+        if self.pk:
+            try:
+                old = HospitalEncounter.objects.only('status').get(pk=self.pk)
+                if old.status != self.status:
+                    allowed = self.VALID_TRANSITIONS.get(old.status, [])
+                    if self.status not in allowed:
+                        raise ValidationError(
+                            f"Transition de '{old.status}' vers '{self.status}' non autorisée."
+                        )
+            except HospitalEncounter.DoesNotExist:
+                pass
+
+        # Discharge date must be after admission date
+        if self.admission_date and self.discharge_date:
+            if self.discharge_date < self.admission_date:
+                raise ValidationError(
+                    "La date de sortie ne peut pas être antérieure à la date d'admission."
+                )
+
+        # Completed encounters should have discharge date
+        if self.status == 'completed' and not self.discharge_date:
+            from django.utils import timezone
+            self.discharge_date = timezone.now()
+
+        # Inpatient/ICU/Surgery must have department
+        if self.encounter_type in ['inpatient', 'icu', 'surgery']:
+            if not self.department:
+                raise ValidationError(
+                    "Un département doit être assigné pour ce type de consultation."
+                )
+
     def save(self, *args, **kwargs):
         if not self.encounter_number:
-            # Generate encounter number: HE-YYYY-XXXXXX
+            # Race-safe encounter number generation with retry + UUID fallback
+            import uuid as _uuid
             from django.utils import timezone
             year = timezone.now().year
-            count = HospitalEncounter.objects.filter(created_at__year=year).count() + 1
-            self.encounter_number = f"HE-{year}-{count:06d}"
+            for attempt in range(5):
+                count = HospitalEncounter.objects.filter(created_at__year=year).count() + 1 + attempt
+                self.encounter_number = f"HE-{year}-{count:06d}"
+                try:
+                    super().save(*args, **kwargs)
+                    return
+                except IntegrityError:
+                    if attempt == 4:
+                        self.encounter_number = f"HE-{year}-{_uuid.uuid4().hex[:8].upper()}"
+                    continue
         super().save(*args, **kwargs)
 
 
@@ -344,6 +405,11 @@ class VitalSigns(models.Model):
         verbose_name = 'Signes vitaux'
         verbose_name_plural = 'Signes vitaux'
         ordering = ['-measured_at']
+        indexes = [
+            models.Index(fields=['patient', '-measured_at']),
+            models.Index(fields=['encounter', '-measured_at']),
+            models.Index(fields=['measured_by', '-measured_at']),
+        ]
         
     def __str__(self):
         return f"Signes vitaux - {self.patient.full_name} - {self.measured_at.strftime('%d/%m/%Y %H:%M')}"
@@ -464,6 +530,10 @@ class HospitalDepartment(models.Model):
         verbose_name_plural = 'Services hospitaliers'
         unique_together = ('organization', 'code')
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['organization', 'name']),
+            models.Index(fields=['organization', 'is_active']),
+        ]
         
     def __str__(self):
         return f"{self.name} ({self.code})"
@@ -702,6 +772,8 @@ class Triage(models.Model):
             models.Index(fields=['patient', '-triage_date']),
             models.Index(fields=['triage_level', '-triage_date']),
             models.Index(fields=['status', '-triage_date']),
+            models.Index(fields=['organization', 'triage_level']),
+            models.Index(fields=['organization', 'status']),
         ]
     
     def __str__(self):

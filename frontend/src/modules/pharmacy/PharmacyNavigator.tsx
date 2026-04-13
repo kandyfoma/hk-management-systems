@@ -21,7 +21,7 @@ const baseSections: SidebarSection[] = [
   {
     title: 'Principal',
     items: [
-      { id: 'dashboard', label: 'Tableau de Bord', icon: 'grid-outline', iconActive: 'grid' },
+      { id: 'dashboard', label: 'Vue d\'Ensemble', icon: 'pulse-outline', iconActive: 'pulse' },
       { id: 'pos', label: 'Point de Vente', icon: 'cart-outline', iconActive: 'cart' },
     ],
   },
@@ -30,8 +30,7 @@ const baseSections: SidebarSection[] = [
     items: [
       { id: 'inventory', label: 'Inventaire', icon: 'cube-outline', iconActive: 'cube' },
       { id: 'ordonnances', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
-      { id: 'prescriptions', label: 'Prescriptions Basic', icon: 'receipt-outline', iconActive: 'receipt' },
-      { id: 'suppliers', label: 'Fournisseurs', icon: 'business-outline', iconActive: 'business' },
+      { id: 'suppliers', label: 'Fournisseurs', icon: 'people-outline', iconActive: 'people' },
       { id: 'stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
       { id: 'expiration-report', label: 'Rapport Expiration', icon: 'time-outline', iconActive: 'time' },
     ],
@@ -39,10 +38,9 @@ const baseSections: SidebarSection[] = [
   {
     title: 'Rapports',
     items: [
-      { id: 'reports', label: 'Tous les Rapports', icon: 'document-outline', iconActive: 'document' },
-      { id: 'sales-reports', label: 'Rapports Ventes', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
+      { id: 'reports', label: 'Rapports Ventes', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
+      { id: 'sales-reports', label: 'Rapports Ventes Détaillés', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
       { id: 'sales-history', label: 'Toutes les Ventes', icon: 'receipt-outline', iconActive: 'receipt' },
-      { id: 'expiration-report', label: 'Rapport Expiration', icon: 'time-outline', iconActive: 'time' },
       { id: 'analytics', label: 'Analytiques', icon: 'analytics-outline', iconActive: 'analytics' },
     ],
   },
