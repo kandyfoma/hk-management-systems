@@ -30,6 +30,7 @@ import {
   PaymentMethod,
   Sale,
   SaleUtils,
+  SellingUnit,
 } from '../../../models/Sale';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -295,6 +296,13 @@ export function POSScreen() {
           sellingPrice: parseFloat(p.selling_price ?? '0'),
           currency: p.currency ?? 'CDF',
           taxRate: 0,
+          // Unit breakdown
+          unitsPerBlister: p.units_per_blister ?? 10,
+          blistersPerBox: p.blisters_per_box ?? 1,
+          allowUnitSelling: p.allow_unit_selling ?? true,
+          allowBlisterSelling: p.allow_blister_selling ?? true,
+          sellingPricePerBlister: p.selling_price_per_blister ? parseFloat(p.selling_price_per_blister) : null,
+          sellingPricePerUnit: p.selling_price_per_unit ? parseFloat(p.selling_price_per_unit) : null,
           reorderLevel: p.reorder_level ?? 10,
           minStockLevel: p.min_stock_level ?? 5,
           maxStockLevel: p.max_stock_level ?? 500,
@@ -365,7 +373,15 @@ export function POSScreen() {
         if (draftRaw) {
           const parsed = JSON.parse(draftRaw);
           if (parsed?.cart?.items && Array.isArray(parsed.cart.items)) {
-            setCart(parsed.cart as CartState);
+            // Ensure restored items have valid sellingUnit (backward compat)
+            const VALID_UNITS = new Set(['BOX', 'BLISTER', 'UNIT']);
+            const sanitized: CartState = {
+              ...parsed.cart,
+              items: parsed.cart.items
+                .filter((i: any) => i.productId && i.quantity > 0)
+                .map((i: any) => ({ ...i, sellingUnit: VALID_UNITS.has(i.sellingUnit) ? i.sellingUnit : 'BOX' })),
+            };
+            setCart(sanitized);
             toastRef.current.info('Brouillon POS restauré');
           }
         }
@@ -444,7 +460,7 @@ export function POSScreen() {
 
   const cartQtyByProduct = useMemo(() => {
     const qtyMap = new Map<string, number>();
-    cart.items.forEach((item) => qtyMap.set(item.productId, item.quantity));
+    cart.items.forEach((item) => qtyMap.set(item.productId, (qtyMap.get(item.productId) ?? 0) + item.quantity));
     return qtyMap;
   }, [cart.items]);
 
@@ -455,25 +471,105 @@ export function POSScreen() {
   }, [products]);
 
   // ═══════════════════════════════════════════════════════
+  //  UNIT SELLING HELPERS (Boîte → Plaquette → Unité)
+  // ═══════════════════════════════════════════════════════
+
+  const getAvailableSellingUnits = useCallback((product: ShopProduct) => {
+    const units: { key: 'BOX' | 'BLISTER' | 'UNIT'; label: string; price: number }[] = [];
+    const boxPrice = product.sellingPrice || 0;
+    const upb = Math.max(1, product.unitsPerBlister || 1);
+    const bpb = Math.max(1, product.blistersPerBox || 1);
+    const totalUnitsPerBox = upb * bpb;
+
+    // Box is always available
+    units.push({ key: 'BOX', label: 'Boîte', price: boxPrice });
+
+    // Blister (only if product has > 1 blister per box or explicitly allowed)
+    if (product.allowBlisterSelling && bpb >= 1) {
+      const blisterPrice = product.sellingPricePerBlister
+        ?? Math.ceil(boxPrice / bpb);
+      units.push({ key: 'BLISTER', label: 'Plaquette', price: blisterPrice });
+    }
+
+    // Individual unit (pill/capsule)
+    if (product.allowUnitSelling && totalUnitsPerBox > 1) {
+      const unitPrice = product.sellingPricePerUnit
+        ?? Math.ceil(boxPrice / totalUnitsPerBox);
+      units.push({ key: 'UNIT', label: 'Unité', price: unitPrice });
+    }
+
+    return units;
+  }, []);
+
+  const getPriceForUnit = useCallback((product: ShopProduct, sellingUnit: 'BOX' | 'BLISTER' | 'UNIT') => {
+    const boxPrice = product.sellingPrice || 0;
+    const upb = Math.max(1, product.unitsPerBlister || 1);
+    const bpb = Math.max(1, product.blistersPerBox || 1);
+
+    if (sellingUnit === 'BLISTER') {
+      return product.sellingPricePerBlister ?? Math.ceil(boxPrice / bpb);
+    }
+    if (sellingUnit === 'UNIT') {
+      const totalUnits = upb * bpb;
+      return product.sellingPricePerUnit ?? Math.ceil(boxPrice / totalUnits);
+    }
+    return boxPrice;
+  }, []);
+
+  /** Convert availableQty (base units) to max sellable quantity for a given selling unit */
+  const getMaxQtyForUnit = useCallback((product: ShopProduct, sellingUnit: 'BOX' | 'BLISTER' | 'UNIT') => {
+    const baseStock = product.availableQty || 0;
+    const upb = Math.max(1, product.unitsPerBlister || 1);
+    const bpb = Math.max(1, product.blistersPerBox || 1);
+
+    if (sellingUnit === 'BOX') return Math.floor(baseStock / (upb * bpb));
+    if (sellingUnit === 'BLISTER') return Math.floor(baseStock / upb);
+    return baseStock; // UNIT
+  }, []);
+
+  // State for unit selection modal
+  const [unitSelectProduct, setUnitSelectProduct] = useState<ShopProduct | null>(null);
+
+  // ═══════════════════════════════════════════════════════
   //  CART ACTIONS
   // ═══════════════════════════════════════════════════════
 
-  const addToCart = useCallback((product: ShopProduct) => {
-    if (product.availableQty <= 0) {
+  const addToCartWithUnit = useCallback((product: ShopProduct, sellingUnit: 'BOX' | 'BLISTER' | 'UNIT' = 'BOX') => {
+    const maxForUnit = getMaxQtyForUnit(product, sellingUnit);
+    if (maxForUnit <= 0) {
       toast.warning(`${product.name} est en rupture de stock`);
       return;
     }
 
-    // Check max stock BEFORE entering the state updater (toast inside setCart is a React anti-pattern)
+    const unitPrice = getPriceForUnit(product, sellingUnit);
+
     setCart((prev) => {
-      const existing = prev.items.find((i) => i.productId === product.id);
+      // Calculate total base units already in cart for this product (all selling units)
+      const upb = Math.max(1, product.unitsPerBlister || 1);
+      const bpb = Math.max(1, product.blistersPerBox || 1);
+      const baseStock = product.availableQty || 0;
+
+      const baseUnitsInCart = prev.items
+        .filter((i) => i.productId === product.id)
+        .reduce((sum, i) => {
+          if (i.sellingUnit === 'BOX') return sum + i.quantity * bpb * upb;
+          if (i.sellingUnit === 'BLISTER') return sum + i.quantity * upb;
+          return sum + i.quantity;
+        }, 0);
+
+      // How many base units would this new item add?
+      const addBaseUnits = sellingUnit === 'BOX' ? bpb * upb : sellingUnit === 'BLISTER' ? upb : 1;
+
+      if (baseUnitsInCart + addBaseUnits > baseStock) {
+        setTimeout(() => toast.warning(`Stock max atteint pour ${product.name}`), 0);
+        return prev;
+      }
+
+      // Find existing with same product AND same selling unit
+      const existing = prev.items.find((i) => i.productId === product.id && i.sellingUnit === sellingUnit);
       if (existing) {
-        if (existing.quantity >= product.availableQty) {
-          // Return prev unchanged — we'll show toast after setCart
-          return prev;
-        }
         const updated = SaleUtils.computeLineItem({ ...existing, quantity: existing.quantity + 1 });
-        return { ...prev, items: prev.items.map((i) => i.productId === product.id ? updated : i) };
+        return { ...prev, items: prev.items.map((i) => (i.productId === product.id && i.sellingUnit === sellingUnit) ? updated : i) };
       }
 
       const newItem = SaleUtils.computeLineItem({
@@ -492,35 +588,46 @@ export function POSScreen() {
           currency: product.currency,
           barcode: product.barcode,
           imageUrl: product.imageUrl,
+          unitsPerBlister: product.unitsPerBlister,
+          blistersPerBox: product.blistersPerBox,
+          allowUnitSelling: product.allowUnitSelling,
+          allowBlisterSelling: product.allowBlisterSelling,
+          sellingPricePerBlister: product.sellingPricePerBlister,
+          sellingPricePerUnit: product.sellingPricePerUnit,
         },
         quantity: 1,
-        unitPrice: product.sellingPrice,
+        sellingUnit,
+        unitPrice,
         discountPercent: 0,
         discountAmount: 0,
         taxAmount: 0,
         lineTotal: 0,
         inventoryItemId: product.inventoryItem?.id,
-        maxQuantity: product.availableQty,
+        maxQuantity: maxForUnit,
       });
 
       return { ...prev, items: [...prev.items, newItem] };
     });
 
-    // Show max-stock warning outside setCart (check current cart state)
-    setCart((prev) => {
-      const existing = prev.items.find((i) => i.productId === product.id);
-      if (existing && existing.quantity >= product.availableQty) {
-        // Use setTimeout to avoid calling toast inside a React state updater
-        setTimeout(() => toast.warning(`Stock max atteint pour ${product.name}`), 0);
-      }
-      return prev; // No mutation — just side-effect check
-    });
-  }, [toast]);
+    setUnitSelectProduct(null);
+  }, [getPriceForUnit, getMaxQtyForUnit, toast]);
 
-  const updateCartItemQty = useCallback((productId: string, delta: number) => {
+  const addToCart = useCallback((product: ShopProduct) => {
+    // If product supports multiple selling units, show selector
+    const units = getAvailableSellingUnits(product);
+    if (units.length > 1) {
+      setUnitSelectProduct(product);
+      return;
+    }
+    // Otherwise add directly as BOX
+    addToCartWithUnit(product, 'BOX');
+  }, [getAvailableSellingUnits, addToCartWithUnit]);
+
+  const updateCartItemQty = useCallback((productId: string, delta: number, sellingUnit?: SellingUnit) => {
     setCart((prev) => {
       const items = prev.items.map((item) => {
         if (item.productId !== productId) return item;
+        if (sellingUnit && item.sellingUnit !== sellingUnit) return item;
         const newQty = Math.max(0, Math.min(item.maxQuantity, item.quantity + delta));
         if (newQty === 0) return null;
         return SaleUtils.computeLineItem({ ...item, quantity: newQty });
@@ -529,10 +636,10 @@ export function POSScreen() {
     });
   }, []);
 
-  const removeCartItem = useCallback((productId: string) => {
+  const removeCartItem = useCallback((productId: string, sellingUnit?: SellingUnit) => {
     setCart((prev) => ({
       ...prev,
-      items: prev.items.filter((i) => i.productId !== productId),
+      items: prev.items.filter((i) => !(i.productId === productId && (!sellingUnit || i.sellingUnit === sellingUnit))),
     }));
   }, []);
 
@@ -556,6 +663,7 @@ export function POSScreen() {
       product_name: item.product.name,
       product_sku: item.product.sku ?? '',
       unit_of_measure: item.product.dosageForm ?? 'UNIT',
+      selling_unit: item.sellingUnit ?? 'BOX',
       quantity: item.quantity,
       unit_price: item.unitPrice,
       unit_cost: item.product.costPrice ?? 0,
@@ -885,6 +993,46 @@ export function POSScreen() {
         onClose={() => setShowHistory(false)}
         onViewReceipt={(sale) => { setLastSale(sale); setShowHistory(false); setShowReceipt(true); }}
       />
+
+      {/* ════════════ UNIT SELECTION MODAL ═════════════════ */}
+      <Modal
+        visible={!!unitSelectProduct}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setUnitSelectProduct(null)}
+      >
+        <TouchableOpacity
+          style={s.unitModalOverlay}
+          activeOpacity={1}
+          onPress={() => setUnitSelectProduct(null)}
+        >
+          <View style={s.unitModalContent}>
+            <Text style={s.unitModalTitle}>Vendre par</Text>
+            <Text style={s.unitModalSubtitle} numberOfLines={1}>{unitSelectProduct?.name}</Text>
+            {unitSelectProduct && getAvailableSellingUnits(unitSelectProduct).map((u) => (
+              <TouchableOpacity
+                key={u.key}
+                style={s.unitModalOption}
+                activeOpacity={0.7}
+                onPress={() => addToCartWithUnit(unitSelectProduct, u.key)}
+              >
+                <Ionicons
+                  name={u.key === 'BOX' ? 'cube-outline' : u.key === 'BLISTER' ? 'grid-outline' : 'ellipse-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={s.unitModalOptionLabel}>{u.label}</Text>
+                </View>
+                <Text style={s.unitModalOptionPrice}>{fmt(u.price)} CDF</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={s.unitModalCancel} onPress={() => setUnitSelectProduct(null)}>
+              <Text style={s.unitModalCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -942,13 +1090,15 @@ const ProductTile = React.memo(function ProductTile({ product, inCart, cartQty, 
 //  CART PANEL
 // ═══════════════════════════════════════════════════════════════
 
+const SELLING_UNIT_LABELS: Record<string, string> = { BOX: 'Boîte', BLISTER: 'Plaquette', UNIT: 'Unité' };
+
 function CartPanel({
   cart, totals, onUpdateQty, onRemove, onClear, onDiscount, onCheckout, isMobile,
 }: {
   cart: CartState;
   totals: CartTotals;
-  onUpdateQty: (pid: string, delta: number) => void;
-  onRemove: (pid: string) => void;
+  onUpdateQty: (pid: string, delta: number, sellingUnit?: SellingUnit) => void;
+  onRemove: (pid: string, sellingUnit?: SellingUnit) => void;
   onClear: () => void;
   onDiscount: (type: 'PERCENTAGE' | 'FIXED' | 'NONE', value: number) => void;
   onCheckout: () => void;
@@ -1009,22 +1159,24 @@ function CartPanel({
       ) : (
         <ScrollView style={s.cartItems} contentContainerStyle={{ paddingBottom: 8 }}>
           {cart.items.map((item) => (
-            <View key={item.productId} style={s.cartItem}>
+            <View key={`${item.productId}_${item.sellingUnit ?? 'BOX'}`} style={s.cartItem}>
               <View style={s.cartItemInfo}>
                 <Text style={s.cartItemName} numberOfLines={1}>{item.product.name}</Text>
-                <Text style={s.cartItemSub}>{fmt(item.unitPrice, item.product.currency)} / unité</Text>
+                <Text style={s.cartItemSub}>
+                  {fmt(item.unitPrice, item.product.currency)} / {SELLING_UNIT_LABELS[item.sellingUnit] ?? 'Boîte'}
+                </Text>
               </View>
               <View style={s.cartItemQtyRow}>
-                <TouchableOpacity style={s.qtyBtn} onPress={() => onUpdateQty(item.productId, -1)} activeOpacity={0.7}>
+                <TouchableOpacity style={s.qtyBtn} onPress={() => onUpdateQty(item.productId, -1, item.sellingUnit)} activeOpacity={0.7}>
                   <Ionicons name="remove" size={16} color={colors.primary} />
                 </TouchableOpacity>
                 <Text style={s.qtyText}>{item.quantity}</Text>
-                <TouchableOpacity style={s.qtyBtn} onPress={() => onUpdateQty(item.productId, 1)} activeOpacity={0.7}>
+                <TouchableOpacity style={s.qtyBtn} onPress={() => onUpdateQty(item.productId, 1, item.sellingUnit)} activeOpacity={0.7}>
                   <Ionicons name="add" size={16} color={colors.primary} />
                 </TouchableOpacity>
               </View>
               <Text style={s.cartItemTotal}>{fmt(item.lineTotal, item.product.currency)}</Text>
-              <TouchableOpacity onPress={() => onRemove(item.productId)} style={s.cartItemRemove} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => onRemove(item.productId, item.sellingUnit)} style={s.cartItemRemove} activeOpacity={0.7}>
                 <Ionicons name="close" size={14} color={colors.error} />
               </TouchableOpacity>
             </View>
@@ -1792,4 +1944,14 @@ const s = StyleSheet.create({
   hisSaleAmount: { fontSize: 15, fontWeight: '700', color: colors.primary },
   hisSaleVoided: { fontSize: 10, fontWeight: '700', color: colors.error },
   voidBtn: { padding: 4, borderRadius: borderRadius.sm, borderWidth: 1, borderColor: colors.error + '40' },
+  // Unit selection modal
+  unitModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
+  unitModalContent: { backgroundColor: colors.surface, borderRadius: borderRadius.xl, padding: 20, width: Math.min(340, SCREEN_W - 40), ...shadows.lg },
+  unitModalTitle: { fontSize: 18, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 4 },
+  unitModalSubtitle: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 16 },
+  unitModalOption: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: borderRadius.lg, backgroundColor: colors.surfaceVariant, marginBottom: 8 },
+  unitModalOptionLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
+  unitModalOptionPrice: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  unitModalCancel: { marginTop: 8, padding: 12, alignItems: 'center' },
+  unitModalCancelText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
 });

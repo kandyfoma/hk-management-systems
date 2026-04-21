@@ -117,6 +117,42 @@ class Product(models.Model):
     pack_size = models.PositiveIntegerField(default=1, help_text='Nombre d\'unités par paquet')
     pack_type = models.CharField(max_length=50, blank=True, help_text='Type d\'emballage')
     
+    # Unit breakdown for selling (Congo pharmacy: Boîte → Plaquette → Unité)
+    units_per_blister = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        help_text='Nombre d\'unités (comprimés/gélules) par plaquette'
+    )
+    blisters_per_box = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text='Nombre de plaquettes par boîte'
+    )
+    allow_unit_selling = models.BooleanField(
+        default=True,
+        help_text='Autoriser la vente à l\'unité (comprimé, gélule...)'
+    )
+    allow_blister_selling = models.BooleanField(
+        default=True,
+        help_text='Autoriser la vente par plaquette'
+    )
+    selling_price_per_blister = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text='Prix de vente par plaquette (auto-calculé si vide)'
+    )
+    selling_price_per_unit = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text='Prix de vente à l\'unité (auto-calculé si vide)'
+    )
+    
     # Manufacturer & Supplier
     manufacturer = models.CharField(max_length=200, blank=True)
     manufacturer_country = models.CharField(max_length=100, blank=True)

@@ -227,7 +227,7 @@ const createDynamicSections = (
     }
     
     if (hasFeature('basic_inventory') || hasFeature('advanced_inventory')) {
-      pharmacyItems.push({ id: 'ph-inventory', label: 'Inventaire', icon: 'cube-outline', iconActive: 'cube', badge: 7 });
+      pharmacyItems.push({ id: 'ph-inventory', label: 'Inventaire', icon: 'cube-outline', iconActive: 'cube' });
     }
     
     if (hasFeature('prescription_management')) {
@@ -239,7 +239,7 @@ const createDynamicSections = (
     }
     
     if (hasFeature('stock_alerts')) {
-      pharmacyItems.push({ id: 'ph-stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle', badge: 3 });
+      pharmacyItems.push({ id: 'ph-stock-alerts', label: 'Alertes Stock', icon: 'alert-circle-outline', iconActive: 'alert-circle' });
       pharmacyItems.push({ id: 'ph-expiration-report', label: 'Rapport Expiration', icon: 'time-outline', iconActive: 'time' });
     }
     
@@ -265,7 +265,7 @@ const createDynamicSections = (
     ];
 
     // Emergency & Triage
-    hospitalItems.push({ id: 'hp-emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 });
+    hospitalItems.push({ id: 'hp-emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse' });
     hospitalItems.push({ id: 'hp-triage', label: 'Triage', icon: 'heart-outline', iconActive: 'heart' });
 
     // Add features based on license
@@ -277,7 +277,7 @@ const createDynamicSections = (
     }
     
     if (hasFeature('appointment_scheduling') || hasFeature('advanced_scheduling')) {
-      hospitalItems.push({ id: 'hp-appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar', badge: 5 });
+      hospitalItems.push({ id: 'hp-appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar' });
     }
     
     // Ward & Admission Management
@@ -298,7 +298,7 @@ const createDynamicSections = (
     }
     
     if (hasFeature('lab_integration')) {
-      hospitalItems.push({ id: 'hp-lab-results', label: 'Laboratoire', icon: 'flask-outline', iconActive: 'flask', badge: 2 });
+      hospitalItems.push({ id: 'hp-lab-results', label: 'Laboratoire', icon: 'flask-outline', iconActive: 'flask' });
     }
     
     if (hasFeature('basic_billing') || hasFeature('billing_management')) {
@@ -352,7 +352,7 @@ const createDynamicSections = (
       collapsible: true,
       defaultCollapsed: false,
       items: [
-        { id: 'oh-incident-dashboard', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning', badge: 3 },
+        { id: 'oh-incident-dashboard', label: 'Incidents & Accidents', icon: 'warning-outline', iconActive: 'warning' },
         { id: 'oh-risk', label: 'Évaluation Risques', icon: 'alert-circle-outline', iconActive: 'alert-circle' },
         { id: 'oh-exposure-monitoring', label: 'Monitoring Expositions', icon: 'water-outline', iconActive: 'water' },
         { id: 'oh-ppe', label: 'Gestion EPI', icon: 'body-outline', iconActive: 'body' },
@@ -446,6 +446,10 @@ function DesktopApp() {
   const [pendingConsultationToLoad, setPendingConsultationToLoad] = useState<string | null>(null);
   const [ohExamsScreenKey, setOhExamsScreenKey] = useState(0);
   const [expirationSoonCount, setExpirationSoonCount] = useState<number>(0);
+
+  // Live badge counts from backend
+  const [pharmacyBadges, setPharmacyBadges] = useState<{ lowStock: number; activeAlerts: number }>({ lowStock: 0, activeAlerts: 0 });
+  const [hospitalBadges, setHospitalBadges] = useState<{ emergency: number; todayEncounters: number; activeEncounters: number }>({ emergency: 0, todayEncounters: 0, activeEncounters: 0 });
 
   // Custom navigation wrapper for screen-based navigation
   const customNavigation = {
@@ -616,10 +620,24 @@ function DesktopApp() {
     
     const sections = createDynamicSections(activeModules, hasFeature);
 
+    // Apply live pharmacy badges
     const pharmacySection = sections.find((section) => section.title === 'Pharmacie');
-    const expirationItem = pharmacySection?.items?.find((item) => item.id === 'ph-expiration-report');
-    if (expirationItem) {
-      expirationItem.badge = expirationSoonCount > 0 ? expirationSoonCount : undefined;
+    if (pharmacySection) {
+      for (const item of pharmacySection.items) {
+        if (item.id === 'ph-inventory') item.badge = pharmacyBadges.lowStock > 0 ? pharmacyBadges.lowStock : undefined;
+        if (item.id === 'ph-stock-alerts') item.badge = pharmacyBadges.activeAlerts > 0 ? pharmacyBadges.activeAlerts : undefined;
+        if (item.id === 'ph-expiration-report') item.badge = expirationSoonCount > 0 ? expirationSoonCount : undefined;
+      }
+    }
+
+    // Apply live hospital badges
+    const hospitalSection = sections.find((section) => section.title === 'Hôpital');
+    if (hospitalSection) {
+      for (const item of hospitalSection.items) {
+        if (item.id === 'hp-emergency') item.badge = hospitalBadges.emergency > 0 ? hospitalBadges.emergency : undefined;
+        if (item.id === 'hp-appointments') item.badge = hospitalBadges.todayEncounters > 0 ? hospitalBadges.todayEncounters : undefined;
+        if (item.id === 'hp-admissions') item.badge = hospitalBadges.activeEncounters > 0 ? hospitalBadges.activeEncounters : undefined;
+      }
     }
     
     // Always add settings section
@@ -632,7 +650,7 @@ function DesktopApp() {
     });
     
     return sections;
-  }, [activeModules, allFeatures, expirationSoonCount]);
+  }, [activeModules, allFeatures, expirationSoonCount, pharmacyBadges, hospitalBadges]);
 
   useEffect(() => {
     const hasPharmacy = activeModules.includes('PHARMACY');
@@ -668,6 +686,63 @@ function DesktopApp() {
       isMounted = false;
     };
   }, [activeModules, allFeatures, activeScreen]);
+
+  // Fetch live pharmacy badge counts (inventory stats)
+  useEffect(() => {
+    if (!activeModules.includes('PHARMACY')) {
+      setPharmacyBadges({ lowStock: 0, activeAlerts: 0 });
+      return;
+    }
+
+    let isMounted = true;
+    const loadPharmacyBadges = async () => {
+      try {
+        const api = ApiService.getInstance();
+        const res = await api.get('/inventory/reports/stats/');
+        if (!isMounted || !res?.data) return;
+        const stats = res.data as any;
+        setPharmacyBadges({
+          lowStock: (stats.low_stock_count ?? 0) + (stats.out_of_stock_count ?? 0),
+          activeAlerts: stats.active_alerts ?? 0,
+        });
+      } catch {
+        if (isMounted) setPharmacyBadges({ lowStock: 0, activeAlerts: 0 });
+      }
+    };
+
+    loadPharmacyBadges();
+    const interval = setInterval(loadPharmacyBadges, 60_000);
+    return () => { isMounted = false; clearInterval(interval); };
+  }, [activeModules]);
+
+  // Fetch live hospital badge counts (dashboard stats)
+  useEffect(() => {
+    if (!activeModules.includes('HOSPITAL')) {
+      setHospitalBadges({ emergency: 0, todayEncounters: 0, activeEncounters: 0 });
+      return;
+    }
+
+    let isMounted = true;
+    const loadHospitalBadges = async () => {
+      try {
+        const api = ApiService.getInstance();
+        const res = await api.get('/hospital/dashboard/');
+        if (!isMounted || !res?.data) return;
+        const stats = res.data as any;
+        setHospitalBadges({
+          emergency: stats.emergency_cases ?? 0,
+          todayEncounters: stats.today_encounters ?? 0,
+          activeEncounters: stats.active_encounters ?? 0,
+        });
+      } catch {
+        if (isMounted) setHospitalBadges({ emergency: 0, todayEncounters: 0, activeEncounters: 0 });
+      }
+    };
+
+    loadHospitalBadges();
+    const interval = setInterval(loadHospitalBadges, 60_000);
+    return () => { isMounted = false; clearInterval(interval); };
+  }, [activeModules]);
 
   useEffect(() => {
     if (!canAccessScreen(activeScreen)) {

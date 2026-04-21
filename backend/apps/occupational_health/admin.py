@@ -223,8 +223,8 @@ class EnterpriseAdmin(admin.ModelAdmin):
     def active_status(self, obj):
         """Display active status with icon"""
         if obj.is_active:
-            return format_html('<span style="color: green;">✓ Actif</span>')
-        return format_html('<span style="color: red;">✗ Inactif</span>')
+            return mark_safe('<span style="color: green;">✓ Actif</span>')
+        return mark_safe('<span style="color: red;">✗ Inactif</span>')
     active_status.short_description = "Statut"
     
     def contract_period(self, obj):
@@ -247,14 +247,14 @@ class WorkSiteAdmin(admin.ModelAdmin):
     
     def remote_site_badge(self, obj):
         if obj.is_remote_site:
-            return format_html('<span style="color: orange;">🏞️ Éloigné</span>')
-        return format_html('<span style="color: green;">🏢 Urbain</span>')
+            return mark_safe('<span style="color: orange;">🏞️ Éloigné</span>')
+        return mark_safe('<span style="color: green;">🏢 Urbain</span>')
     remote_site_badge.short_description = "Localisation"
     
     def medical_facility_badge(self, obj):
         if obj.has_medical_facility:
-            return format_html('<span style="color: green;">🏥 Dispensaire</span>')
-        return format_html('<span style="color: gray;">— Aucun</span>')
+            return mark_safe('<span style="color: green;">🏥 Dispensaire</span>')
+        return mark_safe('<span style="color: gray;">— Aucun</span>')
     medical_facility_badge.short_description = "Installation Médicale"
 
 @admin.register(Worker)
@@ -438,8 +438,8 @@ class MedicalExaminationAdmin(admin.ModelAdmin):
     def completion_status(self, obj):
         """Display completion status"""
         if obj.examination_completed:
-            return format_html('<span style="color: green;">✓ Terminé</span>')
-        return format_html('<span style="color: orange;">⏳ En cours</span>')
+            return mark_safe('<span style="color: green;">✓ Terminé</span>')
+        return mark_safe('<span style="color: orange;">⏳ En cours</span>')
     completion_status.short_description = "Statut"
     
     def fitness_status(self, obj):
@@ -447,9 +447,9 @@ class MedicalExaminationAdmin(admin.ModelAdmin):
         if hasattr(obj, 'fitness_certificate'):
             cert = obj.fitness_certificate
             if cert.is_expired:
-                return format_html('<span style="color: red;">Expiré</span>')
+                return mark_safe('<span style="color: red;">Expiré</span>')
             return format_html('<span style="color: green;">{}</span>', cert.get_fitness_decision_display())
-        return format_html('<span style="color: gray;">Pas de certificat</span>')
+        return mark_safe('<span style="color: gray;">Pas de certificat</span>')
     fitness_status.short_description = "Certificat Aptitude"
 
 @admin.register(VitalSigns)
@@ -490,8 +490,8 @@ class VitalSignsAdmin(admin.ModelAdmin):
     
     def abnormal_vitals_badge(self, obj):
         if obj.has_abnormal_vitals:
-            return format_html('<span style="color: red;">⚠️ Anormal</span>')
-        return format_html('<span style="color: green;">✓ Normal</span>')
+            return mark_safe('<span style="color: red;">⚠️ Anormal</span>')
+        return mark_safe('<span style="color: green;">✓ Normal</span>')
     abnormal_vitals_badge.short_description = "Statut"
 
 @admin.register(FitnessCertificate)
@@ -528,16 +528,16 @@ class FitnessCertificateAdmin(admin.ModelAdmin):
     def expiry_status(self, obj):
         """Display expiry status with color"""
         if obj.is_expired:
-            return format_html('<span style="color: red;">🔴 Expiré</span>')
+            return mark_safe('<span style="color: red;">🔴 Expiré</span>')
         elif obj.days_until_expiry <= 30:
-            return format_html('<span style="color: orange;">🟡 Expire bientôt</span>')
-        return format_html('<span style="color: green;">🟢 Valide</span>')
+            return mark_safe('<span style="color: orange;">🟡 Expire bientôt</span>')
+        return mark_safe('<span style="color: green;">🟢 Valide</span>')
     expiry_status.short_description = "Statut Expiration"
     
     def active_status(self, obj):
         if obj.is_active:
-            return format_html('<span style="color: green;">✓ Actif</span>')
-        return format_html('<span style="color: red;">✗ Inactif</span>')
+            return mark_safe('<span style="color: green;">✓ Actif</span>')
+        return mark_safe('<span style="color: red;">✗ Inactif</span>')
     active_status.short_description = "Actif"
 
 # ==================== DISEASE AND INCIDENT ADMINS ====================
@@ -624,8 +624,8 @@ class OccupationalDiseaseAdmin(admin.ModelAdmin):
     
     def cnss_status(self, obj):
         if obj.reported_to_cnss:
-            return format_html('<span style="color: green;">✓ Déclaré</span>')
-        return format_html('<span style="color: red;">✗ Non déclaré</span>')
+            return mark_safe('<span style="color: green;">✓ Déclaré</span>')
+        return mark_safe('<span style="color: red;">✗ Non déclaré</span>')
     cnss_status.short_description = "CNSS"
 
 @admin.register(WorkplaceIncident)

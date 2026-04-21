@@ -168,6 +168,8 @@ export type PaymentMethod =
 // CART (in-memory session, not persisted)
 // ═══════════════════════════════════════════════════════════════
 
+export type SellingUnit = 'BOX' | 'BLISTER' | 'UNIT';
+
 export interface CartItem {
   productId: string;
   product: {
@@ -184,16 +186,24 @@ export interface CartItem {
     currency: string;
     barcode?: string;
     imageUrl?: string;
+    // Unit breakdown pricing
+    unitsPerBlister?: number;
+    blistersPerBox?: number;
+    allowUnitSelling?: boolean;
+    allowBlisterSelling?: boolean;
+    sellingPricePerBlister?: number | null;
+    sellingPricePerUnit?: number | null;
   };
   quantity: number;
-  unitPrice: number;            // May differ from product price (manual override)
+  sellingUnit: SellingUnit;      // BOX, BLISTER, or UNIT
+  unitPrice: number;            // Price per selected selling unit
   discountPercent: number;
   discountAmount: number;
   taxAmount: number;
   lineTotal: number;
   inventoryItemId?: string;
   batchId?: string;
-  maxQuantity: number;          // Available stock
+  maxQuantity: number;          // Available stock (in base units)
   notes?: string;
 }
 
@@ -242,17 +252,20 @@ export class SaleUtils {
    * Compute line-level totals for a cart item
    */
   static computeLineItem(item: CartItem): CartItem {
-    const baseTotal = item.quantity * item.unitPrice;
+    const qty = Math.max(0, item.quantity);
+    const baseTotal = qty * item.unitPrice;
     const clampedPercent = Math.max(0, Math.min(100, item.discountPercent));
     const discountAmount = clampedPercent > 0
       ? baseTotal * (clampedPercent / 100)
       : 0;
     const afterDiscount = Math.max(0, baseTotal - discountAmount);
-    const taxAmount = afterDiscount * (item.product.taxRate / 100);
+    const taxRate = Math.max(0, Math.min(100, item.product.taxRate || 0));
+    const taxAmount = afterDiscount * (taxRate / 100);
     const lineTotal = afterDiscount + taxAmount;
 
     return {
       ...item,
+      quantity: qty,
       discountPercent: clampedPercent,
       discountAmount: Math.round(discountAmount * 100) / 100,
       taxAmount: Math.round(taxAmount * 100) / 100,

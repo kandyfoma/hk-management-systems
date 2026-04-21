@@ -120,13 +120,21 @@ export interface Product {
 
   // ─── Pricing ──────────────────────────────────────────────
   costPrice: number;               // Purchase / landed cost per unit
-  sellingPrice: number;            // Retail price per unit
+  sellingPrice: number;            // Retail price per unit (box price)
   wholesalePrice?: number;         // Wholesale price per unit
   currency: string;
   taxRate: number;                 // Tax percentage (e.g. 16)
   marginPercent?: number;          // Auto-calculated profit margin
   insuranceReimbursable: boolean;
   insuranceCode?: string;          // NHIS / insurance billing code
+
+  // ─── Unit breakdown (Congo: Boîte → Plaquette → Unité) ───
+  unitsPerBlister: number;         // Number of pills/capsules per blister
+  blistersPerBox: number;          // Number of blisters per box
+  allowUnitSelling: boolean;       // Can sell individual pills
+  allowBlisterSelling: boolean;    // Can sell blisters
+  sellingPricePerBlister?: number | null; // Price per blister
+  sellingPricePerUnit?: number | null;    // Price per individual pill
 
   // ─── Inventory Thresholds ─────────────────────────────────
   reorderLevel: number;            // When stock hits this → alert

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from datetime import datetime
 from .models import Patient
 
@@ -134,7 +135,7 @@ class PatientAdmin(admin.ModelAdmin):
                 '<span style="color: #7f8c8d;">📅 {}</span>',
                 obj.last_visit.strftime('%Y-%m-%d')
             )
-        return format_html('<em style="color: #95a5a6;">No visits</em>')
+        return mark_safe('<em style="color: #95a5a6;">No visits</em>')
     last_visit_display.short_description = '📅 Last Visit'
     last_visit_display.admin_order_field = 'last_visit'
     

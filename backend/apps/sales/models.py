@@ -289,6 +289,20 @@ class SaleItem(models.Model):
     product_name = models.CharField(max_length=200, help_text='Nom du produit au moment de la vente')
     product_sku = models.CharField(max_length=100)
     unit_of_measure = models.CharField(max_length=50)
+    selling_unit = models.CharField(
+        max_length=20,
+        choices=[
+            ('BOX', 'Boîte'),
+            ('BLISTER', 'Plaquette'),
+            ('UNIT', 'Unité'),
+        ],
+        default='BOX',
+        help_text='Unité de vente: boîte, plaquette ou unité'
+    )
+    base_quantity = models.PositiveIntegerField(
+        default=0,
+        help_text='Quantité convertie en unités de base pour le stock'
+    )
     
     # Pricing & Quantities
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
@@ -507,6 +521,16 @@ class CartItem(models.Model):
     
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    selling_unit = models.CharField(
+        max_length=20,
+        choices=[
+            ('BOX', 'Boîte'),
+            ('BLISTER', 'Plaquette'),
+            ('UNIT', 'Unité'),
+        ],
+        default='BOX',
+        help_text='Unité de vente'
+    )
     
     # Discount
     discount_type = models.CharField(

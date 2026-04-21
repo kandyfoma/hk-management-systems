@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { SidebarLayout, SidebarSection } from '../../components/SidebarLayout';
 import { HospitalDashboardContent } from './screens/HospitalDashboard';
@@ -21,14 +21,15 @@ import { HospitalBillingScreen } from './screens/HospitalBillingScreen';
 import { PlaceholderScreen } from '../shared/PlaceholderScreen';
 import { colors } from '../../theme/theme';
 import { Patient } from '../../models/Patient';
+import ApiService from '../../services/ApiService';
 
 // ─── Sidebar Menu Configuration ──────────────────────────────
-const hospitalSections: SidebarSection[] = [
+const baseHospitalSections: SidebarSection[] = [
   {
     title: 'Principal',
     items: [
       { id: 'dashboard', label: 'Vue d\'Ensemble', icon: 'grid-outline', iconActive: 'grid' },
-      { id: 'emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse', badge: 8 },
+      { id: 'emergency', label: 'Urgences', icon: 'pulse-outline', iconActive: 'pulse' },
       { id: 'triage', label: 'Triage', icon: 'heart-outline', iconActive: 'heart' },
       { id: 'patients', label: 'Gestion Patients', icon: 'people-outline', iconActive: 'people' },
     ],
@@ -39,11 +40,11 @@ const hospitalSections: SidebarSection[] = [
       { id: 'intake', label: 'Accueil Consultation', icon: 'person-add-outline', iconActive: 'person-add' },
       { id: 'consultation', label: 'Consultation', icon: 'medkit-outline', iconActive: 'medkit' },
       { id: 'consultations', label: 'Historique Consult.', icon: 'time-outline', iconActive: 'time' },
-      { id: 'appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar', badge: 5 },
+      { id: 'appointments', label: 'Rendez-vous', icon: 'calendar-outline', iconActive: 'calendar' },
       { id: 'prescriptions', label: 'Ordonnances', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'clinical-notes', label: 'Notes Cliniques', icon: 'document-text-outline', iconActive: 'document-text' },
       { id: 'medical-records', label: 'Dossiers Médicaux', icon: 'folder-open-outline', iconActive: 'folder-open' },
-      { id: 'lab-results', label: 'Laboratoire', icon: 'flask-outline', iconActive: 'flask', badge: 2 },
+      { id: 'lab-results', label: 'Laboratoire', icon: 'flask-outline', iconActive: 'flask' },
     ],
   },
   {
@@ -202,6 +203,7 @@ const hospitalScreens: Record<string, { title: string; subtitle: string; icon: a
 // ─── Navigator Component ─────────────────────────────────────
 export function HospitalNavigator() {
   const [activeScreen, setActiveScreen] = useState('dashboard');
+  const [hospitalSections, setHospitalSections] = useState<SidebarSection[]>(baseHospitalSections);
 
   // Sub-navigation state for patients module
   const [patientView, setPatientView] = useState<'list' | 'detail' | 'register'>('list');
@@ -213,6 +215,38 @@ export function HospitalNavigator() {
 
   // Emergency/Triage refresh trigger
   const [emergencyRefreshTrigger, setEmergencyRefreshTrigger] = useState(0);
+
+  // ─── Fetch live badge counts from hospital dashboard endpoint ──
+  const loadBadges = useCallback(async () => {
+    try {
+      const api = ApiService.getInstance();
+      const res = await api.get('/hospital/dashboard/');
+      const stats = res?.data ?? {};
+      const emergencyCount: number = stats.emergency_cases ?? 0;
+      const activeCount: number = stats.active_encounters ?? 0;
+      const todayCount: number = stats.today_encounters ?? 0;
+
+      setHospitalSections(prev =>
+        prev.map(section => ({
+          ...section,
+          items: section.items.map(item => {
+            if (item.id === 'emergency') return { ...item, badge: emergencyCount > 0 ? emergencyCount : undefined };
+            if (item.id === 'appointments') return { ...item, badge: todayCount > 0 ? todayCount : undefined };
+            if (item.id === 'admissions') return { ...item, badge: activeCount > 0 ? activeCount : undefined };
+            return item;
+          }),
+        }))
+      );
+    } catch {
+      // silently fail — badges just won't update
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBadges();
+    const interval = setInterval(loadBadges, 60_000);
+    return () => clearInterval(interval);
+  }, [loadBadges]);
 
   const handleSelectPatient = useCallback((patient: Patient) => {
     setSelectedPatientId(patient.id);

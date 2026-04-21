@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from .models import Organization
 
 
@@ -100,11 +101,11 @@ class OrganizationAdmin(admin.ModelAdmin):
     
     def status_indicator(self, obj):
         if obj.is_active:
-            return format_html(
+            return mark_safe(
                 '<span style="color: #27ae60; font-weight: bold;">🟢 Active</span>'
             )
         else:
-            return format_html(
+            return mark_safe(
                 '<span style="color: #e74c3c; font-weight: bold;">🔴 Inactive</span>'
             )
     status_indicator.short_description = '⚡ Status'

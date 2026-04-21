@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.utils import timezone
 from .models import License, LicenseDocument, LicenseRenewal
 
@@ -126,7 +127,7 @@ class LicenseAdmin(admin.ModelAdmin):
                 '<strong>{}</strong><br/><small style="color: #7f8c8d;">📦 {}</small>',
                 obj.organization.name, modules_text
             )
-        return format_html('<em style="color: #95a5a6;">No organization assigned</em>')
+        return mark_safe('<em style="color: #95a5a6;">No organization assigned</em>')
     holder_display.short_description = '🏢 Organization'
     
     def expiry_date_display(self, obj):

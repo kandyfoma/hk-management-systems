@@ -161,13 +161,21 @@ function LicenseActivationScreen({ navigation, onSuccess }: any) {
             }, 800);
             return;
           } else {
-            // License key no longer valid — clear stale activation
+            // License key explicitly invalid (not just a network/DB error) — clear stale activation
             console.log('⚠️ Stored license key is no longer valid, clearing activation');
             await AsyncStorage.removeItem(DEVICE_ACTIVATION_KEY);
           }
         } catch (err) {
-          console.log('⚠️ Error re-validating stored license, clearing activation');
-          await AsyncStorage.removeItem(DEVICE_ACTIVATION_KEY);
+          // On error (network, DB not ready, etc.) — keep activation and proceed to login
+          console.log('⚠️ Error re-validating stored license, keeping activation and proceeding to login');
+          showSuccessToast('Appareil déjà activé. Redirection...');
+          setTimeout(() => {
+            navigation.navigate('Login', { 
+              licenseKey: activationInfo.licenseKey,
+              isDeviceActivated: true
+            });
+          }, 800);
+          return;
         }
       }
       setIsCheckingActivation(false);

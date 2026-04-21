@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.utils import timezone
 from .models import User, UserPermission
 
@@ -100,17 +101,17 @@ class UserAdmin(BaseUserAdmin):
                 '<strong>{}</strong><br/><small style="color: #7f8c8d;">🏢 Organization</small>',
                 obj.organization.name
             )
-        return format_html('<em style="color: #95a5a6;">No organization</em>')
+        return mark_safe('<em style="color: #95a5a6;">No organization</em>')
     organization_link.short_description = '🏢 Organization'
     organization_link.admin_order_field = 'organization__name'
     
     def status_indicator(self, obj):
         if obj.is_active:
-            return format_html(
+            return mark_safe(
                 '<span style="color: #27ae60; font-weight: bold;">🟢 Active</span>'
             )
         else:
-            return format_html(
+            return mark_safe(
                 '<span style="color: #e74c3c; font-weight: bold;">🔴 Inactive</span>'
             )
     status_indicator.short_description = '⚡ Status'

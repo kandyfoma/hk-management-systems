@@ -82,8 +82,8 @@ class VitalSignsAdmin(admin.ModelAdmin):
     
     def abnormal_status(self, obj):
         if obj.is_abnormal:
-            return format_html('<span style="color: red;">⚠️ Anormal</span>')
-        return format_html('<span style="color: green;">✓ Normal</span>')
+            return mark_safe('<span style="color: red;">⚠️ Anormal</span>')
+        return mark_safe('<span style="color: green;">✓ Normal</span>')
     abnormal_status.short_description = 'Statut'
 
 

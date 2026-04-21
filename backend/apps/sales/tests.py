@@ -40,14 +40,16 @@ def _org(suffix="1"):
 
 
 def _user(org, role="pharmacist", suffix="1"):
-    return User.objects.create_user(
+    u = User(
         phone=f"+243820000{suffix.zfill(3)}",
-        password="testpass123",
         first_name="User",
         last_name=f"Test{suffix}",
         primary_role=role,
         organization=org,
     )
+    u.set_password("testpass123")
+    u.save()
+    return u
 
 
 def _product(org, name="Paracetamol 500mg", sku=None, price="500.00",
@@ -595,3 +597,370 @@ class SaleReportTests(APITestCase):
         resp = self.client.get("/api/v1/sales/reports/stats/")
         self.assertEqual(resp.status_code, 200)
         self.assertGreaterEqual(resp.data["today_sales_count"], 1)
+
+
+# ──────────────────────────────────────────────────────────────
+# UNIT SELLING TESTS (BOX → BLISTER → UNIT)
+# ──────────────────────────────────────────────────────────────
+
+def _unit_product(org, name="Amoxicilline 500mg", price="6000.00", cost="3000.00",
+                  upb=10, bpb=3, allow_unit=True, allow_blister=True,
+                  price_blister=None, price_unit=None, **kwargs):
+    """Create a product with unit selling fields configured."""
+    sku = f"SKU-{name[:5]}-{timezone.now().timestamp()}"
+    return Product.objects.create(
+        organization=org,
+        name=name,
+        sku=sku,
+        category="MEDICATION",
+        dosage_form="TABLET",
+        unit_of_measure="UNIT",
+        selling_price=Decimal(price),
+        cost_price=Decimal(cost),
+        units_per_blister=upb,
+        blisters_per_box=bpb,
+        allow_unit_selling=allow_unit,
+        allow_blister_selling=allow_blister,
+        selling_price_per_blister=Decimal(price_blister) if price_blister else None,
+        selling_price_per_unit=Decimal(price_unit) if price_unit else None,
+        is_active=True,
+        **kwargs,
+    )
+
+
+def _unit_sale_payload(product, qty=1, selling_unit='BOX', price=None):
+    """Build sale payload with selling_unit field."""
+    return {
+        "items": [
+            {
+                "product": product.id,
+                "product_name": product.name,
+                "product_sku": product.sku,
+                "unit_of_measure": product.unit_of_measure,
+                "selling_unit": selling_unit,
+                "quantity": qty,
+                "unit_price": str(price or product.selling_price),
+            }
+        ],
+        "type": "COUNTER",
+    }
+
+
+class UnitSellingBaseQtyTests(TestCase):
+    """Test base_quantity computation for BOX/BLISTER/UNIT selling."""
+
+    def setUp(self):
+        self.org = _org("us1")
+        self.user = _user(self.org, suffix="us1")
+        # Product: 10 units/blister × 3 blisters/box = 30 units per box
+        self.product = _unit_product(self.org, upb=10, bpb=3)
+        self.inv = _inventory(self.product, self.org, qty=300, facility="pharmacy-main")
+        _batch(self.inv, qty=300, expiry_days=365)
+
+    def _create_sale(self, payload):
+        factory = APIRequestFactory()
+        request = factory.post("/api/v1/sales/", payload, format="json")
+        request.user = self.user
+        ser = SaleCreateSerializer(data=payload, context={
+            "request": request,
+            "organization": self.org,
+        })
+        ser.is_valid(raise_exception=True)
+        return ser.save(
+            organization=self.org,
+            cashier=self.user,
+            cashier_name=self.user.full_name,
+            created_by=self.user,
+        )
+
+    def test_box_base_qty_calculation(self):
+        """Selling 2 BOXes → base_qty = 2 × 3 × 10 = 60."""
+        payload = _unit_sale_payload(self.product, qty=2, selling_unit='BOX')
+        sale = self._create_sale(payload)
+        item = SaleItem.objects.filter(sale=sale).first()
+        self.assertEqual(item.base_quantity, 60)
+        self.assertEqual(item.selling_unit, 'BOX')
+
+    def test_blister_base_qty_calculation(self):
+        """Selling 5 BLISTERs → base_qty = 5 × 10 = 50."""
+        payload = _unit_sale_payload(self.product, qty=5, selling_unit='BLISTER',
+                                      price='2000.00')
+        sale = self._create_sale(payload)
+        item = SaleItem.objects.filter(sale=sale).first()
+        self.assertEqual(item.base_quantity, 50)
+
+    def test_unit_base_qty_calculation(self):
+        """Selling 7 UNITs → base_qty = 7."""
+        payload = _unit_sale_payload(self.product, qty=7, selling_unit='UNIT',
+                                      price='200.00')
+        sale = self._create_sale(payload)
+        item = SaleItem.objects.filter(sale=sale).first()
+        self.assertEqual(item.base_quantity, 7)
+
+    def test_stock_deducted_by_base_qty(self):
+        """Selling 1 BOX (30 base units) deducts 30 from inventory."""
+        prev = self.inv.quantity_on_hand
+        payload = _unit_sale_payload(self.product, qty=1, selling_unit='BOX')
+        self._create_sale(payload)
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.quantity_on_hand, prev - 30)
+
+    def test_stock_deduction_blister(self):
+        """Selling 3 BLISTERs deducts 3 × 10 = 30."""
+        prev = self.inv.quantity_on_hand
+        payload = _unit_sale_payload(self.product, qty=3, selling_unit='BLISTER',
+                                      price='2000.00')
+        self._create_sale(payload)
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.quantity_on_hand, prev - 30)
+
+    def test_stock_deduction_unit(self):
+        """Selling 15 UNITs deducts 15."""
+        prev = self.inv.quantity_on_hand
+        payload = _unit_sale_payload(self.product, qty=15, selling_unit='UNIT',
+                                      price='200.00')
+        self._create_sale(payload)
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.quantity_on_hand, prev - 15)
+
+    def test_stock_movement_records_base_qty(self):
+        """StockMovement.quantity should use base_qty, not selling qty."""
+        payload = _unit_sale_payload(self.product, qty=2, selling_unit='BOX')
+        self._create_sale(payload)
+        movement = StockMovement.objects.filter(
+            inventory_item=self.inv, movement_type='SALE'
+        ).order_by('-created_at').first()
+        self.assertEqual(movement.quantity, 60)
+        self.assertIn('BOX', movement.reason)
+
+
+class UnitSellingValidationTests(TestCase):
+    """Test validation: invalid unit, disallowed unit, qty=0, etc."""
+
+    def setUp(self):
+        self.org = _org("uv1")
+        self.user = _user(self.org, suffix="uv1")
+        self.product = _unit_product(self.org, upb=10, bpb=3,
+                                      allow_unit=False, allow_blister=False)
+        self.inv = _inventory(self.product, self.org, qty=300, facility="pharmacy-main")
+        _batch(self.inv, qty=300, expiry_days=365)
+
+    def _try_create(self, payload):
+        factory = APIRequestFactory()
+        request = factory.post("/api/v1/sales/", payload, format="json")
+        request.user = self.user
+        ser = SaleCreateSerializer(data=payload, context={
+            "request": request,
+            "organization": self.org,
+        })
+        return ser
+
+    def test_invalid_selling_unit_rejected(self):
+        """Invalid selling_unit value like 'PACKET' should be rejected."""
+        payload = _unit_sale_payload(self.product, qty=1, selling_unit='PACKET')
+        ser = self._try_create(payload)
+        self.assertFalse(ser.is_valid())
+
+    def test_disallowed_unit_selling_rejected(self):
+        """Product with allow_unit_selling=False rejects UNIT sales."""
+        payload = _unit_sale_payload(self.product, qty=5, selling_unit='UNIT',
+                                      price='200.00')
+        ser = self._try_create(payload)
+        self.assertFalse(ser.is_valid())
+
+    def test_disallowed_blister_selling_rejected(self):
+        """Product with allow_blister_selling=False rejects BLISTER sales."""
+        payload = _unit_sale_payload(self.product, qty=2, selling_unit='BLISTER',
+                                      price='2000.00')
+        ser = self._try_create(payload)
+        self.assertFalse(ser.is_valid())
+
+    def test_zero_quantity_rejected(self):
+        """Quantity of 0 should be rejected."""
+        payload = _unit_sale_payload(self.product, qty=0, selling_unit='BOX')
+        ser = self._try_create(payload)
+        self.assertFalse(ser.is_valid())
+
+    def test_box_selling_always_allowed(self):
+        """BOX selling works even when blister/unit are disabled."""
+        payload = _unit_sale_payload(self.product, qty=1, selling_unit='BOX')
+        ser = self._try_create(payload)
+        self.assertTrue(ser.is_valid(), ser.errors)
+
+
+class UnitSellingStockLimitTests(TestCase):
+    """Test stock exhaustion edge cases with unit selling."""
+
+    def setUp(self):
+        self.org = _org("sl1")
+        self.user = _user(self.org, suffix="sl1")
+        # 10 units/blister × 2 blisters/box = 20 units per box
+        self.product = _unit_product(self.org, upb=10, bpb=2)
+        # Only 25 units in stock (1 full box + 5 loose units)
+        self.inv = _inventory(self.product, self.org, qty=25, facility="pharmacy-main")
+        _batch(self.inv, qty=25, expiry_days=365)
+
+    def _create_sale(self, payload):
+        factory = APIRequestFactory()
+        request = factory.post("/api/v1/sales/", payload, format="json")
+        request.user = self.user
+        ser = SaleCreateSerializer(data=payload, context={
+            "request": request,
+            "organization": self.org,
+        })
+        ser.is_valid(raise_exception=True)
+        return ser.save(
+            organization=self.org,
+            cashier=self.user,
+            cashier_name=self.user.full_name,
+            created_by=self.user,
+        )
+
+    def test_oversell_box_rejected(self):
+        """2 BOXes = 40 units, but only 25 in stock → rejected."""
+        payload = _unit_sale_payload(self.product, qty=2, selling_unit='BOX')
+        with self.assertRaises(Exception) as ctx:
+            self._create_sale(payload)
+        self.assertIn("Stock insuffisant", str(ctx.exception))
+
+    def test_exact_stock_accepted(self):
+        """25 UNITs when stock is 25 → accepted."""
+        payload = _unit_sale_payload(self.product, qty=25, selling_unit='UNIT',
+                                      price='300.00')
+        sale = self._create_sale(payload)
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.quantity_on_hand, 0)
+
+    def test_one_over_stock_rejected(self):
+        """26 UNITs when stock is 25 → rejected."""
+        payload = _unit_sale_payload(self.product, qty=26, selling_unit='UNIT',
+                                      price='300.00')
+        with self.assertRaises(Exception) as ctx:
+            self._create_sale(payload)
+        self.assertIn("Stock insuffisant", str(ctx.exception))
+
+    def test_blister_partial_stock_accepted(self):
+        """2 BLISTERs = 20 units, stock is 25 → accepted."""
+        payload = _unit_sale_payload(self.product, qty=2, selling_unit='BLISTER',
+                                      price='3000.00')
+        sale = self._create_sale(payload)
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.quantity_on_hand, 5)
+
+    def test_blister_exceeds_stock_rejected(self):
+        """3 BLISTERs = 30 units, stock is 25 → rejected."""
+        payload = _unit_sale_payload(self.product, qty=3, selling_unit='BLISTER',
+                                      price='3000.00')
+        with self.assertRaises(Exception) as ctx:
+            self._create_sale(payload)
+        self.assertIn("Stock insuffisant", str(ctx.exception))
+
+
+class UnitSellingBatchFEFOTests(TestCase):
+    """Test FEFO batch deduction with unit selling."""
+
+    def setUp(self):
+        self.org = _org("bf1")
+        self.user = _user(self.org, suffix="bf1")
+        self.product = _unit_product(self.org, upb=5, bpb=2)  # 10 units/box
+        self.inv = _inventory(self.product, self.org, qty=100, facility="pharmacy-main")
+        # Batch A expires sooner (30 days), Batch B later (365 days)
+        self.batch_a = _batch(self.inv, qty=30, expiry_days=30, batch_number="LOT-A")
+        self.batch_b = _batch(self.inv, qty=70, expiry_days=365, batch_number="LOT-B")
+
+    def _create_sale(self, payload):
+        factory = APIRequestFactory()
+        request = factory.post("/api/v1/sales/", payload, format="json")
+        request.user = self.user
+        ser = SaleCreateSerializer(data=payload, context={
+            "request": request,
+            "organization": self.org,
+        })
+        ser.is_valid(raise_exception=True)
+        return ser.save(
+            organization=self.org,
+            cashier=self.user,
+            cashier_name=self.user.full_name,
+            created_by=self.user,
+        )
+
+    def test_fefo_deducts_expiring_batch_first(self):
+        """Selling 20 units should deplete batch A (30d) first."""
+        payload = _unit_sale_payload(self.product, qty=20, selling_unit='UNIT',
+                                      price='600.00')
+        self._create_sale(payload)
+        self.batch_a.refresh_from_db()
+        self.batch_b.refresh_from_db()
+        self.assertEqual(self.batch_a.current_quantity, 10)  # 30-20
+        self.assertEqual(self.batch_b.current_quantity, 70)  # untouched
+
+    def test_fefo_spans_multiple_batches(self):
+        """Selling 40 units should exhaust batch A (30), take 10 from B."""
+        payload = _unit_sale_payload(self.product, qty=4, selling_unit='BOX')
+        self._create_sale(payload)
+        self.batch_a.refresh_from_db()
+        self.batch_b.refresh_from_db()
+        self.assertEqual(self.batch_a.current_quantity, 0)
+        self.assertEqual(self.batch_a.status, 'DEPLETED')
+        self.assertEqual(self.batch_b.current_quantity, 60)
+
+    def test_expired_batch_skipped(self):
+        """An already-expired batch is skipped during FEFO deduction."""
+        self.batch_a.expiry_date = date.today() - timedelta(days=1)
+        self.batch_a.save()
+
+        payload = _unit_sale_payload(self.product, qty=10, selling_unit='UNIT',
+                                      price='600.00')
+        self._create_sale(payload)
+        self.batch_a.refresh_from_db()
+        self.batch_b.refresh_from_db()
+        self.assertEqual(self.batch_a.current_quantity, 30)  # untouched (expired)
+        self.assertEqual(self.batch_b.current_quantity, 60)  # 70-10
+
+
+class UnitSellingZeroFieldTests(TestCase):
+    """Test edge cases where upb or bpb could be 0 or None."""
+
+    def setUp(self):
+        self.org = _org("zf1")
+        self.user = _user(self.org, suffix="zf1")
+
+    def _create_sale(self, product, qty, selling_unit, price):
+        inv = _inventory(product, self.org, qty=1000, facility="pharmacy-main")
+        _batch(inv, qty=1000, expiry_days=365)
+        payload = _unit_sale_payload(product, qty=qty, selling_unit=selling_unit,
+                                      price=price)
+        factory = APIRequestFactory()
+        request = factory.post("/api/v1/sales/", payload, format="json")
+        request.user = self.user
+        ser = SaleCreateSerializer(data=payload, context={
+            "request": request,
+            "organization": self.org,
+        })
+        ser.is_valid(raise_exception=True)
+        return ser.save(
+            organization=self.org,
+            cashier=self.user,
+            cashier_name=self.user.full_name,
+            created_by=self.user,
+        )
+
+    def test_upb_zero_clamped_to_1(self):
+        """If units_per_blister is 0, backend clamps to max(1, 0) = 1."""
+        prod = _unit_product(self.org, name="TestZeroUPB", upb=1, bpb=1)
+        Product.objects.filter(pk=prod.pk).update(units_per_blister=0)
+        prod.refresh_from_db()
+        sale = self._create_sale(prod, qty=5, selling_unit='BLISTER', price='500.00')
+        item = SaleItem.objects.filter(sale=sale).first()
+        # With upb clamped to 1: 5 × 1 = 5
+        self.assertEqual(item.base_quantity, 5)
+
+    def test_bpb_zero_clamped_to_1(self):
+        """If blisters_per_box is 0, backend clamps to max(1, 0) = 1."""
+        prod = _unit_product(self.org, name="TestZeroBPB", upb=10, bpb=1)
+        Product.objects.filter(pk=prod.pk).update(blisters_per_box=0)
+        prod.refresh_from_db()
+        sale = self._create_sale(prod, qty=2, selling_unit='BOX', price='6000.00')
+        item = SaleItem.objects.filter(sale=sale).first()
+        # With bpb clamped to 1: 2 × 1 × 10 = 20
+        self.assertEqual(item.base_quantity, 20)

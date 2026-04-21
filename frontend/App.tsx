@@ -297,41 +297,84 @@ function AppContent() {
       // If no existing session or session restore failed, check backend connection
       console.log('🔍 No existing session found, checking backend connection...');
       const isConnected = await ApiAuthService.getInstance().checkBackendConnection();
-      if (!isConnected) {
-        console.log('⚠️ Backend not reachable, using offline mode');
-        setAppState('unauthenticated');
-        return;
-      }
-
-      console.log('🌐 Backend connected');
       
-      // Check authentication with backend (this now does background verification)
+      // Check if we have a stored token + session even if backend is unreachable
       const isAuthenticated = await ApiAuthService.getInstance().isAuthenticated();
-      console.log('👤 Authentication check:', isAuthenticated);
+      console.log('👤 Authentication check:', isAuthenticated, 'Backend connected:', isConnected);
       
       if (isAuthenticated) {
-        // This should only happen if session was restored above, but keeping for safety
         const user = await ApiAuthService.getInstance().getCurrentUser();
         const organization = await ApiAuthService.getInstance().getCurrentOrganization();
         
         if (user && organization) {
-          console.log('🔄 Loading fresh user data from backend...');
-          const licenses = await ApiAuthService.getInstance().getOrganizationLicenses();
-          const userModuleAccess = await ApiAuthService.getInstance().getUserModuleAccess();
-          const activationInfo = await getActivationInfo();
-          const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activationInfo);
-          
-          dispatch(loginSuccess({
-            user,
-            organization,
-            licenses: scopedLicenses,
-            userModuleAccess,
-          }));
+          if (isConnected) {
+            console.log('🔄 Loading fresh user data from backend...');
+            try {
+              const [licenses, userModuleAccess] = await Promise.all([
+                ApiAuthService.getInstance().getOrganizationLicenses(),
+                ApiAuthService.getInstance().getUserModuleAccess()
+              ]);
+              const activationInfo = await getActivationInfo();
+              const scopedLicenses = scopeLicensesToOrganization(licenses, organization, activationInfo);
+              
+              dispatch(loginSuccess({
+                user,
+                organization,
+                licenses: scopedLicenses,
+                userModuleAccess,
+              }));
+            } catch (fetchError) {
+              console.log('⚠️ Could not fetch fresh data, restoring with stored session');
+              const fallbackInfo = await getActivationInfo();
+              const fallbackLicenses = fallbackInfo?.licenseType ? [{
+                id: 'activated-license',
+                licenseKey: fallbackInfo.licenseKey,
+                organizationId: fallbackInfo.organizationId,
+                moduleType: fallbackInfo.licenseType,
+                licenseTier: 'PROFESSIONAL',
+                isActive: true,
+                issuedDate: fallbackInfo.activatedAt,
+                expiryDate: fallbackInfo.expiresAt,
+                features: [],
+                billingCycle: 'ANNUAL',
+                autoRenew: false,
+                createdAt: fallbackInfo.activatedAt,
+              }] : [];
+              dispatch(loginSuccess({
+                user,
+                organization,
+                licenses: fallbackLicenses,
+                userModuleAccess: [],
+              }));
+            }
+          } else {
+            console.log('⚠️ Backend not reachable, restoring session offline');
+            const fallbackInfo = await getActivationInfo();
+            const fallbackLicenses = fallbackInfo?.licenseType ? [{
+              id: 'activated-license',
+              licenseKey: fallbackInfo.licenseKey,
+              organizationId: fallbackInfo.organizationId,
+              moduleType: fallbackInfo.licenseType,
+              licenseTier: 'PROFESSIONAL',
+              isActive: true,
+              issuedDate: fallbackInfo.activatedAt,
+              expiryDate: fallbackInfo.expiresAt,
+              features: [],
+              billingCycle: 'ANNUAL',
+              autoRenew: false,
+              createdAt: fallbackInfo.activatedAt,
+            }] : [];
+            dispatch(loginSuccess({
+              user,
+              organization,
+              licenses: fallbackLicenses,
+              userModuleAccess: [],
+            }));
+          }
           setIsLicenseValid(true);
           setAppState('authenticated');
         } else {
-          // Clear invalid session
-          await ApiAuthService.getInstance().logout();
+          // No user data at all — must login
           setAppState('unauthenticated');
         }
       } else {

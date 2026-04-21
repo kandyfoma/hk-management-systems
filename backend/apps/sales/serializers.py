@@ -15,6 +15,7 @@ class SaleItemSerializer(serializers.ModelSerializer):
         model = SaleItem
         fields = [
             'id', 'sale', 'product', 'product_name', 'product_sku', 'unit_of_measure',
+            'selling_unit', 'base_quantity',
             'product_name_display', 'product_sku_display',
             'quantity', 'unit_price', 'unit_cost', 'discount_type', 'discount_value',
             'discount_amount', 'line_total', 'inventory_batch',
@@ -112,9 +113,23 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         if not items_data:
             raise serializers.ValidationError("Au moins un article est requis.")
 
+        VALID_SELLING_UNITS = {'BOX', 'BLISTER', 'UNIT'}
         today = timezone.now().date()
         for item_data in items_data:
             product = item_data.get('product')
+            qty = item_data.get('quantity', 0)
+            selling_unit = item_data.get('selling_unit', 'BOX')
+
+            if qty <= 0:
+                raise serializers.ValidationError(
+                    f"La quantité doit être supérieure à 0 pour '{getattr(product, 'name', 'inconnu')}'."
+                )
+
+            if selling_unit not in VALID_SELLING_UNITS:
+                raise serializers.ValidationError(
+                    f"Unité de vente invalide '{selling_unit}'. Valeurs acceptées: BOX, BLISTER, UNIT."
+                )
+
             if not product:
                 continue
             if not product.is_active:
@@ -124,6 +139,15 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             if product.is_discontinued:
                 raise serializers.ValidationError(
                     f"Le produit '{product.name}' est discontinué."
+                )
+            # Validate selling unit is allowed for this product
+            if selling_unit == 'BLISTER' and not getattr(product, 'allow_blister_selling', True):
+                raise serializers.ValidationError(
+                    f"La vente par plaquette n'est pas autorisée pour '{product.name}'."
+                )
+            if selling_unit == 'UNIT' and not getattr(product, 'allow_unit_selling', True):
+                raise serializers.ValidationError(
+                    f"La vente à l'unité n'est pas autorisée pour '{product.name}'."
                 )
             # Check product-level expiry
             if product.expiration_date and product.expiration_date < today:
@@ -165,10 +189,30 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         today = timezone.now().date()
 
         for item_data in items_data:
-            SaleItem.objects.create(sale=sale, **item_data)
-
             product = item_data.get('product')
             qty_sold = int(item_data.get('quantity', 0))
+            selling_unit = item_data.get('selling_unit', 'BOX')
+
+            # Calculate base_quantity (individual units) for stock deduction
+            # BOX = quantity × blisters_per_box × units_per_blister
+            # BLISTER = quantity × units_per_blister
+            # UNIT = quantity × 1
+            if product and qty_sold > 0:
+                upb = max(1, getattr(product, 'units_per_blister', 1) or 1)
+                bpb = max(1, getattr(product, 'blisters_per_box', 1) or 1)
+                if selling_unit == 'BOX':
+                    base_qty = qty_sold * bpb * upb
+                elif selling_unit == 'BLISTER':
+                    base_qty = qty_sold * upb
+                else:  # UNIT
+                    base_qty = qty_sold
+                item_data['base_quantity'] = base_qty
+            else:
+                base_qty = qty_sold
+                item_data['base_quantity'] = base_qty
+
+            SaleItem.objects.create(sale=sale, **item_data)
+
             if product and qty_sold > 0:
                 inv_qs = InventoryItem.objects.filter(product=product)
                 if organization:
@@ -181,15 +225,16 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 if inv_item:
                     prev_qty = int(inv_item.quantity_on_hand or 0)
 
-                    # Enforce stock availability unless negative stock allowed
+                    # Enforce stock availability (base_qty = individual units)
                     allow_negative = getattr(product, 'allow_negative_stock', False)
-                    if not allow_negative and prev_qty < qty_sold:
+                    if not allow_negative and prev_qty < base_qty:
+                        unit_label = {'BOX': 'boîte(s)', 'BLISTER': 'plaquette(s)', 'UNIT': 'unité(s)'}.get(selling_unit, 'unité(s)')
                         raise serializers.ValidationError(
                             f"Stock insuffisant pour '{product.name}': "
-                            f"{prev_qty} disponible(s), {qty_sold} demandé(s)."
+                            f"{prev_qty} unité(s) en stock, {qty_sold} {unit_label} demandé(s) ({base_qty} unités)."
                         )
 
-                    new_qty = prev_qty - qty_sold
+                    new_qty = prev_qty - base_qty
                     inv_item.quantity_on_hand = new_qty
                     inv_item.last_sold = timezone.now()
                     inv_item.last_movement = timezone.now()
@@ -199,10 +244,10 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                         inventory_item=inv_item,
                         movement_type='SALE',
                         direction='OUT',
-                        quantity=qty_sold,
+                        quantity=base_qty,
                         unit_cost=item_data.get('unit_cost'),
                         total_cost=(
-                            Decimal(str(item_data.get('unit_cost') or 0)) * qty_sold
+                            Decimal(str(item_data.get('unit_cost') or 0)) * base_qty
                         ),
                         reference_number=sale.sale_number,
                         sale_id=str(sale.id),
@@ -211,7 +256,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                         balance_after=new_qty,
                         performed_by=cashier,
                         created_by=cashier,
-                        reason='Vente POS',
+                        reason=f'Vente POS ({qty_sold} {selling_unit})',
                     )
 
                     # Check batch expiry (FEFO - deduct from soonest expiring first)
@@ -219,7 +264,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                         status='AVAILABLE',
                         current_quantity__gt=0
                     ).order_by('expiry_date')
-                    remaining_to_deduct = qty_sold
+                    remaining_to_deduct = base_qty
                     for batch in batches:
                         if remaining_to_deduct <= 0:
                             break
@@ -231,6 +276,15 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                             batch.status = 'DEPLETED'
                         batch.save()
                         remaining_to_deduct -= deduct_from_batch
+
+                    if remaining_to_deduct > 0:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Déduction partielle lots pour '{product.name}': "
+                            f"{remaining_to_deduct} unité(s) non affectées aux lots "
+                            f"(stock principal déduit correctement)."
+                        )
 
         # Create payments if provided
         for payment_data in payments_data:
@@ -249,7 +303,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = [
             'id', 'cart', 'product', 'product_name', 'product_sku', 'product_price',
-            'quantity', 'unit_price', 'discount_amount', 'line_total', 'notes',
+            'quantity', 'unit_price', 'selling_unit', 'discount_amount', 'line_total', 'notes',
             'created_at'
         ]
         read_only_fields = ['id', 'cart', 'created_at']

@@ -1,26 +1,30 @@
 /* ============================================================
    KAT Management Systems — Admin Custom Styles
-   Design system: primary #122056 (navy), accent #5B65DC (purple-blue)
+   Design system: modern light — single accent #3B82F6 (blue)
    ============================================================ */
 
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root {
-  --kat-primary:      #122056;
-  --kat-primary-light:#1E3A8A;
-  --kat-accent:       #5B65DC;
-  --kat-accent-light: #818CF8;
-  --kat-success:      #059669;
-  --kat-warning:      #D97706;
+  --kat-primary:      #1E293B;
+  --kat-primary-light:#334155;
+  --kat-accent:       #3B82F6;
+  --kat-accent-light: #60A5FA;
+  --kat-accent-subtle:#EFF6FF;
+  --kat-success:      #10B981;
+  --kat-warning:      #F59E0B;
   --kat-danger:       #EF4444;
-  --kat-info:         #0284C7;
+  --kat-info:         #06B6D4;
   --kat-bg:           #F8FAFC;
   --kat-surface:      #FFFFFF;
   --kat-border:       #E2E8F0;
-  --kat-text:         #0F172A;
-  --kat-text-muted:   #64748B;
-  --kat-shadow-sm:    0 1px 3px rgba(18,32,86,0.08);
-  --kat-shadow:       0 4px 12px rgba(18,32,86,0.10);
-  --kat-shadow-lg:    0 8px 24px rgba(18,32,86,0.14);
+  --kat-border-light: #F1F5F9;
+  --kat-text:         #1E293B;
+  --kat-text-muted:   #94A3B8;
+  --kat-sidebar-bg:   #FFFFFF;
+  --kat-sidebar-text: #475569;
+  --kat-shadow-sm:    0 1px 2px rgba(0,0,0,0.04);
+  --kat-shadow:       0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --kat-shadow-lg:    0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
   --kat-radius:       8px;
   --kat-radius-lg:    12px;
 }
@@ -38,22 +42,30 @@ body {
 
 /* ── Top navbar ─────────────────────────────────────────────── */
 .main-header.navbar {
-  background: var(--kat-primary) !important;
-  border-bottom: none !important;
-  box-shadow: var(--kat-shadow) !important;
+  background: var(--kat-surface) !important;
+  border-bottom: 1px solid var(--kat-border) !important;
+  box-shadow: var(--kat-shadow-sm) !important;
+}
+
+.main-header .navbar-nav .nav-link {
+  color: var(--kat-sidebar-text) !important;
+}
+
+.main-header .navbar-nav .nav-link:hover {
+  color: var(--kat-accent) !important;
 }
 
 .main-header .navbar-brand,
 .main-header .brand-link {
-  background: rgba(255,255,255,0.06) !important;
-  border-right: 1px solid rgba(255,255,255,0.1) !important;
+  background: transparent !important;
+  border-right: 1px solid var(--kat-border) !important;
 }
 
 .main-header .brand-text {
   font-weight: 700 !important;
   font-size: 1rem !important;
   letter-spacing: -0.01em;
-  color: #FFF !important;
+  color: var(--kat-primary) !important;
 }
 
 .brand-link img.brand-image {
@@ -62,48 +74,77 @@ body {
   border-radius: 6px;
 }
 
+/* Navbar search icon & hamburger */
+.main-header .navbar-nav .nav-link i,
+.main-header .navbar-nav .nav-link .fas,
+.main-header .navbar-nav .nav-link .far {
+  color: var(--kat-sidebar-text) !important;
+}
+
 /* ── Sidebar ────────────────────────────────────────────────── */
 .main-sidebar,
 .main-sidebar .sidebar {
-  background: var(--kat-primary) !important;
+  background: var(--kat-sidebar-bg) !important;
+}
+
+.main-sidebar {
+  border-right: 1px solid var(--kat-border) !important;
+  box-shadow: none !important;
 }
 
 .nav-sidebar .nav-link {
   border-radius: 8px !important;
   margin: 2px 8px !important;
   padding: 9px 12px !important;
-  color: rgba(255,255,255,0.70) !important;
+  color: var(--kat-sidebar-text) !important;
   font-size: 0.875rem !important;
   font-weight: 500;
 }
 
+.nav-sidebar .nav-link .nav-icon,
+.nav-sidebar .nav-link i {
+  color: var(--kat-text-muted) !important;
+}
+
 .nav-sidebar .nav-link:hover {
-  background: rgba(255,255,255,0.10) !important;
-  color: #FFF !important;
+  background: var(--kat-accent-subtle) !important;
+  color: var(--kat-accent) !important;
+}
+
+.nav-sidebar .nav-link:hover .nav-icon,
+.nav-sidebar .nav-link:hover i {
+  color: var(--kat-accent) !important;
 }
 
 .nav-sidebar .nav-link.active,
 .nav-sidebar .nav-item.menu-open > .nav-link {
-  background: var(--kat-accent) !important;
-  color: #FFF !important;
+  background: var(--kat-accent-subtle) !important;
+  color: var(--kat-accent) !important;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(91,101,220,0.40);
+  box-shadow: none;
+}
+
+.nav-sidebar .nav-link.active .nav-icon,
+.nav-sidebar .nav-link.active i,
+.nav-sidebar .nav-item.menu-open > .nav-link .nav-icon,
+.nav-sidebar .nav-item.menu-open > .nav-link i {
+  color: var(--kat-accent) !important;
 }
 
 .nav-sidebar .nav-treeview .nav-link {
   padding-left: 28px !important;
   font-size: 0.84rem !important;
-  color: rgba(255,255,255,0.58) !important;
+  color: var(--kat-text-muted) !important;
 }
 
 .nav-sidebar .nav-treeview .nav-link:hover,
 .nav-sidebar .nav-treeview .nav-link.active {
-  color: #FFF !important;
-  background: rgba(255,255,255,0.10) !important;
+  color: var(--kat-accent) !important;
+  background: var(--kat-accent-subtle) !important;
 }
 
 .nav-sidebar .nav-header {
-  color: rgba(255,255,255,0.38) !important;
+  color: var(--kat-text-muted) !important;
   font-size: 0.7rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
@@ -111,8 +152,30 @@ body {
   text-transform: uppercase;
 }
 
-.sidebar-dark-primary .brand-link {
-  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+.sidebar-dark-primary .brand-link,
+.sidebar-light-primary .brand-link {
+  border-bottom: 1px solid var(--kat-border) !important;
+  background: transparent !important;
+}
+
+.sidebar-dark-primary .brand-link .brand-text,
+.sidebar-light-primary .brand-link .brand-text {
+  color: var(--kat-primary) !important;
+}
+
+/* Sidebar toggle arrows */
+.nav-sidebar .nav-link p .right,
+.nav-sidebar .nav-link .right {
+  color: var(--kat-text-muted) !important;
+}
+
+/* User panel in sidebar */
+.user-panel {
+  border-bottom: 1px solid var(--kat-border) !important;
+}
+
+.user-panel .info a {
+  color: var(--kat-sidebar-text) !important;
 }
 
 /* ── Content area ───────────────────────────────────────────── */
@@ -153,14 +216,18 @@ body {
 .card > .card-header,
 #content-main .module > h2,
 #content-main .module > caption {
-  background: linear-gradient(135deg, var(--kat-primary) 0%, var(--kat-primary-light) 100%) !important;
-  color: #FFF !important;
+  background: var(--kat-bg) !important;
+  color: var(--kat-text) !important;
   border-radius: var(--kat-radius-lg) var(--kat-radius-lg) 0 0 !important;
-  font-size: 0.875rem !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.02em !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
   padding: 12px 18px !important;
-  border: none !important;
+  border-bottom: 1px solid var(--kat-border) !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
 }
 
 .info-box {
@@ -183,34 +250,39 @@ body {
 }
 
 #result_list thead th {
-  background: var(--kat-primary) !important;
-  color: rgba(255,255,255,0.90) !important;
-  font-size: 0.78rem !important;
+  background: var(--kat-bg) !important;
+  color: var(--kat-text-muted) !important;
+  font-size: 0.75rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.06em !important;
   text-transform: uppercase !important;
   padding: 12px 16px !important;
-  border: none !important;
+  border-bottom: 1px solid var(--kat-border) !important;
+  border-top: none !important;
 }
 
 #result_list thead th a {
-  color: rgba(255,255,255,0.90) !important;
+  color: var(--kat-text-muted) !important;
+}
+
+#result_list thead th a:hover {
+  color: var(--kat-accent) !important;
 }
 
 #result_list thead th.sorted a {
-  color: #FFF !important;
+  color: var(--kat-accent) !important;
 }
 
 #result_list thead th.sorted .text {
-  border-bottom: 2px solid var(--kat-accent-light) !important;
+  border-bottom: 2px solid var(--kat-accent) !important;
 }
 
 #result_list tbody tr {
-  border-bottom: 1px solid var(--kat-border) !important;
+  border-bottom: 1px solid var(--kat-border-light) !important;
 }
 
 #result_list tbody tr:hover td {
-  background: rgba(91,101,220,0.05) !important;
+  background: var(--kat-accent-subtle) !important;
 }
 
 #result_list tbody tr td {
@@ -231,7 +303,7 @@ body {
 }
 
 #result_list tbody tr:nth-child(even) td {
-  background: rgba(248,250,252,0.8);
+  background: var(--kat-border-light);
 }
 
 /* ── Form inputs ────────────────────────────────────────────── */
@@ -262,7 +334,7 @@ select:focus,
 .form-control:focus,
 .form-select:focus {
   border-color: var(--kat-accent) !important;
-  box-shadow: 0 0 0 3px rgba(91,101,220,0.15) !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important;
   outline: none;
 }
 
@@ -299,7 +371,7 @@ select:focus,
 .select2-container--default .select2-selection--single:focus,
 .select2-container--default.select2-container--focus .select2-selection--single {
   border-color: var(--kat-accent) !important;
-  box-shadow: 0 0 0 3px rgba(91,101,220,0.15) !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important;
 }
 
 .select2-dropdown {
@@ -331,14 +403,14 @@ input[type="submit"][value="Save"] {
   background: var(--kat-accent) !important;
   border-color: var(--kat-accent) !important;
   color: #FFF !important;
-  box-shadow: 0 2px 6px rgba(91,101,220,0.30) !important;
+  box-shadow: var(--kat-shadow-sm) !important;
 }
 
 .btn-primary:hover,
 .submit-row input[type="submit"][name="_save"]:hover {
-  background: var(--kat-primary-light) !important;
-  border-color: var(--kat-primary-light) !important;
-  box-shadow: 0 4px 10px rgba(18,32,86,0.25) !important;
+  background: #2563EB !important;
+  border-color: #2563EB !important;
+  box-shadow: var(--kat-shadow) !important;
   transform: translateY(-1px);
 }
 
@@ -378,15 +450,16 @@ fieldset h2,
 fieldset legend,
 fieldset .card-header,
 .tab-pane fieldset legend {
-  background: var(--kat-primary) !important;
-  color: #FFF !important;
-  font-size: 0.82rem !important;
+  background: var(--kat-bg) !important;
+  color: var(--kat-primary) !important;
+  font-size: 0.78rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
   padding: 10px 18px !important;
   margin: 0 !important;
   text-transform: uppercase;
   border-radius: 0 !important;
+  border-bottom: 1px solid var(--kat-border) !important;
 }
 
 .form-row,
@@ -412,7 +485,7 @@ fieldset .card-header,
 
 .nav-tabs .nav-link:hover {
   color: var(--kat-accent) !important;
-  background: rgba(91,101,220,0.06) !important;
+  background: var(--kat-accent-subtle) !important;
 }
 
 .nav-tabs .nav-link.active {
@@ -437,22 +510,23 @@ fieldset .card-header,
 }
 
 .inline-group h2 {
-  background: var(--kat-primary) !important;
-  color: #FFF !important;
-  font-size: 0.82rem !important;
+  background: var(--kat-bg) !important;
+  color: var(--kat-primary) !important;
+  font-size: 0.78rem !important;
   font-weight: 700 !important;
   padding: 10px 16px !important;
   margin: 0 !important;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border-radius: 0 !important;
+  border-bottom: 1px solid var(--kat-border) !important;
 }
 
 .inline-group .tabular thead th {
-  background: rgba(18,32,86,0.06) !important;
-  font-size: 0.78rem !important;
+  background: var(--kat-border-light) !important;
+  font-size: 0.75rem !important;
   font-weight: 700 !important;
-  color: var(--kat-text) !important;
+  color: var(--kat-text-muted) !important;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 8px 12px !important;
@@ -464,19 +538,17 @@ fieldset .card-header,
 }
 
 /* ── Login page ─────────────────────────────────────────────── */
-/* Body class Jazzmin actually applies is 'jazzmin-login-page' */
 body.jazzmin-login-page {
-  background: linear-gradient(135deg, var(--kat-primary) 0%, #1E3A8A 60%, #2D3A9A 100%) !important;
+  background: var(--kat-bg) !important;
 }
 
-/* Logo lives in: .login-logo > h1 > picture > img — reset the h1 first */
 .login-logo {
   text-align: center !important;
   margin-bottom: 12px !important;
 }
 
 .login-logo h1 {
-  font-size: 0 !important;       /* collapse the h1's own text sizing */
+  font-size: 0 !important;
   line-height: 1 !important;
   margin: 0 0 6px 0 !important;
   padding: 0 !important;
@@ -494,13 +566,12 @@ body.jazzmin-login-page {
   vertical-align: middle;
 }
 
-/* Site header text shown below the logo */
 .login-logo h1 a,
 .login-logo a {
   display: block;
   font-size: 1rem !important;
   font-weight: 700 !important;
-  color: #FFF !important;
+  color: var(--kat-primary) !important;
   margin-top: 8px;
   letter-spacing: -0.01em;
 }
@@ -510,7 +581,7 @@ body.jazzmin-login-page {
 .card.login-card {
   border-radius: 16px !important;
   box-shadow: var(--kat-shadow-lg) !important;
-  border: none !important;
+  border: 1px solid var(--kat-border) !important;
   overflow: hidden;
 }
 
@@ -534,14 +605,14 @@ body.jazzmin-login-page {
   font-size: 0.95rem !important;
   padding: 11px 0 !important;
   width: 100%;
-  box-shadow: 0 4px 12px rgba(91,101,220,0.35) !important;
+  box-shadow: var(--kat-shadow) !important;
 }
 
 .login-card-body .btn-primary:hover {
-  background: var(--kat-primary-light) !important;
-  border-color: var(--kat-primary-light) !important;
+  background: #2563EB !important;
+  border-color: #2563EB !important;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(18,32,86,0.30) !important;
+  box-shadow: var(--kat-shadow-lg) !important;
 }
 
 /* ── Badges ─────────────────────────────────────────────────── */
@@ -590,14 +661,15 @@ body.jazzmin-login-page {
 }
 
 #changelist-filter h2 {
-  background: var(--kat-primary) !important;
-  color: #FFF !important;
+  background: var(--kat-bg) !important;
+  color: var(--kat-primary) !important;
   font-weight: 700;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   padding: 10px 14px !important;
   margin: 0;
+  border-bottom: 1px solid var(--kat-border) !important;
 }
 
 #changelist-filter li {
@@ -605,12 +677,16 @@ body.jazzmin-login-page {
 }
 
 #changelist-filter a {
-  color: var(--kat-accent) !important;
+  color: var(--kat-sidebar-text) !important;
   font-size: 0.875rem;
 }
 
+#changelist-filter a:hover {
+  color: var(--kat-accent) !important;
+}
+
 #changelist-filter a.selected {
-  color: var(--kat-primary) !important;
+  color: var(--kat-accent) !important;
   font-weight: 700;
 }
 
@@ -623,8 +699,8 @@ body.jazzmin-login-page {
 }
 
 .object-tools li a:hover {
-  background: var(--kat-primary-light) !important;
-  border-color: var(--kat-primary-light) !important;
+  background: #2563EB !important;
+  border-color: #2563EB !important;
 }
 
 /* ── Footer ─────────────────────────────────────────────────── */
@@ -670,7 +746,7 @@ fieldset.collapse .card-header,
   border-radius: 6px; padding: 3px 10px; font-weight: 600; font-size: 0.78rem;
 }
 .status-pending {
-  background: #E0E7FF; color: #3730A3;
+  background: #EFF6FF; color: #1E40AF;
   border-radius: 6px; padding: 3px 10px; font-weight: 600; font-size: 0.78rem;
 }
 .status-active {

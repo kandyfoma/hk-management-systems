@@ -402,22 +402,22 @@ JAZZMIN_SETTINGS = {
     "related_modal_active": True,
 }
 
-# ============= Jazzmin UI Tweaks - Brand Colors from Frontend =============
-# Colors: Primary #122056 (dark navy), Secondary #5B65DC (purple-blue)
+# ============= Jazzmin UI Tweaks - Modern Light Theme =============
+# Colors: Primary #1E293B (slate), Accent #3B82F6 (blue)
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
     "body_small_text": False,
     "brand_small_text": False,
-    "brand_colour": "navbar-primary",
+    "brand_colour": "navbar-white",
     "accent": "accent-primary",
-    "navbar": "navbar-dark",
-    "no_navbar_border": True,
+    "navbar": "navbar-white navbar-light",
+    "no_navbar_border": False,
     "navbar_fixed": True,
     "layout_boxed": False,
     "footer_fixed": False,
     "sidebar_fixed": True,
-    "sidebar": "sidebar-dark-primary",
+    "sidebar": "sidebar-light-primary",
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
     "sidebar_nav_child_indent": True,
@@ -428,8 +428,8 @@ JAZZMIN_UI_TWEAKS = {
     "dark_mode_theme": None,
     "button_classes": {
         "primary": "btn-primary",
-        "secondary": "btn-secondary",
-        "info": "btn-info",
+        "secondary": "btn-outline-secondary",
+        "info": "btn-outline-info",
         "warning": "btn-warning",
         "danger": "btn-danger",
         "success": "btn-success",

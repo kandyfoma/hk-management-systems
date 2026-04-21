@@ -243,31 +243,29 @@ export class ApiAuthService {
     }
   }
 
-  // Background token verification - will logout user if token is invalid
+  // Background token verification - will logout user ONLY if backend explicitly returns 401
   private async verifyTokenInBackground(): Promise<void> {
     try {
       const response: ApiResponse<User> = await ApiService.getInstance().get('/auth/profile/');
-      if (!response.success) {
-        console.log('Token verification failed, logging out user');
-        await this.logout();
-        // Notify app to update UI state
-        this.notifyLogout();
-      } else {
+      if (response.success) {
         console.log('Token verification successful');
-        // Optionally update user data if it changed
+        // Update user data if it changed
         if (response.data) {
           await AsyncStorage.setItem(USER_KEY, JSON.stringify(response.data));
         }
+      } else {
+        // Non-success but not necessarily 401 — could be server error, don't logout
+        console.log('Token verification returned non-success, keeping session (may be transient)');
       }
     } catch (error: any) {
-      console.error('Background token verification error:', error);
-      // Only logout if it's a 401 error (unauthorized)
+      // Only logout on explicit 401 (token revoked/expired on server)
       if (error?.response?.status === 401) {
-        console.log('Token expired, logging out user');
+        console.log('Token expired (401), logging out user');
         await this.logout();
         this.notifyLogout();
       }
-      // For network errors or other issues, keep user logged in
+      // For ALL other errors (network, 500, timeout, etc.) — keep user logged in
+      console.log('Background token verification error (keeping session):', error?.message || error);
     }
   }
 

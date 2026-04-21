@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.utils import timezone
 from django.db.models import Count, Q
 from django.urls import path
@@ -138,9 +139,9 @@ class AuditLogAdmin(admin.ModelAdmin):
     
     def success_icon(self, obj):
         if obj.success:
-            return format_html('<span style="color: green;">✓</span>')
+            return mark_safe('<span style="color: green;">✓</span>')
         else:
-            return format_html('<span style="color: red;">✗</span>')
+            return mark_safe('<span style="color: red;">✗</span>')
     success_icon.short_description = "Succès"
     
     def description_short(self, obj):
@@ -252,8 +253,8 @@ class PharmacyAuditLogAdmin(admin.ModelAdmin):
                     obj.verified_by.get_full_name()
                 )
             else:
-                return format_html('<span style="color: orange;">⚠ En attente</span>')
-        return format_html('<span style="color: gray;">− Non requis</span>')
+                return mark_safe('<span style="color: orange;">⚠ En attente</span>')
+        return mark_safe('<span style="color: gray;">− Non requis</span>')
     verification_status.short_description = "Statut vérification"
     
     def mark_as_verified(self, request, queryset):
